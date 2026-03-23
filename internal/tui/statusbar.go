@@ -20,6 +20,7 @@ type statusBarModel struct {
 	commandMode    bool
 	commandBuffer  string
 	contextHints   string // override hints when set (e.g. comment-specific keybinds)
+	diffStyle      diffStyle
 	width          int
 	theme          Theme
 }
@@ -81,6 +82,10 @@ func (m statusBarModel) View() string {
 
 	if m.agentName != "" {
 		parts = append(parts, m.agentName)
+	}
+
+	if m.diffStyle == diffStyleFile {
+		parts = append(parts, lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Bold(true).Render("[FILE]"))
 	}
 
 	parts = append(parts, fmt.Sprintf("%d files", m.fileCount))

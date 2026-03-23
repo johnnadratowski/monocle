@@ -174,8 +174,11 @@ func NewApp(engine core.EngineAPI, opts ...AppOptions) appModel {
 			if cfg.SidebarStyle == "tree" {
 				sidebar.treeMode = true
 			}
-			if cfg.DiffStyle == "split" {
+			switch cfg.DiffStyle {
+			case "split":
 				dv.style = diffStyleSplit
+			case "file":
+				dv.style = diffStyleFile
 			}
 			if cfg.Layout != "" {
 				layoutCfg = cfg.Layout
@@ -475,6 +478,37 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Content item loading (plans, docs)
 	case loadContentMsg:
+		var cmd tea.Cmd
+		m.diffView, cmd = m.diffView.Update(msg)
+		return m, cmd
+
+	// File content request (from diff style cycle)
+	case requestFileContentMsg:
+		engine := m.engine
+		path := msg.path
+		return m, func() tea.Msg {
+			content, err := engine.GetFileContent(path)
+			if err != nil {
+				return loadFileContentMsg{path: path, err: err}
+			}
+			session := engine.GetSession()
+			var comments []types.ReviewComment
+			if session != nil {
+				for _, c := range session.Comments {
+					if c.TargetRef == path {
+						comments = append(comments, c)
+					}
+				}
+			}
+			return loadFileContentMsg{
+				path:     path,
+				content:  content,
+				comments: comments,
+			}
+		}
+
+	// File content loaded
+	case loadFileContentMsg:
 		var cmd tea.Cmd
 		m.diffView, cmd = m.diffView.Update(msg)
 		return m, cmd
@@ -1454,6 +1488,7 @@ func (m appModel) View() tea.View {
 	} else {
 		m.statusBar.contextHints = ""
 	}
+	m.statusBar.diffStyle = m.diffView.style
 	statusView := m.statusBar.View()
 	full := lipgloss.JoinVertical(lipgloss.Left, titleBar, body, statusView)
 

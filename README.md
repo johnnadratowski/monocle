@@ -170,7 +170,7 @@ This tells Claude Code to load the monocle MCP server as a channel. Claude Code 
 | `x` | Toggle comment resolved (on a comment line) |
 | `d` | Delete comment (on a comment line) |
 | `r` | Toggle file reviewed |
-| `t` | Toggle unified/split diff |
+| `t` | Cycle diff style (unified/split/file) |
 | `T` | Cycle layout (auto/side-by-side/stacked) |
 | `S` / `:submit` | Submit review |
 | `Ctrl+y` | Copy review to clipboard |
@@ -243,7 +243,7 @@ Monocle loads settings from JSON config files:
 | Setting | Values | Default | Description |
 |---------|--------|---------|-------------|
 | `layout` | `"auto"`, `"side-by-side"`, `"stacked"` | `"auto"` | Pane arrangement (`auto` switches based on terminal width) |
-| `diff_style` | `"unified"`, `"split"` | `"unified"` | Diff display mode |
+| `diff_style` | `"unified"`, `"split"`, `"file"` | `"unified"` | Diff display mode (`file` shows raw content) |
 | `sidebar_style` | `"flat"`, `"tree"` | `"flat"` | File list display mode |
 | `wrap` | `true`, `false` | `false` | Word-wrap long lines in diffs |
 | `tab_size` | integer | `4` | Spaces per tab character |

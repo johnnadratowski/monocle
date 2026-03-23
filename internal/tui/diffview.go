@@ -16,6 +16,7 @@ type diffStyle int
 const (
 	diffStyleUnified diffStyle = iota
 	diffStyleSplit
+	diffStyleFile // raw file content, no diff coloring
 )
 
 // diffViewLine represents a rendered line in the diff view.
@@ -92,6 +93,17 @@ type loadDiffMsg struct {
 	comments []types.ReviewComment
 }
 
+type requestFileContentMsg struct {
+	path string
+}
+
+type loadFileContentMsg struct {
+	path     string
+	content  string
+	err      error
+	comments []types.ReviewComment
+}
+
 func (m diffViewModel) Init() tea.Cmd {
 	return nil
 }
@@ -110,6 +122,11 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 		}
 		m.path = msg.path
 		m.comments = msg.comments
+		// If in file view mode, store hunks but fetch file content instead
+		if m.style == diffStyleFile {
+			path := m.path
+			return m, func() tea.Msg { return requestFileContentMsg{path: path} }
+		}
 		prevCursor := m.cursor
 		prevOffset := m.offset
 		m.buildLines()
@@ -144,6 +161,26 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 		prevOffset := m.offset
 		m.buildContentLines(msg.content)
 		if isReload && prevCursor < len(m.lines) {
+			m.cursor = m.nearestSelectable(prevCursor, 1)
+			m.offset = prevOffset
+		} else {
+			m.cursor = m.nearestSelectable(0, 1)
+			m.offset = 0
+		}
+		m.hOffset = 0
+		m.visualMode = false
+		return m, nil
+
+	case loadFileContentMsg:
+		if msg.err != nil {
+			return m, nil
+		}
+		m.style = diffStyleFile
+		m.comments = msg.comments
+		prevCursor := m.cursor
+		prevOffset := m.offset
+		m.buildFileViewLines(msg.content)
+		if prevCursor < len(m.lines) {
 			m.cursor = m.nearestSelectable(prevCursor, 1)
 			m.offset = prevOffset
 		} else {
@@ -196,13 +233,20 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 			}
 			m.ensureVisible()
 		case Matches(key, m.keys.ToggleDiff):
-			// Toggle diff style
-			if m.style == diffStyleUnified {
-				m.style = diffStyleSplit
-			} else {
-				m.style = diffStyleUnified
+			if m.contentMode {
+				return m, nil
 			}
-			m.buildLines()
+			switch m.style {
+			case diffStyleUnified:
+				m.style = diffStyleSplit
+				m.buildLines()
+			case diffStyleSplit:
+				path := m.path
+				return m, func() tea.Msg { return requestFileContentMsg{path: path} }
+			case diffStyleFile:
+				m.style = diffStyleUnified
+				m.buildLines()
+			}
 		case Matches(key, m.keys.Comment):
 			// If cursor is on a comment, edit it
 			if c := m.CursorComment(); c != nil {
@@ -262,6 +306,9 @@ func (m diffViewModel) View() string {
 		if m.contentMode {
 			return centerBlock([]string{"Empty content"}, m.width, m.height)
 		}
+		if m.style == diffStyleFile {
+			return centerBlock([]string{"File not available"}, m.width, m.height)
+		}
 		return centerBlock([]string{"No changes"}, m.width, m.height)
 	}
 
@@ -280,7 +327,7 @@ func (m diffViewModel) View() string {
 			rendered = m.renderCommentLine(line, selected)
 		} else if line.isSplit {
 			rendered = m.renderSplitLine(line, selected, inVisual)
-		} else if m.contentMode {
+		} else if m.style == diffStyleFile || m.contentMode {
 			gutterWidth := 4
 			contentWidth := m.width - gutterWidth
 			rendered = m.renderContentLine(line, gutterWidth, contentWidth, selected, inVisual)
@@ -446,6 +493,71 @@ func (m *diffViewModel) buildContentLines(content string) {
 				anchor = c.LineStart
 			}
 			if c.TargetRef == m.contentID && anchor == lineNum {
+				m.lines = append(m.lines, diffViewLine{
+					isComment: true,
+					comment:   c,
+					content:   formatInlineComment(c),
+				})
+			}
+		}
+	}
+}
+
+// buildFileViewLines builds lines from raw file content for file view mode.
+// Uses m.path for comment matching (unlike buildContentLines which uses m.contentID).
+func (m *diffViewModel) buildFileViewLines(content string) {
+	m.lines = nil
+
+	// File-level comments (LineStart == 0)
+	for i := range m.comments {
+		c := &m.comments[i]
+		if c.TargetRef == m.path && c.LineStart == 0 {
+			m.lines = append(m.lines, diffViewLine{
+				isComment: true,
+				comment:   c,
+				content:   formatInlineComment(c),
+			})
+		}
+	}
+
+	isMd := isMarkdownFile(m.path)
+	inCodeBlock := false
+	codeLang := ""
+	rawLines := strings.Split(content, "\n")
+	for i, line := range rawLines {
+		lineNum := i + 1
+
+		isFence := false
+		if isMd {
+			if fence := codeFencePattern.FindStringSubmatch(line); fence != nil {
+				isFence = true
+				if !inCodeBlock {
+					inCodeBlock = true
+					codeLang = fence[1]
+				} else {
+					inCodeBlock = false
+					codeLang = ""
+				}
+			}
+		}
+
+		m.lines = append(m.lines, diffViewLine{
+			kind:          types.DiffLineContext,
+			newLineNum:    lineNum,
+			content:       m.expandTabs(line),
+			mdInCodeBlock: inCodeBlock && isMd && !isFence,
+			mdIsFence:     isFence,
+			mdCodeLang:    codeLang,
+		})
+
+		// Insert comments after their last targeted line
+		for j := range m.comments {
+			c := &m.comments[j]
+			anchor := c.LineEnd
+			if anchor == 0 {
+				anchor = c.LineStart
+			}
+			if c.TargetRef == m.path && anchor == lineNum {
 				m.lines = append(m.lines, diffViewLine{
 					isComment: true,
 					comment:   c,
@@ -680,7 +792,7 @@ func (m diffViewModel) renderCommentLine(line diffViewLine, selected bool) strin
 func (m diffViewModel) renderContentLine(line diffViewLine, _, contentWidth int, selected, inVisual bool) string {
 	gutterWidth := 4
 	gutter := fmt.Sprintf("%-3d ", line.newLineNum)
-	isMd := m.contentMode && isMarkdownContent(m.path)
+	isMd := (m.contentMode || m.style == diffStyleFile) && isMarkdownContent(m.path)
 
 	// Wrap mode
 	if m.wrap {
