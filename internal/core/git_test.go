@@ -53,6 +53,8 @@ func setupTestRepo(t *testing.T) (string, string) {
 	os.WriteFile(filepath.Join(dir, "hello.go"), []byte("package main\n\nfunc hello() {\n\tprintln(\"hello\")\n}\n"), 0o644)
 	os.WriteFile(filepath.Join(dir, "world.go"), []byte("package main\n\nfunc world() {}\n"), 0o644)
 	run("add", "world.go")
+	// Create an untracked file (not staged)
+	os.WriteFile(filepath.Join(dir, "untracked.go"), []byte("package main\n\nfunc untracked() {}\n"), 0o644)
 
 	return dir, baseRef
 }
@@ -66,11 +68,10 @@ func TestGitDiff(t *testing.T) {
 		t.Fatalf("Diff: %v", err)
 	}
 
-	if len(files) != 2 {
-		t.Fatalf("expected 2 files, got %d", len(files))
+	if len(files) != 3 {
+		t.Fatalf("expected 3 files, got %d: %+v", len(files), files)
 	}
 
-	// Files should be hello.go (modified) and world.go (added)
 	found := map[string]types.FileChangeStatus{}
 	for _, f := range files {
 		found[f.Path] = f.Status
@@ -79,8 +80,12 @@ func TestGitDiff(t *testing.T) {
 	if found["hello.go"] != types.FileModified {
 		t.Errorf("hello.go: expected modified, got %q", found["hello.go"])
 	}
-	// world.go is untracked, won't show in diff against commit
-	// It should not appear since it's not staged
+	if found["world.go"] != types.FileAdded {
+		t.Errorf("world.go: expected added, got %q", found["world.go"])
+	}
+	if found["untracked.go"] != types.FileAdded {
+		t.Errorf("untracked.go: expected added (untracked), got %q", found["untracked.go"])
+	}
 }
 
 func TestGitFileDiff(t *testing.T) {
@@ -110,6 +115,40 @@ func TestGitFileDiff(t *testing.T) {
 	}
 	if !hasAdded {
 		t.Error("expected added lines in diff")
+	}
+}
+
+func TestGitFileDiffUntracked(t *testing.T) {
+	dir, baseRef := setupTestRepo(t)
+	g := NewGitClient(dir)
+
+	result, err := g.FileDiff(baseRef, "untracked.go", 0)
+	if err != nil {
+		t.Fatalf("FileDiff untracked: %v", err)
+	}
+
+	if len(result.Hunks) == 0 {
+		t.Fatal("expected at least one hunk for untracked file")
+	}
+
+	hunk := result.Hunks[0]
+	if hunk.OldStart != 0 || hunk.OldCount != 0 {
+		t.Errorf("expected old range 0,0 for new file, got %d,%d", hunk.OldStart, hunk.OldCount)
+	}
+	if hunk.NewStart != 1 {
+		t.Errorf("expected new start 1, got %d", hunk.NewStart)
+	}
+
+	// All lines should be added
+	for _, l := range hunk.Lines {
+		if l.Kind != types.DiffLineAdded {
+			t.Errorf("expected all lines added, got kind %v for %q", l.Kind, l.Content)
+		}
+	}
+
+	// Should contain the file content
+	if len(hunk.Lines) != 3 {
+		t.Errorf("expected 3 lines, got %d", len(hunk.Lines))
 	}
 }
 

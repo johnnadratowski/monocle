@@ -39,12 +39,14 @@ func (g *GitClient) RepoRoot() string {
 }
 
 // Diff returns the list of changed files between baseRef and the working tree.
+// It includes both tracked changes (from git diff) and untracked files.
 func (g *GitClient) Diff(baseRef string) ([]types.ChangedFile, error) {
 	out, err := g.run("diff", "--name-status", baseRef)
 	if err != nil {
 		return nil, fmt.Errorf("git diff --name-status: %w", err)
 	}
 
+	seen := make(map[string]bool)
 	var files []types.ChangedFile
 	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
 		if line == "" {
@@ -65,17 +67,36 @@ func (g *GitClient) Diff(baseRef string) ([]types.ChangedFile, error) {
 			}
 		}
 
+		seen[path] = true
 		files = append(files, types.ChangedFile{
 			Path:   path,
 			Status: status,
 		})
 	}
+
+	// Also include untracked files (new files not yet staged).
+	untrackedOut, err := g.run("ls-files", "-o", "--exclude-standard")
+	if err != nil {
+		return nil, fmt.Errorf("git ls-files untracked: %w", err)
+	}
+	for _, path := range strings.Split(strings.TrimSpace(untrackedOut), "\n") {
+		if path == "" || seen[path] {
+			continue
+		}
+		files = append(files, types.ChangedFile{
+			Path:   path,
+			Status: types.FileAdded,
+		})
+	}
+
 	return files, nil
 }
 
 // FileDiff returns the parsed diff for a single file.
 // contextLines controls the number of unchanged lines around each hunk (-U flag).
 // A value of 0 or less uses git's default (3).
+// For untracked files (where git diff returns nothing), a synthetic diff is
+// generated showing the entire file as added.
 func (g *GitClient) FileDiff(baseRef, path string, contextLines int) (*types.DiffResult, error) {
 	args := []string{"diff"}
 	if contextLines > 0 {
@@ -92,9 +113,20 @@ func (g *GitClient) FileDiff(baseRef, path string, contextLines int) (*types.Dif
 		}
 	}
 
+	hunks := parseDiff(out)
+
+	// If git diff returned nothing (e.g. untracked file), build a synthetic
+	// all-added diff from the working-tree content.
+	if len(hunks) == 0 {
+		content, readErr := g.FileContent("", path)
+		if readErr == nil && content != "" {
+			hunks = buildSyntheticDiff(content)
+		}
+	}
+
 	return &types.DiffResult{
 		Path:  path,
-		Hunks: parseDiff(out),
+		Hunks: hunks,
 	}, nil
 }
 
@@ -180,6 +212,34 @@ func (g *GitClient) run(args ...string) (string, error) {
 		return string(out), err
 	}
 	return string(out), nil
+}
+
+// buildSyntheticDiff creates a single hunk showing the entire content as added lines.
+// Used for untracked files that have no base version to diff against.
+func buildSyntheticDiff(content string) []types.DiffHunk {
+	lines := strings.Split(content, "\n")
+	// Trim trailing empty line from final newline
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	if len(lines) == 0 {
+		return nil
+	}
+
+	hunk := types.DiffHunk{
+		OldStart: 0,
+		OldCount: 0,
+		NewStart: 1,
+		NewCount: len(lines),
+	}
+	for i, line := range lines {
+		hunk.Lines = append(hunk.Lines, types.DiffLine{
+			Kind:       types.DiffLineAdded,
+			Content:    line,
+			NewLineNum: i + 1,
+		})
+	}
+	return []types.DiffHunk{hunk}
 }
 
 func parseFileStatus(s string) types.FileChangeStatus {
