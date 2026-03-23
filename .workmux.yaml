@@ -1,0 +1,14 @@
+window_prefix: wm-
+
+panes:
+  - command: <agent>
+    focus: true
+  - command: devbox run -- make build && ./bin/monocle
+    split: horizontal
+
+files:
+  symlink:
+    - node_modules
+
+agent: claude --dangerously-load-development-channels server:monocle
+nerdfont: true
