@@ -4,7 +4,7 @@
       "args": [
         "serve-mcp-channel"
       ],
-      "command": "monocle"
+      "command": "./bin/monocle"
     }
   }
 }
