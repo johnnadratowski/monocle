@@ -296,6 +296,122 @@ func TestClaudeChannelUnregister(t *testing.T) {
 	}
 }
 
+func writeInstalledPlugins(t *testing.T, homeDir string, plugins map[string]any) {
+	t.Helper()
+	pluginsDir := filepath.Join(homeDir, ".claude", "plugins")
+	os.MkdirAll(pluginsDir, 0755)
+	data := map[string]any{"version": 2, "plugins": plugins}
+	raw, _ := json.Marshal(data)
+	os.WriteFile(filepath.Join(pluginsDir, "installed_plugins.json"), raw, 0644)
+}
+
+func TestHasPluginConfig_UserScope(t *testing.T) {
+	dir := t.TempDir()
+	homeDir := filepath.Join(dir, "home")
+	os.MkdirAll(homeDir, 0755)
+	t.Setenv("HOME", homeDir)
+
+	origDir, _ := os.Getwd()
+	projDir := filepath.Join(dir, "project")
+	os.MkdirAll(projDir, 0755)
+	os.Chdir(projDir)
+	defer os.Chdir(origDir)
+
+	writeInstalledPlugins(t, homeDir, map[string]any{
+		"monocle@monocle": []any{
+			map[string]any{"scope": "user"},
+		},
+	})
+
+	adapter := &ClaudeAdapter{}
+	if !adapter.HasPluginConfig() {
+		t.Fatal("should return true for user-scoped monocle plugin")
+	}
+}
+
+func TestHasPluginConfig_ProjectScope_Matching(t *testing.T) {
+	dir := t.TempDir()
+	homeDir := filepath.Join(dir, "home")
+	os.MkdirAll(homeDir, 0755)
+	t.Setenv("HOME", homeDir)
+
+	origDir, _ := os.Getwd()
+	projDir := filepath.Join(dir, "project")
+	os.MkdirAll(projDir, 0755)
+	os.Chdir(projDir)
+	defer os.Chdir(origDir)
+
+	writeInstalledPlugins(t, homeDir, map[string]any{
+		"monocle@monocle": []any{
+			map[string]any{"scope": "project", "projectPath": projDir},
+		},
+	})
+
+	adapter := &ClaudeAdapter{}
+	if !adapter.HasPluginConfig() {
+		t.Fatal("should return true for project-scoped plugin matching cwd")
+	}
+}
+
+func TestHasPluginConfig_ProjectScope_NonMatching(t *testing.T) {
+	dir := t.TempDir()
+	homeDir := filepath.Join(dir, "home")
+	os.MkdirAll(homeDir, 0755)
+	t.Setenv("HOME", homeDir)
+
+	origDir, _ := os.Getwd()
+	projDir := filepath.Join(dir, "project")
+	os.MkdirAll(projDir, 0755)
+	os.Chdir(projDir)
+	defer os.Chdir(origDir)
+
+	writeInstalledPlugins(t, homeDir, map[string]any{
+		"monocle@monocle": []any{
+			map[string]any{"scope": "project", "projectPath": "/some/other/project"},
+		},
+	})
+
+	adapter := &ClaudeAdapter{}
+	if adapter.HasPluginConfig() {
+		t.Fatal("should return false for project-scoped plugin with non-matching path")
+	}
+}
+
+func TestHasPluginConfig_NoFile(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", filepath.Join(dir, "home"))
+
+	adapter := &ClaudeAdapter{}
+	if adapter.HasPluginConfig() {
+		t.Fatal("should return false when no installed_plugins.json exists")
+	}
+}
+
+func TestNeedsRegister_PluginRegistered(t *testing.T) {
+	dir := t.TempDir()
+	homeDir := filepath.Join(dir, "home")
+	os.MkdirAll(homeDir, 0755)
+	t.Setenv("HOME", homeDir)
+
+	origDir, _ := os.Getwd()
+	projDir := filepath.Join(dir, "project")
+	os.MkdirAll(projDir, 0755)
+	os.Chdir(projDir)
+	defer os.Chdir(origDir)
+
+	// No .mcp.json, but plugin is registered
+	writeInstalledPlugins(t, homeDir, map[string]any{
+		"monocle@monocle": []any{
+			map[string]any{"scope": "user"},
+		},
+	})
+
+	adapter := &ClaudeAdapter{}
+	if adapter.NeedsRegister() {
+		t.Fatal("should not need register when plugin is installed")
+	}
+}
+
 func TestWriteChannelBundle(t *testing.T) {
 	path, err := WriteChannelBundle()
 	if err != nil {

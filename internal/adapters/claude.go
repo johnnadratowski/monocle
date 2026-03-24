@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 // ClaudeAdapter handles Claude Code MCP channel registration.
@@ -75,10 +76,60 @@ func (a *ClaudeAdapter) HasMCPConfig() bool {
 	return false
 }
 
-// NeedsRegister returns true if the MCP channel is not correctly configured in any .mcp.json.
+// HasPluginConfig checks if monocle is installed as a Claude Code plugin.
+// Returns true if ~/.claude/plugins/installed_plugins.json contains a monocle@* entry
+// with user scope (global) or project scope matching the current working directory.
+func (a *ClaudeAdapter) HasPluginConfig() bool {
+	path := installedPluginsPath()
+	data, err := ReadJSONFile(path)
+	if err != nil {
+		return false
+	}
+	plugins, ok := data["plugins"].(map[string]any)
+	if !ok {
+		return false
+	}
+
+	cwd, _ := os.Getwd()
+	if resolved, err := filepath.EvalSymlinks(cwd); err == nil {
+		cwd = resolved
+	}
+
+	for key, val := range plugins {
+		if !strings.HasPrefix(key, "monocle@") {
+			continue
+		}
+		entries, ok := val.([]any)
+		if !ok {
+			continue
+		}
+		for _, e := range entries {
+			entry, ok := e.(map[string]any)
+			if !ok {
+				continue
+			}
+			scope, _ := entry["scope"].(string)
+			if scope == "user" {
+				return true
+			}
+			if scope == "project" {
+				projectPath, _ := entry["projectPath"].(string)
+				if resolved, err := filepath.EvalSymlinks(projectPath); err == nil {
+					projectPath = resolved
+				}
+				if projectPath != "" && cwd != "" && strings.HasPrefix(cwd, projectPath) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// NeedsRegister returns true if monocle is not configured via .mcp.json or Claude Code plugin.
 // This includes cases where an old-style config exists (e.g., pointing to bun/node directly).
 func (a *ClaudeAdapter) NeedsRegister() bool {
-	return !a.HasMCPConfig()
+	return !a.HasMCPConfig() && !a.HasPluginConfig()
 }
 
 // RegisterDetails returns info about what was registered.
@@ -199,6 +250,15 @@ func (a *ClaudeAdapter) unconfigureMCP(global bool) error {
 	}
 
 	return WriteJSONFile(mcpPath, data)
+}
+
+// installedPluginsPath returns the path to Claude Code's installed plugins registry.
+func installedPluginsPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".claude", "plugins", "installed_plugins.json")
 }
 
 // mcpJSONPath returns the path for .mcp.json.
