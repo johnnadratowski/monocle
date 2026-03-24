@@ -6,7 +6,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { connect } from "net";
 import { createHash } from "crypto";
-import { statSync, existsSync } from "fs";
+import { statSync, existsSync, readFileSync } from "fs";
 import { resolve, join, dirname } from "path";
 
 // -- Socket path computation (mirrors Go's FindRepoRoot + DefaultSocketPath) --
@@ -244,10 +244,12 @@ const mcp = new Server(
       "You can check the current review status at any time using the review_status tool.",
       "",
       "IMPORTANT — Plan mode workflow:",
-      "When you are in plan mode and have written your plan, use submit_plan_and_wait instead of submit_plan.",
+      "When you are in plan mode and have written your plan file, use submit_plan_and_wait instead of submit_plan.",
+      "Pass your plan file path as the file_path parameter so the channel reads your plan file directly.",
+      "This ensures your reviewer sees exactly what you wrote — do not pass plan content manually.",
       "This submits the plan to your reviewer AND blocks until they respond with feedback.",
       "If the reviewer approves, proceed to call ExitPlanMode.",
-      "If the reviewer requests changes, update your plan and call submit_plan_and_wait again.",
+      "If the reviewer requests changes, update your plan file and call submit_plan_and_wait again.",
       "Only call ExitPlanMode after your reviewer has approved the plan via submit_plan_and_wait.",
     ].join("\n"),
   },
@@ -332,7 +334,11 @@ mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
           },
           content: {
             type: "string",
-            description: "The plan or content body (markdown supported)",
+            description: "The plan or content body (markdown supported). Ignored if file_path is provided.",
+          },
+          file_path: {
+            type: "string",
+            description: "Absolute path to a file whose content to submit. Takes precedence over content.",
           },
           id: {
             type: "string",
@@ -344,7 +350,7 @@ mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
               "File extension for syntax highlighting (e.g. 'md', 'go', 'py', 'ts')",
           },
         },
-        required: ["title", "content"],
+        required: ["title"],
       },
     },
     {
@@ -380,7 +386,11 @@ mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
           },
           content: {
             type: "string",
-            description: "The plan body (markdown supported)",
+            description: "The plan body (markdown supported). Ignored if file_path is provided.",
+          },
+          file_path: {
+            type: "string",
+            description: "Absolute path to a file whose content to submit. Takes precedence over content.",
           },
           id: {
             type: "string",
@@ -392,7 +402,7 @@ mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
               "File extension for syntax highlighting (e.g. 'md', 'go', 'py', 'ts')",
           },
         },
-        required: ["title", "content"],
+        required: ["title"],
       },
     },
   ],
@@ -443,11 +453,20 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
 
     case "submit_plan": {
       try {
+        let content = args.content || "";
+        if (args.file_path) {
+          content = readFileSync(args.file_path, "utf-8");
+        }
+        if (!content) {
+          return {
+            content: [{ type: "text" as const, text: "Either content or file_path must be provided." }],
+          };
+        }
         const resp = await engine.request({
           type: "submit_content",
           id: args.id || "",
           title: args.title,
-          content: args.content,
+          content,
           content_type: args.content_type || "",
           is_plan: true,
         });
@@ -468,12 +487,23 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
 
     case "submit_plan_and_wait": {
       try {
+        // Resolve content from file_path or inline content
+        let content = args.content || "";
+        if (args.file_path) {
+          content = readFileSync(args.file_path, "utf-8");
+        }
+        if (!content) {
+          return {
+            content: [{ type: "text" as const, text: "Either content or file_path must be provided." }],
+          };
+        }
+
         // Step 1: Submit the plan
         await engine.request({
           type: "submit_content",
           id: args.id || "",
           title: args.title,
-          content: args.content,
+          content,
           content_type: args.content_type || "",
           is_plan: true,
         });
