@@ -39,6 +39,36 @@ Monocle isn't limited to reviewing file changes. Claude Code can submit **plans,
 
 This means you can review the agent's *thinking* before it writes code — not just the output. Ask Claude Code to submit its plan first, review it, leave feedback, and only then let it start implementing.
 
+### Plan mode integration
+
+When Claude Code enters [plan mode](https://docs.anthropic.com/en/docs/claude-code/plan-mode), it writes a plan and then exits to begin implementing. But you may want to review and approve the plan before implementation starts. Monocle provides the `submit_plan_and_wait` tool for exactly this — it submits the plan to your Monocle TUI **and blocks** until you respond with feedback.
+
+The flow:
+
+1. Claude Code enters plan mode and writes a plan
+2. The agent calls `submit_plan_and_wait` — the plan appears in Monocle's sidebar
+3. You review the plan, leave comments, and submit your review
+4. The agent receives your feedback:
+   - **If you approve** (select "Approve" in the submit modal), the agent calls `ExitPlanMode` and starts implementing
+   - **If you request changes**, the agent updates the plan and calls `submit_plan_and_wait` again
+5. The loop repeats until you approve
+
+#### Setup
+
+The channel's built-in instructions tell Claude Code about `submit_plan_and_wait`, but for reliable plan mode behavior you should also add instructions to your project's `CLAUDE.md`. Add the following to your project's `CLAUDE.md` (create one at the root of your repo if you don't have one):
+
+````markdown
+## Monocle Integration
+
+When the Monocle MCP channel is connected:
+- Use the `submit_plan` MCP tool to send plans or content for the reviewer to see
+- Use the plan filename as the `id` parameter so updates replace the previous version
+
+**Plan mode (important):** When in plan mode, use `submit_plan_and_wait` instead of `submit_plan`. This tool submits the plan AND blocks until the reviewer responds with feedback. If the reviewer approves, proceed to call ExitPlanMode. If they request changes, update the plan and call `submit_plan_and_wait` again. Only call ExitPlanMode after the reviewer has approved.
+````
+
+> **Why CLAUDE.md?** Claude Code reads your project's `CLAUDE.md` at the start of every conversation. While the MCP channel provides its own instructions, having the plan mode workflow in `CLAUDE.md` ensures the agent follows it consistently — especially at the critical moment of deciding whether to exit plan mode or submit for review first.
+
 ## Features
 
 - **MCP channel integration** — Push-based feedback delivery to Claude Code, no polling or copy-pasting
@@ -47,6 +77,7 @@ This means you can review the agent's *thinking* before it writes code — not j
 - **Structured comments** — Tag feedback as issues, suggestions, notes, or praise with line-level or file-level precision
 - **Visual selection** — Select line ranges for comments with vim-style visual mode
 - **Plan review** — Claude Code can submit plans for your review before writing code, with markdown rendering
+- **Plan mode gating** — `submit_plan_and_wait` blocks the agent until you approve the plan before implementation begins
 - **Markdown rendering** — Plans and changed `.md` files render with styled headings, bold, italic, lists, and code blocks
 - **Horizontal scrolling & line wrapping** — Navigate wide diffs with `h`/`l` or toggle wrapping with `w`
 - **Responsive layout** — Automatically stacks panes vertically in narrow terminals
@@ -143,7 +174,7 @@ In another, start Claude Code with the channel enabled (the flag is required dur
 claude --dangerously-load-development-channels plugin:monocle@monocle
 ```
 
-Claude Code gets three new tools (`review_status`, `get_feedback`, `submit_plan`) and starts receiving your review feedback as push notifications.
+Claude Code gets tools for checking review status, retrieving feedback, submitting plans, and more — and starts receiving your review feedback as push notifications.
 
 > **Note:** The `--dangerously-load-development-channels` flag is required during the [channels research preview](https://code.claude.com/docs/en/channels-reference).
 

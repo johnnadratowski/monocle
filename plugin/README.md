@@ -40,6 +40,8 @@ Monocle's TUI will display diffs as Claude makes changes. Add comments, then sub
 | `review_status` | Check if the reviewer has pending feedback or has requested a pause |
 | `get_feedback` | Retrieve review feedback. Use `wait=true` to block until feedback is available |
 | `submit_plan` | Submit a plan or architecture decision for the reviewer to see and comment on |
+| `submit_plan_and_wait` | Submit a plan and block until the reviewer responds — use this in plan mode |
+| `add_files` | Add additional files for the reviewer to see in Monocle |
 
 ## How it works
 
@@ -50,3 +52,21 @@ Claude can also submit plans for your review before writing code — these appea
 ## Pause flow
 
 Press **P** in Monocle to request Claude pause. Claude receives a notification and blocks until you submit your review — giving you time to catch up without the agent racing ahead.
+
+## Plan mode
+
+When Claude Code is in plan mode, Monocle can gate implementation behind reviewer approval. Instead of `submit_plan`, the agent uses `submit_plan_and_wait` — which submits the plan and blocks until you review it.
+
+For this to work reliably, add the following to your project's `CLAUDE.md`:
+
+````markdown
+## Monocle Integration
+
+When the Monocle MCP channel is connected:
+- Use the `submit_plan` MCP tool to send plans or content for the reviewer to see
+- Use the plan filename as the `id` parameter so updates replace the previous version
+
+**Plan mode (important):** When in plan mode, use `submit_plan_and_wait` instead of `submit_plan`. This tool submits the plan AND blocks until the reviewer responds with feedback. If the reviewer approves, proceed to call ExitPlanMode. If they request changes, update the plan and call `submit_plan_and_wait` again. Only call ExitPlanMode after the reviewer has approved.
+````
+
+See the [main README](https://github.com/josephschmitt/monocle#plan-mode-integration) for the full plan mode workflow.
