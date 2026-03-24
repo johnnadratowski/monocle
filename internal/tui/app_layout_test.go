@@ -39,13 +39,13 @@ func TestStackedSidebarHeight(t *testing.T) {
 		contentItemCount int
 		want             int
 	}{
-		{"clamps to minimum 4", 50, 0, 0, 4},
-		{"uses file count plus header", 50, 6, 0, 7},
-		{"includes content items", 50, 3, 3, 7},
-		{"no hard cap uses 40pct", 50, 15, 5, 20},
+		{"clamps to minimum 8", 50, 0, 0, 8},
+		{"clamps small file count to minimum", 50, 6, 0, 8},
+		{"includes content items", 50, 3, 3, 8},
+		{"no hard cap uses 35pct", 50, 15, 5, 17},
 		{"grows with tall terminal", 80, 12, 0, 13},
-		{"caps at 40% of total height", 20, 15, 0, 8},
-		{"40% cap doesn't go below min 4", 8, 0, 0, 4},
+		{"caps at 35% of total height", 20, 15, 0, 8},
+		{"40% cap doesn't go below min 8", 8, 0, 0, 8},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
