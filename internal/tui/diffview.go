@@ -69,6 +69,9 @@ type diffViewModel struct {
 	visualMode  bool
 	visualStart int
 
+	// Mouse drag state
+	mouseDragActive bool
+
 	// Content view mode (for plans/docs)
 	contentMode bool
 	contentID   string
@@ -1638,6 +1641,69 @@ func (m diffViewModel) lineNumAt(idx int) int {
 
 func (m diffViewModel) currentDiffLine() int {
 	return m.lineNumAt(m.cursor)
+}
+
+// screenLineToIndex maps a screen-relative Y coordinate to a logical lines[] index.
+// In non-wrap mode this is a 1:1 mapping from offset. In wrap mode, a single
+// logical line may span multiple screen lines, so we walk from offset counting
+// screen lines consumed by each logical line.
+// Returns -1 if the coordinate is out of bounds.
+func (m diffViewModel) screenLineToIndex(screenY int) int {
+	if screenY < 0 || len(m.lines) == 0 {
+		return -1
+	}
+
+	screenLine := 0
+	for i := m.offset; i < len(m.lines); i++ {
+		sl := m.screenLinesFor(i)
+		if screenY < screenLine+sl {
+			return i
+		}
+		screenLine += sl
+		if screenLine > m.height {
+			break
+		}
+	}
+	return -1
+}
+
+// handleMouseClick positions the cursor at the clicked screen line and starts
+// drag tracking for visual selection.
+func (m *diffViewModel) handleMouseClick(relY int) {
+	idx := m.screenLineToIndex(relY)
+	if idx < 0 {
+		return
+	}
+	idx = m.nearestSelectable(idx, 1)
+	m.cursor = idx
+	m.visualMode = true
+	m.visualStart = m.cursor
+	m.mouseDragActive = true
+	m.ensureVisible()
+}
+
+// handleMouseMotion extends the visual selection to the line under the cursor
+// during a mouse drag.
+func (m *diffViewModel) handleMouseMotion(relY int) {
+	if !m.mouseDragActive {
+		return
+	}
+	idx := m.screenLineToIndex(relY)
+	if idx < 0 {
+		return
+	}
+	idx = m.nearestSelectable(idx, 1)
+	m.cursor = idx
+	m.ensureVisible()
+}
+
+// handleMouseRelease ends drag tracking. If the click didn't produce a range
+// (start == end), visual mode is cancelled — it was just a click, not a drag.
+func (m *diffViewModel) handleMouseRelease() {
+	m.mouseDragActive = false
+	if m.visualStart == m.cursor {
+		m.visualMode = false
+	}
 }
 
 type openCommentMsg struct {

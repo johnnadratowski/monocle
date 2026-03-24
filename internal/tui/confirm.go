@@ -80,6 +80,24 @@ func (m confirmModel) Update(msg tea.Msg) (confirmModel, tea.Cmd) {
 	return m, nil
 }
 
+// handleClick processes a mouse click at content-relative coordinates.
+// Returns true if the click was on an interactive element.
+func (m *confirmModel) handleClick(contentX, contentY int) bool {
+	if !m.showDontAsk {
+		return false
+	}
+	// Line 0: title
+	// Line 1: blank
+	// Line 2: message
+	// Line 3: blank
+	// Line 4: checkbox
+	if contentY == 4 && contentX >= 0 && contentX <= 2 {
+		m.dontAsk = !m.dontAsk
+		return true
+	}
+	return false
+}
+
 func (m confirmModel) View() string {
 	if !m.active {
 		return ""

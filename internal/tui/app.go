@@ -164,6 +164,8 @@ type appModel struct {
 	planReviewActive       bool // currently in plan review UI mode
 	planReviewSavedSidebar bool // sidebar visibility before entering
 	planReviewSavedWrap    bool // wrap state before entering
+
+	mouseEnabled bool // whether mouse mode is active
 }
 
 // NewApp creates the root appModel.
@@ -180,6 +182,7 @@ func NewApp(engine core.EngineAPI, opts ...AppOptions) appModel {
 	dv := newDiffViewModel(&theme, &keys)
 	var layoutCfg string
 
+	mouseEnabled := true
 	if engine != nil {
 		if cfg := engine.GetConfig(); cfg != nil {
 			if cfg.Keybindings != nil {
@@ -203,6 +206,9 @@ func NewApp(engine core.EngineAPI, opts ...AppOptions) appModel {
 			if cfg.TabSize > 0 {
 				dv.tabSize = cfg.TabSize
 			}
+			if cfg.Mouse != nil && !*cfg.Mouse {
+				mouseEnabled = false
+			}
 		}
 	}
 
@@ -225,6 +231,7 @@ func NewApp(engine core.EngineAPI, opts ...AppOptions) appModel {
 		theme:         theme,
 		keys:          keys,
 		mcpRegisterFn:  o.MCPRegisterFn,
+		mouseEnabled:   mouseEnabled,
 	}
 }
 
@@ -951,6 +958,23 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
+
+	case tea.MouseClickMsg:
+		if m.mouseEnabled {
+			return m.handleMouseClick(msg)
+		}
+	case tea.MouseWheelMsg:
+		if m.mouseEnabled {
+			return m.handleMouseWheel(msg)
+		}
+	case tea.MouseMotionMsg:
+		if m.mouseEnabled {
+			return m.handleMouseMotion(msg)
+		}
+	case tea.MouseReleaseMsg:
+		if m.mouseEnabled {
+			return m.handleMouseRelease(msg)
+		}
 	}
 
 	return m, nil
@@ -1893,6 +1917,9 @@ func (m appModel) View() tea.View {
 
 	v := tea.NewView(full)
 	v.AltScreen = true
+	if m.mouseEnabled {
+		v.MouseMode = tea.MouseModeCellMotion
+	}
 	return v
 }
 

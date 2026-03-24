@@ -189,6 +189,37 @@ func (m *commentEditorModel) open(path string, lineStart, lineEnd int, targetTyp
 	m.editingID = ""
 }
 
+// handleClick processes a mouse click at content-relative coordinates.
+// Returns true if the click was on an interactive element.
+func (m *commentEditorModel) handleClick(contentX, contentY int) bool {
+	// Type labels are on line 4: title(0), blank(1), file info(2), blank(3), labels(4)
+	typeLabelLine := 4
+	if contentY != typeLabelLine {
+		return false
+	}
+
+	labels := []struct {
+		t     types.CommentType
+		label string
+	}{
+		{types.CommentIssue, "ISSUE"},
+		{types.CommentSuggestion, "SUGGESTION"},
+		{types.CommentNote, "NOTE"},
+		{types.CommentPraise, "PRAISE"},
+	}
+
+	x := 0
+	for _, l := range labels {
+		labelW := len(l.label) + 2 // padding(0,1) adds 1 each side
+		if contentX >= x && contentX < x+labelW {
+			m.commentType = l.t
+			return true
+		}
+		x += labelW + 1 // +1 for " " separator
+	}
+	return false
+}
+
 func (m *commentEditorModel) openEdit(comment *types.ReviewComment) {
 	m.active = true
 	m.path = comment.TargetRef

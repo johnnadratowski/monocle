@@ -116,6 +116,89 @@ func (m reviewSummaryModel) Update(msg tea.Msg) (reviewSummaryModel, tea.Cmd) {
 	return m, nil
 }
 
+// handleClick processes a mouse click at content-relative coordinates.
+// Returns true if the click was on an interactive element.
+func (m *reviewSummaryModel) handleClick(contentX, contentY int) bool {
+	// Action labels are on line 2: title(0), blank(1), labels(2)
+	if contentY == 2 {
+		labels := []struct {
+			a     types.SubmitAction
+			label string
+		}{
+			{types.ActionApprove, "APPROVE"},
+			{types.ActionRequestChanges, "REQUEST CHANGES"},
+		}
+		x := 0
+		for _, l := range labels {
+			labelW := len(l.label) + 2 // padding(0,1)
+			if contentX >= x && contentX < x+labelW {
+				m.action = l.a
+				return true
+			}
+			x += labelW + 1
+		}
+		return false
+	}
+
+	// Checkbox: find the line with "[x]" or "[ ]" by computing its position.
+	// The checkbox line is variable due to comment counts. We compute it by
+	// counting the rendered content lines that precede it.
+	checkboxLine := m.checkboxLine()
+	if contentY == checkboxLine && contentX >= 0 && contentX <= 2 {
+		m.copyToClipboard = !m.copyToClipboard
+		return true
+	}
+
+	return false
+}
+
+// checkboxLine computes the content line number where the clipboard checkbox renders.
+func (m reviewSummaryModel) checkboxLine() int {
+	// Line 0: "Submit Review"
+	// Line 1: blank
+	// Line 2: action labels
+	// Line 3: blank
+	line := 4
+
+	// Variable-height comment summary section
+	hasComments := m.summary != nil && (m.summary.IssueCt+m.summary.SuggestionCt+m.summary.NoteCt+m.summary.PraiseCt > 0)
+	if hasComments {
+		if m.summary.IssueCt > 0 {
+			line++
+		}
+		if m.summary.SuggestionCt > 0 {
+			line++
+		}
+		if m.summary.NoteCt > 0 {
+			line++
+		}
+		if m.summary.PraiseCt > 0 {
+			line++
+		}
+		line++ // blank after counts
+
+		if len(m.summary.FileComments) > 0 {
+			line++ // "Files:" header
+			line += len(m.summary.FileComments)
+			line++ // blank
+		}
+		if len(m.summary.ContentComments) > 0 {
+			line++ // "Content Items:" header
+			line += len(m.summary.ContentComments)
+			line++ // blank
+		}
+	}
+
+	// "Comment (optional):" header
+	line++
+	// body text line
+	line++
+	// blank
+	line++
+	// checkbox line
+	return line
+}
+
 func (m reviewSummaryModel) View() string {
 	if !m.active {
 		return ""

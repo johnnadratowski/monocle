@@ -832,6 +832,72 @@ func (m sidebarModel) viewportHeight() int {
 	return h
 }
 
+// itemAtLine maps a visual line index (0-based, relative to sidebar content area)
+// to a logical item index, or -1 if the line is a header or separator.
+// This mirrors the rendering logic in View() to provide accurate click targeting.
+func (m sidebarModel) itemAtLine(lineY int) int {
+	contentItemCt := len(m.contentItems)
+	totalItems := m.totalItems()
+	fileItemCt := m.fileItemCount()
+	additionalStart := contentItemCt + fileItemCt
+	additionalCt := len(m.additionalFiles)
+
+	line := 0
+
+	// If no content items, "Files" header is prepended at line 0
+	if contentItemCt == 0 {
+		if lineY == line {
+			return -1 // Files header
+		}
+		line++
+	}
+
+	// "Review Items" header (when content items exist)
+	if contentItemCt > 0 {
+		if lineY == line {
+			return -1
+		}
+		line++
+	}
+
+	for idx := m.offset; idx < totalItems; idx++ {
+		// "Files" section header between content items and files
+		if idx == contentItemCt && contentItemCt > 0 {
+			if line > 0 {
+				if lineY == line {
+					return -1 // blank separator
+				}
+				line++
+			}
+			if lineY == line {
+				return -1 // "Files" header
+			}
+			line++
+		}
+
+		// "Additional Files" section header
+		if idx == additionalStart && additionalCt > 0 {
+			if line > 0 {
+				if lineY == line {
+					return -1 // blank separator
+				}
+				line++
+			}
+			if lineY == line {
+				return -1 // "Additional Files" header
+			}
+			line++
+		}
+
+		if lineY == line {
+			return idx
+		}
+		line++
+	}
+
+	return -1
+}
+
 // clampOffset ensures offset and cursor are within valid bounds after the
 // item list changes externally.
 func (m *sidebarModel) clampOffset() {

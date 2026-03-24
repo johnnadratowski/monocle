@@ -196,6 +196,37 @@ func (m refPickerModel) View() string {
 		Render(b.String())
 }
 
+// handleClick processes a mouse click at content-relative coordinates.
+// Returns a command and whether the click was handled.
+func (m *refPickerModel) handleClick(contentY int) (tea.Cmd, bool) {
+	// Content layout:
+	// Line 0: "Select Base Ref"
+	// Line 1: blank
+	// Line 2: Auto option
+	// Line 3: blank
+	// Line 4+: "▲ more" (if scrolled), then entries, then "Load more..."/"▼ more"
+
+	// Auto option
+	if contentY == 2 {
+		m.cursor = 0
+		return func() tea.Msg { return selectRefMsg{auto: true} }, true
+	}
+
+	entryStartLine := 4
+	if m.offset > 0 {
+		entryStartLine++ // "▲ more" indicator line
+	}
+
+	clickedIdx := contentY - entryStartLine + m.offset
+	if clickedIdx >= 0 && clickedIdx < len(m.entries) {
+		m.cursor = clickedIdx + 1
+		hash := m.entries[clickedIdx].Hash
+		return func() tea.Msg { return selectRefMsg{hash: hash} }, true
+	}
+
+	return nil, false
+}
+
 // viewportHeight returns how many commit entries fit in the ref picker.
 // Uses a stable calculation based only on screen size so the modal
 // doesn't resize while scrolling.

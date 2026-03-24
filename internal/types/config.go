@@ -12,6 +12,7 @@ type Config struct {
 	ReviewFormat      ReviewFormatConfig `json:"review_format"`
 	ClearAfterSubmit  string             `json:"clear_after_submit"`
 	PlanReviewMode    bool               `json:"plan_review_mode"`
+	Mouse             *bool              `json:"mouse"`
 }
 
 type ReviewFormatConfig struct {
