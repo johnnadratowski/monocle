@@ -29,6 +29,9 @@ type CLI struct {
 type RunCmd struct {
 	Socket         string   `help:"Override socket path for MCP channel connection" env:"MONOCLE_SOCKET" default:""`
 	AdditionalPath []string `help:"Additional file or directory paths to include for review (repeatable)" name:"additional-path" short:"a" type:"path"`
+	Continue       bool     `help:"Resume the most recent session for this repo" name:"continue" short:"c" xor:"session-mode"`
+	Resume         bool     `help:"Show a picker to resume a previous session" name:"resume" short:"r" xor:"session-mode"`
+	Session        string   `help:"Resume a specific session by ID" name:"session" short:"s" default:""`
 }
 
 type RegisterCmd struct {
@@ -62,7 +65,7 @@ func main() {
 }
 
 func (cmd *RunCmd) Run() error {
-	return runTUI(cmd.Socket, cmd.AdditionalPath)
+	return runTUI(cmd.Socket, cmd.AdditionalPath, cmd.Continue, cmd.Resume, cmd.Session)
 }
 
 func (cmd *RegisterCmd) Run() error {
@@ -140,7 +143,49 @@ func (cmd *UninstallCmd) Run() error {
 	return (&UnregisterCmd{Global: cmd.Global}).Run()
 }
 
-func runTUI(socketOverride string, additionalPaths []string) error {
+func startNewSession(engine core.EngineAPI, repoRoot string) error {
+	opts := core.SessionOptions{
+		Agent:    "claude",
+		RepoRoot: repoRoot,
+	}
+	if _, err := engine.StartSession(opts); err != nil {
+		return fmt.Errorf("start session: %w", err)
+	}
+	return nil
+}
+
+func resolveSession(engine core.EngineAPI, repoRoot string, continueSession bool, resumePicker bool, sessionID string) error {
+	switch {
+	case sessionID != "":
+		// Direct session ID provided via --session
+		if _, err := engine.ResumeSession(sessionID); err != nil {
+			return fmt.Errorf("resume session %s: %w", sessionID, err)
+		}
+		return nil
+
+	case continueSession:
+		sessions, err := engine.ListSessions(core.ListSessionsOptions{
+			RepoRoot: repoRoot,
+			Limit:    1,
+		})
+		if err != nil || len(sessions) == 0 {
+			return startNewSession(engine, repoRoot)
+		}
+		if _, err := engine.ResumeSession(sessions[0].ID); err != nil {
+			return fmt.Errorf("resume session: %w", err)
+		}
+		return nil
+
+	case resumePicker:
+		// --resume: defer session creation until user picks in the TUI modal
+		return nil
+
+	default:
+		return startNewSession(engine, repoRoot)
+	}
+}
+
+func runTUI(socketOverride string, additionalPaths []string, continueSession bool, resumePicker bool, sessionID string) error {
 	// Load config
 	cfg, err := core.LoadConfig()
 	if err != nil {
@@ -167,29 +212,27 @@ func runTUI(socketOverride string, additionalPaths []string) error {
 		return fmt.Errorf("create engine: %w", err)
 	}
 
-	// Start session
-	opts := core.SessionOptions{
-		Agent:    "claude",
-		RepoRoot: repoRoot,
-	}
-	if _, err := engine.StartSession(opts); err != nil {
-		return fmt.Errorf("start session: %w", err)
+	// Resolve session: continue, resume, or new
+	if err := resolveSession(engine, repoRoot, continueSession, resumePicker, sessionID); err != nil {
+		return err
 	}
 
-	// Add additional file paths if provided
-	if len(additionalPaths) > 0 {
+	// Add additional file paths if provided (only for new sessions)
+	if len(additionalPaths) > 0 && !continueSession && !resumePicker && sessionID == "" {
 		if _, err := engine.AddAdditionalPaths(additionalPaths); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not add additional paths: %v\n", err)
 		}
 	}
 
-	// Start socket server
+	// Start socket server (deferred when showing session picker)
 	socketPath := socketOverride
 	if socketPath == "" {
 		socketPath = adapters.DefaultSocketPath(repoRoot)
 	}
-	if err := engine.StartServer(socketPath); err != nil {
-		return fmt.Errorf("start server: %w", err)
+	if !resumePicker {
+		if err := engine.StartServer(socketPath); err != nil {
+			return fmt.Errorf("start server: %w", err)
+		}
 	}
 
 	// Check if MCP channel needs registration
@@ -199,6 +242,11 @@ func runTUI(socketOverride string, additionalPaths []string) error {
 		appOpts.MCPRegisterFn = func(global bool) error {
 			return adapter.Register(global)
 		}
+	}
+	if resumePicker {
+		appOpts.ShowSessionPicker = true
+		appOpts.RepoRoot = repoRoot
+		appOpts.DeferredSocket = socketPath
 	}
 
 	// Create TUI model

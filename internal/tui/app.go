@@ -45,6 +45,7 @@ const (
 	overlayRegisterPrompt
 	overlayConnectionInfo
 	overlayHistory
+	overlaySessionPicker
 )
 
 // Engine event messages bridged from core.EngineAPI callbacks.
@@ -123,7 +124,10 @@ func refreshTick() tea.Cmd {
 
 // AppOptions configures optional behavior for the TUI app.
 type AppOptions struct {
-	MCPRegisterFn func(global bool) error // if non-nil, offer MCP auto-registration on startup
+	MCPRegisterFn    func(global bool) error // if non-nil, offer MCP auto-registration on startup
+	ShowSessionPicker bool   // if true, show session picker modal on startup
+	RepoRoot         string  // repo root path, used by session picker to list sessions
+	DeferredSocket   string  // socket path to start after session is established (empty = already started)
 }
 
 // appModel is the root model that composes all sub-models.
@@ -140,6 +144,7 @@ type appModel struct {
 	confirm        confirmModel
 	connectionInfo connectionInfoModel
 	history        historyModel
+	sessionPicker  sessionPickerModel
 
 	focus         focusTarget
 	overlay       overlayKind
@@ -166,6 +171,10 @@ type appModel struct {
 	planReviewSavedWrap    bool // wrap state before entering
 
 	mouseEnabled bool // whether mouse mode is active
+
+	showSessionPicker bool   // open session picker on startup
+	repoRoot          string // repo root for session listing
+	deferredSocket    string // socket to start after session pick
 }
 
 // NewApp creates the root appModel.
@@ -224,34 +233,93 @@ func NewApp(engine core.EngineAPI, opts ...AppOptions) appModel {
 		confirm:        newConfirmModel(theme),
 		connectionInfo: newConnectionInfoModel(theme),
 		history:        newHistoryModel(theme),
+		sessionPicker:  newSessionPickerModel(theme),
 		registerPrompt: newRegisterPromptModel(theme),
 		focus:         focusSidebar,
 		overlay:       overlayNone,
 		layoutConfig:  layoutCfg,
 		theme:         theme,
 		keys:          keys,
-		mcpRegisterFn:  o.MCPRegisterFn,
-		mouseEnabled:   mouseEnabled,
+		mcpRegisterFn:     o.MCPRegisterFn,
+		mouseEnabled:      mouseEnabled,
+		showSessionPicker: o.ShowSessionPicker,
+		repoRoot:          o.RepoRoot,
+		deferredSocket:    o.DeferredSocket,
 	}
 }
 
 // Init loads the initial file list from the engine and starts the refresh tick.
 func (m appModel) Init() tea.Cmd {
-	cmds := []tea.Cmd{
-		func() tea.Msg {
+	cmds := []tea.Cmd{refreshTick()}
+
+	if m.showSessionPicker {
+		// Defer file loading until user picks a session
+		engine := m.engine
+		repoRoot := m.repoRoot
+		startCmd := m.startSessionAndLoad()
+		cmds = append(cmds, func() tea.Msg {
+			sessions, err := engine.ListSessions(core.ListSessionsOptions{
+				RepoRoot: repoRoot,
+				Limit:    20,
+			})
+			if err != nil || len(sessions) == 0 {
+				// No sessions to pick from — create a new one
+				return startCmd()
+			}
+			return openSessionPickerMsg{sessions: sessions}
+		})
+	} else {
+		cmds = append(cmds, func() tea.Msg {
 			files := m.engine.GetChangedFiles()
 			items := m.engine.GetContentItems()
 			additional := m.engine.GetAdditionalFiles()
 			return initialLoadMsg{files: files, items: items, additionalFiles: additional}
-		},
-		refreshTick(),
+		})
 	}
+
 	if m.mcpRegisterFn != nil {
 		cmds = append(cmds, func() tea.Msg {
 			return mcpRegisterPromptMsg{}
 		})
 	}
 	return tea.Batch(cmds...)
+}
+
+// startSessionAndLoad creates a new session, starts the deferred socket server,
+// and returns a cmd that loads the initial data.
+func (m appModel) startSessionAndLoad() tea.Cmd {
+	engine := m.engine
+	repoRoot := m.repoRoot
+	socketPath := m.deferredSocket
+	return func() tea.Msg {
+		engine.StartSession(core.SessionOptions{Agent: "claude", RepoRoot: repoRoot})
+		if socketPath != "" {
+			engine.StartServer(socketPath)
+		}
+		files := engine.GetChangedFiles()
+		items := engine.GetContentItems()
+		additional := engine.GetAdditionalFiles()
+		return initialLoadMsg{files: files, items: items, additionalFiles: additional}
+	}
+}
+
+// resumeSessionAndLoad resumes an existing session, starts the deferred socket server,
+// and returns a cmd that loads the session data.
+func (m appModel) resumeSessionAndLoad(sessionID string) tea.Cmd {
+	engine := m.engine
+	socketPath := m.deferredSocket
+	return func() tea.Msg {
+		if _, err := engine.ResumeSession(sessionID); err != nil {
+			return nil
+		}
+		if socketPath != "" {
+			engine.StartServer(socketPath)
+		}
+		files := engine.GetChangedFiles()
+		items := engine.GetContentItems()
+		additional := engine.GetAdditionalFiles()
+		return initialLoadMsg{files: files, items: items, additionalFiles: additional}
+	}
 }
 
 // initialLoadMsg carries the initial file and content item lists.
@@ -359,6 +427,8 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.registerPrompt.height = m.height
 		m.connectionInfo.width = m.width
 		m.connectionInfo.height = m.height
+		m.sessionPicker.width = m.width
+		m.sessionPicker.height = m.height
 		return m, nil
 
 	case initialLoadMsg:
@@ -579,6 +649,29 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.overlay = overlayNone
 		m.refPicker.active = false
 		return m, nil
+
+	case openSessionPickerMsg:
+		m.sessionPicker.sessions = msg.sessions
+		m.sessionPicker.active = true
+		m.sessionPicker.width = m.width
+		m.sessionPicker.height = m.height
+		m.sessionPicker.cursor = 0
+		m.sessionPicker.offset = 0
+		m.overlay = overlaySessionPicker
+		return m, nil
+
+	case selectSessionMsg:
+		m.overlay = overlayNone
+		m.sessionPicker.active = false
+		if msg.id == "" {
+			return m, m.startSessionAndLoad()
+		}
+		return m, m.resumeSessionAndLoad(msg.id)
+
+	case cancelSessionPickerMsg:
+		m.overlay = overlayNone
+		m.sessionPicker.active = false
+		return m, m.startSessionAndLoad()
 
 	// Diff loading
 	case loadDiffMsg:
@@ -1035,6 +1128,11 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.overlay == overlayHistory {
 		var cmd tea.Cmd
 		m.history, cmd = m.history.Update(msg)
+		return m, cmd
+	}
+	if m.overlay == overlaySessionPicker {
+		var cmd tea.Cmd
+		m.sessionPicker, cmd = m.sessionPicker.Update(msg)
 		return m, cmd
 	}
 
@@ -1910,6 +2008,11 @@ func (m appModel) View() tea.View {
 		}
 	} else if m.overlay == overlayHistory {
 		overlayContent := m.history.View()
+		if overlayContent != "" {
+			full = overlayOn(full, overlayContent, m.width, m.height)
+		}
+	} else if m.overlay == overlaySessionPicker {
+		overlayContent := m.sessionPicker.View()
 		if overlayContent != "" {
 			full = overlayOn(full, overlayContent, m.width, m.height)
 		}

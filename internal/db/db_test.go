@@ -346,6 +346,62 @@ func TestCreateAndGetSubmissions(t *testing.T) {
 	}
 }
 
+func TestAdditionalFiles(t *testing.T) {
+	d := testDB(t)
+	now := time.Now()
+	d.CreateSession(&types.ReviewSession{ID: "sess-1", Agent: "claude", AgentStatus: types.AgentStatusIdle, RepoRoot: "/tmp", BaseRef: "abc", ReviewRound: 1, CreatedAt: now, UpdatedAt: now})
+
+	af := &types.AdditionalFile{Path: "/tmp/extra.go", Name: "extra.go"}
+	if err := d.UpsertAdditionalFile("sess-1", af); err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+
+	files, err := d.GetAdditionalFiles("sess-1")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if len(files) != 1 || files[0].Path != "/tmp/extra.go" || files[0].Name != "extra.go" {
+		t.Errorf("unexpected files: %+v", files)
+	}
+
+	// Upsert same path updates name
+	af2 := &types.AdditionalFile{Path: "/tmp/extra.go", Name: "renamed.go"}
+	if err := d.UpsertAdditionalFile("sess-1", af2); err != nil {
+		t.Fatalf("upsert update: %v", err)
+	}
+	files, _ = d.GetAdditionalFiles("sess-1")
+	if len(files) != 1 || files[0].Name != "renamed.go" {
+		t.Errorf("expected updated name, got %+v", files)
+	}
+
+	// Mark reviewed
+	if err := d.MarkAdditionalFileReviewed("sess-1", "/tmp/extra.go", true); err != nil {
+		t.Fatalf("mark reviewed: %v", err)
+	}
+	files, _ = d.GetAdditionalFiles("sess-1")
+	if !files[0].Reviewed {
+		t.Error("expected reviewed")
+	}
+
+	// Unmark reviewed
+	if err := d.MarkAdditionalFileReviewed("sess-1", "/tmp/extra.go", false); err != nil {
+		t.Fatalf("unmark reviewed: %v", err)
+	}
+	files, _ = d.GetAdditionalFiles("sess-1")
+	if files[0].Reviewed {
+		t.Error("expected not reviewed")
+	}
+
+	// Delete
+	if err := d.DeleteAdditionalFiles("sess-1"); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	files, _ = d.GetAdditionalFiles("sess-1")
+	if len(files) != 0 {
+		t.Errorf("expected 0 files after delete, got %d", len(files))
+	}
+}
+
 func TestListSessions_WithFilter(t *testing.T) {
 	d := testDB(t)
 	now := time.Now()

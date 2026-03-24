@@ -11,6 +11,7 @@ const dropSQL = `
 DROP TABLE IF EXISTS review_submissions;
 DROP TABLE IF EXISTS comments;
 DROP TABLE IF EXISTS content_items;
+DROP TABLE IF EXISTS additional_files;
 DROP TABLE IF EXISTS changed_files;
 DROP TABLE IF EXISTS sessions;
 DROP TABLE IF EXISTS schema_version;
@@ -81,11 +82,21 @@ CREATE TABLE IF NOT EXISTS review_submissions (
 	submitted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS additional_files (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	session_id TEXT NOT NULL REFERENCES sessions(id),
+	path TEXT NOT NULL,
+	name TEXT NOT NULL,
+	reviewed INTEGER NOT NULL DEFAULT 0,
+	UNIQUE(session_id, path)
+);
+
 CREATE INDEX IF NOT EXISTS idx_changed_files_session ON changed_files(session_id);
 CREATE INDEX IF NOT EXISTS idx_content_items_session ON content_items(session_id);
 CREATE INDEX IF NOT EXISTS idx_comments_session ON comments(session_id);
 CREATE INDEX IF NOT EXISTS idx_comments_target ON comments(target_type, target_ref);
 CREATE INDEX IF NOT EXISTS idx_review_submissions_session ON review_submissions(session_id);
+CREATE INDEX IF NOT EXISTS idx_additional_files_session ON additional_files(session_id);
 `
 
 // Migrate checks the schema version and applies migrations as needed.

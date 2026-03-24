@@ -309,6 +309,13 @@ func (e *Engine) AddAdditionalPaths(paths []string) ([]types.AdditionalFile, err
 			added = append(added, af)
 		}
 	}
+	// Persist to DB
+	for i := range added {
+		if err := e.database.UpsertAdditionalFile(session.ID, &added[i]); err != nil {
+			e.mu.Unlock()
+			return nil, fmt.Errorf("persist additional file %s: %w", added[i].Path, err)
+		}
+	}
 	e.mu.Unlock()
 
 	for _, af := range added {
@@ -537,11 +544,11 @@ func (e *Engine) MarkReviewed(path string) error {
 		return fmt.Errorf("no active session")
 	}
 
-	// Check additional files first (in-memory only, no DB)
+	// Check additional files first
 	for i := range e.current.AdditionalFiles {
 		if e.current.AdditionalFiles[i].Path == path {
 			e.current.AdditionalFiles[i].Reviewed = true
-			return nil
+			return e.database.MarkAdditionalFileReviewed(e.current.ID, path, true)
 		}
 	}
 
@@ -568,11 +575,11 @@ func (e *Engine) UnmarkReviewed(path string) error {
 		return fmt.Errorf("no active session")
 	}
 
-	// Check additional files first (in-memory only, no DB)
+	// Check additional files first
 	for i := range e.current.AdditionalFiles {
 		if e.current.AdditionalFiles[i].Path == path {
 			e.current.AdditionalFiles[i].Reviewed = false
-			return nil
+			return e.database.MarkAdditionalFileReviewed(e.current.ID, path, false)
 		}
 	}
 

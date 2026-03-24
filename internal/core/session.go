@@ -85,6 +85,12 @@ func (sm *SessionManager) ResumeSession(sessionID string) (*types.ReviewSession,
 	}
 	session.Comments = comments
 
+	additionalFiles, err := sm.db.GetAdditionalFiles(session.ID)
+	if err != nil {
+		return nil, fmt.Errorf("get additional files: %w", err)
+	}
+	session.AdditionalFiles = additionalFiles
+
 	// Build file statuses map
 	session.FileStatuses = make(map[string]bool)
 	for _, f := range files {

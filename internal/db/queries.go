@@ -317,6 +317,55 @@ func (d *DB) GetSubmissions(sessionID string) ([]types.ReviewSubmission, error) 
 	return subs, rows.Err()
 }
 
+// UpsertAdditionalFile inserts or updates an additional file record.
+func (d *DB) UpsertAdditionalFile(sessionID string, af *types.AdditionalFile) error {
+	_, err := d.Exec(
+		`INSERT INTO additional_files (session_id, path, name, reviewed)
+		 VALUES (?, ?, ?, ?)
+		 ON CONFLICT(session_id, path) DO UPDATE SET name = excluded.name`,
+		sessionID, af.Path, af.Name, boolToInt(af.Reviewed),
+	)
+	return err
+}
+
+// GetAdditionalFiles returns all additional files for a session.
+func (d *DB) GetAdditionalFiles(sessionID string) ([]types.AdditionalFile, error) {
+	rows, err := d.Query(
+		`SELECT path, name, reviewed FROM additional_files WHERE session_id = ? ORDER BY name`, sessionID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var files []types.AdditionalFile
+	for rows.Next() {
+		var f types.AdditionalFile
+		var reviewed int
+		if err := rows.Scan(&f.Path, &f.Name, &reviewed); err != nil {
+			return nil, err
+		}
+		f.Reviewed = reviewed != 0
+		files = append(files, f)
+	}
+	return files, rows.Err()
+}
+
+// MarkAdditionalFileReviewed sets the reviewed flag for an additional file.
+func (d *DB) MarkAdditionalFileReviewed(sessionID, path string, reviewed bool) error {
+	_, err := d.Exec(
+		`UPDATE additional_files SET reviewed = ? WHERE session_id = ? AND path = ?`,
+		boolToInt(reviewed), sessionID, path,
+	)
+	return err
+}
+
+// DeleteAdditionalFiles removes all additional file records for a session.
+func (d *DB) DeleteAdditionalFiles(sessionID string) error {
+	_, err := d.Exec(`DELETE FROM additional_files WHERE session_id = ?`, sessionID)
+	return err
+}
+
 func boolToInt(b bool) int {
 	if b {
 		return 1

@@ -412,7 +412,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
         };
       } catch {
         return {
-          content: [{ type: "text" as const, text: "No reviewer connected." }],
+          content: [{ type: "text" as const, text: "No reviewer connected. Make sure Monocle is running in your terminal." }],
         };
       }
     }
@@ -436,7 +436,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
         };
       } catch {
         return {
-          content: [{ type: "text" as const, text: "No reviewer connected." }],
+          content: [{ type: "text" as const, text: "No reviewer connected. Make sure Monocle is running in your terminal." }],
         };
       }
     }
@@ -461,7 +461,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
         };
       } catch {
         return {
-          content: [{ type: "text" as const, text: "No reviewer connected." }],
+          content: [{ type: "text" as const, text: "No reviewer connected. Make sure Monocle is running in your terminal." }],
         };
       }
     }
@@ -491,7 +491,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
         };
       } catch {
         return {
-          content: [{ type: "text" as const, text: "No reviewer connected." }],
+          content: [{ type: "text" as const, text: "No reviewer connected. Make sure Monocle is running in your terminal." }],
         };
       }
     }
@@ -512,7 +512,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
         };
       } catch {
         return {
-          content: [{ type: "text" as const, text: "No reviewer connected." }],
+          content: [{ type: "text" as const, text: "No reviewer connected. Make sure Monocle is running in your terminal." }],
         };
       }
     }
