@@ -1644,9 +1644,8 @@ func (m diffViewModel) currentDiffLine() int {
 }
 
 // screenLineToIndex maps a screen-relative Y coordinate to a logical lines[] index.
-// In non-wrap mode this is a 1:1 mapping from offset. In wrap mode, a single
-// logical line may span multiple screen lines, so we walk from offset counting
-// screen lines consumed by each logical line.
+// Walks from offset counting the actual display lines each logical line occupies,
+// including multi-line comment rendering (3 lines per comment).
 // Returns -1 if the coordinate is out of bounds.
 func (m diffViewModel) screenLineToIndex(screenY int) int {
 	if screenY < 0 || len(m.lines) == 0 {
@@ -1655,7 +1654,7 @@ func (m diffViewModel) screenLineToIndex(screenY int) int {
 
 	screenLine := 0
 	for i := m.offset; i < len(m.lines); i++ {
-		sl := m.screenLinesFor(i)
+		sl := m.displayLinesFor(i)
 		if screenY < screenLine+sl {
 			return i
 		}
@@ -1665,6 +1664,22 @@ func (m diffViewModel) screenLineToIndex(screenY int) int {
 		}
 	}
 	return -1
+}
+
+// displayLinesFor returns how many terminal lines a logical line actually occupies
+// in the rendered output. Unlike screenLinesFor (used by scroll functions),
+// this correctly accounts for multi-line comment rendering in all modes.
+func (m diffViewModel) displayLinesFor(idx int) int {
+	if idx < 0 || idx >= len(m.lines) {
+		return 1
+	}
+	line := m.lines[idx]
+	// Comments render as a 3-line box (header + body + footer) via formatInlineComment
+	if line.isComment {
+		return strings.Count(line.content, "\n") + 1
+	}
+	// For other line types, use the standard screen line calculation
+	return m.screenLinesFor(idx)
 }
 
 // handleMouseClick positions the cursor at the clicked screen line and starts

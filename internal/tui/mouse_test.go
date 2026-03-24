@@ -360,6 +360,45 @@ func TestDiffViewScreenLineToIndexWithOffset(t *testing.T) {
 	}
 }
 
+func TestDiffViewScreenLineToIndexWithComment(t *testing.T) {
+	comment := &types.ReviewComment{
+		Type: types.CommentIssue,
+		Body: "fix this",
+	}
+	dv := diffViewModel{
+		lines: []diffViewLine{
+			{content: "line 0", newLineNum: 1},
+			// Comment renders as 3 screen lines (header + body + footer)
+			{content: formatInlineComment(comment), isComment: true, comment: comment},
+			{content: "line 2", newLineNum: 2},
+			{content: "line 3", newLineNum: 3},
+		},
+		offset: 0,
+		height: 20,
+		width:  80,
+	}
+
+	// Screen line 0 -> lines[0] (regular line)
+	if got := dv.screenLineToIndex(0); got != 0 {
+		t.Errorf("screenLineToIndex(0) = %d, want 0", got)
+	}
+	// Screen lines 1-3 -> lines[1] (comment, 3 screen lines)
+	if got := dv.screenLineToIndex(1); got != 1 {
+		t.Errorf("screenLineToIndex(1) = %d, want 1 (comment start)", got)
+	}
+	if got := dv.screenLineToIndex(3); got != 1 {
+		t.Errorf("screenLineToIndex(3) = %d, want 1 (comment end)", got)
+	}
+	// Screen line 4 -> lines[2] (after the 3-line comment)
+	if got := dv.screenLineToIndex(4); got != 2 {
+		t.Errorf("screenLineToIndex(4) = %d, want 2 (first line after comment)", got)
+	}
+	// Screen line 5 -> lines[3]
+	if got := dv.screenLineToIndex(5); got != 3 {
+		t.Errorf("screenLineToIndex(5) = %d, want 3", got)
+	}
+}
+
 func TestMouseEnabledDefault(t *testing.T) {
 	m := NewApp(nil)
 	if !m.mouseEnabled {
