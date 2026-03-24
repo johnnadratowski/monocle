@@ -312,17 +312,18 @@ func TestSidebarItemAtLineWithContentItems(t *testing.T) {
 }
 
 func TestDiffViewScreenLineToIndex(t *testing.T) {
-	dv := diffViewModel{
-		lines: []diffViewLine{
-			{content: "line 0", newLineNum: 1},
-			{content: "line 1", newLineNum: 2},
-			{content: "line 2", newLineNum: 3},
-			{content: "line 3", newLineNum: 4},
-		},
-		offset: 0,
-		height: 10,
-		width:  80,
+	theme := DefaultTheme()
+	keys := DefaultKeyMap()
+	dv := newDiffViewModel(&theme, &keys)
+	dv.lines = []diffViewLine{
+		{content: "line 0", newLineNum: 1},
+		{content: "line 1", newLineNum: 2},
+		{content: "line 2", newLineNum: 3},
+		{content: "line 3", newLineNum: 4},
 	}
+	dv.offset = 0
+	dv.height = 10
+	dv.width = 80
 
 	// Non-wrap mode: 1:1 mapping
 	if got := dv.screenLineToIndex(0); got != 0 {
@@ -340,17 +341,18 @@ func TestDiffViewScreenLineToIndex(t *testing.T) {
 }
 
 func TestDiffViewScreenLineToIndexWithOffset(t *testing.T) {
-	dv := diffViewModel{
-		lines: []diffViewLine{
-			{content: "line 0", newLineNum: 1},
-			{content: "line 1", newLineNum: 2},
-			{content: "line 2", newLineNum: 3},
-			{content: "line 3", newLineNum: 4},
-		},
-		offset: 2,
-		height: 10,
-		width:  80,
+	theme := DefaultTheme()
+	keys := DefaultKeyMap()
+	dv := newDiffViewModel(&theme, &keys)
+	dv.lines = []diffViewLine{
+		{content: "line 0", newLineNum: 1},
+		{content: "line 1", newLineNum: 2},
+		{content: "line 2", newLineNum: 3},
+		{content: "line 3", newLineNum: 4},
 	}
+	dv.offset = 2
+	dv.height = 10
+	dv.width = 80
 
 	// With offset 2, screen line 0 maps to lines[2]
 	if got := dv.screenLineToIndex(0); got != 2 {
@@ -362,22 +364,23 @@ func TestDiffViewScreenLineToIndexWithOffset(t *testing.T) {
 }
 
 func TestDiffViewScreenLineToIndexWithComment(t *testing.T) {
+	theme := DefaultTheme()
+	keys := DefaultKeyMap()
 	comment := &types.ReviewComment{
 		Type: types.CommentIssue,
 		Body: "fix this",
 	}
-	dv := diffViewModel{
-		lines: []diffViewLine{
-			{content: "line 0", newLineNum: 1},
-			// Comment renders as 3 screen lines (header + body + footer)
-			{content: formatInlineComment(comment), isComment: true, comment: comment},
-			{content: "line 2", newLineNum: 2},
-			{content: "line 3", newLineNum: 3},
-		},
-		offset: 0,
-		height: 20,
-		width:  80,
+	dv := newDiffViewModel(&theme, &keys)
+	dv.lines = []diffViewLine{
+		{content: "line 0", newLineNum: 1},
+		// Comment renders as 3 screen lines (header + body + footer)
+		{content: formatInlineComment(comment), isComment: true, comment: comment},
+		{content: "line 2", newLineNum: 2},
+		{content: "line 3", newLineNum: 3},
 	}
+	dv.offset = 0
+	dv.height = 20
+	dv.width = 80
 
 	// Screen line 0 -> lines[0] (regular line)
 	if got := dv.screenLineToIndex(0); got != 0 {

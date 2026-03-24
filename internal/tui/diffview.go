@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/anthropics/monocle/internal/types"
 )
@@ -374,7 +375,9 @@ func (m diffViewModel) View() string {
 			if screenUsed > 0 {
 				b.WriteString("\n")
 			}
-			b.WriteString(rl)
+			// Truncate to pane width to prevent terminal-level wrapping
+			// when background colors cause lines to bleed past the border.
+			b.WriteString(ansi.Truncate(rl, m.width, ""))
 			screenUsed++
 		}
 	}
@@ -1666,20 +1669,35 @@ func (m diffViewModel) screenLineToIndex(screenY int) int {
 	return -1
 }
 
-// displayLinesFor returns how many terminal lines a logical line actually occupies
-// in the rendered output. Unlike screenLinesFor (used by scroll functions),
-// this correctly accounts for multi-line comment rendering in all modes.
+// displayLinesFor returns the actual number of terminal lines a logical line
+// occupies in the rendered output. It renders the line using the same logic as
+// View() and counts newlines, guaranteeing accuracy for comments, wrapped lines,
+// and any other multi-line rendering. Only called during mouse event processing,
+// not every frame.
 func (m diffViewModel) displayLinesFor(idx int) int {
 	if idx < 0 || idx >= len(m.lines) {
 		return 1
 	}
 	line := m.lines[idx]
-	// Comments render as a 3-line box (header + body + footer) via formatInlineComment
-	if line.isComment {
-		return strings.Count(line.content, "\n") + 1
+
+	var rendered string
+	if line.isHunk {
+		rendered = m.renderHunkHeader(line, false)
+	} else if line.isComment {
+		rendered = m.renderCommentLine(line, false)
+	} else if line.isSplit {
+		rendered = m.renderSplitLine(line, false, false)
+	} else if m.style == diffStyleFile || m.contentMode {
+		gutterWidth := 4
+		contentWidth := m.width - gutterWidth
+		rendered = m.renderContentLine(line, gutterWidth, contentWidth, false, false)
+	} else {
+		gutterWidth := 10
+		contentWidth := m.width - gutterWidth
+		rendered = m.renderDiffLine(line, gutterWidth, contentWidth, false, false)
 	}
-	// For other line types, use the standard screen line calculation
-	return m.screenLinesFor(idx)
+
+	return strings.Count(rendered, "\n") + 1
 }
 
 // handleMouseClick positions the cursor at the clicked screen line and starts
