@@ -166,9 +166,9 @@ type appModel struct {
 
 	clearAfterSubmitOverride string // session-only override: "", "always", or "never"
 
-	planReviewActive       bool // currently in plan review UI mode
-	planReviewSavedSidebar bool // sidebar visibility before entering
-	planReviewSavedWrap    bool // wrap state before entering
+	focusModeActive       bool // currently in focus mode
+	focusModeSavedSidebar bool // sidebar visibility before entering focus mode
+	focusModeSavedWrap    bool // wrap state before entering focus mode
 
 	mouseEnabled bool // whether mouse mode is active
 
@@ -553,19 +553,19 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.sidebar.rebuildTree()
 		m.sidebar.clampOffset()
 		recalcStackedLayout(&m)
-		// Enter plan review mode if enabled and this is a plan
-		if !m.planReviewActive && msg.id != "" {
-			if cfg := m.engine.GetConfig(); cfg != nil && cfg.PlanReviewMode {
+		// Auto-enter focus mode if enabled and this is a plan
+		if !m.focusModeActive && msg.id != "" {
+			if cfg := m.engine.GetConfig(); cfg != nil && cfg.AutoFocusMode {
 				if item, err := m.engine.GetContentItem(msg.id); err == nil && item != nil && item.IsPlan {
-					m.planReviewSavedSidebar = m.sidebarHidden
-					m.planReviewSavedWrap = m.diffView.wrap
+					m.focusModeSavedSidebar = m.sidebarHidden
+					m.focusModeSavedWrap = m.diffView.wrap
 					m.sidebarHidden = true
 					m.diffView.wrap = true
 					m.diffView.hOffset = 0
 					m.focus = focusMain
 					m.sidebar.focused = false
 					m.diffView.focused = true
-					m.planReviewActive = true
+					m.focusModeActive = true
 					m.sidebar.selectContentByID(msg.id)
 					selectCmd := m.handleSidebarSelect(sidebarSelectMsg{isContent: true, contentID: msg.id})
 					resizeCmd := func() tea.Msg {
@@ -896,18 +896,18 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusBar.commentCount = len(session.Comments)
 		}
 
-		// Restore plan review mode state
-		var planReviewRestored bool
-		if m.planReviewActive {
-			m.sidebarHidden = m.planReviewSavedSidebar
-			m.diffView.wrap = m.planReviewSavedWrap
-			m.planReviewActive = false
-			planReviewRestored = true
+		// Restore focus mode state
+		var focusModeRestored bool
+		if m.focusModeActive {
+			m.sidebarHidden = m.focusModeSavedSidebar
+			m.diffView.wrap = m.focusModeSavedWrap
+			m.focusModeActive = false
+			focusModeRestored = true
 		}
 
-		// Helper: if plan review was restored, batch cmd with layout recalc
+		// Helper: if focus mode was restored, batch cmd with layout recalc
 		maybeResize := func(cmd tea.Cmd) tea.Cmd {
-			if !planReviewRestored {
+			if !focusModeRestored {
 				return cmd
 			}
 			resize := func() tea.Msg {
@@ -1236,6 +1236,30 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	case Matches(key, km.Pause):
 		return m, m.executeCommand("pause")
+
+	case Matches(key, km.ToggleFocusMode):
+		if m.focusModeActive {
+			// Exit focus mode: restore saved state
+			m.sidebarHidden = m.focusModeSavedSidebar
+			m.diffView.wrap = m.focusModeSavedWrap
+			m.focusModeActive = false
+			return m, func() tea.Msg {
+				return tea.WindowSizeMsg{Width: m.width, Height: m.height}
+			}
+		}
+		// Enter focus mode
+		m.focusModeSavedSidebar = m.sidebarHidden
+		m.focusModeSavedWrap = m.diffView.wrap
+		m.sidebarHidden = true
+		m.diffView.wrap = true
+		m.diffView.hOffset = 0
+		m.focus = focusMain
+		m.sidebar.focused = false
+		m.diffView.focused = true
+		m.focusModeActive = true
+		return m, func() tea.Msg {
+			return tea.WindowSizeMsg{Width: m.width, Height: m.height}
+		}
 
 	case Matches(key, km.CycleLayout):
 		switch m.layoutConfig {
@@ -1901,6 +1925,15 @@ type loadContentMsg struct {
 func (m appModel) View() tea.View {
 	// Title bar
 	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("4")).Render(" o_(◉) monocle")
+	if m.focusModeActive {
+		badge := lipgloss.NewStyle().
+			Background(lipgloss.Color("5")).
+			Foreground(lipgloss.Color("0")).
+			Bold(true).
+			Padding(0, 1).
+			Render("FOCUS MODE")
+		title = title + " " + badge
+	}
 	titleBar := lipgloss.NewStyle().Width(m.width).Render(title)
 
 	sidebarStyle := m.theme.SidebarBorder

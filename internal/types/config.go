@@ -11,7 +11,7 @@ type Config struct {
 	ContextLines   int               `json:"context_lines"`
 	ReviewFormat      ReviewFormatConfig `json:"review_format"`
 	ClearAfterSubmit  string             `json:"clear_after_submit"`
-	PlanReviewMode    bool               `json:"plan_review_mode"`
+	AutoFocusMode     bool               `json:"auto_focus_mode"`
 	Mouse             *bool              `json:"mouse"`
 }
 

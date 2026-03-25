@@ -119,6 +119,7 @@ func (m helpModel) View() string {
 			{"Ctrl+y", "Copy review to clipboard"},
 			{Label(km.Pause) + " / :pause", "Toggle pause (ask Claude Code to wait)"},
 			{Label(km.DismissOutdated) + " / :dismiss-outdated", "Dismiss outdated comments"},
+			{Label(km.ToggleFocusMode), "Toggle focus mode"},
 			{":discard", "Discard all pending comments"},
 			{":history", "View submission history"},
 		}},

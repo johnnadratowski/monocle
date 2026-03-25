@@ -46,6 +46,7 @@ type KeyMap struct {
 	Submit      []string
 	Pause       []string
 	DismissOutdated []string
+	ToggleFocusMode []string
 
 	// General
 	BaseRef     []string
@@ -96,6 +97,7 @@ func DefaultKeyMap() KeyMap {
 		Submit:          []string{"S"},
 		Pause:           []string{"P"},
 		DismissOutdated: []string{"D"},
+		ToggleFocusMode: []string{"F"},
 
 		BaseRef:     []string{"b"},
 		CycleLayout: []string{"T"},
@@ -116,7 +118,7 @@ var actionNames = []string{
 	"wrap", "toggle_diff",
 	"tree_mode", "collapse_all", "expand_all", "prev_section", "next_section",
 	"comment", "file_comment", "visual", "reviewed",
-	"submit", "pause", "dismiss_outdated",
+	"submit", "pause", "dismiss_outdated", "toggle_focus_mode",
 	"base_ref", "cycle_layout", "refresh", "help", "quit", "command_mode",
 }
 
@@ -189,6 +191,8 @@ func (km KeyMap) ApplyOverrides(overrides map[string]string) KeyMap {
 			km.Pause = []string{key}
 		case "dismiss_outdated":
 			km.DismissOutdated = []string{key}
+		case "toggle_focus_mode":
+			km.ToggleFocusMode = []string{key}
 		case "base_ref":
 			km.BaseRef = []string{key}
 		case "cycle_layout":

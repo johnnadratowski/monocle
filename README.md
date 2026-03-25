@@ -127,7 +127,7 @@ Navigate with `j`/`k`, add comments with `c`, and use `v` for visual (multi-line
 
 **Pause** (`P`): Claude Code receives a notification to stop and wait. It calls `get_feedback` with `wait=true` and blocks until you submit your review. This is for when you want to review before the agent moves on.
 
-### 4. Plan review
+### 4. Plan review and focus mode
 
 Monocle isn't limited to reviewing file changes. Claude Code can submit **plans, architecture decisions, and other content** directly to Monocle for review using the `submit_plan` tool. These show up alongside your file diffs in the sidebar, and you can leave line-level comments on them the same way.
 
@@ -142,7 +142,7 @@ When Claude Code enters [plan mode](https://docs.anthropic.com/en/docs/claude-co
 - **Live diff viewer** — Unified and split (side-by-side) views with syntax highlighting and intra-line diffs
 - **Structured comments** — Tag feedback as issues, suggestions, notes, or praise with line-level or file-level precision
 - **Visual selection** — Select line ranges for comments with vim-style visual mode
-- **Plan review** — Claude Code can submit plans for your review before writing code, with markdown rendering
+- **Plan review + focus mode** — Claude Code can submit plans for your review before writing code, with markdown rendering and distraction-free focus mode
 - **Plan mode gating** — `submit_plan_and_wait` blocks the agent until you approve the plan before implementation begins
 - **Markdown rendering** — Plans and changed `.md` files render with styled headings, bold, italic, lists, and code blocks
 - **Horizontal scrolling & line wrapping** — Navigate wide diffs with `h`/`l` or toggle wrapping with `w`
@@ -208,6 +208,7 @@ When the Monocle MCP channel is connected:
 | `Ctrl+y` | Copy review to clipboard |
 | `P` / `:pause` | Pause Claude Code (wait for your review) |
 | `D` / `:dismiss-outdated` | Dismiss outdated comments |
+| `F` | Toggle focus mode (hide sidebar, enable wrap) |
 | `:discard` | Discard all pending comments |
 | `:history` | View past review submissions |
 | `I` | Connection info (socket path, subscriber count) |
@@ -259,7 +260,7 @@ Monocle loads settings from JSON config files:
   "keybindings": {},
   "mouse": true,
   "clear_after_submit": "ask",
-  "plan_review_mode": false,
+  "auto_focus_mode": false,
   "review_format": {
     "include_snippets": true,
     "max_snippet_lines": 10,
@@ -279,7 +280,7 @@ Monocle loads settings from JSON config files:
 | `ignore_patterns` | string array | `[]` | Glob patterns for files to exclude |
 | `mouse` | `true`, `false` | `true` | Enable mouse interactions (click, scroll, drag) |
 | `clear_after_submit` | `"ask"`, `"always"`, `"never"` | `"ask"` | Whether to clear comments after submitting a review |
-| `plan_review_mode` | `true`, `false` | `false` | Auto-hide sidebar and enable wrap when reviewing plans |
+| `auto_focus_mode` | `true`, `false` | `false` | Auto-enter focus mode (hide sidebar, enable wrap) when reviewing plans |
 | `keybindings` | object | `{}` | Custom key overrides (see below) |
 | `review_format.include_snippets` | `true`, `false` | `true` | Include code snippets in formatted reviews |
 | `review_format.max_snippet_lines` | integer | `10` | Truncate snippets longer than this |

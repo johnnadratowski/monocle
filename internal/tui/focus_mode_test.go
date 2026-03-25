@@ -6,9 +6,9 @@ import (
 	"github.com/anthropics/monocle/internal/types"
 )
 
-func TestPlanReviewMode_EntersOnPlanContentItem(t *testing.T) {
+func TestAutoFocusMode_EntersOnPlanContentItem(t *testing.T) {
 	engine := &stubEngine{
-		cfg: &types.Config{PlanReviewMode: true},
+		cfg: &types.Config{AutoFocusMode: true},
 		contentItems: []types.ContentItem{
 			{ID: "plan-1", Title: "Plan", IsPlan: true},
 		},
@@ -27,26 +27,26 @@ func TestPlanReviewMode_EntersOnPlanContentItem(t *testing.T) {
 	result, _ := m.Update(contentItemMsg{id: "plan-1"})
 	app := result.(appModel)
 
-	if !app.planReviewActive {
-		t.Error("expected planReviewActive to be true")
+	if !app.focusModeActive {
+		t.Error("expected focusModeActive to be true")
 	}
 	if !app.sidebarHidden {
-		t.Error("expected sidebar to be hidden in plan review mode")
+		t.Error("expected sidebar to be hidden in focus mode")
 	}
 	if !app.diffView.wrap {
-		t.Error("expected wrap to be enabled in plan review mode")
+		t.Error("expected wrap to be enabled in focus mode")
 	}
-	if app.planReviewSavedSidebar {
+	if app.focusModeSavedSidebar {
 		t.Error("expected saved sidebar state to be false (was visible)")
 	}
-	if app.planReviewSavedWrap {
+	if app.focusModeSavedWrap {
 		t.Error("expected saved wrap state to be false (was disabled)")
 	}
 }
 
-func TestPlanReviewMode_DoesNotEnterOnNonPlanContentItem(t *testing.T) {
+func TestAutoFocusMode_DoesNotEnterOnNonPlanContentItem(t *testing.T) {
 	engine := &stubEngine{
-		cfg: &types.Config{PlanReviewMode: true},
+		cfg: &types.Config{AutoFocusMode: true},
 		contentItems: []types.ContentItem{
 			{ID: "doc-1", Title: "Doc", IsPlan: false},
 		},
@@ -58,17 +58,17 @@ func TestPlanReviewMode_DoesNotEnterOnNonPlanContentItem(t *testing.T) {
 	result, _ := m.Update(contentItemMsg{id: "doc-1"})
 	app := result.(appModel)
 
-	if app.planReviewActive {
-		t.Error("expected planReviewActive to be false for non-plan content")
+	if app.focusModeActive {
+		t.Error("expected focusModeActive to be false for non-plan content")
 	}
 	if app.sidebarHidden {
 		t.Error("expected sidebar to remain visible for non-plan content")
 	}
 }
 
-func TestPlanReviewMode_ExitsOnSubmit(t *testing.T) {
+func TestAutoFocusMode_ExitsOnSubmit(t *testing.T) {
 	engine := &stubEngine{
-		cfg: &types.Config{PlanReviewMode: true, ClearAfterSubmit: "never"},
+		cfg: &types.Config{AutoFocusMode: true, ClearAfterSubmit: "never"},
 		contentItems: []types.ContentItem{
 			{ID: "plan-1", Title: "Plan", IsPlan: true},
 		},
@@ -78,20 +78,20 @@ func TestPlanReviewMode_ExitsOnSubmit(t *testing.T) {
 	m.width = 120
 	m.height = 40
 
-	// Enter plan review mode
+	// Enter focus mode
 	result, _ := m.Update(contentItemMsg{id: "plan-1"})
 	m = result.(appModel)
 
-	if !m.planReviewActive {
-		t.Fatal("expected planReviewActive to be true after entering")
+	if !m.focusModeActive {
+		t.Fatal("expected focusModeActive to be true after entering")
 	}
 
 	// Submit review
 	result, _ = m.Update(submitSuccessMsg{})
 	app := result.(appModel)
 
-	if app.planReviewActive {
-		t.Error("expected planReviewActive to be false after submit")
+	if app.focusModeActive {
+		t.Error("expected focusModeActive to be false after submit")
 	}
 	if app.sidebarHidden {
 		t.Error("expected sidebar to be restored to visible")
@@ -101,9 +101,9 @@ func TestPlanReviewMode_ExitsOnSubmit(t *testing.T) {
 	}
 }
 
-func TestPlanReviewMode_DoesNotReapplyOnSecondContentItem(t *testing.T) {
+func TestAutoFocusMode_DoesNotReapplyOnSecondContentItem(t *testing.T) {
 	engine := &stubEngine{
-		cfg: &types.Config{PlanReviewMode: true},
+		cfg: &types.Config{AutoFocusMode: true},
 		contentItems: []types.ContentItem{
 			{ID: "plan-1", Title: "Plan", IsPlan: true},
 		},
@@ -112,7 +112,7 @@ func TestPlanReviewMode_DoesNotReapplyOnSecondContentItem(t *testing.T) {
 	m.width = 120
 	m.height = 40
 
-	// Enter plan review mode
+	// Enter focus mode
 	result, _ := m.Update(contentItemMsg{id: "plan-1"})
 	m = result.(appModel)
 
@@ -126,14 +126,14 @@ func TestPlanReviewMode_DoesNotReapplyOnSecondContentItem(t *testing.T) {
 	if app.sidebarHidden {
 		t.Error("expected sidebar to remain visible after manual toggle + second content item")
 	}
-	if !app.planReviewActive {
-		t.Error("expected planReviewActive to remain true")
+	if !app.focusModeActive {
+		t.Error("expected focusModeActive to remain true")
 	}
 }
 
-func TestPlanReviewMode_Disabled_NoEffect(t *testing.T) {
+func TestAutoFocusMode_Disabled_NoEffect(t *testing.T) {
 	engine := &stubEngine{
-		cfg: &types.Config{PlanReviewMode: false},
+		cfg: &types.Config{AutoFocusMode: false},
 		contentItems: []types.ContentItem{
 			{ID: "plan-1", Title: "Plan", IsPlan: true},
 		},
@@ -145,17 +145,17 @@ func TestPlanReviewMode_Disabled_NoEffect(t *testing.T) {
 	result, _ := m.Update(contentItemMsg{id: "plan-1"})
 	app := result.(appModel)
 
-	if app.planReviewActive {
-		t.Error("expected planReviewActive to be false when config is disabled")
+	if app.focusModeActive {
+		t.Error("expected focusModeActive to be false when config is disabled")
 	}
 	if app.sidebarHidden {
 		t.Error("expected sidebar to remain visible when config is disabled")
 	}
 }
 
-func TestPlanReviewMode_RestoresCustomState(t *testing.T) {
+func TestAutoFocusMode_RestoresCustomState(t *testing.T) {
 	engine := &stubEngine{
-		cfg: &types.Config{PlanReviewMode: true, Wrap: true, ClearAfterSubmit: "never"},
+		cfg: &types.Config{AutoFocusMode: true, Wrap: true, ClearAfterSubmit: "never"},
 		contentItems: []types.ContentItem{
 			{ID: "plan-1", Title: "Plan", IsPlan: true},
 		},
@@ -175,10 +175,10 @@ func TestPlanReviewMode_RestoresCustomState(t *testing.T) {
 	m = result.(appModel)
 
 	// Saved state should reflect the pre-existing state
-	if !m.planReviewSavedSidebar {
+	if !m.focusModeSavedSidebar {
 		t.Error("expected saved sidebar to be true (was already hidden)")
 	}
-	if !m.planReviewSavedWrap {
+	if !m.focusModeSavedWrap {
 		t.Error("expected saved wrap to be true (was already enabled)")
 	}
 
@@ -186,7 +186,7 @@ func TestPlanReviewMode_RestoresCustomState(t *testing.T) {
 	result, _ = m.Update(submitSuccessMsg{})
 	app := result.(appModel)
 
-	// Should restore to pre-plan-review state
+	// Should restore to pre-focus-mode state
 	if !app.sidebarHidden {
 		t.Error("expected sidebar to remain hidden (original state)")
 	}
