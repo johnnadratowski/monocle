@@ -1292,7 +1292,7 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, m.handleMarkReviewed()
 
 	case Matches(key, km.FilterReviewed):
-		m.sidebar.hideReviewed = !m.sidebar.hideReviewed
+		m.sidebar.cycleReviewFilter()
 		m.sidebar.files = m.engine.GetChangedFiles()
 		m.sidebar.contentItems = m.engine.GetContentItems()
 		m.sidebar.additionalFiles = m.engine.GetAdditionalFiles()

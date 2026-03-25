@@ -28,8 +28,8 @@ type sidebarModel struct {
 	collapsed    map[string]bool
 	visibleItems []visibleItem
 
-	// Filter state
-	hideReviewed bool
+	// Filter state: "" = show all, "unreviewed" = hide reviewed, "reviewed" = hide unreviewed
+	reviewFilter string
 }
 
 func newSidebarModel(keys *KeyMap) sidebarModel {
@@ -198,10 +198,7 @@ func (m sidebarModel) View() string {
 			if m.treeMode {
 				modeIndicator = " "
 			}
-			filterIndicator := ""
-			if m.hideReviewed {
-				filterIndicator = " (unreviewed only)"
-			}
+			filterIndicator := m.reviewFilterLabel()
 			header := fmt.Sprintf(" Files%s%s  %d / %d", modeIndicator, filterIndicator, reviewedCount, fileCount)
 			b.WriteString(sectionStyle.Render(header))
 			b.WriteString("\n")
@@ -227,10 +224,7 @@ func (m sidebarModel) View() string {
 					reviewedCount++
 				}
 			}
-			filterIndicator := ""
-			if m.hideReviewed {
-				filterIndicator = " (unreviewed only)"
-			}
+			filterIndicator := m.reviewFilterLabel()
 			header := fmt.Sprintf(" Additional Files%s  %d / %d", filterIndicator, reviewedCount, additionalCt)
 			b.WriteString(sectionStyle.Render(header))
 			b.WriteString("\n")
@@ -279,10 +273,7 @@ func (m sidebarModel) View() string {
 		if m.treeMode {
 			modeIndicator = " "
 		}
-		filterIndicator := ""
-		if m.hideReviewed {
-			filterIndicator = " (unreviewed only)"
-		}
+		filterIndicator := m.reviewFilterLabel()
 		headerStr := fmt.Sprintf(" Files%s%s  %d / %d", modeIndicator, filterIndicator, reviewedCount, fileCount)
 		header.WriteString(sectionStyle.Render(headerStr))
 		header.WriteString("\n")
@@ -990,15 +981,18 @@ func (m *sidebarModel) clampOffset() {
 	}
 }
 
-// applyReviewedFilter builds new slices excluding reviewed items when
-// hideReviewed is enabled. Call after setting files/contentItems/additionalFiles.
+// applyReviewedFilter builds new slices based on reviewFilter state.
+// "" = no filter, "unreviewed" = hide reviewed, "reviewed" = hide unreviewed.
+// Call after setting files/contentItems/additionalFiles.
 func (m *sidebarModel) applyReviewedFilter() {
-	if !m.hideReviewed {
+	if m.reviewFilter == "" {
 		return
 	}
+	keepReviewed := m.reviewFilter == "reviewed"
+
 	var files []types.ChangedFile
 	for _, f := range m.files {
-		if !f.Reviewed {
+		if f.Reviewed == keepReviewed {
 			files = append(files, f)
 		}
 	}
@@ -1006,7 +1000,7 @@ func (m *sidebarModel) applyReviewedFilter() {
 
 	var items []types.ContentItem
 	for _, item := range m.contentItems {
-		if !item.Reviewed {
+		if item.Reviewed == keepReviewed {
 			items = append(items, item)
 		}
 	}
@@ -1014,11 +1008,35 @@ func (m *sidebarModel) applyReviewedFilter() {
 
 	var additional []types.AdditionalFile
 	for _, af := range m.additionalFiles {
-		if !af.Reviewed {
+		if af.Reviewed == keepReviewed {
 			additional = append(additional, af)
 		}
 	}
 	m.additionalFiles = additional
+}
+
+// cycleReviewFilter advances the filter: "" → "unreviewed" → "reviewed" → "".
+func (m *sidebarModel) cycleReviewFilter() {
+	switch m.reviewFilter {
+	case "":
+		m.reviewFilter = "unreviewed"
+	case "unreviewed":
+		m.reviewFilter = "reviewed"
+	default:
+		m.reviewFilter = ""
+	}
+}
+
+// reviewFilterLabel returns the header indicator for the current filter state.
+func (m sidebarModel) reviewFilterLabel() string {
+	switch m.reviewFilter {
+	case "unreviewed":
+		return " (unreviewed only)"
+	case "reviewed":
+		return " (reviewed only)"
+	default:
+		return ""
+	}
 }
 
 func truncatePath(path string, maxLen int) string {
