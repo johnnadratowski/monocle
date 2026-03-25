@@ -48,16 +48,31 @@ class EngineConnection {
     { resolve: (msg: Message) => void; reject: (err: Error) => void }
   >();
   private onEvent: (event: string, payload: Record<string, any>) => void;
+  private onConnectionChange: (connected: boolean) => void;
   private lineBuffer = "";
   private reconnecting = false;
   private closed = false;
+  private _connected = false;
+
+  get isConnected(): boolean {
+    return this._connected;
+  }
+
+  private setConnected(value: boolean) {
+    if (this._connected !== value) {
+      this._connected = value;
+      this.onConnectionChange(value);
+    }
+  }
 
   constructor(
     socketPath: string,
     onEvent: (event: string, payload: Record<string, any>) => void,
+    onConnectionChange: (connected: boolean) => void,
   ) {
     this.socketPath = socketPath;
     this.onEvent = onEvent;
+    this.onConnectionChange = onConnectionChange;
   }
 
   async connect(): Promise<void> {
@@ -96,6 +111,7 @@ class EngineConnection {
             const msg: Message = JSON.parse(line);
             if (!gotAck && msg.type === "subscribe_response") {
               gotAck = true;
+              this.setConnected(true);
               resolve();
               continue;
             }
@@ -110,12 +126,14 @@ class EngineConnection {
         if (!gotAck) {
           reject(err);
         } else {
+          this.setConnected(false);
           this.scheduleReconnect();
         }
       });
 
       this.conn.on("close", () => {
         if (gotAck && !this.closed) {
+          this.setConnected(false);
           this.scheduleReconnect();
         }
       });
@@ -176,8 +194,14 @@ class EngineConnection {
     attempt(1000);
   }
 
+  // Start trying to connect in the background. Never throws.
+  connectInBackground() {
+    this.scheduleReconnect();
+  }
+
   close() {
     this.closed = true;
+    this.setConnected(false);
     if (this.conn) {
       this.conn.destroy();
       this.conn = null;
@@ -252,48 +276,57 @@ const mcp = new Server(
 );
 
 // Engine connection with event handler that pushes channel notifications
-const engine = new EngineConnection(socketPath, (event, payload) => {
-  switch (event) {
-    case "feedback_submitted":
-      mcp
-        .notification({
-          method: "notifications/claude/channel",
-          params: {
-            content:
-              payload.message || "Your reviewer has submitted feedback. Use the get_feedback tool to retrieve it.",
-            meta: { event: "feedback_submitted" },
-          },
-        })
-        .catch((err: unknown) => { console.error("Failed to deliver feedback_submitted notification:", err); });
-      break;
-    case "pause_changed":
-      if (payload.status === "pause_requested") {
+const engine = new EngineConnection(
+  socketPath,
+  // onEvent
+  (event, payload) => {
+    switch (event) {
+      case "feedback_submitted":
         mcp
           .notification({
             method: "notifications/claude/channel",
             params: {
               content:
-                "Your reviewer has requested you pause and wait for feedback. " +
-                "Use the get_feedback tool with wait=true to block until feedback is ready.",
-              meta: { event: "pause_requested" },
+                payload.message || "Your reviewer has submitted feedback. Use the get_feedback tool to retrieve it.",
+              meta: { event: "feedback_submitted" },
             },
           })
-          .catch((err: unknown) => { console.error("Failed to deliver pause_requested notification:", err); });
-      }
-      break;
-    case "content_item_added":
-      // Informational — no push needed, the agent submitted this
-      break;
-    case "additional_file_added":
-      // Informational — no push needed, the agent added this
-      break;
-  }
-});
+          .catch((err: unknown) => { console.error("Failed to deliver feedback_submitted notification:", err); });
+        break;
+      case "pause_changed":
+        if (payload.status === "pause_requested") {
+          mcp
+            .notification({
+              method: "notifications/claude/channel",
+              params: {
+                content:
+                  "Your reviewer has requested you pause and wait for feedback. " +
+                  "Use the get_feedback tool with wait=true to block until feedback is ready.",
+                meta: { event: "pause_requested" },
+              },
+            })
+            .catch((err: unknown) => { console.error("Failed to deliver pause_requested notification:", err); });
+        }
+        break;
+      case "content_item_added":
+        // Informational — no push needed, the agent submitted this
+        break;
+      case "additional_file_added":
+        // Informational — no push needed, the agent added this
+        break;
+    }
+  },
+  // onConnectionChange — notify Claude Code to re-fetch tools
+  (_connected: boolean) => {
+    mcp
+      .notification({ method: "notifications/tools/list_changed" })
+      .catch(() => {});
+  },
+);
 
 // -- Tools --
 
-mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [
+const TOOLS = [
     {
       name: "review_status",
       description:
@@ -401,7 +434,10 @@ mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
         required: ["title"],
       },
     },
-  ],
+];
+
+mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
+  tools: engine.isConnected ? TOOLS : [],
 }));
 
 mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
@@ -551,21 +587,13 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
 // -- Start --
 
 async function main() {
-  // Connect to monocle engine (retry if not yet started)
-  let connected = false;
-  for (let i = 0; i < 5; i++) {
-    try {
-      await engine.connect();
-      connected = true;
-      break;
-    } catch {
-      await new Promise((r) => setTimeout(r, 2000));
-    }
-  }
-
-  if (!connected) {
-    console.error("Monocle is not running. Channel exiting.");
-    process.exit(1);
+  // Try connecting to engine immediately — fails fast if socket doesn't exist.
+  // This ensures tools are available on Claude's first fetch when Monocle is running.
+  try {
+    await engine.connect();
+  } catch {
+    // Monocle not running yet — retry in background; tools appear via list_changed.
+    engine.connectInBackground();
   }
 
   // Connect to Claude Code via stdio
