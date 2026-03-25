@@ -24,12 +24,25 @@ func newHighlighter() *highlighter {
 	}
 }
 
+// extraXMLExtensions maps file extensions that Chroma doesn't recognise
+// to the XML lexer name so they get proper syntax highlighting.
+var extraXMLExtensions = map[string]bool{
+	".plist": true, ".xmp": true, ".xsd": true, ".xsl": true,
+	".xslt": true, ".wsdl": true, ".csproj": true, ".fsproj": true,
+	".vbproj": true, ".vcxproj": true, ".props": true, ".targets": true,
+	".nuspec": true, ".resx": true, ".config": true, ".xaml": true,
+	".storyboard": true, ".xib": true, ".iml": true, ".mxml": true,
+}
+
 func (h *highlighter) getLexer(path string) chroma.Lexer {
 	ext := filepath.Ext(path)
 	if l, ok := h.lexerCache[ext]; ok {
 		return l
 	}
 	l := lexers.Match(path)
+	if l == nil && extraXMLExtensions[strings.ToLower(ext)] {
+		l = lexers.Get("xml")
+	}
 	if l == nil {
 		l = lexers.Fallback
 	}
