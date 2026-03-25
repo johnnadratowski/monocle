@@ -249,9 +249,8 @@ const mcp = new Server(
       "Pass your plan file path as the file_path parameter so the channel reads your plan file directly.",
       "This ensures your reviewer sees exactly what you wrote — do not pass plan content manually.",
       "This submits the plan to your reviewer AND blocks until they respond with feedback.",
-      "If the reviewer approves, proceed to call ExitPlanMode.",
-      "If the reviewer requests changes, update your plan file and call submit_plan_and_wait again.",
-      "Only call ExitPlanMode after your reviewer has approved the plan via submit_plan_and_wait.",
+      "If the reviewer requests changes, update your plan file and call submit_plan_and_wait again to start another review round.",
+      "Keep iterating until the reviewer approves, then continue with your normal workflow.",
     ].join("\n"),
   },
 );
@@ -376,8 +375,8 @@ mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
       description:
         "Submit a plan for review AND block until your reviewer responds with feedback. " +
         "Use this in plan mode instead of submit_plan. " +
-        "If the reviewer approves, proceed to ExitPlanMode. " +
-        "If they request changes, update the plan and call this again.",
+        "If they request changes, update the plan and call this again. " +
+        "Keep iterating until the reviewer approves, then continue with your normal workflow.",
       inputSchema: {
         type: "object" as const,
         properties: {
