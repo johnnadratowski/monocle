@@ -42,8 +42,8 @@ func TestCreateSession(t *testing.T) {
 		t.Errorf("expected BaseRef %q (HEAD), got %q", stub.currentRef, session.BaseRef)
 	}
 
-	if session.Agent != "claude" {
-		t.Errorf("expected default agent 'claude', got %q", session.Agent)
+	if session.Agent != "" {
+		t.Errorf("expected empty default agent, got %q", session.Agent)
 	}
 
 	if session.RepoRoot != stub.repoRoot {

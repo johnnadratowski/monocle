@@ -234,7 +234,24 @@ func (s *SocketServer) handleMessage(msg any) any {
 		return s.engine.handleSubmitContent(m)
 	case *protocol.AddAdditionalFilesMsg:
 		return s.engine.handleAddAdditionalFiles(m)
+	case *protocol.IdentifyMsg:
+		s.handleIdentify(m)
+		return nil
 	default:
 		return nil
 	}
+}
+
+// handleIdentify processes an agent self-identification message and emits a
+// connection event so the TUI can display the agent name.
+func (s *SocketServer) handleIdentify(msg *protocol.IdentifyMsg) {
+	s.subscriberMu.Lock()
+	count := s.subscriberCount
+	s.subscriberMu.Unlock()
+
+	s.engine.emit(EventConnectionChanged, EventPayload{
+		Kind:    EventConnectionChanged,
+		Status:  fmt.Sprintf("%d", count),
+		Message: msg.Agent,
+	})
 }

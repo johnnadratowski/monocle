@@ -44,9 +44,6 @@ func (sm *SessionManager) CreateSession(opts SessionOptions) (*types.ReviewSessi
 		UpdatedAt:      now,
 	}
 
-	if session.Agent == "" {
-		session.Agent = "claude"
-	}
 	if session.RepoRoot == "" {
 		session.RepoRoot = sm.git.RepoRoot()
 	}

@@ -208,6 +208,13 @@ class EngineConnection {
     this.scheduleReconnect();
   }
 
+  // Send agent identification (fire-and-forget, no response expected).
+  identify(agent: string) {
+    if (this.conn && !this.conn.destroyed) {
+      this.conn.write(JSON.stringify({ type: "identify", agent }) + "\n");
+    }
+  }
+
   close() {
     this.closed = true;
     this.setConnected(false);
@@ -608,6 +615,12 @@ async function main() {
   // Connect to Claude Code via stdio
   const transport = new StdioServerTransport();
   await mcp.connect(transport);
+
+  // Identify the connecting agent to Monocle
+  const clientVersion = mcp.getClientVersion();
+  if (clientVersion?.name) {
+    engine.identify(clientVersion.name);
+  }
 
   // Handle graceful shutdown
   process.on("SIGINT", () => {

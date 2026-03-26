@@ -6,6 +6,7 @@ const (
 	TypePollFeedback       = "poll_feedback"
 	TypeSubmitContent      = "submit_content"
 	TypeSubscribe          = "subscribe"
+	TypeIdentify           = "identify"
 	TypeAddAdditionalFiles = "add_additional_files"
 )
 
@@ -81,6 +82,12 @@ type EventNotification struct {
 	Type    string         `json:"type"`
 	Event   string         `json:"event"`
 	Payload map[string]any `json:"payload"`
+}
+
+// IdentifyMsg carries the agent's self-reported name (sent after MCP handshake).
+type IdentifyMsg struct {
+	Type  string `json:"type"`
+	Agent string `json:"agent"`
 }
 
 // AddAdditionalFilesMsg sends file/directory paths to add for review.

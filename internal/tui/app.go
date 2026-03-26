@@ -72,7 +72,8 @@ type additionalFileAddedMsg struct {
 }
 
 type connectionChangedMsg struct {
-	count int
+	count     int
+	agentName string
 }
 
 type pauseChangedMsg struct {
@@ -317,7 +318,7 @@ func (m appModel) startSessionAndLoad() tea.Cmd {
 	repoRoot := m.repoRoot
 	socketPath := m.deferredSocket
 	return func() tea.Msg {
-		engine.StartSession(core.SessionOptions{Agent: "claude", RepoRoot: repoRoot})
+		engine.StartSession(core.SessionOptions{RepoRoot: repoRoot})
 		if socketPath != "" {
 			engine.StartServer(socketPath)
 		}
@@ -583,6 +584,12 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case connectionChangedMsg:
 		m.statusBar.subscriberCount = msg.count
 		m.statusBar.socketStarted = m.engine.GetSocketPath() != ""
+		if msg.agentName != "" {
+			m.statusBar.agentName = msg.agentName
+		}
+		if msg.count == 0 {
+			m.statusBar.agentName = ""
+		}
 		return m, nil
 
 	case feedbackStatusMsg:
@@ -2226,6 +2233,6 @@ func BridgeEngineEvents(engine core.EngineAPI, p *tea.Program) {
 	})
 	engine.On(core.EventConnectionChanged, func(e core.EventPayload) {
 		count, _ := strconv.Atoi(e.Status)
-		p.Send(connectionChangedMsg{count: count})
+		p.Send(connectionChangedMsg{count: count, agentName: e.Message})
 	})
 }
