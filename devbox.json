@@ -7,7 +7,8 @@
   ],
   "shell": {
     "init_hook": [
-      "lefthook install"
+      "lefthook install",
+      "export MONOCLE_DB=$PWD/.monocle-dev.db"
     ]
   }
 }

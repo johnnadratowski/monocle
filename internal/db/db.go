@@ -15,8 +15,12 @@ type DB struct {
 	path string
 }
 
-// DBPath returns the XDG-compliant default database path.
+// DBPath returns the database path. If MONOCLE_DB is set, it is used as-is.
+// Otherwise the XDG-compliant default is returned.
 func DBPath() string {
+	if p := os.Getenv("MONOCLE_DB"); p != "" {
+		return p
+	}
 	dataDir := os.Getenv("XDG_DATA_HOME")
 	if dataDir == "" {
 		home, _ := os.UserHomeDir()

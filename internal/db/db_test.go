@@ -1,11 +1,31 @@
 package db
 
 import (
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/anthropics/monocle/internal/types"
 )
+
+func TestDBPath_EnvOverride(t *testing.T) {
+	t.Setenv("MONOCLE_DB", "/custom/path/test.db")
+	got := DBPath()
+	if got != "/custom/path/test.db" {
+		t.Errorf("expected /custom/path/test.db, got %q", got)
+	}
+}
+
+func TestDBPath_Default(t *testing.T) {
+	t.Setenv("MONOCLE_DB", "")
+	got := DBPath()
+	if got == "" {
+		t.Error("expected non-empty default path")
+	}
+	if !strings.HasSuffix(got, "monocle/monocle.db") {
+		t.Errorf("expected path ending in monocle/monocle.db, got %q", got)
+	}
+}
 
 func testDB(t *testing.T) *DB {
 	t.Helper()
