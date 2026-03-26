@@ -39,11 +39,16 @@ func (m statusBarModel) View() string {
 		return m.theme.StatusBar.Width(m.width).Render(cmdLine)
 	}
 
-	// Connection status
+	// Connection status with agent name
 	var connLabel string
+	name := m.agentName
 	switch {
 	case m.subscriberCount > 0:
-		connLabel = lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Render("● Connected")
+		if name != "" {
+			connLabel = lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Render("● Connected " + name)
+		} else {
+			connLabel = lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Render("● Connected")
+		}
 	case m.socketStarted:
 		connLabel = lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render("○ Waiting")
 	default:
@@ -59,10 +64,6 @@ func (m statusBarModel) View() string {
 			ref = ref[:8]
 		}
 		parts = append(parts, fmt.Sprintf("ref:%s", ref))
-	}
-
-	if m.agentName != "" {
-		parts = append(parts, m.agentName)
 	}
 
 	if m.diffStyle == diffStyleFile {
