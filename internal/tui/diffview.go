@@ -74,10 +74,12 @@ type diffViewModel struct {
 	mouseDragActive bool
 
 	// Content view mode (for plans/docs)
-	contentMode bool
-	contentID   string
-	contentTitle string
-	mdStyler    *markdownStyler
+	contentMode        bool
+	contentID          string
+	contentTitle       string
+	contentHasDiff     bool   // true when a previous version exists for diffing
+	contentDiffContent string // current content text, for toggling back from diff view
+	mdStyler           *markdownStyler
 
 	// Additional file mode (external files, no diff)
 	additionalFilePath string
@@ -161,6 +163,8 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 		m.contentMode = true
 		m.contentID = msg.id
 		m.contentTitle = msg.title
+		m.contentHasDiff = msg.hasPreviousVersion
+		m.contentDiffContent = msg.content
 		m.additionalFilePath = ""
 		if msg.contentType != "" {
 			ext := msg.contentType
@@ -185,6 +189,21 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 			m.visualMode = false
 		}
 		m.hOffset = 0
+		return m, nil
+
+	case loadContentDiffMsg:
+		if msg.err != nil || msg.result == nil {
+			return m, nil // stay in content mode on error
+		}
+		m.contentMode = false
+		m.hunks = msg.result.Hunks
+		m.comments = msg.comments
+		m.style = diffStyleUnified
+		m.buildLines()
+		m.cursor = m.nearestSelectable(0, 1)
+		m.offset = 0
+		m.hOffset = 0
+		m.visualMode = false
 		return m, nil
 
 	case loadFileContentMsg:
@@ -1304,11 +1323,43 @@ func (m *diffViewModel) ToggleWrap() {
 	m.ensureVisible()
 }
 
-// CycleDiffStyle cycles through unified → split → file display styles.
+// CycleDiffStyle cycles through display styles.
+// For file diffs: unified → split → file → unified.
+// For content items with a previous version: content → unified → split → content.
 func (m *diffViewModel) CycleDiffStyle() tea.Cmd {
-	if m.contentMode || m.additionalFilePath != "" {
+	if m.additionalFilePath != "" {
 		return nil
 	}
+
+	// Content mode: toggle into diff view if a previous version exists
+	if m.contentMode {
+		if !m.contentHasDiff {
+			return nil
+		}
+		contentID := m.contentID
+		return func() tea.Msg {
+			return requestContentDiffMsg{contentID: contentID}
+		}
+	}
+
+	// Content diff view (contentID set but not in contentMode): cycle unified → split → content
+	if m.contentID != "" {
+		switch m.style {
+		case diffStyleUnified:
+			m.style = diffStyleSplit
+			m.buildLines()
+		case diffStyleSplit:
+			m.contentMode = true
+			m.style = diffStyleUnified
+			m.buildContentLines(m.contentDiffContent)
+			m.cursor = m.nearestSelectable(0, 1)
+			m.offset = 0
+			m.hOffset = 0
+		}
+		return nil
+	}
+
+	// Regular file diff cycling: unified → split → file → unified
 	switch m.style {
 	case diffStyleUnified:
 		m.style = diffStyleSplit

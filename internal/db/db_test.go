@@ -192,6 +192,75 @@ func TestContentItems(t *testing.T) {
 	}
 }
 
+func TestContentItemPreviousContent(t *testing.T) {
+	d := testDB(t)
+	now := time.Now()
+	d.CreateSession(&types.ReviewSession{ID: "sess-1", Agent: "claude", RepoRoot: "/tmp", BaseRef: "abc", ReviewRound: 1, CreatedAt: now, UpdatedAt: now})
+
+	// First insert: no previous content
+	item := &types.ContentItem{
+		ID:          "plan-1",
+		Title:       "My Plan",
+		Content:     "version 1",
+		ContentType: "markdown",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if err := d.UpsertContentItem("sess-1", item); err != nil {
+		t.Fatalf("first upsert: %v", err)
+	}
+
+	got, err := d.GetContentItem("plan-1")
+	if err != nil {
+		t.Fatalf("get after first upsert: %v", err)
+	}
+	if got.PreviousContent != "" {
+		t.Errorf("expected empty previous_content on first insert, got %q", got.PreviousContent)
+	}
+
+	// Second insert (update): previous content should be "version 1"
+	item.Content = "version 2"
+	item.UpdatedAt = now.Add(1)
+	if err := d.UpsertContentItem("sess-1", item); err != nil {
+		t.Fatalf("second upsert: %v", err)
+	}
+
+	got, err = d.GetContentItem("plan-1")
+	if err != nil {
+		t.Fatalf("get after second upsert: %v", err)
+	}
+	if got.PreviousContent != "version 1" {
+		t.Errorf("expected previous_content='version 1', got %q", got.PreviousContent)
+	}
+	if got.Content != "version 2" {
+		t.Errorf("expected content='version 2', got %q", got.Content)
+	}
+
+	// Third insert (update): previous content should now be "version 2"
+	item.Content = "version 3"
+	item.UpdatedAt = now.Add(2)
+	if err := d.UpsertContentItem("sess-1", item); err != nil {
+		t.Fatalf("third upsert: %v", err)
+	}
+
+	got, err = d.GetContentItem("plan-1")
+	if err != nil {
+		t.Fatalf("get after third upsert: %v", err)
+	}
+	if got.PreviousContent != "version 2" {
+		t.Errorf("expected previous_content='version 2', got %q", got.PreviousContent)
+	}
+
+	// Also verify GetContentItems returns previous_content
+	items, err := d.GetContentItems("sess-1")
+	if err != nil {
+		t.Fatalf("get items: %v", err)
+	}
+	if len(items) != 1 || items[0].PreviousContent != "version 2" {
+		t.Errorf("GetContentItems: expected previous_content='version 2', got %q", items[0].PreviousContent)
+	}
+}
+
 func TestDeleteComment(t *testing.T) {
 	d := testDB(t)
 	now := time.Now()
