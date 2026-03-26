@@ -265,6 +265,11 @@ const cwd = process.cwd();
 const repoRoot = findRepoRoot(cwd);
 const socketPath = process.env.MONOCLE_SOCKET || defaultSocketPath(repoRoot);
 
+// When a tool (submit_plan_and_wait, get_feedback --wait) is blocking for
+// feedback, suppress the event-based notification to avoid delivering the
+// same feedback twice.
+let waitingForFeedback = false;
+
 // Create MCP server with channel capability
 const mcp = new Server(
   { name: "monocle", version: "1.0.0" },
@@ -298,6 +303,7 @@ const engine = new EngineConnection(
   (event, payload) => {
     switch (event) {
       case "feedback_submitted":
+        if (waitingForFeedback) break; // Tool call will deliver this feedback
         mcp
           .notification({
             method: "notifications/claude/channel",
@@ -479,7 +485,15 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
       try {
         let resp: Message;
         if (args.wait) {
-          resp = await blockingGetFeedback(socketPath);
+          waitingForFeedback = true;
+          try {
+            resp = await blockingGetFeedback(socketPath);
+          } finally {
+            // Defer flag reset: the Go engine wakes the blocking poll before
+            // emitting the event notification, so the event may still be
+            // in-flight on the subscription socket when this resolves.
+            setTimeout(() => { waitingForFeedback = false; }, 200);
+          }
         } else {
           resp = await engine.request({ type: "poll_feedback", wait: false });
         }
@@ -557,7 +571,16 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
         });
 
         // Step 2: Block until reviewer submits feedback
-        const feedback = await blockingGetFeedback(socketPath);
+        waitingForFeedback = true;
+        let feedback: Message;
+        try {
+          feedback = await blockingGetFeedback(socketPath);
+        } finally {
+          // Defer flag reset: the Go engine wakes the blocking poll before
+          // emitting the event notification, so the event may still be
+          // in-flight on the subscription socket when this resolves.
+          setTimeout(() => { waitingForFeedback = false; }, 200);
+        }
 
         if (feedback.has_feedback) {
           return {
