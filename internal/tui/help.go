@@ -118,6 +118,7 @@ func (m helpModel) View() string {
 			{"d", "Delete comment (on comment)"},
 			{Label(km.Reviewed), "Toggle file reviewed"},
 			{Label(km.Submit) + " / :submit", "Submit review"},
+			{"Ctrl+g", "Open external editor (comment/submit modal)"},
 			{"Ctrl+y", "Copy review to clipboard"},
 			{Label(km.Pause) + " / :pause", "Toggle pause (ask Claude Code to wait)"},
 			{Label(km.ToggleFocusMode), "Toggle focus mode"},

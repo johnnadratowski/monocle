@@ -115,6 +115,10 @@ func (m commentEditorModel) Update(msg tea.Msg) (commentEditorModel, tea.Cmd) {
 			m.moveCursorToLineStart()
 		case "end", "ctrl+e":
 			m.moveCursorToLineEnd()
+		case "ctrl+g":
+			return m, func() tea.Msg {
+				return externalEditorRequestMsg{body: m.body, origin: overlayComment}
+			}
 		case "space":
 			m.insertAtCursor(" ")
 		default:
@@ -380,7 +384,7 @@ func (m commentEditorModel) View() string {
 	b.WriteString("\n\n")
 
 	// Hints
-	b.WriteString(lipgloss.NewStyle().Faint(true).Render("Enter: save  Shift+Enter: newline  Esc: cancel  Tab: cycle type  Arrows: navigate"))
+	b.WriteString(lipgloss.NewStyle().Faint(true).Render("Enter: save  Shift+Enter: newline  Ctrl+g: editor  Esc: cancel  Tab: cycle type"))
 
 	return m.theme.ModalBorder.Width(modalWidth).Render(b.String())
 }

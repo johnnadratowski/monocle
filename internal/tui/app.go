@@ -846,6 +846,22 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.overlay = overlayNone
 		return m, nil
 
+	case externalEditorRequestMsg:
+		return m, openExternalEditor(msg.body, msg.origin)
+
+	case externalEditorResultMsg:
+		if msg.err != nil {
+			return m, nil
+		}
+		switch msg.origin {
+		case overlayComment:
+			m.commentEditor.body = msg.body
+			m.commentEditor.cursor = len([]rune(msg.body))
+		case overlayReview:
+			m.reviewSummary.body = msg.body
+		}
+		return m, nil
+
 	case closeHelpMsg:
 		m.overlay = overlayNone
 		return m, nil

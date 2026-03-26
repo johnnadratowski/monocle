@@ -98,6 +98,10 @@ func (m reviewSummaryModel) Update(msg tea.Msg) (reviewSummaryModel, tea.Cmd) {
 			return m, func() tea.Msg { return yank }
 		case "shift+tab":
 			m.copyToClipboard = !m.copyToClipboard
+		case "ctrl+g":
+			return m, func() tea.Msg {
+				return externalEditorRequestMsg{body: m.body, origin: overlayReview}
+			}
 		case "shift+enter", "alt+enter":
 			m.body += "\n"
 		case "backspace":
@@ -304,7 +308,7 @@ func (m reviewSummaryModel) View() string {
 	}
 	b.WriteString("\n\n")
 
-	b.WriteString(lipgloss.NewStyle().Faint(true).Render("Enter: submit  Ctrl+y: yank  Esc: cancel"))
+	b.WriteString(lipgloss.NewStyle().Faint(true).Render("Enter: submit  Ctrl+g: editor  Ctrl+y: yank  Esc: cancel"))
 
 	return m.theme.ModalBorder.Width(modalWidth).Render(b.String())
 }
