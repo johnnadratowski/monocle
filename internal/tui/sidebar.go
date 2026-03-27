@@ -278,10 +278,10 @@ func (m sidebarModel) View() string {
 		header.WriteString(sectionStyle.Render(headerStr))
 		header.WriteString("\n")
 		header.WriteString(b.String())
-		return header.String()
+		return strings.TrimRight(header.String(), "\n")
 	}
 
-	return b.String()
+	return strings.TrimRight(b.String(), "\n")
 }
 
 func (m sidebarModel) renderFileItem(f types.ChangedFile, selected bool) string {

@@ -1,11 +1,14 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
+	"github.com/anthropics/monocle/internal/types"
 )
 
 func TestLayoutModeBreakpoint(t *testing.T) {
@@ -80,6 +83,32 @@ func TestWidthAllocationHorizontal(t *testing.T) {
 	}
 	if app.diffView.width < 80 {
 		t.Errorf("diffView.width = %d, want >= 80", app.diffView.width)
+	}
+}
+
+func TestStackedLayoutRenderedHeight(t *testing.T) {
+	m := NewApp(nil)
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 60, Height: 40})
+	app := updated.(appModel)
+
+	if app.layout != layoutStacked {
+		t.Fatalf("expected stacked layout at width 60")
+	}
+
+	// Add enough files to fill the sidebar to its allocated height.
+	for i := 0; i < 15; i++ {
+		app.sidebar.files = append(app.sidebar.files, types.ChangedFile{
+			Path:   fmt.Sprintf("file%d.go", i),
+			Status: types.FileModified,
+		})
+	}
+	recalcStackedLayout(&app)
+
+	v := app.View()
+	rendered := v.Content
+	lineCount := strings.Count(rendered, "\n") + 1
+	if lineCount != app.height {
+		t.Errorf("rendered height = %d, want %d (terminal height)", lineCount, app.height)
 	}
 }
 
