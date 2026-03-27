@@ -298,6 +298,7 @@ const INSTRUCTIONS = [
   "When you receive a pause_requested event, your reviewer wants you to stop and wait. Use the get_feedback tool with wait=true to block until they submit their review.",
   "",
   "You can submit plans or architecture decisions for your reviewer to see using the submit_plan tool.",
+  "Only use submit_plan and submit_plan_and_wait from the top-level agent — never from subagents or background tasks.",
   "When submitting plans, use the plan filename as the id parameter so updates replace the previous version.",
   "You can check the current review status at any time using the review_status tool.",
   "",
@@ -413,7 +414,7 @@ const TOOLS = [
     {
       name: "submit_plan",
       description:
-        "Submit a plan, architecture decision, or other content for your reviewer to see and comment on",
+        "Submit a fully formed plan or architecture decision for your reviewer to see and comment on. Only call this from the top-level agent, not from subagents.",
       inputSchema: {
         type: "object" as const,
         properties: {
@@ -462,7 +463,8 @@ const TOOLS = [
     {
       name: "submit_plan_and_wait",
       description:
-        "Submit a plan for review AND block until your reviewer responds with feedback. " +
+        "Submit a fully formed plan for review AND block until your reviewer responds with feedback. " +
+        "Only call this from the top-level agent, not from subagents. " +
         "Use this in plan mode instead of submit_plan. " +
         "If they request changes, update the plan and call this again. " +
         "Keep iterating until the reviewer approves, then continue with your normal workflow.",
