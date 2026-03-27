@@ -133,19 +133,17 @@ Monocle works with any agent that supports MCP tool servers. The agent gets the 
 #### 1. Register the MCP server
 
 ```bash
-monocle register
+monocle register opencode   # or: codex, gemini, all
 ```
 
-This writes Monocle's MCP server config to `.mcp.json`, which works for Claude Code and other agents that read `.mcp.json`. For agents that use their own config format, copy the pre-built config from Monocle's repo:
+This writes the agent's MCP server config and slash commands. You can also run `monocle register` with no argument to get an interactive picker. Each agent writes to its own config location:
 
 | Agent | Config file | Slash commands |
 |-------|-------------|----------------|
-| Claude Code | `.mcp.json` (via `monocle register`) | `plugin/commands/` |
+| Claude Code | `.mcp.json` | `plugin/commands/` |
 | OpenCode | `opencode.json` | `.opencode/commands/` |
 | Codex CLI | `.codex/config.toml` | — |
 | Gemini CLI | `.gemini/settings.json` | `.gemini/commands/` |
-
-Copy the relevant config and command files into your project to get started.
 
 #### 2. Start reviewing
 
@@ -293,11 +291,13 @@ The comment editor supports standard emacs-style shortcuts:
 ## CLI
 
 ```
-monocle [--socket PATH]        Start a review session
-monocle register [--global]    Register MCP channel for Claude Code
-monocle unregister [--global]  Remove MCP channel registration
-monocle --version              Print version
+monocle [--socket PATH]              Start a review session
+monocle register [agent] [--global]  Register Monocle for an agent
+monocle unregister [agent] [--global] Remove Monocle registration
+monocle --version                    Print version
 ```
+
+The `agent` argument is one of `claude`, `opencode`, `codex`, `gemini`, or `all`. If omitted, an interactive picker lets you select which agents to register. The `--global` flag writes to the user-level config directory instead of the project.
 
 ### Manual Socket Override
 

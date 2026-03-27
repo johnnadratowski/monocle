@@ -18,8 +18,8 @@ var version = "dev"
 
 type CLI struct {
 	Run             RunCmd             `cmd:"" default:"withargs" help:"Start a review session"`
-	Register        RegisterCmd        `cmd:"" help:"Register MCP channel for Claude Code"`
-	Unregister      UnregisterCmd      `cmd:"" help:"Remove MCP channel registration"`
+	Register        RegisterCmd        `cmd:"" help:"Register Monocle for an agent"`
+	Unregister      UnregisterCmd      `cmd:"" help:"Remove Monocle registration"`
 	ServeMcpChannel ServeMCPChannelCmd `cmd:"serve-mcp-channel" help:"Run the MCP channel server" hidden:""`
 	Install         InstallCmd         `cmd:"" help:"Install MCP channel (alias for register)" hidden:""`
 	Uninstall       UninstallCmd       `cmd:"" help:"Remove MCP channel (alias for unregister)" hidden:""`
@@ -35,21 +35,25 @@ type RunCmd struct {
 }
 
 type RegisterCmd struct {
-	Global bool `help:"Register in user-level ~/.mcp.json instead of project" default:"false"`
+	Agent  string `arg:"" optional:"" help:"Agent to register (claude, opencode, codex, gemini, all)"`
+	Global bool   `help:"Register in user-level config instead of project" default:"false"`
 }
 
 type UnregisterCmd struct {
-	Global bool `help:"Remove from user-level ~/.mcp.json instead of project" default:"false"`
+	Agent  string `arg:"" optional:"" help:"Agent to unregister (claude, opencode, codex, gemini, all)"`
+	Global bool   `help:"Remove from user-level config instead of project" default:"false"`
 }
 
 type ServeMCPChannelCmd struct{}
 
 type InstallCmd struct {
-	Global bool `help:"Register in user-level ~/.mcp.json instead of project" default:"false"`
+	Agent  string `arg:"" optional:"" help:"Agent to register (claude, opencode, codex, gemini, all)"`
+	Global bool   `help:"Register in user-level config instead of project" default:"false"`
 }
 
 type UninstallCmd struct {
-	Global bool `help:"Remove from user-level ~/.mcp.json instead of project" default:"false"`
+	Agent  string `arg:"" optional:"" help:"Agent to unregister (claude, opencode, codex, gemini, all)"`
+	Global bool   `help:"Remove from user-level config instead of project" default:"false"`
 }
 
 func main() {
@@ -69,44 +73,65 @@ func (cmd *RunCmd) Run() error {
 }
 
 func (cmd *RegisterCmd) Run() error {
-	adapter := &adapters.ClaudeAdapter{}
-
-	if !adapter.Detect() {
-		fmt.Println("Claude Code not detected. Install Claude Code first.")
-		return nil
+	agents, err := resolveAgents(cmd.Agent)
+	if err != nil {
+		return err
+	}
+	if len(agents) == 0 {
+		return nil // user cancelled picker
 	}
 
-	if adapter.HasMCPConfig() {
-		fmt.Println("  ✓ claude: MCP already registered")
-		return nil
+	for _, a := range agents {
+		if a.HasConfig() {
+			fmt.Printf("  ✓ %s: already registered\n", a.Name())
+			continue
+		}
+		if err := a.Register(cmd.Global); err != nil {
+			return fmt.Errorf("register %s: %w", a.Name(), err)
+		}
+		fmt.Printf("  ✓ %s: registered\n", a.Name())
+		for _, p := range a.ConfigPaths(cmd.Global) {
+			fmt.Printf("    → %s\n", p)
+		}
 	}
-
-	if err := adapter.Register(cmd.Global); err != nil {
-		return fmt.Errorf("register: %w", err)
-	}
-
-	fmt.Println("  ✓ claude: MCP server registered")
-	for _, detail := range adapter.RegisterDetails(cmd.Global) {
-		fmt.Printf("    %s\n", detail)
-	}
-
 	return nil
 }
 
 func (cmd *UnregisterCmd) Run() error {
-	adapter := &adapters.ClaudeAdapter{}
-
-	if !adapter.HasMCPConfig() {
-		fmt.Println("  ✓ claude: nothing to remove")
+	agents, err := resolveAgents(cmd.Agent)
+	if err != nil {
+		return err
+	}
+	if len(agents) == 0 {
 		return nil
 	}
 
-	if err := adapter.Unregister(cmd.Global); err != nil {
-		return fmt.Errorf("unregister: %w", err)
+	for _, a := range agents {
+		if !a.HasConfig() {
+			fmt.Printf("  ✓ %s: nothing to remove\n", a.Name())
+			continue
+		}
+		if err := a.Unregister(cmd.Global); err != nil {
+			return fmt.Errorf("unregister %s: %w", a.Name(), err)
+		}
+		fmt.Printf("  ✓ %s: removed\n", a.Name())
 	}
-
-	fmt.Println("  ✓ claude: MCP channel removed")
 	return nil
+}
+
+func resolveAgents(name string) ([]adapters.AgentAdapter, error) {
+	switch name {
+	case "":
+		return adapters.PickAgents(adapters.AllAdapters())
+	case "all":
+		return adapters.AllAdapters(), nil
+	default:
+		a, err := adapters.GetAdapter(name)
+		if err != nil {
+			return nil, err
+		}
+		return []adapters.AgentAdapter{a}, nil
+	}
 }
 
 func (cmd *ServeMCPChannelCmd) Run() error {
@@ -134,13 +159,13 @@ func (cmd *ServeMCPChannelCmd) Run() error {
 // Deprecated: use 'monocle register' instead.
 func (cmd *InstallCmd) Run() error {
 	fmt.Fprintln(os.Stderr, "Note: 'monocle install' is deprecated, use 'monocle register' instead")
-	return (&RegisterCmd{Global: cmd.Global}).Run()
+	return (&RegisterCmd{Agent: cmd.Agent, Global: cmd.Global}).Run()
 }
 
 // Deprecated: use 'monocle unregister' instead.
 func (cmd *UninstallCmd) Run() error {
 	fmt.Fprintln(os.Stderr, "Note: 'monocle uninstall' is deprecated, use 'monocle unregister' instead")
-	return (&UnregisterCmd{Global: cmd.Global}).Run()
+	return (&UnregisterCmd{Agent: cmd.Agent, Global: cmd.Global}).Run()
 }
 
 func startNewSession(engine core.EngineAPI, repoRoot string) error {

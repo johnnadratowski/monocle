@@ -13,7 +13,18 @@ import (
 // ClaudeAdapter handles Claude Code MCP channel registration.
 type ClaudeAdapter struct{}
 
-func (a *ClaudeAdapter) Name() string { return "claude" }
+func (a *ClaudeAdapter) Name() string  { return "claude" }
+func (a *ClaudeAdapter) Label() string { return "Claude Code" }
+
+// ConfigPaths returns the files written by Register.
+func (a *ClaudeAdapter) ConfigPaths(global bool) []string {
+	return []string{mcpJSONPath(global)}
+}
+
+// HasConfig returns true if monocle is configured via .mcp.json or Claude Code plugin.
+func (a *ClaudeAdapter) HasConfig() bool {
+	return a.HasMCPConfig() || a.HasPluginConfig()
+}
 
 // Detect returns true if Claude Code appears to be installed.
 func (a *ClaudeAdapter) Detect() bool {
@@ -52,25 +63,8 @@ func (a *ClaudeAdapter) Unregister(global bool) error {
 // Returns true only if the entry uses the serve-mcp-channel subcommand (not old-style bun/node configs).
 func (a *ClaudeAdapter) HasMCPConfig() bool {
 	for _, global := range []bool{true, false} {
-		path := mcpJSONPath(global)
-		data, err := ReadJSONFile(path)
-		if err != nil {
-			continue
-		}
-		servers, ok := data["mcpServers"].(map[string]any)
-		if !ok {
-			continue
-		}
-		entry, ok := servers["monocle"].(map[string]any)
-		if !ok {
-			continue
-		}
-		// Validate the entry points to serve-mcp-channel
-		args, _ := entry["args"].([]any)
-		if len(args) > 0 {
-			if arg, ok := args[0].(string); ok && arg == "serve-mcp-channel" {
-				return true
-			}
+		if hasMCPServersEntry(mcpJSONPath(global)) {
+			return true
 		}
 	}
 	return false
@@ -199,10 +193,19 @@ func WriteChannelBundle() (string, error) {
 }
 
 // configureMCP adds monocle to .mcp.json.
-// If global is true, writes to ~/.mcp.json; otherwise to ./.mcp.json.
 func (a *ClaudeAdapter) configureMCP(global bool) error {
-	mcpPath := mcpJSONPath(global)
-	data, err := ReadJSONFile(mcpPath)
+	return configureMCPServersJSON(mcpJSONPath(global), ResolveCommand(global))
+}
+
+// unconfigureMCP removes monocle from .mcp.json.
+func (a *ClaudeAdapter) unconfigureMCP(global bool) error {
+	return unconfigureMCPServersJSON(mcpJSONPath(global))
+}
+
+// configureMCPServersJSON adds monocle to a JSON file with an "mcpServers" key.
+// Used by Claude (.mcp.json) and Gemini (.gemini/settings.json).
+func configureMCPServersJSON(path, command string) error {
+	data, err := ReadJSONFile(path)
 	if err != nil {
 		return err
 	}
@@ -213,27 +216,17 @@ func (a *ClaudeAdapter) configureMCP(global bool) error {
 		data["mcpServers"] = servers
 	}
 
-	command := "monocle"
-	if global {
-		// Use absolute path for global config (machine-specific)
-		if exePath, err := os.Executable(); err == nil {
-			command = exePath
-		}
-	}
-
 	servers["monocle"] = map[string]any{
 		"command": command,
 		"args":    []any{"serve-mcp-channel"},
 	}
 
-	return WriteJSONFile(mcpPath, data)
+	return WriteJSONFile(path, data)
 }
 
-// unconfigureMCP removes monocle from .mcp.json.
-// If global is true, operates on ~/.mcp.json; otherwise ./.mcp.json.
-func (a *ClaudeAdapter) unconfigureMCP(global bool) error {
-	mcpPath := mcpJSONPath(global)
-	data, err := ReadJSONFile(mcpPath)
+// unconfigureMCPServersJSON removes monocle from a JSON file with an "mcpServers" key.
+func unconfigureMCPServersJSON(path string) error {
+	data, err := ReadJSONFile(path)
 	if err != nil {
 		return err
 	}
@@ -246,10 +239,38 @@ func (a *ClaudeAdapter) unconfigureMCP(global bool) error {
 	delete(servers, "monocle")
 
 	if len(servers) == 0 {
-		return os.Remove(mcpPath)
+		delete(data, "mcpServers")
 	}
 
-	return WriteJSONFile(mcpPath, data)
+	if len(data) == 0 {
+		return RemoveFileIfExists(path)
+	}
+
+	return WriteJSONFile(path, data)
+}
+
+// hasMCPServersEntry checks if a JSON file has a monocle entry under "mcpServers"
+// with the serve-mcp-channel subcommand.
+func hasMCPServersEntry(path string) bool {
+	data, err := ReadJSONFile(path)
+	if err != nil {
+		return false
+	}
+	servers, ok := data["mcpServers"].(map[string]any)
+	if !ok {
+		return false
+	}
+	entry, ok := servers["monocle"].(map[string]any)
+	if !ok {
+		return false
+	}
+	args, _ := entry["args"].([]any)
+	if len(args) > 0 {
+		if arg, ok := args[0].(string); ok && arg == "serve-mcp-channel" {
+			return true
+		}
+	}
+	return false
 }
 
 // installedPluginsPath returns the path to Claude Code's installed plugins registry.
