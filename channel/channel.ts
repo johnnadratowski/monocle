@@ -53,8 +53,9 @@ class EngineConnection {
   private reconnecting = false;
   private closed = false;
   private _connected = false;
-  private reconnectAttempts = 0;
-  private static readonly MAX_RECONNECT_ATTEMPTS = 50;
+  private hasConnected = false;
+  private agentName: string | null = null;
+  private connectionResolvers: Array<() => void> = [];
 
   get isConnected(): boolean {
     return this._connected;
@@ -64,6 +65,11 @@ class EngineConnection {
     if (this._connected !== value) {
       this._connected = value;
       this.onConnectionChange(value);
+      if (value) {
+        this.hasConnected = true;
+        const resolvers = this.connectionResolvers.splice(0);
+        for (const r of resolvers) r();
+      }
     }
   }
 
@@ -183,24 +189,27 @@ class EngineConnection {
 
     const attempt = (delay: number) => {
       if (this.closed) return;
-      if (this.reconnectAttempts >= EngineConnection.MAX_RECONNECT_ATTEMPTS) {
-        this.close();
-        return;
-      }
-      this.reconnectAttempts++;
       const timer = setTimeout(async () => {
         try {
           await this.connect();
           this.reconnecting = false;
-          this.reconnectAttempts = 0;
+          if (this.agentName) {
+            this.identify(this.agentName);
+          }
         } catch {
-          attempt(Math.min(delay * 2, 10000));
+          if (this.hasConnected) {
+            // Reconnecting after disconnect: exponential backoff, cap at 10s
+            attempt(Math.min(delay * 2, 10000));
+          } else {
+            // Initial connection: fixed 2s interval for fast detection
+            attempt(2000);
+          }
         }
       }, delay);
       timer.unref();
     };
 
-    attempt(1000);
+    attempt(this.hasConnected ? 1000 : 2000);
   }
 
   // Start trying to connect in the background. Never throws.
@@ -210,9 +219,28 @@ class EngineConnection {
 
   // Send agent identification (fire-and-forget, no response expected).
   identify(agent: string) {
+    this.agentName = agent;
     if (this.conn && !this.conn.destroyed) {
       this.conn.write(JSON.stringify({ type: "identify", agent }) + "\n");
     }
+  }
+
+  // Wait up to timeoutMs for the engine connection to be established.
+  waitForConnection(timeoutMs: number): Promise<boolean> {
+    if (this._connected) return Promise.resolve(true);
+    return new Promise<boolean>((resolve) => {
+      const onConnect = () => {
+        clearTimeout(timer);
+        resolve(true);
+      };
+      this.connectionResolvers.push(onConnect);
+      const timer = setTimeout(() => {
+        const idx = this.connectionResolvers.indexOf(onConnect);
+        if (idx >= 0) this.connectionResolvers.splice(idx, 1);
+        resolve(false);
+      }, timeoutMs);
+      timer.unref();
+    });
   }
 
   close() {
@@ -458,9 +486,15 @@ const TOOLS = [
     },
 ];
 
-mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: engine.isConnected ? TOOLS : [],
-}));
+let initialWaitDone = false;
+
+mcp.setRequestHandler(ListToolsRequestSchema, async () => {
+  if (!engine.isConnected && !initialWaitDone) {
+    initialWaitDone = true;
+    await engine.waitForConnection(10000);
+  }
+  return { tools: engine.isConnected ? TOOLS : [] };
+});
 
 mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
   const args = (req.params.arguments || {}) as Record<string, any>;
