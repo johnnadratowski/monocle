@@ -37,7 +37,8 @@ func TextDiff(oldContent, newContent string) ([]types.DiffHunk, error) {
 	}
 	newFile.Close()
 
-	out, err := exec.Command("diff", "-u", oldFile.Name(), newFile.Name()).Output()
+	// Use a large context (-U) so the entire file is shown, not just changed hunks
+	out, err := exec.Command("diff", "-U999999", oldFile.Name(), newFile.Name()).Output()
 	if err != nil {
 		// diff exits with code 1 when files differ — that's expected
 		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
