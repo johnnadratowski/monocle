@@ -304,7 +304,7 @@ func (m reviewSummaryModel) View() string {
 	if m.agentConnected {
 		b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Render("Review will be sent immediately"))
 	} else {
-		b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Render("Review will be queued until Claude Code connects"))
+		b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Render("Review will be queued for delivery"))
 	}
 	b.WriteString("\n\n")
 

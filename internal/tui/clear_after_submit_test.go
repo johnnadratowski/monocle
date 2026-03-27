@@ -22,6 +22,8 @@ type stubEngine struct {
 func (s *stubEngine) GetConfig() *types.Config                  { return s.cfg }
 func (s *stubEngine) GetSession() *types.ReviewSession           { return s.session }
 func (s *stubEngine) GetFeedbackStatus() string { return "" }
+func (s *stubEngine) GetQueuedCount() int        { return 0 }
+func (s *stubEngine) ReloadPendingFeedback()     {}
 func (s *stubEngine) GetChangedFiles() []types.ChangedFile       { return nil }
 func (s *stubEngine) GetAdditionalFiles() []types.AdditionalFile { return nil }
 func (s *stubEngine) MarkContentReviewed(id string) error        { return nil }
@@ -96,7 +98,7 @@ func TestSubmitSuccess_NoComments_SkipsClear(t *testing.T) {
 	}
 }
 
-func TestSubmitSuccess_AgentDisconnected_PreservesComments(t *testing.T) {
+func TestSubmitSuccess_AgentDisconnected_ClearsComments(t *testing.T) {
 	engine := &stubEngine{
 		cfg:     &types.Config{},
 		session: newTestSession(true),
@@ -108,8 +110,10 @@ func TestSubmitSuccess_AgentDisconnected_PreservesComments(t *testing.T) {
 	if cmd != nil {
 		t.Error("expected no command when agent disconnected")
 	}
-	if engine.cleared {
-		t.Error("expected ClearComments NOT to be called when agent disconnected")
+	// Comments are cleared even without agent — they're frozen in the
+	// queued submission record and should not remain in the UI.
+	if !engine.cleared {
+		t.Error("expected ClearComments to be called for queued submission")
 	}
 }
 

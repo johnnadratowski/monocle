@@ -1,47 +1,5 @@
 # Changelog
 
-## [0.30.0](https://github.com/josephschmitt/monocle/compare/v0.29.0...v0.30.0) (2026-03-27)
-
-
-### Features
-
-* **tui:** open file in external editor at cursor line with Ctrl+g ([3d9dd87](https://github.com/josephschmitt/monocle/commit/3d9dd87c2ad25dc57efe1269354df3b094fe5d62))
-
-
-### Bug Fixes
-
-* **tui:** recalculate sidebar layout after feedback submission ([c9204b6](https://github.com/josephschmitt/monocle/commit/c9204b660b82e1a61333da6374cd455f2c480954))
-
-## [0.29.0](https://github.com/josephschmitt/monocle/compare/v0.28.0...v0.29.0) (2026-03-27)
-
-
-### Features
-
-* **tui:** auto-switch to preferred diff style for plan versions 2+ ([9e7cb6e](https://github.com/josephschmitt/monocle/commit/9e7cb6ef67554b9629bbcf15adf2152ec0b4cd44))
-
-## [0.28.0](https://github.com/josephschmitt/monocle/compare/v0.27.1...v0.28.0) (2026-03-27)
-
-
-### Features
-
-* **tui:** add diff support for content item versions ([6e0d221](https://github.com/josephschmitt/monocle/commit/6e0d221d80542a8c0ff8b8027f2e3da49fdef0c5))
-
-
-### Bug Fixes
-
-* **tui:** prevent content diff view from being overridden by refresh ([a29e09f](https://github.com/josephschmitt/monocle/commit/a29e09f059ca96bb30eeff3ab5914bad5cfe475c))
-* **tui:** show full content in plan diff view, not just changed hunks ([af75908](https://github.com/josephschmitt/monocle/commit/af75908f42bccf0ee8de8fa03a03e52956c81d96))
-
-## [0.27.1](https://github.com/josephschmitt/monocle/compare/v0.27.0...v0.27.1) (2026-03-27)
-
-
-### Bug Fixes
-
-* add make run target so MONOCLE_DB stays set via devbox ([3be6572](https://github.com/josephschmitt/monocle/commit/3be6572b834628cf06a62f2915d0eaa9d332e43a))
-* **channel:** suppress duplicate feedback notification when blocking tool is active ([6affcc0](https://github.com/josephschmitt/monocle/commit/6affcc07349cca96701138d2bd83123f848b6b0c))
-* **channel:** wait up to 10s for engine connection on first tool fetch ([e17db00](https://github.com/josephschmitt/monocle/commit/e17db008ce4d6d9d61625fb90486ae96a020c24e))
-* **tui:** preserve visual block selection during content reload ([f1a86d4](https://github.com/josephschmitt/monocle/commit/f1a86d4fe892bc33ac7e7f845196f2e515967e6b))
-
 ## [0.27.0](https://github.com/josephschmitt/monocle/compare/v0.26.0...v0.27.0) (2026-03-26)
 
 

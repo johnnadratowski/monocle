@@ -230,23 +230,6 @@ func (e *Engine) GetContentItem(id string) (*types.ContentItem, error) {
 	return e.database.GetContentItem(id)
 }
 
-// GetContentDiff computes a diff between the previous and current version of a content item.
-// Returns nil if no previous version exists.
-func (e *Engine) GetContentDiff(id string) (*types.DiffResult, error) {
-	item, err := e.database.GetContentItem(id)
-	if err != nil {
-		return nil, err
-	}
-	if item.PreviousContent == "" {
-		return nil, nil
-	}
-	hunks, err := TextDiff(item.PreviousContent, item.Content)
-	if err != nil {
-		return nil, fmt.Errorf("compute content diff: %w", err)
-	}
-	return &types.DiffResult{Path: id, Hunks: hunks}, nil
-}
-
 // -- Additional files --
 
 func (e *Engine) GetAdditionalFiles() []types.AdditionalFile {
@@ -783,9 +766,13 @@ func (e *Engine) Submit(action types.SubmitAction, body string) (*SubmitResult, 
 
 	formatted := e.formatter.Format(session, session.Comments, action, body)
 
-	e.feedback.Submit(formatted)
+	// Check if a push-mode agent is connected (subscriber = channel mode)
+	agentConnected := e.server != nil && e.server.SubscriberCount() > 0
+
+	e.feedback.Submit(formatted, agentConnected)
 
 	// Save submission record
+	now := time.Now()
 	sub := &types.ReviewSubmission{
 		ID:              uuid.New().String(),
 		SessionID:       session.ID,
@@ -793,7 +780,10 @@ func (e *Engine) Submit(action types.SubmitAction, body string) (*SubmitResult, 
 		FormattedReview: formatted.Formatted,
 		CommentCount:    formatted.CommentCount,
 		ReviewRound:     session.ReviewRound,
-		SubmittedAt:     time.Now(),
+		SubmittedAt:     now,
+	}
+	if agentConnected {
+		sub.DeliveredAt = &now // Channel delivers immediately
 	}
 	_ = e.database.CreateSubmission(session.ID, sub)
 
@@ -807,15 +797,12 @@ func (e *Engine) Submit(action types.SubmitAction, body string) (*SubmitResult, 
 
 	e.emit(EventFeedbackSubmitted, EventPayload{
 		Kind:    EventFeedbackSubmitted,
-		Message: formatted.Formatted,
+		Message: buildFeedbackSummary(formatted.Action, session.Comments),
 		Status:  formatted.Action,
 	})
 
-	// Check if an agent is connected to receive the review
-	agentConnected := e.server != nil && e.server.SubscriberCount() > 0
-
 	if agentConnected {
-		// Agent connected: advance round for a clean slate
+		// Push mode: advance round for a clean slate (channel delivers immediately)
 		e.mu.Lock()
 		_ = e.sessions.AdvanceRound(session)
 		e.mu.Unlock()
@@ -832,6 +819,49 @@ func (e *Engine) Submit(action types.SubmitAction, body string) (*SubmitResult, 
 	}
 
 	return &SubmitResult{AgentConnected: agentConnected}, nil
+}
+
+// buildFeedbackSummary creates a human-readable one-liner for channel notifications.
+func buildFeedbackSummary(action string, comments []types.ReviewComment) string {
+	issues, suggestions, notes, _ := countByType(comments)
+
+	// Build counts portion (skip praise — not actionable)
+	var parts []string
+	if issues > 0 {
+		if issues == 1 {
+			parts = append(parts, "1 issue")
+		} else {
+			parts = append(parts, fmt.Sprintf("%d issues", issues))
+		}
+	}
+	if suggestions > 0 {
+		if suggestions == 1 {
+			parts = append(parts, "1 suggestion")
+		} else {
+			parts = append(parts, fmt.Sprintf("%d suggestions", suggestions))
+		}
+	}
+	if notes > 0 {
+		if notes == 1 {
+			parts = append(parts, "1 note")
+		} else {
+			parts = append(parts, fmt.Sprintf("%d notes", notes))
+		}
+	}
+	counts := strings.Join(parts, ", ")
+
+	if action == string(types.ActionRequestChanges) {
+		if counts != "" {
+			return fmt.Sprintf("Your reviewer requested changes (%s). Call get_feedback to retrieve the full review and address their comments.", counts)
+		}
+		return "Your reviewer requested changes. Call get_feedback to retrieve the full review and address their comments."
+	}
+
+	// Approved
+	if counts != "" {
+		return fmt.Sprintf("Your reviewer approved your changes with %s. Call get_feedback to read the review.", counts)
+	}
+	return "Your reviewer approved your changes. Call get_feedback to read the review."
 }
 
 func (e *Engine) FormatReview(action types.SubmitAction, body string) (string, error) {
@@ -980,27 +1010,23 @@ func (e *Engine) SubmitContentForReview(id, title, content, contentType string, 
 	found := false
 	for i := range session.ContentItems {
 		if session.ContentItems[i].ID == id {
-			item.PreviousContent = session.ContentItems[i].Content
-			item.CreatedAt = session.ContentItems[i].CreatedAt
-			session.ContentItems[i] = item
+			session.ContentItems[i].Title = title
+			session.ContentItems[i].Content = content
+			session.ContentItems[i].ContentType = contentType
+			session.ContentItems[i].IsPlan = isPlan
+			session.ContentItems[i].UpdatedAt = now
+			item = session.ContentItems[i]
 			found = true
 			break
 		}
 	}
 	if !found {
-		// Check DB in case the item exists from a previous session load
-		if existing, err := e.database.GetContentItem(id); err == nil && existing != nil {
-			item.PreviousContent = existing.Content
-			item.CreatedAt = existing.CreatedAt
-		}
 		session.ContentItems = append(session.ContentItems, item)
 	}
 	e.mu.Unlock()
 
 	// Persist to DB
-	if err := e.database.UpsertContentItem(session.ID, &item); err != nil {
-		return fmt.Errorf("persist content item: %w", err)
-	}
+	_ = e.database.UpsertContentItem(session.ID, &item)
 
 	e.emit(EventContentItemAdded, EventPayload{
 		Kind:   EventContentItemAdded,
@@ -1032,6 +1058,36 @@ func (e *Engine) CancelPause() {
 
 func (e *Engine) GetFeedbackStatus() string {
 	return e.feedback.GetStatus()
+}
+
+func (e *Engine) GetQueuedCount() int {
+	return e.feedback.QueuedCount()
+}
+
+// ReloadPendingFeedback checks the DB for undelivered submissions from the
+// current session and reloads them into the in-memory FeedbackQueue.
+// Called on session resume so queued feedback survives restarts.
+func (e *Engine) ReloadPendingFeedback() {
+	e.mu.RLock()
+	session := e.current
+	e.mu.RUnlock()
+	if session == nil {
+		return
+	}
+
+	subs, err := e.database.GetUndeliveredSubmissions(session.ID)
+	if err != nil || len(subs) == 0 {
+		return
+	}
+
+	for _, sub := range subs {
+		review := &FormattedReview{
+			Formatted:    sub.FormattedReview,
+			CommentCount: sub.CommentCount,
+			Action:       string(sub.Action),
+		}
+		e.feedback.Submit(review, false)
+	}
 }
 
 func (e *Engine) GetSubscriberCount() int {
@@ -1107,36 +1163,70 @@ func (e *Engine) handleGetReviewStatus(_ *protocol.GetReviewStatusMsg) *protocol
 }
 
 // handlePollFeedback returns pending feedback, optionally blocking until available.
-// Round advancement now happens in Submit(), not here.
+// In push (channel) mode, round advancement happens in Submit().
+// In queue mode, round advancement happens here when feedback is picked up.
 func (e *Engine) handlePollFeedback(msg *protocol.PollFeedbackMsg) *protocol.PollFeedbackResponse {
-	if msg.Wait {
-		review := e.WaitForFeedback()
+	var result *PollResult
 
-		return &protocol.PollFeedbackResponse{
-			Type:         protocol.TypePollFeedbackResponse,
-			HasFeedback:  true,
-			Feedback:     review.Formatted,
-			CommentCount: review.CommentCount,
-			Action:       review.Action,
-		}
+	if msg.Wait {
+		result = e.feedback.WaitForFeedbackWithInfo()
+	} else {
+		result = e.feedback.PollWithInfo()
 	}
 
-	// Non-blocking poll
-	review := e.PollFeedback()
-	if review == nil {
+	if result == nil || len(result.Reviews) == 0 {
 		return &protocol.PollFeedbackResponse{
 			Type:        protocol.TypePollFeedbackResponse,
 			HasFeedback: false,
 		}
 	}
 
+	// If this feedback was NOT already channel-delivered, perform queue delivery
+	// side effects: advance round, mark delivered, clear comments, emit events.
+	if !result.ChannelDelivered {
+		e.completeQueuedDelivery()
+	}
+
+	feedback, commentCount, action := result.CombinedFeedback()
+
 	return &protocol.PollFeedbackResponse{
 		Type:         protocol.TypePollFeedbackResponse,
 		HasFeedback:  true,
-		Feedback:     review.Formatted,
-		CommentCount: review.CommentCount,
-		Action:       review.Action,
+		Feedback:     feedback,
+		CommentCount: commentCount,
+		Action:       action,
 	}
+}
+
+// completeQueuedDelivery performs the side effects of delivering queued feedback:
+// advancing the round, marking DB submissions as delivered, clearing comments,
+// and emitting events so the TUI can update.
+func (e *Engine) completeQueuedDelivery() {
+	e.mu.Lock()
+	session := e.current
+	if session != nil {
+		_ = e.sessions.AdvanceRound(session)
+	}
+	e.mu.Unlock()
+
+	if session != nil {
+		_ = e.database.MarkSubmissionsDelivered(session.ID)
+	}
+
+	_ = e.ClearComments()
+
+	e.feedback.ClearStatus()
+
+	e.emit(EventFeedbackPickedUp, EventPayload{
+		Kind: EventFeedbackPickedUp,
+	})
+	e.emit(EventFeedbackStatusChanged, EventPayload{
+		Kind:   EventFeedbackStatusChanged,
+		Status: "none",
+	})
+	e.emit(EventFileChanged, EventPayload{
+		Kind: EventFileChanged,
+	})
 }
 
 // handleSubmitContent receives reviewable content (plans, docs) from the agent.

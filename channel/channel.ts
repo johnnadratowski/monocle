@@ -91,9 +91,11 @@ class EngineConnection {
       }
 
       this.conn = connect(this.socketPath, () => {
-        // Send subscribe message
-        const sub = JSON.stringify({
-          type: "subscribe",
+        // Always use ConnectMsg: receives event notifications for channel
+        // forwarding but does not increment subscriberCount (feedback always
+        // queues for pull delivery via get_feedback).
+        const msg = JSON.stringify({
+          type: "connect",
           events: [
             "feedback_submitted",
             "pause_changed",
@@ -101,7 +103,7 @@ class EngineConnection {
             "additional_file_added",
           ],
         });
-        this.conn!.write(sub + "\n");
+        this.conn!.write(msg + "\n");
       });
 
       this.conn.setEncoding("utf8");
@@ -117,7 +119,7 @@ class EngineConnection {
           if (!line.trim()) continue;
           try {
             const msg: Message = JSON.parse(line);
-            if (!gotAck && msg.type === "subscribe_response") {
+            if (!gotAck && msg.type === "connect_response") {
               gotAck = true;
               this.setConnected(true);
               resolve();
@@ -287,6 +289,23 @@ async function blockingGetFeedback(socketPath: string): Promise<Message> {
   });
 }
 
+// -- Instructions --
+
+const INSTRUCTIONS = [
+  "Your human reviewer is watching your code changes in real-time using Monocle.",
+  "",
+  "When you receive a feedback_submitted event, call the get_feedback tool to retrieve the review.",
+  "When you receive a pause_requested event, your reviewer wants you to stop and wait. Use the get_feedback tool with wait=true to block until they submit their review.",
+  "",
+  "You can submit plans or architecture decisions for your reviewer to see using the submit_plan tool.",
+  "When submitting plans, use the plan filename as the id parameter so updates replace the previous version.",
+  "You can check the current review status at any time using the review_status tool.",
+  "",
+  "When a plan draft is ready, use submit_plan_and_wait to get feedback from your reviewer.",
+  "Pass the plan file_path so the reviewer sees exactly what you wrote.",
+  "If changes are requested, update the plan and call submit_plan_and_wait again. Continue iterating until approved.",
+].join("\n");
+
 // -- Main --
 
 const cwd = process.cwd();
@@ -298,7 +317,9 @@ const socketPath = process.env.MONOCLE_SOCKET || defaultSocketPath(repoRoot);
 // same feedback twice.
 let waitingForFeedback = false;
 
-// Create MCP server with channel capability
+// Create MCP server with channel capability (fire-and-forget: if the client
+// supports channels, notifications arrive as channel events; if not, they're
+// silently ignored and the agent uses get_feedback manually).
 const mcp = new Server(
   { name: "monocle", version: "1.0.0" },
   {
@@ -306,25 +327,13 @@ const mcp = new Server(
       experimental: { "claude/channel": {} },
       tools: {},
     },
-    instructions: [
-      "Events from the monocle channel arrive as <channel source=\"monocle\" event=\"...\">.",
-      "These are review events from your human reviewer who is watching your code changes in real-time using Monocle.",
-      "",
-      "When you receive a feedback_submitted event, the full review feedback is included in the notification content. Read and act on it directly — do not call get_feedback.",
-      "When you receive a pause_requested event, your reviewer wants you to stop and wait. Use the get_feedback tool with wait=true to block until they submit their review.",
-      "",
-      "You can submit plans or architecture decisions for your reviewer to see using the submit_plan tool.",
-      "When submitting plans, use the plan filename as the id parameter so updates replace the previous version.",
-      "You can check the current review status at any time using the review_status tool.",
-      "",
-      "When a plan draft is ready, use submit_plan_and_wait to get feedback from your reviewer.",
-      "Pass the plan file_path so the reviewer sees exactly what you wrote.",
-      "If changes are requested, update the plan and call submit_plan_and_wait again. Continue iterating until approved.",
-    ].join("\n"),
+    instructions: INSTRUCTIONS,
   },
 );
 
-// Engine connection with event handler that pushes channel notifications
+// Engine connection with event handler that tries to push channel notifications.
+// These are fire-and-forget: if channels are active, the agent gets prompted
+// to call get_feedback. If not, the notification is silently dropped.
 const engine = new EngineConnection(
   socketPath,
   // onEvent
@@ -337,11 +346,12 @@ const engine = new EngineConnection(
             method: "notifications/claude/channel",
             params: {
               content:
-                payload.message || "Your reviewer has submitted feedback. Use the get_feedback tool to retrieve it.",
+                payload.message ||
+                "Your reviewer has submitted feedback. Call get_feedback to retrieve it.",
               meta: { event: "feedback_submitted" },
             },
           })
-          .catch((err: unknown) => { console.error("Failed to deliver feedback_submitted notification:", err); });
+          .catch(() => { /* channel not available — agent uses /get-feedback manually */ });
         break;
       case "pause_changed":
         if (payload.status === "pause_requested") {
@@ -355,7 +365,7 @@ const engine = new EngineConnection(
                 meta: { event: "pause_requested" },
               },
             })
-            .catch((err: unknown) => { console.error("Failed to deliver pause_requested notification:", err); });
+            .catch(() => { /* channel not available */ });
         }
         break;
       case "content_item_added":

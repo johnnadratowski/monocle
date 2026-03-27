@@ -125,7 +125,7 @@ Navigate with `j`/`k`, add comments with `c`, and use `v` for visual (multi-line
 
 **Submit** (`S`): Your review is formatted and pushed to Claude Code via the MCP channel. If there are no comments, it's treated as an approval. Toggle the "Copy to clipboard" checkbox with `Shift+Tab` in the submit modal to also copy the formatted review when submitting.
 
-**Open in editor** (`Ctrl+g`): Opens the current file in your `$VISUAL` or `$EDITOR` (falls back to `vi`) at the line under the cursor. Save and quit to return to Monocle — changes are reflected immediately. Also works in comment and submit modals to edit comment text externally.
+**External editor** (`Ctrl+g`): In the comment or submit modal, opens the current text in your `$VISUAL` or `$EDITOR` (falls back to `vi`). Edit in your preferred editor, save and quit, and the text is brought back into the modal.
 
 **Yank** (`Ctrl+y`): In the submit modal, copies the formatted review to your system clipboard without submitting, then closes the modal.
 
@@ -156,7 +156,7 @@ When Claude Code enters [plan mode](https://docs.anthropic.com/en/docs/claude-co
 - **Comment resolution** — Mark individual comments as resolved (`x`); resolved comments are excluded from submitted reviews
 - **Submission history** — View past review submissions with `:history`
 - **Mouse support** — Click to focus panes, scroll with the wheel, click files to select, drag to make visual selections, and interact with modal controls
-- **Open in editor** — Jump from a diff line to your `$VISUAL`/`$EDITOR` with `Ctrl+g`; also works in comment/submit modals
+- **External editor** — Open comment or submit text in `$VISUAL`/`$EDITOR` with `Ctrl+g` for full editing power
 - **Configurable keybindings** — Override any navigation or action key via config
 - **Feedback queue** — Submit reviews while the agent is working; delivered when Claude Code next checks
 - **Connection indicator** — See at a glance whether Claude Code is connected, with manual socket override for troubleshooting
@@ -198,7 +198,7 @@ When Claude Code enters [plan mode](https://docs.anthropic.com/en/docs/claude-co
 | `T` | Cycle layout (auto/side-by-side/stacked) |
 | `R` | Force reload files |
 | `S` / `:submit` | Submit review |
-| `Ctrl+g` | Open file in editor at cursor (also works in comment/submit modals) |
+| `Ctrl+g` | Open external editor (comment/submit modal) |
 | `Ctrl+y` | Copy review to clipboard |
 | `P` / `:pause` | Pause Claude Code (wait for your review) |
 | `D` / `:clear` | Clear review (all comments, plans, reviewed states) |

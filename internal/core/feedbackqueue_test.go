@@ -21,7 +21,7 @@ func TestSubmitThenPoll(t *testing.T) {
 		Formatted:    "## Review\nFix bug",
 		CommentCount: 1,
 		Action:       "request_changes",
-	})
+	}, false)
 
 	if fq.GetStatus() != "queued" {
 		t.Errorf("expected status queued, got %q", fq.GetStatus())
@@ -63,7 +63,7 @@ func TestWaitForFeedback(t *testing.T) {
 		Formatted:    "## Review\nFix bug",
 		CommentCount: 1,
 		Action:       "request_changes",
-	})
+	}, false)
 
 	select {
 	case <-done:
@@ -87,7 +87,7 @@ func TestWaitForFeedbackWithPending(t *testing.T) {
 		Formatted:    "## Review\nLooks good",
 		CommentCount: 1,
 		Action:       "approve",
-	})
+	}, false)
 
 	// WaitForFeedback should return immediately
 	review := fq.WaitForFeedback()
@@ -117,7 +117,7 @@ func TestPauseRequested(t *testing.T) {
 		Formatted:    "review",
 		CommentCount: 1,
 		Action:       "request_changes",
-	})
+	}, false)
 
 	if fq.IsPauseRequested() {
 		t.Error("expected pause cleared after Submit")
@@ -135,7 +135,7 @@ func TestHasPending(t *testing.T) {
 		Formatted:    "review",
 		CommentCount: 1,
 		Action:       "request_changes",
-	})
+	}, false)
 
 	if !fq.HasPending() {
 		t.Error("expected HasPending=true after Submit")

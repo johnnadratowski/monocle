@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -75,22 +76,10 @@ type additionalFileAddedMsg struct {
 type connectionChangedMsg struct {
 	count     int
 	agentName string
+	mode      string // "queue" for queue-mode connections, subscriber count for push
 }
 
-// requestContentDiffMsg requests async computation of a content item diff.
-type requestContentDiffMsg struct {
-	contentID      string
-	preferredStyle diffStyle // style to use when diff loads (0=unified for manual cycle)
-}
-
-// loadContentDiffMsg carries the computed content diff result.
-type loadContentDiffMsg struct {
-	contentID      string
-	result         *types.DiffResult
-	comments       []types.ReviewComment
-	err            error
-	preferredStyle diffStyle // style to render the diff in
-}
+type feedbackPickedUpMsg struct{}
 
 type pauseChangedMsg struct {
 	status string
@@ -236,14 +225,8 @@ func NewApp(engine core.EngineAPI, opts ...AppOptions) appModel {
 			switch cfg.DiffStyle {
 			case "split":
 				dv.style = diffStyleSplit
-				dv.preferredContentDiffStyle = diffStyleSplit
-				dv.autoContentDiff = true
 			case "file":
 				dv.style = diffStyleFile
-				// autoContentDiff stays false: "file" mode = no auto-switch for plans
-			default:
-				dv.autoContentDiff = true
-				// preferredContentDiffStyle stays at diffStyleUnified (zero value)
 			}
 			if cfg.Layout != "" {
 				layoutCfg = cfg.Layout
@@ -458,12 +441,11 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var diffCmd tea.Cmd
 		if msg.contentItem != nil && m.diffView.contentMode && m.diffView.contentID == msg.contentItem.ID {
 			m.diffView, diffCmd = m.diffView.Update(loadContentMsg{
-				id:                 msg.contentItem.ID,
-				title:              msg.contentItem.Title,
-				content:            msg.contentItem.Content,
-				contentType:        msg.contentItem.ContentType,
-				comments:           msg.contentComments,
-				hasPreviousVersion: msg.contentItem.PreviousContent != "",
+				id:          msg.contentItem.ID,
+				title:       msg.contentItem.Title,
+				content:     msg.contentItem.Content,
+				contentType: msg.contentItem.ContentType,
+				comments:    msg.contentComments,
 			})
 		} else if msg.path != "" && msg.result != nil {
 			m.diffView, diffCmd = m.diffView.Update(loadDiffMsg{
@@ -476,7 +458,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(msg.files) > 0 && !m.diffViewShowsValidFile() {
 			m.sidebar.selectPath(msg.files[0].Path)
 			return m, m.handleSidebarSelect(sidebarSelectMsg{path: msg.files[0].Path})
-		} else if len(msg.files) == 0 && !m.diffView.contentMode && m.diffView.contentID == "" && m.diffView.path != "" {
+		} else if len(msg.files) == 0 && !m.diffView.contentMode && m.diffView.path != "" {
 			m.diffView.path = ""
 			m.diffView.hunks = nil
 			m.diffView.lines = nil
@@ -512,7 +494,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(m.sidebar.files) > 0 && !m.diffViewShowsValidFile() {
 			m.sidebar.selectPath(m.sidebar.files[0].Path)
 			return m, m.handleSidebarSelect(sidebarSelectMsg{path: m.sidebar.files[0].Path})
-		} else if len(m.sidebar.files) == 0 && !m.diffView.contentMode && m.diffView.contentID == "" && m.diffView.path != "" {
+		} else if len(m.sidebar.files) == 0 && !m.diffView.contentMode && m.diffView.path != "" {
 			m.diffView.path = ""
 			m.diffView.hunks = nil
 			m.diffView.lines = nil
@@ -538,11 +520,12 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case connectionChangedMsg:
 		m.statusBar.subscriberCount = msg.count
+		m.statusBar.connectionMode = msg.mode
 		m.statusBar.socketStarted = m.engine.GetSocketPath() != ""
 		if msg.agentName != "" {
 			m.statusBar.agentName = msg.agentName
 		}
-		if msg.count == 0 {
+		if msg.count == 0 && msg.mode == "" {
 			m.statusBar.agentName = ""
 		}
 		return m, nil
@@ -692,34 +675,6 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Content item loading (plans, docs)
 	case loadContentMsg:
-		var cmd tea.Cmd
-		m.diffView, cmd = m.diffView.Update(msg)
-		return m, cmd
-
-	// Content diff request (from diff style cycle on content items)
-	case requestContentDiffMsg:
-		engine := m.engine
-		contentID := msg.contentID
-		preferredStyle := msg.preferredStyle
-		return m, func() tea.Msg {
-			result, err := engine.GetContentDiff(contentID)
-			if err != nil || result == nil {
-				return loadContentDiffMsg{contentID: contentID, err: err}
-			}
-			session := engine.GetSession()
-			var comments []types.ReviewComment
-			if session != nil {
-				for _, c := range session.Comments {
-					if c.TargetRef == contentID && c.TargetType == types.TargetContent {
-						comments = append(comments, c)
-					}
-				}
-			}
-			return loadContentDiffMsg{contentID: contentID, result: result, comments: comments, preferredStyle: preferredStyle}
-		}
-
-	// Content diff loaded
-	case loadContentDiffMsg:
 		var cmd tea.Cmd
 		m.diffView, cmd = m.diffView.Update(msg)
 		return m, cmd
@@ -961,10 +916,29 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusBar.baseRef = session.BaseRef
 		}
 
-		// If no agent was connected, warn the user and preserve comments for retry
+		// If no push-mode agent was connected, feedback is queued for pull delivery.
+		// Clear comments (they're frozen in the submission) but don't advance
+		// the round or clear content items — that happens when the agent pulls.
 		if !msg.agentConnected {
-			m.statusBar.feedbackStatus = "saved (no agent)"
-			// Restore focus mode state even when disconnected
+			count := m.engine.GetQueuedCount()
+			if count == 1 {
+				m.statusBar.feedbackStatus = "1 review queued"
+			} else {
+				m.statusBar.feedbackStatus = fmt.Sprintf("%d reviews queued", count)
+			}
+
+			// Clear comments — they're now frozen in the submission record
+			if session != nil && len(session.Comments) > 0 {
+				_ = m.engine.ClearComments()
+				m.statusBar.commentCount = 0
+			}
+
+			// Reload diff view to remove inline comment annotations
+			if m.diffView.path != "" {
+				m.diffView.comments = nil
+			}
+
+			// Restore focus mode state
 			if m.focusModeActive {
 				m.sidebarHidden = m.focusModeSavedSidebar
 				m.diffView.wrap = m.focusModeSavedWrap
@@ -1007,6 +981,41 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		recalcStackedLayout(&m)
+		return m, nil
+
+	// Queued feedback was picked up by the agent (pull delivery completed)
+	case feedbackPickedUpMsg:
+		m.statusBar.feedbackStatus = "delivered"
+		session := m.engine.GetSession()
+
+		// Same cleanup as push-mode delivery
+		m.sidebar.contentItems = nil
+		m.sidebar.rebuildTree()
+		m.sidebar.clampOffset()
+
+		if m.diffView.contentMode {
+			m.diffView.contentMode = false
+			m.diffView.contentID = ""
+			m.diffView.path = ""
+			m.diffView.hunks = nil
+			m.diffView.lines = nil
+			m.diffView.comments = nil
+		}
+
+		if session != nil {
+			m.statusBar.commentCount = 0
+			m.statusBar.fileCount = len(session.ChangedFiles)
+		}
+
+		if m.focusModeActive {
+			m.sidebarHidden = m.focusModeSavedSidebar
+			m.diffView.wrap = m.focusModeSavedWrap
+			m.focusModeActive = false
+			return m, func() tea.Msg {
+				return tea.WindowSizeMsg{Width: m.width, Height: m.height}
+			}
+		}
+
 		return m, nil
 
 	// Confirm overlay actions
@@ -1842,8 +1851,7 @@ func (m appModel) diffViewShowsValidFile() bool {
 	if m.diffView.path == "" {
 		return false
 	}
-	// Content item view (raw or diff mode)
-	if m.diffView.contentID != "" {
+	if m.diffView.contentMode {
 		for _, ci := range m.sidebar.contentItems {
 			if ci.ID == m.diffView.contentID {
 				return true
@@ -1885,13 +1893,11 @@ func (m appModel) handleSidebarSelect(msg sidebarSelectMsg) tea.Cmd {
 				}
 			}
 			return loadContentMsg{
-				id:                 item.ID,
-				title:              item.Title,
-				content:            item.Content,
-				contentType:        item.ContentType,
-				comments:           comments,
-				hasPreviousVersion: item.PreviousContent != "",
-				autoSwitchDiff:     item.PreviousContent != "",
+				id:          item.ID,
+				title:       item.Title,
+				content:     item.Content,
+				contentType: item.ContentType,
+				comments:    comments,
 			}
 		}
 	}
@@ -1993,12 +1999,11 @@ func (m appModel) handleSaveComment(msg saveCommentMsg) tea.Cmd {
 				}
 			}
 			return loadContentMsg{
-				id:                 item.ID,
-				title:              item.Title,
-				content:            item.Content,
-				contentType:        item.ContentType,
-				comments:           comments,
-				hasPreviousVersion: item.PreviousContent != "",
+				id:          item.ID,
+				title:       item.Title,
+				content:     item.Content,
+				contentType: item.ContentType,
+				comments:    comments,
 			}
 		}
 
@@ -2119,6 +2124,7 @@ func (m appModel) contentItemForReview() *types.ContentItem {
 func (m appModel) refreshFiles() tea.Cmd {
 	engine := m.engine
 	currentPath := m.diffView.path
+	inContentMode := m.diffView.contentMode
 	contentID := m.diffView.contentID
 	inAdditionalFileMode := m.diffView.additionalFilePath != ""
 	return func() tea.Msg {
@@ -2129,8 +2135,8 @@ func (m appModel) refreshFiles() tea.Cmd {
 		}
 		session := engine.GetSession()
 
-		// Refresh content item if one is currently displayed (raw or diff mode)
-		if contentID != "" {
+		// Refresh content item if one is currently displayed
+		if inContentMode && contentID != "" {
 			item, itemErr := engine.GetContentItem(contentID)
 			var contentComments []types.ReviewComment
 			if session != nil {
@@ -2184,13 +2190,11 @@ type refreshResultMsg struct {
 
 // loadContentMsg carries content item data for rendering in the diff view.
 type loadContentMsg struct {
-	id                 string
-	title              string
-	content            string
-	contentType        string
-	comments           []types.ReviewComment
-	hasPreviousVersion bool // true if a previous version exists for diffing
-	autoSwitchDiff     bool // true to auto-switch to preferred diff style
+	id          string
+	title       string
+	content     string
+	contentType string
+	comments    []types.ReviewComment
 }
 
 // View renders the full TUI layout.
@@ -2272,8 +2276,6 @@ func (m appModel) View() tea.View {
 		m.statusBar.contextHints = ""
 	}
 	m.statusBar.diffStyle = m.diffView.style
-	m.statusBar.contentMode = m.diffView.contentMode
-	m.statusBar.contentID = m.diffView.contentID
 	statusView := m.statusBar.View()
 	full := lipgloss.JoinVertical(lipgloss.Left, titleBar, body, statusView)
 
@@ -2424,7 +2426,16 @@ func BridgeEngineEvents(engine core.EngineAPI, p *tea.Program) {
 		p.Send(pauseChangedMsg{status: e.Status})
 	})
 	engine.On(core.EventConnectionChanged, func(e core.EventPayload) {
-		count, _ := strconv.Atoi(e.Status)
-		p.Send(connectionChangedMsg{count: count, agentName: e.Message})
+		var msg connectionChangedMsg
+		msg.agentName = e.Message
+		if e.Status == "queue" {
+			msg.mode = "queue"
+		} else {
+			msg.count, _ = strconv.Atoi(e.Status)
+		}
+		p.Send(msg)
+	})
+	engine.On(core.EventFeedbackPickedUp, func(e core.EventPayload) {
+		p.Send(feedbackPickedUpMsg{})
 	})
 }

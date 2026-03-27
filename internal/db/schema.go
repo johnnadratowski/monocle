@@ -47,7 +47,6 @@ CREATE TABLE IF NOT EXISTS content_items (
 	session_id TEXT NOT NULL REFERENCES sessions(id),
 	title TEXT NOT NULL,
 	content TEXT NOT NULL,
-	previous_content TEXT NOT NULL DEFAULT '',
 	content_type TEXT NOT NULL DEFAULT 'text',
 	is_plan INTEGER NOT NULL DEFAULT 0,
 	reviewed INTEGER NOT NULL DEFAULT 0,
@@ -79,7 +78,8 @@ CREATE TABLE IF NOT EXISTS review_submissions (
 	formatted_review TEXT NOT NULL,
 	comment_count INTEGER NOT NULL DEFAULT 0,
 	review_round INTEGER NOT NULL DEFAULT 1,
-	submitted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+	submitted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	delivered_at DATETIME
 );
 
 CREATE TABLE IF NOT EXISTS additional_files (

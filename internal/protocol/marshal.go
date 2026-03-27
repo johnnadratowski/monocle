@@ -33,6 +33,8 @@ func Decode(data []byte) (any, error) {
 		msg = &SubmitContentMsg{}
 	case TypeSubscribe:
 		msg = &SubscribeMsg{}
+	case TypeConnect:
+		msg = &ConnectMsg{}
 	case TypeIdentify:
 		msg = &IdentifyMsg{}
 	case TypeAddAdditionalFiles:
@@ -45,6 +47,8 @@ func Decode(data []byte) (any, error) {
 		msg = &SubmitContentResponse{}
 	case TypeSubscribeResponse:
 		msg = &SubscribeResponse{}
+	case TypeConnectResponse:
+		msg = &ConnectResponse{}
 	case TypeEventNotification:
 		msg = &EventNotification{}
 	case TypeAddAdditionalFilesResponse:

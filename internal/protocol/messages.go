@@ -6,6 +6,7 @@ const (
 	TypePollFeedback       = "poll_feedback"
 	TypeSubmitContent      = "submit_content"
 	TypeSubscribe          = "subscribe"
+	TypeConnect            = "connect"
 	TypeIdentify           = "identify"
 	TypeAddAdditionalFiles = "add_additional_files"
 )
@@ -16,6 +17,7 @@ const (
 	TypePollFeedbackResponse       = "poll_feedback_response"
 	TypeSubmitContentResponse      = "submit_content_response"
 	TypeSubscribeResponse          = "subscribe_response"
+	TypeConnectResponse            = "connect_response"
 	TypeEventNotification          = "event_notification"
 	TypeAddAdditionalFilesResponse = "add_additional_files_response"
 )
@@ -82,6 +84,21 @@ type EventNotification struct {
 	Type    string         `json:"type"`
 	Event   string         `json:"event"`
 	Payload map[string]any `json:"payload"`
+}
+
+// ConnectMsg requests a persistent connection with optional event forwarding
+// but without becoming a push subscriber. The connection supports request/response
+// for tool calls and receives event notifications, but does not increment
+// subscriberCount (so Submit() always queues feedback for pull delivery).
+type ConnectMsg struct {
+	Type   string   `json:"type"`
+	Events []string `json:"events,omitempty"`
+}
+
+// ConnectResponse acknowledges a connect request.
+type ConnectResponse struct {
+	Type    string `json:"type"`
+	Success bool   `json:"success"`
 }
 
 // IdentifyMsg carries the agent's self-reported name (sent after MCP handshake).

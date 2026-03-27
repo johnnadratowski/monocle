@@ -77,7 +77,7 @@ func (cmd *RegisterCmd) Run() error {
 	}
 
 	if adapter.HasMCPConfig() {
-		fmt.Println("  ✓ claude: MCP channel already registered")
+		fmt.Println("  ✓ claude: MCP already registered")
 		return nil
 	}
 
@@ -85,7 +85,7 @@ func (cmd *RegisterCmd) Run() error {
 		return fmt.Errorf("register: %w", err)
 	}
 
-	fmt.Println("  ✓ claude: MCP channel registered")
+	fmt.Println("  ✓ claude: MCP server registered")
 	for _, detail := range adapter.RegisterDetails(cmd.Global) {
 		fmt.Printf("    %s\n", detail)
 	}
@@ -221,6 +221,11 @@ func runTUI(socketOverride string, additionalPaths []string, continueSession boo
 		}
 	} else if err := resolveSession(engine, repoRoot, continueSession, resumePicker, sessionID); err != nil {
 		return err
+	}
+
+	// Reload any pending (undelivered) feedback from a previous session
+	if continueSession || sessionID != "" {
+		engine.ReloadPendingFeedback()
 	}
 
 	// Add additional file paths if provided (only for new sessions)

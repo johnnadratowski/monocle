@@ -145,13 +145,12 @@ func (d *DB) MarkContentItemReviewed(sessionID, id string, reviewed bool) error 
 }
 
 // UpsertContentItem inserts or updates a content item.
-// On update, the existing content is preserved as previous_content for diffing.
 func (d *DB) UpsertContentItem(sessionID string, item *types.ContentItem) error {
 	_, err := d.Exec(
-		`INSERT INTO content_items (id, session_id, title, content, previous_content, content_type, is_plan, reviewed, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		 ON CONFLICT(id) DO UPDATE SET previous_content = excluded.previous_content, title = excluded.title, content = excluded.content, content_type = excluded.content_type, is_plan = excluded.is_plan, updated_at = excluded.updated_at`,
-		item.ID, sessionID, item.Title, item.Content, item.PreviousContent, item.ContentType, boolToInt(item.IsPlan), boolToInt(item.Reviewed), item.CreatedAt, item.UpdatedAt,
+		`INSERT INTO content_items (id, session_id, title, content, content_type, is_plan, reviewed, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(id) DO UPDATE SET title = excluded.title, content = excluded.content, content_type = excluded.content_type, is_plan = excluded.is_plan, updated_at = excluded.updated_at`,
+		item.ID, sessionID, item.Title, item.Content, item.ContentType, boolToInt(item.IsPlan), boolToInt(item.Reviewed), item.CreatedAt, item.UpdatedAt,
 	)
 	return err
 }
@@ -159,7 +158,7 @@ func (d *DB) UpsertContentItem(sessionID string, item *types.ContentItem) error 
 // GetContentItems returns all content items for a session.
 func (d *DB) GetContentItems(sessionID string) ([]types.ContentItem, error) {
 	rows, err := d.Query(
-		`SELECT id, title, content, previous_content, content_type, is_plan, reviewed, created_at, updated_at
+		`SELECT id, title, content, content_type, is_plan, reviewed, created_at, updated_at
 		 FROM content_items WHERE session_id = ? ORDER BY created_at`, sessionID,
 	)
 	if err != nil {
@@ -171,7 +170,7 @@ func (d *DB) GetContentItems(sessionID string) ([]types.ContentItem, error) {
 	for rows.Next() {
 		var item types.ContentItem
 		var isPlan, reviewed int
-		if err := rows.Scan(&item.ID, &item.Title, &item.Content, &item.PreviousContent, &item.ContentType, &isPlan, &reviewed, &item.CreatedAt, &item.UpdatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.Title, &item.Content, &item.ContentType, &isPlan, &reviewed, &item.CreatedAt, &item.UpdatedAt); err != nil {
 			return nil, err
 		}
 		item.IsPlan = isPlan != 0
@@ -186,9 +185,9 @@ func (d *DB) GetContentItem(id string) (*types.ContentItem, error) {
 	item := &types.ContentItem{}
 	var isPlan, reviewed int
 	err := d.QueryRow(
-		`SELECT id, title, content, previous_content, content_type, is_plan, reviewed, created_at, updated_at
+		`SELECT id, title, content, content_type, is_plan, reviewed, created_at, updated_at
 		 FROM content_items WHERE id = ?`, id,
-	).Scan(&item.ID, &item.Title, &item.Content, &item.PreviousContent, &item.ContentType, &isPlan, &reviewed, &item.CreatedAt, &item.UpdatedAt)
+	).Scan(&item.ID, &item.Title, &item.Content, &item.ContentType, &isPlan, &reviewed, &item.CreatedAt, &item.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -270,9 +269,9 @@ func (d *DB) ClearComments(sessionID string) error {
 // CreateSubmission inserts a review submission record.
 func (d *DB) CreateSubmission(sessionID string, sub *types.ReviewSubmission) error {
 	_, err := d.Exec(
-		`INSERT INTO review_submissions (id, session_id, action, formatted_review, comment_count, review_round, submitted_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		sub.ID, sessionID, string(sub.Action), sub.FormattedReview, sub.CommentCount, sub.ReviewRound, sub.SubmittedAt,
+		`INSERT INTO review_submissions (id, session_id, action, formatted_review, comment_count, review_round, submitted_at, delivered_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		sub.ID, sessionID, string(sub.Action), sub.FormattedReview, sub.CommentCount, sub.ReviewRound, sub.SubmittedAt, sub.DeliveredAt,
 	)
 	return err
 }
@@ -280,8 +279,41 @@ func (d *DB) CreateSubmission(sessionID string, sub *types.ReviewSubmission) err
 // GetSubmissions returns all submissions for a session.
 func (d *DB) GetSubmissions(sessionID string) ([]types.ReviewSubmission, error) {
 	rows, err := d.Query(
-		`SELECT id, session_id, action, formatted_review, comment_count, review_round, submitted_at
+		`SELECT id, session_id, action, formatted_review, comment_count, review_round, submitted_at, delivered_at
 		 FROM review_submissions WHERE session_id = ? ORDER BY submitted_at`, sessionID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var subs []types.ReviewSubmission
+	for rows.Next() {
+		var s types.ReviewSubmission
+		var action string
+		if err := rows.Scan(&s.ID, &s.SessionID, &action, &s.FormattedReview, &s.CommentCount, &s.ReviewRound, &s.SubmittedAt, &s.DeliveredAt); err != nil {
+			return nil, err
+		}
+		s.Action = types.SubmitAction(action)
+		subs = append(subs, s)
+	}
+	return subs, rows.Err()
+}
+
+// MarkSubmissionsDelivered sets delivered_at on all undelivered submissions for a session.
+func (d *DB) MarkSubmissionsDelivered(sessionID string) error {
+	_, err := d.Exec(
+		`UPDATE review_submissions SET delivered_at = ? WHERE session_id = ? AND delivered_at IS NULL`,
+		time.Now(), sessionID,
+	)
+	return err
+}
+
+// GetUndeliveredSubmissions returns all undelivered submissions for a session, ordered by submission time.
+func (d *DB) GetUndeliveredSubmissions(sessionID string) ([]types.ReviewSubmission, error) {
+	rows, err := d.Query(
+		`SELECT id, session_id, action, formatted_review, comment_count, review_round, submitted_at
+		 FROM review_submissions WHERE session_id = ? AND delivered_at IS NULL ORDER BY submitted_at`, sessionID,
 	)
 	if err != nil {
 		return nil, err

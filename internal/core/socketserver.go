@@ -107,9 +107,16 @@ func (s *SocketServer) handleConnection(conn net.Conn) {
 		return
 	}
 
-	// If the first message is a subscribe request, handle as persistent connection
+	// If the first message is a subscribe request, handle as persistent connection (push mode)
 	if sub, ok := msg.(*protocol.SubscribeMsg); ok {
 		s.handleSubscription(conn, scanner, sub)
+		return
+	}
+
+	// If the first message is a connect request, handle as persistent connection
+	// with event forwarding but without incrementing subscriberCount.
+	if cm, ok := msg.(*protocol.ConnectMsg); ok {
+		s.handleQueuedConnection(conn, scanner, cm)
 		return
 	}
 
@@ -205,6 +212,91 @@ func (s *SocketServer) handleSubscription(conn net.Conn, scanner *bufio.Scanner,
 	}()
 
 	// Read loop: incoming messages are request/response (tool calls)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+
+		msg, err := protocol.Decode(line)
+		if err != nil {
+			continue
+		}
+
+		response := s.handleMessage(msg)
+		if response != nil {
+			_ = writeMsg(response)
+		}
+	}
+}
+
+// handleQueuedConnection manages a persistent connection that receives event
+// notifications but does NOT increment subscriberCount. This means Submit()
+// always queues feedback for pull delivery via get_feedback, while the client
+// can still forward event notifications as channel hints (fire-and-forget).
+func (s *SocketServer) handleQueuedConnection(conn net.Conn, scanner *bufio.Scanner, cm *protocol.ConnectMsg) {
+	defer conn.Close()
+
+	var writeMu sync.Mutex
+	writeMsg := func(msg any) error {
+		data, err := protocol.Encode(msg)
+		if err != nil {
+			return err
+		}
+		writeMu.Lock()
+		defer writeMu.Unlock()
+		_, err = conn.Write(data)
+		return err
+	}
+
+	// Subscribe to requested events (like handleSubscription) but do NOT
+	// increment subscriberCount. This allows event forwarding for channel
+	// notifications without affecting the push/queue decision in Submit().
+	var unsubs []UnsubscribeFunc
+	for _, eventName := range cm.Events {
+		kind := EventKind(eventName)
+		unsub := s.engine.On(kind, func(payload EventPayload) {
+			if err := writeMsg(&protocol.EventNotification{
+				Type:  protocol.TypeEventNotification,
+				Event: string(payload.Kind),
+				Payload: map[string]any{
+					"message": payload.Message,
+					"status":  payload.Status,
+					"path":    payload.Path,
+					"item_id": payload.ItemID,
+				},
+			}); err != nil {
+				conn.Close()
+			}
+		})
+		unsubs = append(unsubs, unsub)
+	}
+
+	// Send ack
+	if err := writeMsg(&protocol.ConnectResponse{
+		Type:    protocol.TypeConnectResponse,
+		Success: true,
+	}); err != nil {
+		return
+	}
+
+	// Notify TUI that an agent connected (without push subscription)
+	s.engine.emit(EventConnectionChanged, EventPayload{
+		Kind:   EventConnectionChanged,
+		Status: "queue",
+	})
+
+	defer func() {
+		for _, unsub := range unsubs {
+			unsub()
+		}
+		s.engine.emit(EventConnectionChanged, EventPayload{
+			Kind:   EventConnectionChanged,
+			Status: "0",
+		})
+	}()
+
+	// Read loop: request/response + event notifications
 	for scanner.Scan() {
 		line := scanner.Bytes()
 		if len(line) == 0 {

@@ -22,6 +22,7 @@ const (
 	EventFeedbackSubmitted     EventKind = "feedback_submitted"
 	EventConnectionChanged     EventKind = "connection_changed"
 	EventAdditionalFileAdded   EventKind = "additional_file_added"
+	EventFeedbackPickedUp      EventKind = "feedback_picked_up"
 )
 
 // EventPayload carries data for an engine event.
@@ -77,7 +78,6 @@ type EngineAPI interface {
 	GetFileDiff(path string) (*types.DiffResult, error)
 	GetFileContent(path string) (string, error)
 	GetContentItem(id string) (*types.ContentItem, error)
-	GetContentDiff(id string) (*types.DiffResult, error)
 
 	// Additional files
 	GetAdditionalFiles() []types.AdditionalFile
@@ -125,6 +125,8 @@ type EngineAPI interface {
 
 	// Feedback status
 	GetFeedbackStatus() string
+	GetQueuedCount() int
+	ReloadPendingFeedback()
 
 	// Connection status
 	GetSubscriberCount() int

@@ -14,13 +14,12 @@ type statusBarModel struct {
 	commentCount    int
 	feedbackStatus  string
 	subscriberCount int
+	connectionMode  string // "queue" for queue-mode connections
 	socketStarted   bool
 	commandMode     bool
 	commandBuffer   string
 	contextHints    string // override hints when set (e.g. comment-specific keybinds)
 	diffStyle       diffStyle
-	contentMode     bool // true when viewing content (plan/doc) in raw mode
-	contentID       string // non-empty when viewing a content item (raw or diff)
 	width           int
 	theme           Theme
 }
@@ -45,7 +44,7 @@ func (m statusBarModel) View() string {
 	var connLabel string
 	name := m.agentName
 	switch {
-	case m.subscriberCount > 0:
+	case m.subscriberCount > 0 || m.connectionMode == "queue":
 		connLabel = lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Render("● Connected")
 		if name != "" {
 			connLabel += " " + name
@@ -67,15 +66,7 @@ func (m statusBarModel) View() string {
 		parts = append(parts, fmt.Sprintf("ref:%s", ref))
 	}
 
-	if m.contentID != "" && !m.contentMode {
-		// Viewing a content item diff
-		switch m.diffStyle {
-		case diffStyleUnified:
-			parts = append(parts, lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Bold(true).Render("[DIFF]"))
-		case diffStyleSplit:
-			parts = append(parts, lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Bold(true).Render("[SPLIT]"))
-		}
-	} else if m.diffStyle == diffStyleFile {
+	if m.diffStyle == diffStyleFile {
 		parts = append(parts, lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Bold(true).Render("[FILE]"))
 	}
 

@@ -39,7 +39,7 @@ func TestGetReviewStatusInfo_Pending(t *testing.T) {
 		Formatted:    "review",
 		CommentCount: 2,
 		Action:       "request_changes",
-	})
+	}, false)
 
 	info := e.GetReviewStatusInfo()
 	if info.Status != "pending" {
@@ -71,12 +71,6 @@ func TestSubmitContentForReview(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer database.Close()
-
-	now := time.Now()
-	database.CreateSession(&types.ReviewSession{
-		ID: "sess-1", Agent: "test", RepoRoot: "/tmp", BaseRef: "abc",
-		ReviewRound: 1, CreatedAt: now, UpdatedAt: now,
-	})
 
 	e := &Engine{
 		feedback:    NewFeedbackQueue(),

@@ -1,6 +1,8 @@
 package core
 
 import (
+	"fmt"
+	"strings"
 	"sync"
 )
 
@@ -11,6 +13,41 @@ type FormattedReview struct {
 	Action       string
 }
 
+// PollResult holds the result of polling the feedback queue.
+type PollResult struct {
+	Reviews          []*FormattedReview
+	ChannelDelivered bool
+}
+
+// CombinedFeedback returns the reviews combined into a single formatted string.
+// If there's only one review, it returns it directly. Multiple reviews are
+// joined with headers.
+func (r *PollResult) CombinedFeedback() (string, int, string) {
+	if len(r.Reviews) == 0 {
+		return "", 0, ""
+	}
+	if len(r.Reviews) == 1 {
+		rev := r.Reviews[0]
+		return rev.Formatted, rev.CommentCount, rev.Action
+	}
+
+	var b strings.Builder
+	totalComments := 0
+	action := "approve"
+	for i, rev := range r.Reviews {
+		if i > 0 {
+			b.WriteString("\n\n")
+		}
+		b.WriteString(fmt.Sprintf("--- Review %d of %d ---\n\n", i+1, len(r.Reviews)))
+		b.WriteString(rev.Formatted)
+		totalComments += rev.CommentCount
+		if rev.Action == "request_changes" {
+			action = "request_changes"
+		}
+	}
+	return b.String(), totalComments, action
+}
+
 // ReviewStatusInfo holds the current review status for MCP channel queries.
 type ReviewStatusInfo struct {
 	Status       string // "no_feedback" | "pending" | "pause_requested"
@@ -19,14 +56,21 @@ type ReviewStatusInfo struct {
 }
 
 // FeedbackQueue manages the synchronization between user review actions
-// and MCP channel feedback retrieval. Supports both non-blocking and blocking
-// wait (pause flow) models.
+// and MCP channel/tool feedback retrieval. Supports both non-blocking and
+// blocking wait (pause flow) models, and both push (channel) and queue modes.
+//
+// In push mode (channelDelivered=true), pending is replaced on each submit.
+// In queue mode (channelDelivered=false), reviews accumulate until polled.
 type FeedbackQueue struct {
 	mu   sync.Mutex
 	cond *sync.Cond
 
-	// pending holds a review waiting to be delivered
-	pending *FormattedReview
+	// pending holds reviews waiting to be delivered (slice for queue mode)
+	pending []*FormattedReview
+
+	// channelDelivered is true when the latest submit was already delivered
+	// via channel push (so handlePollFeedback should not advance the round)
+	channelDelivered bool
 
 	// pauseRequested is set when the user wants the agent to stop and wait
 	pauseRequested bool
@@ -43,13 +87,23 @@ func NewFeedbackQueue() *FeedbackQueue {
 }
 
 // Submit stores a review for delivery. If a wait handler is blocking,
-// it wakes it to deliver immediately. If the channel hasn't requested it yet,
-// the review is queued for the next request.
-func (fq *FeedbackQueue) Submit(review *FormattedReview) {
+// it wakes it to deliver immediately.
+//
+// channelDelivered controls accumulation behavior:
+//   - true (push mode): replaces any pending review (channel delivers immediately)
+//   - false (queue mode): appends to the pending queue
+func (fq *FeedbackQueue) Submit(review *FormattedReview, channelDelivered bool) {
 	fq.mu.Lock()
 	defer fq.mu.Unlock()
 
-	fq.pending = review
+	fq.channelDelivered = channelDelivered
+	if channelDelivered {
+		// Push mode: replace pending (will be cleared by ClearStatus shortly)
+		fq.pending = []*FormattedReview{review}
+	} else {
+		// Queue mode: accumulate reviews
+		fq.pending = append(fq.pending, review)
+	}
 	fq.status = "queued"
 	fq.pauseRequested = false
 	fq.cond.Broadcast()
@@ -57,44 +111,79 @@ func (fq *FeedbackQueue) Submit(review *FormattedReview) {
 
 // Poll returns pending feedback without blocking. Returns nil if none available.
 func (fq *FeedbackQueue) Poll() *FormattedReview {
+	result := fq.PollWithInfo()
+	if result == nil {
+		return nil
+	}
+	if len(result.Reviews) == 1 {
+		return result.Reviews[0]
+	}
+	// Combine multiple reviews into one
+	text, count, action := result.CombinedFeedback()
+	return &FormattedReview{Formatted: text, CommentCount: count, Action: action}
+}
+
+// PollWithInfo returns all pending feedback with delivery metadata.
+// Returns nil if no feedback is available.
+func (fq *FeedbackQueue) PollWithInfo() *PollResult {
 	fq.mu.Lock()
 	defer fq.mu.Unlock()
 
-	if fq.pending == nil {
+	if len(fq.pending) == 0 {
 		return nil
 	}
 
-	review := fq.pending
+	result := &PollResult{
+		Reviews:          fq.pending,
+		ChannelDelivered: fq.channelDelivered,
+	}
 	fq.pending = nil
 	fq.status = "delivered"
-	return review
+	return result
 }
 
 // WaitForFeedback blocks until the user submits feedback. Used for the "pause" flow
 // where the agent explicitly waits for review.
 func (fq *FeedbackQueue) WaitForFeedback() *FormattedReview {
+	result := fq.WaitForFeedbackWithInfo()
+	if len(result.Reviews) == 1 {
+		return result.Reviews[0]
+	}
+	text, count, action := result.CombinedFeedback()
+	return &FormattedReview{Formatted: text, CommentCount: count, Action: action}
+}
+
+// WaitForFeedbackWithInfo blocks until feedback is available, then returns
+// all pending reviews with delivery metadata.
+func (fq *FeedbackQueue) WaitForFeedbackWithInfo() *PollResult {
 	fq.mu.Lock()
 	defer fq.mu.Unlock()
 
 	// If there's already pending feedback, return it immediately
-	if fq.pending != nil {
-		review := fq.pending
+	if len(fq.pending) > 0 {
+		result := &PollResult{
+			Reviews:          fq.pending,
+			ChannelDelivered: fq.channelDelivered,
+		}
 		fq.pending = nil
 		fq.status = "delivered"
 		fq.pauseRequested = false
-		return review
+		return result
 	}
 
 	// Block until feedback is submitted
-	for fq.pending == nil {
+	for len(fq.pending) == 0 {
 		fq.cond.Wait()
 	}
 
-	review := fq.pending
+	result := &PollResult{
+		Reviews:          fq.pending,
+		ChannelDelivered: fq.channelDelivered,
+	}
 	fq.pending = nil
 	fq.status = "delivered"
 	fq.pauseRequested = false
-	return review
+	return result
 }
 
 // SetPauseRequested sets the pause flag. The next review_status call
@@ -129,10 +218,16 @@ func (fq *FeedbackQueue) ClearStatus() {
 	fq.pending = nil
 }
 
-// HasPending returns true if there is a queued review waiting for delivery.
+// HasPending returns true if there are queued reviews waiting for delivery.
 func (fq *FeedbackQueue) HasPending() bool {
 	fq.mu.Lock()
 	defer fq.mu.Unlock()
-	return fq.pending != nil
+	return len(fq.pending) > 0
 }
 
+// QueuedCount returns the number of reviews waiting in the queue.
+func (fq *FeedbackQueue) QueuedCount() int {
+	fq.mu.Lock()
+	defer fq.mu.Unlock()
+	return len(fq.pending)
+}
