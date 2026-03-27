@@ -9,10 +9,12 @@ import (
 )
 
 // PickAgents shows an interactive multi-select picker and returns the selected adapters.
-func PickAgents(agents []AgentAdapter) ([]AgentAdapter, error) {
+// The title is shown at the top of the picker (e.g. "Select agents to register").
+func PickAgents(agents []AgentAdapter, title string) ([]AgentAdapter, error) {
 	m := pickerModel{
 		agents:   agents,
 		selected: make(map[int]bool),
+		title:    title,
 	}
 	p := tea.NewProgram(m)
 	final, err := p.Run()
@@ -38,6 +40,7 @@ type pickerModel struct {
 	selected  map[int]bool
 	cursor    int
 	cancelled bool
+	title     string
 }
 
 func (m pickerModel) Init() tea.Cmd { return nil }
@@ -54,7 +57,7 @@ func (m pickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.cursor > 0 {
 				m.cursor--
 			}
-		case " ":
+		case "space", " ":
 			m.selected[m.cursor] = !m.selected[m.cursor]
 		case "a":
 			allSelected := true
@@ -79,7 +82,7 @@ func (m pickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m pickerModel) View() tea.View {
 	var b strings.Builder
-	b.WriteString(lipgloss.NewStyle().Bold(true).Render("Select agents to register"))
+	b.WriteString(lipgloss.NewStyle().Bold(true).Render(m.title))
 	b.WriteString("\n\n")
 
 	for i, a := range m.agents {

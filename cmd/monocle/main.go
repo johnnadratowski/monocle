@@ -73,7 +73,7 @@ func (cmd *RunCmd) Run() error {
 }
 
 func (cmd *RegisterCmd) Run() error {
-	agents, err := resolveAgents(cmd.Agent)
+	agents, err := resolveAgents(cmd.Agent, "Select agents to register")
 	if err != nil {
 		return err
 	}
@@ -98,7 +98,7 @@ func (cmd *RegisterCmd) Run() error {
 }
 
 func (cmd *UnregisterCmd) Run() error {
-	agents, err := resolveAgents(cmd.Agent)
+	agents, err := resolveAgents(cmd.Agent, "Select agents to unregister")
 	if err != nil {
 		return err
 	}
@@ -119,10 +119,10 @@ func (cmd *UnregisterCmd) Run() error {
 	return nil
 }
 
-func resolveAgents(name string) ([]adapters.AgentAdapter, error) {
+func resolveAgents(name, pickerTitle string) ([]adapters.AgentAdapter, error) {
 	switch name {
 	case "":
-		return adapters.PickAgents(adapters.AllAdapters())
+		return adapters.PickAgents(adapters.AllAdapters(), pickerTitle)
 	case "all":
 		return adapters.AllAdapters(), nil
 	default:
