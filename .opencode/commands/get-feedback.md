@@ -1,0 +1,5 @@
+---
+description: Retrieve review feedback from Monocle
+---
+
+Call the monocle `get_feedback` tool to retrieve pending review feedback from your reviewer. If feedback is available, read it carefully and address the comments. If no feedback is pending, let the user know.
