@@ -44,9 +44,9 @@ func (rf *ReviewFormatter) Format(session *types.ReviewSession, comments []types
 	}
 
 	if !hasComments && strings.TrimSpace(body) == "" {
-		header := "## Review — Approved\n\nNo issues found."
+		header := "## Review — Approved"
 		if action == types.ActionRequestChanges {
-			header = "## Review — Changes Requested\n\nNo specific comments."
+			header = "## Review — Changes Requested"
 		}
 		return &FormattedReview{
 			Formatted:    header,

@@ -297,14 +297,12 @@ const INSTRUCTIONS = [
   "When you receive a feedback_submitted event, call the get_feedback tool to retrieve the review.",
   "When you receive a pause_requested event, your reviewer wants you to stop and wait. Use the get_feedback tool with wait=true to block until they submit their review.",
   "",
-  "You can submit plans or architecture decisions for your reviewer to see using the submit_plan tool.",
-  "Only use submit_plan and submit_plan_and_wait from the top-level agent — never from subagents or background tasks.",
-  "When submitting plans, use the plan filename as the id parameter so updates replace the previous version.",
+  "Sharing content for review:",
+  "When you produce content your reviewer should see (plans, decisions, summaries, etc.), call submit_for_review_and_wait. Use file_path if the content is on disk, otherwise pass it inline as content.",
+  "Only use submit_for_review and submit_for_review_and_wait from the top-level agent — never from subagents or background tasks.",
+  "Use a stable id (e.g. the filename if available) so updates replace the previous version.",
   "You can check the current review status at any time using the review_status tool.",
-  "",
-  "When a plan draft is ready, use submit_plan_and_wait to get feedback from your reviewer.",
-  "Pass the plan file_path so the reviewer sees exactly what you wrote.",
-  "If changes are requested, update the plan and call submit_plan_and_wait again. Continue iterating until approved.",
+  "Never try to exit plan mode yourself — only the user can do that.",
 ].join("\n");
 
 // -- Main --
@@ -412,9 +410,9 @@ const TOOLS = [
       },
     },
     {
-      name: "submit_plan",
+      name: "submit_for_review",
       description:
-        "Submit a fully formed plan or architecture decision for your reviewer to see and comment on. Only call this from the top-level agent, not from subagents.",
+        "Submit content for your reviewer to see and comment on in Monocle. Only call this from the top-level agent, not from subagents.",
       inputSchema: {
         type: "object" as const,
         properties: {
@@ -461,23 +459,23 @@ const TOOLS = [
       },
     },
     {
-      name: "submit_plan_and_wait",
+      name: "submit_for_review_and_wait",
       description:
-        "Submit a fully formed plan for review AND block until your reviewer responds with feedback. " +
+        "Submit content to your reviewer and wait for their feedback before continuing. " +
         "Only call this from the top-level agent, not from subagents. " +
-        "Use this in plan mode instead of submit_plan. " +
-        "If they request changes, update the plan and call this again. " +
-        "Keep iterating until the reviewer approves, then continue with your normal workflow.",
+        "Unlike submit_for_review, this tool blocks until the reviewer responds — do not proceed until it returns. " +
+        "An empty response simply means the reviewer had no comments. " +
+        "If they request changes, update the content and call this again.",
       inputSchema: {
         type: "object" as const,
         properties: {
           title: {
             type: "string",
-            description: "Title for the plan",
+            description: "Title for the plan or content",
           },
           content: {
             type: "string",
-            description: "The plan body (markdown supported). Ignored if file_path is provided.",
+            description: "The plan or content body (markdown supported). Ignored if file_path is provided.",
           },
           file_path: {
             type: "string",
@@ -559,7 +557,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
       }
     }
 
-    case "submit_plan": {
+    case "submit_for_review": {
       try {
         let content = args.content || "";
         if (args.file_path) {
@@ -593,7 +591,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
       }
     }
 
-    case "submit_plan_and_wait": {
+    case "submit_for_review_and_wait": {
       try {
         // Resolve content from file_path or inline content
         let content = args.content || "";
@@ -634,7 +632,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
           };
         }
         return {
-          content: [{ type: "text" as const, text: "Review approved." }],
+          content: [{ type: "text" as const, text: "Approved. No feedback from reviewer." }],
         };
       } catch {
         return {
