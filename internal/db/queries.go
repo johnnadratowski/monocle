@@ -150,7 +150,7 @@ func (d *DB) UpsertContentItem(sessionID string, item *types.ContentItem) error 
 	_, err := d.Exec(
 		`INSERT INTO content_items (id, session_id, title, content, previous_content, content_type, is_plan, reviewed, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		 ON CONFLICT(id) DO UPDATE SET previous_content = content_items.content, title = excluded.title, content = excluded.content, content_type = excluded.content_type, is_plan = excluded.is_plan, updated_at = excluded.updated_at`,
+		 ON CONFLICT(id) DO UPDATE SET previous_content = excluded.previous_content, title = excluded.title, content = excluded.content, content_type = excluded.content_type, is_plan = excluded.is_plan, updated_at = excluded.updated_at`,
 		item.ID, sessionID, item.Title, item.Content, item.PreviousContent, item.ContentType, boolToInt(item.IsPlan), boolToInt(item.Reviewed), item.CreatedAt, item.UpdatedAt,
 	)
 	return err

@@ -980,24 +980,27 @@ func (e *Engine) SubmitContentForReview(id, title, content, contentType string, 
 	found := false
 	for i := range session.ContentItems {
 		if session.ContentItems[i].ID == id {
-			session.ContentItems[i].PreviousContent = session.ContentItems[i].Content
-			session.ContentItems[i].Title = title
-			session.ContentItems[i].Content = content
-			session.ContentItems[i].ContentType = contentType
-			session.ContentItems[i].IsPlan = isPlan
-			session.ContentItems[i].UpdatedAt = now
-			item = session.ContentItems[i]
+			item.PreviousContent = session.ContentItems[i].Content
+			item.CreatedAt = session.ContentItems[i].CreatedAt
+			session.ContentItems[i] = item
 			found = true
 			break
 		}
 	}
 	if !found {
+		// Check DB in case the item exists from a previous session load
+		if existing, err := e.database.GetContentItem(id); err == nil && existing != nil {
+			item.PreviousContent = existing.Content
+			item.CreatedAt = existing.CreatedAt
+		}
 		session.ContentItems = append(session.ContentItems, item)
 	}
 	e.mu.Unlock()
 
 	// Persist to DB
-	_ = e.database.UpsertContentItem(session.ID, &item)
+	if err := e.database.UpsertContentItem(session.ID, &item); err != nil {
+		return fmt.Errorf("persist content item: %w", err)
+	}
 
 	e.emit(EventContentItemAdded, EventPayload{
 		Kind:   EventContentItemAdded,

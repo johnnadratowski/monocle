@@ -72,6 +72,12 @@ func TestSubmitContentForReview(t *testing.T) {
 	}
 	defer database.Close()
 
+	now := time.Now()
+	database.CreateSession(&types.ReviewSession{
+		ID: "sess-1", Agent: "test", RepoRoot: "/tmp", BaseRef: "abc",
+		ReviewRound: 1, CreatedAt: now, UpdatedAt: now,
+	})
+
 	e := &Engine{
 		feedback:    NewFeedbackQueue(),
 		database:    database,

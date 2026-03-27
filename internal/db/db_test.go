@@ -218,7 +218,8 @@ func TestContentItemPreviousContent(t *testing.T) {
 		t.Errorf("expected empty previous_content on first insert, got %q", got.PreviousContent)
 	}
 
-	// Second insert (update): previous content should be "version 1"
+	// Second insert (update): caller sets previous_content to old content
+	item.PreviousContent = item.Content // "version 1"
 	item.Content = "version 2"
 	item.UpdatedAt = now.Add(1)
 	if err := d.UpsertContentItem("sess-1", item); err != nil {
@@ -236,7 +237,8 @@ func TestContentItemPreviousContent(t *testing.T) {
 		t.Errorf("expected content='version 2', got %q", got.Content)
 	}
 
-	// Third insert (update): previous content should now be "version 2"
+	// Third insert (update): caller sets previous_content to old content
+	item.PreviousContent = item.Content // "version 2"
 	item.Content = "version 3"
 	item.UpdatedAt = now.Add(2)
 	if err := d.UpsertContentItem("sess-1", item); err != nil {
