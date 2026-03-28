@@ -170,6 +170,8 @@ This means you can review the agent's *thinking* before it writes code — not j
 
 The `submit_for_review_and_wait` tool submits content to your TUI **and blocks** until you respond with feedback. If you approve, the agent continues. If you request changes, the agent updates and submits again — iterating across as many rounds as it takes until you're satisfied.
 
+> **Note:** Monocle's tools are available to your agent but the agent decides when to use them on its own. If you want the agent to automatically submit plans for review, add instructions to your agent's project configuration. See the [plugin README](plugin/README.md#automatic-content-review) for a suggested prompt.
+
 ## Features
 
 - **Works with any MCP agent** — Claude Code, OpenCode, Codex CLI, Gemini CLI, or any agent that supports MCP tool servers
@@ -202,11 +204,11 @@ Monocle exposes the following tools to your agent via its MCP server:
 
 | Tool | Description |
 |------|-------------|
-| `review_status` | Check if the reviewer has pending feedback or has requested a pause |
-| `get_feedback` | Retrieve queued review feedback. Use `wait=true` to block until feedback is available (pause flow) |
-| `submit_for_review` | Submit content (plans, summaries, decisions, etc.) for the reviewer to see and comment on |
-| `submit_for_review_and_wait` | Submit content and block until the reviewer responds — if changes are requested, update and call again |
-| `add_files` | Add additional files for the reviewer to see in Monocle (absolute paths to files or directories) |
+| `review_status` | Check the current review status, including whether feedback is pending or a pause has been requested |
+| `get_feedback` | Retrieve queued review feedback. When `wait` is true, blocks until feedback is available |
+| `submit_for_review` | Submit content for review in Monocle. Accepts inline content or a file path. Returns immediately after submission |
+| `submit_for_review_and_wait` | Submit content for review in Monocle and block until the reviewer responds. An empty response means no comments were left |
+| `add_files` | Add files or directories to the review session in Monocle. Accepts absolute paths |
 
 ## Slash Commands
 

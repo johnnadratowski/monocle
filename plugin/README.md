@@ -37,11 +37,11 @@ Monocle's TUI will display diffs as Claude makes changes. Add comments, then sub
 
 | Tool | Description |
 |------|-------------|
-| `review_status` | Check if the reviewer has pending feedback or has requested a pause |
-| `get_feedback` | Retrieve review feedback. Use `wait=true` to block until feedback is available |
-| `submit_for_review` | Submit content (plans, summaries, decisions, etc.) for the reviewer to see and comment on |
-| `submit_for_review_and_wait` | Submit content and block until the reviewer responds — use for review gating |
-| `add_files` | Add additional files for the reviewer to see in Monocle |
+| `review_status` | Check the current review status, including whether feedback is pending or a pause has been requested |
+| `get_feedback` | Retrieve queued review feedback. When `wait` is true, blocks until feedback is available |
+| `submit_for_review` | Submit content for review in Monocle. Accepts inline content or a file path. Returns immediately |
+| `submit_for_review_and_wait` | Submit content for review in Monocle and block until the reviewer responds |
+| `add_files` | Add files or directories to the review session in Monocle. Accepts absolute paths |
 
 ## How it works
 
@@ -53,20 +53,19 @@ Claude can also submit content (plans, summaries, decisions) for your review —
 
 Press **P** in Monocle to request Claude pause. Claude receives a notification and blocks until you submit your review — giving you time to catch up without the agent racing ahead.
 
-## Plan mode
+## Automatic content review
 
-When your agent is in plan mode, Monocle can gate implementation behind reviewer approval. Instead of `submit_for_review`, the agent uses `submit_for_review_and_wait` — which submits the content and blocks until you review it.
-
-For this to work reliably, add the following to your project's `CLAUDE.md`:
+By default, Monocle's tools are available to your agent but the agent decides when to use them on its own. If you want the agent to automatically submit plans or other content for review, add instructions to your agent's project configuration (e.g. `CLAUDE.md`, `AGENTS.md`, etc.):
 
 ````markdown
 ## Monocle Integration
 
-When the Monocle MCP channel is connected:
-- Use the `submit_for_review` MCP tool to send content for the reviewer to see
-- Use the plan filename as the `id` parameter so updates replace the previous version
-
-**Plan mode (important):** When in plan mode, use `submit_for_review_and_wait` instead of `submit_for_review`. This tool submits the content AND blocks until the reviewer responds with feedback. If they request changes, update and call `submit_for_review_and_wait` again to start another review round. Keep iterating until the reviewer approves, then continue with your normal workflow.
+When Monocle's MCP tools are available:
+- Use the `submit_for_review` MCP tool to send content (plans, decisions, summaries) for the reviewer to see
+- Use the content's filename as the `id` parameter so updates replace the previous version
+- In plan mode, use `submit_for_review_and_wait` instead — it blocks until the reviewer responds. If they request changes, update and call again until approved.
 ````
 
-See the [main README](https://github.com/josephschmitt/monocle#plan-mode-integration) for the full plan mode workflow.
+You can also use the `/review-plan` and `/review-plan-wait` slash commands to manually send content at any time.
+
+See the [main README](https://github.com/josephschmitt/monocle#plan-review-and-focus-mode) for more on content review workflows.

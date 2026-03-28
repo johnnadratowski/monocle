@@ -294,16 +294,8 @@ async function blockingGetFeedback(socketPath: string): Promise<Message> {
 const INSTRUCTIONS = [
   "IMPORTANT: submit_for_review and submit_for_review_and_wait are restricted to the top-level agent. Subagents and background tasks must NEVER call these tools.",
   "",
-  "Your human reviewer is watching your code changes in real-time using Monocle.",
-  "",
   "When you receive a feedback_submitted event, call the get_feedback tool to retrieve the review.",
-  "When you receive a pause_requested event, your reviewer wants you to stop and wait. Use the get_feedback tool with wait=true to block until they submit their review.",
-  "",
-  "Sharing content for review:",
-  "When you produce content your reviewer should see (plans, decisions, summaries, etc.), call submit_for_review_and_wait. Use file_path if the content is on disk, otherwise pass it inline as content.",
-  "Use a stable id (e.g. the filename if available) so updates replace the previous version.",
-  "You can check the current review status at any time using the review_status tool.",
-  "Never try to exit plan mode yourself — only the user can do that.",
+  "When you receive a pause_requested event, call the get_feedback tool with wait=true to block until the reviewer submits feedback.",
 ].join("\n");
 
 // -- Main --
@@ -390,7 +382,7 @@ const TOOLS = [
     {
       name: "review_status",
       description:
-        "Check if your reviewer has pending feedback or has requested a pause",
+        "Check the current review status, including whether feedback is pending or a pause has been requested.",
       inputSchema: {
         type: "object" as const,
         properties: {},
@@ -399,7 +391,7 @@ const TOOLS = [
     {
       name: "get_feedback",
       description:
-        "Retrieve review feedback from your reviewer. Use wait=true to block until feedback is available (pause flow).",
+        "Retrieve queued review feedback. When wait is true, blocks until feedback is available.",
       inputSchema: {
         type: "object" as const,
         properties: {
@@ -413,7 +405,7 @@ const TOOLS = [
     {
       name: "submit_for_review",
       description:
-        "TOP-LEVEL AGENT ONLY — do not call from subagents or background tasks. Submits content for your reviewer to see and comment on in Monocle.",
+        "Submit content for review in Monocle. Accepts inline content or a file path. Returns immediately after submission.",
       inputSchema: {
         type: "object" as const,
         properties: {
@@ -445,7 +437,7 @@ const TOOLS = [
     {
       name: "add_files",
       description:
-        "Add additional files for your reviewer to see in Monocle. Accepts absolute file or directory paths from anywhere on the filesystem.",
+        "Add files or directories to the review session in Monocle. Accepts absolute paths.",
       inputSchema: {
         type: "object" as const,
         properties: {
@@ -462,9 +454,8 @@ const TOOLS = [
     {
       name: "submit_for_review_and_wait",
       description:
-        "TOP-LEVEL AGENT ONLY — do not call from subagents or background tasks. " +
-        "Submits content to your reviewer and blocks until they respond. " +
-        "An empty response means no comments. If they request changes, update and call again.",
+        "Submit content for review in Monocle and block until the reviewer responds. " +
+        "Accepts inline content or a file path. An empty response means no comments were left.",
       inputSchema: {
         type: "object" as const,
         properties: {

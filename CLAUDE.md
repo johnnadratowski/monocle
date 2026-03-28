@@ -126,6 +126,13 @@ User reviews, adds comments, submits → FeedbackQueue releases → notification
 3. Add query functions to `queries.go`
 4. Add tests to `db_test.go`
 
+## Monocle Integration
+
+When Monocle's MCP tools are available:
+- Use the `submit_for_review` MCP tool to send content (plans, decisions, summaries) for the reviewer to see
+- Use the content's filename as the `id` parameter so updates replace the previous version
+- In plan mode, use `submit_for_review_and_wait` instead — it blocks until the reviewer responds. If they request changes, update and call again until approved.
+
 ## Release Process
 
 Automated via release-please + goreleaser:
