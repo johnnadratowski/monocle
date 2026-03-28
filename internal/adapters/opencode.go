@@ -57,6 +57,26 @@ func (a *OpenCodeAdapter) Register(global bool) error {
 		"command": []any{command, "serve-mcp-channel"},
 		"enabled": true,
 	}
+
+	// Allow monocle MCP tools in plan mode so the agent can submit
+	// content for review and check review status while planning.
+	agent, ok := data["agent"].(map[string]any)
+	if !ok {
+		agent = map[string]any{}
+		data["agent"] = agent
+	}
+	plan, ok := agent["plan"].(map[string]any)
+	if !ok {
+		plan = map[string]any{}
+		agent["plan"] = plan
+	}
+	perm, ok := plan["permission"].(map[string]any)
+	if !ok {
+		perm = map[string]any{}
+		plan["permission"] = perm
+	}
+	perm["mcp__monocle"] = "allow"
+
 	if err := WriteJSONFile(path, data); err != nil {
 		return fmt.Errorf("write %s: %w", path, err)
 	}
