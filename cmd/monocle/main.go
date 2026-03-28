@@ -82,14 +82,15 @@ func (cmd *RegisterCmd) Run() error {
 	}
 
 	for _, a := range agents {
-		if a.HasConfig(cmd.Global) {
-			fmt.Printf("  ✓ %s: already registered\n", a.Name())
-			continue
-		}
+		wasRegistered := a.HasConfig(cmd.Global)
 		if err := a.Register(cmd.Global); err != nil {
 			return fmt.Errorf("register %s: %w", a.Name(), err)
 		}
-		fmt.Printf("  ✓ %s: registered\n", a.Name())
+		if wasRegistered {
+			fmt.Printf("  ✓ %s: updated\n", a.Name())
+		} else {
+			fmt.Printf("  ✓ %s: registered\n", a.Name())
+		}
 		for _, p := range a.ConfigPaths(cmd.Global) {
 			fmt.Printf("    → %s\n", p)
 		}

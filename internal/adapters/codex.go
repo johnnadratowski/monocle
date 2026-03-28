@@ -35,10 +35,7 @@ func (a *CodexAdapter) Register(global bool) error {
 		return fmt.Errorf("read %s: %w", path, err)
 	}
 
-	existing := string(content)
-	if strings.Contains(existing, "[mcp_servers.monocle]") {
-		return nil // already registered
-	}
+	existing := removeMonocleTOMLSection(string(content))
 
 	block := fmt.Sprintf("\n[mcp_servers.monocle]\ncommand = %q\nargs = [\"serve-mcp-channel\"]\n", command)
 
@@ -59,7 +56,17 @@ func (a *CodexAdapter) Unregister(global bool) error {
 		return fmt.Errorf("read %s: %w", path, err)
 	}
 
-	lines := strings.Split(string(content), "\n")
+	cleaned := strings.TrimRight(removeMonocleTOMLSection(string(content)), "\n") + "\n"
+	if strings.TrimSpace(cleaned) == "" {
+		return RemoveFileIfExists(path)
+	}
+	return WriteFileAtomic(path, []byte(cleaned))
+}
+
+// removeMonocleTOMLSection strips the [mcp_servers.monocle] section and its
+// key-value lines from a TOML document string.
+func removeMonocleTOMLSection(content string) string {
+	lines := strings.Split(content, "\n")
 	var result []string
 	inSection := false
 
@@ -70,7 +77,6 @@ func (a *CodexAdapter) Unregister(global bool) error {
 			continue
 		}
 		if inSection {
-			// End of section: next section header or blank line after content
 			if strings.HasPrefix(trimmed, "[") {
 				inSection = false
 				result = append(result, line)
@@ -80,11 +86,7 @@ func (a *CodexAdapter) Unregister(global bool) error {
 		result = append(result, line)
 	}
 
-	cleaned := strings.TrimRight(strings.Join(result, "\n"), "\n") + "\n"
-	if strings.TrimSpace(cleaned) == "" {
-		return RemoveFileIfExists(path)
-	}
-	return WriteFileAtomic(path, []byte(cleaned))
+	return strings.Join(result, "\n")
 }
 
 // Detect returns true if Codex CLI appears to be installed.
