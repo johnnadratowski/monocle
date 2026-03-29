@@ -5,12 +5,6 @@ description: Retrieves pending review feedback from Monocle. Use when the review
 
 # Get Review Feedback
 
-## Prerequisite
-
-Run `monocle status` to check if Monocle is active. If the output is "not running", **do not execute this skill**. Instead, let the user know that Monocle is not running, and they can start it with `monocle` if they'd like to use it for this session.
-
-## Usage
-
 Run `monocle review get-feedback` to retrieve pending review feedback.
 
 ## Handling the response

@@ -38,4 +38,3 @@ sync-skills:
 skills-tarball:
 	mkdir -p dist
 	tar -czf dist/skills.tar.gz --exclude='*.go' -C skills .
-

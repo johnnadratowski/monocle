@@ -7,10 +7,6 @@ description: Sends a plan file to Monocle for the reviewer to see. Returns immed
 
 Submits a plan file to Monocle so the reviewer can see it. Does NOT wait for feedback — use `/review-plan-wait` to block until the reviewer responds.
 
-## Prerequisite
-
-Run `monocle status` to check if Monocle is active. If the output is "not running", **do not execute this skill**. Instead, let the user know that Monocle is not running, and they can start it with `monocle` if they'd like to use it for this session.
-
 ## Steps
 
 1. **Find the plan file** — if the user provided a path via `$ARGUMENTS`, use that. Otherwise, find the most recently modified plan file in the project.
