@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-const schemaVersion = 4
+const schemaVersion = 5
 
 const dropSQL = `
 DROP TABLE IF EXISTS review_submissions;
@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS content_items (
 	session_id TEXT NOT NULL REFERENCES sessions(id),
 	title TEXT NOT NULL,
 	content TEXT NOT NULL,
+	previous_content TEXT NOT NULL DEFAULT '',
 	content_type TEXT NOT NULL DEFAULT 'text',
 	is_plan INTEGER NOT NULL DEFAULT 0,
 	reviewed INTEGER NOT NULL DEFAULT 0,

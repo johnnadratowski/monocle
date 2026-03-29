@@ -20,6 +20,8 @@ type statusBarModel struct {
 	commandBuffer   string
 	contextHints    string // override hints when set (e.g. comment-specific keybinds)
 	diffStyle       diffStyle
+	contentMode     bool // true when viewing content (plan/doc) in raw mode
+	contentID       string // non-empty when viewing a content item (raw or diff)
 	width           int
 	theme           Theme
 }
@@ -66,7 +68,15 @@ func (m statusBarModel) View() string {
 		parts = append(parts, fmt.Sprintf("ref:%s", ref))
 	}
 
-	if m.diffStyle == diffStyleFile {
+	if m.contentID != "" && !m.contentMode {
+		// Viewing a content item diff
+		switch m.diffStyle {
+		case diffStyleUnified:
+			parts = append(parts, lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Bold(true).Render("[DIFF]"))
+		case diffStyleSplit:
+			parts = append(parts, lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Bold(true).Render("[SPLIT]"))
+		}
+	} else if m.diffStyle == diffStyleFile {
 		parts = append(parts, lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Bold(true).Render("[FILE]"))
 	}
 

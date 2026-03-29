@@ -79,6 +79,21 @@ type connectionChangedMsg struct {
 	mode      string // "queue" for queue-mode connections, subscriber count for push
 }
 
+// requestContentDiffMsg requests async computation of a content item diff.
+type requestContentDiffMsg struct {
+	contentID      string
+	preferredStyle diffStyle // style to use when diff loads (0=unified for manual cycle)
+}
+
+// loadContentDiffMsg carries the computed content diff result.
+type loadContentDiffMsg struct {
+	contentID      string
+	result         *types.DiffResult
+	comments       []types.ReviewComment
+	err            error
+	preferredStyle diffStyle // style to render the diff in
+}
+
 type feedbackPickedUpMsg struct{}
 
 type pauseChangedMsg struct {
@@ -225,8 +240,14 @@ func NewApp(engine core.EngineAPI, opts ...AppOptions) appModel {
 			switch cfg.DiffStyle {
 			case "split":
 				dv.style = diffStyleSplit
+				dv.preferredContentDiffStyle = diffStyleSplit
+				dv.autoContentDiff = true
 			case "file":
 				dv.style = diffStyleFile
+				// autoContentDiff stays false: "file" mode = no auto-switch for plans
+			default:
+				dv.autoContentDiff = true
+				// preferredContentDiffStyle stays at diffStyleUnified (zero value)
 			}
 			if cfg.Layout != "" {
 				layoutCfg = cfg.Layout
@@ -441,11 +462,12 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var diffCmd tea.Cmd
 		if msg.contentItem != nil && m.diffView.contentMode && m.diffView.contentID == msg.contentItem.ID {
 			m.diffView, diffCmd = m.diffView.Update(loadContentMsg{
-				id:          msg.contentItem.ID,
-				title:       msg.contentItem.Title,
-				content:     msg.contentItem.Content,
-				contentType: msg.contentItem.ContentType,
-				comments:    msg.contentComments,
+				id:                 msg.contentItem.ID,
+				title:              msg.contentItem.Title,
+				content:            msg.contentItem.Content,
+				contentType:        msg.contentItem.ContentType,
+				comments:           msg.contentComments,
+				hasPreviousVersion: msg.contentItem.PreviousContent != "",
 			})
 		} else if msg.path != "" && msg.result != nil {
 			m.diffView, diffCmd = m.diffView.Update(loadDiffMsg{
@@ -681,6 +703,34 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Content item loading (plans, docs)
 	case loadContentMsg:
+		var cmd tea.Cmd
+		m.diffView, cmd = m.diffView.Update(msg)
+		return m, cmd
+
+	// Content diff request (from diff style cycle on content items)
+	case requestContentDiffMsg:
+		engine := m.engine
+		contentID := msg.contentID
+		preferredStyle := msg.preferredStyle
+		return m, func() tea.Msg {
+			result, err := engine.GetContentDiff(contentID)
+			if err != nil || result == nil {
+				return loadContentDiffMsg{contentID: contentID, err: err}
+			}
+			session := engine.GetSession()
+			var comments []types.ReviewComment
+			if session != nil {
+				for _, c := range session.Comments {
+					if c.TargetRef == contentID && c.TargetType == types.TargetContent {
+						comments = append(comments, c)
+					}
+				}
+			}
+			return loadContentDiffMsg{contentID: contentID, result: result, comments: comments, preferredStyle: preferredStyle}
+		}
+
+	// Content diff loaded
+	case loadContentDiffMsg:
 		var cmd tea.Cmd
 		m.diffView, cmd = m.diffView.Update(msg)
 		return m, cmd
@@ -1913,11 +1963,13 @@ func (m appModel) handleSidebarSelect(msg sidebarSelectMsg) tea.Cmd {
 				}
 			}
 			return loadContentMsg{
-				id:          item.ID,
-				title:       item.Title,
-				content:     item.Content,
-				contentType: item.ContentType,
-				comments:    comments,
+				id:                 item.ID,
+				title:              item.Title,
+				content:            item.Content,
+				contentType:        item.ContentType,
+				comments:           comments,
+				hasPreviousVersion: item.PreviousContent != "",
+				autoSwitchDiff:     item.PreviousContent != "",
 			}
 		}
 	}
@@ -2019,11 +2071,12 @@ func (m appModel) handleSaveComment(msg saveCommentMsg) tea.Cmd {
 				}
 			}
 			return loadContentMsg{
-				id:          item.ID,
-				title:       item.Title,
-				content:     item.Content,
-				contentType: item.ContentType,
-				comments:    comments,
+				id:                 item.ID,
+				title:              item.Title,
+				content:            item.Content,
+				contentType:        item.ContentType,
+				comments:           comments,
+				hasPreviousVersion: item.PreviousContent != "",
 			}
 		}
 
@@ -2210,11 +2263,13 @@ type refreshResultMsg struct {
 
 // loadContentMsg carries content item data for rendering in the diff view.
 type loadContentMsg struct {
-	id          string
-	title       string
-	content     string
-	contentType string
-	comments    []types.ReviewComment
+	id                 string
+	title              string
+	content            string
+	contentType        string
+	comments           []types.ReviewComment
+	hasPreviousVersion bool // true if a previous version exists for diffing
+	autoSwitchDiff     bool // true to auto-switch to preferred diff style
 }
 
 // View renders the full TUI layout.
@@ -2296,6 +2351,8 @@ func (m appModel) View() tea.View {
 		m.statusBar.contextHints = ""
 	}
 	m.statusBar.diffStyle = m.diffView.style
+	m.statusBar.contentMode = m.diffView.contentMode
+	m.statusBar.contentID = m.diffView.contentID
 	statusView := m.statusBar.View()
 	full := lipgloss.JoinVertical(lipgloss.Left, titleBar, body, statusView)
 

@@ -190,6 +190,66 @@ func TestContentItems(t *testing.T) {
 	if got.Content != "# Test Plan\nSteps..." {
 		t.Errorf("unexpected content: %q", got.Content)
 	}
+	if got.PreviousContent != "" {
+		t.Errorf("expected empty previous_content for first version, got %q", got.PreviousContent)
+	}
+
+	// Update the same item — previous_content should capture the old content
+	item2 := &types.ContentItem{
+		ID:          "item-1",
+		Title:       "Updated Plan",
+		Content:     "# Updated Plan\nNew steps...",
+		ContentType: "markdown",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if err := d.UpsertContentItem("sess-1", item2); err != nil {
+		t.Fatalf("upsert update: %v", err)
+	}
+
+	got2, err := d.GetContentItem("item-1")
+	if err != nil {
+		t.Fatalf("get updated item: %v", err)
+	}
+	if got2.Content != "# Updated Plan\nNew steps..." {
+		t.Errorf("unexpected content after update: %q", got2.Content)
+	}
+	if got2.PreviousContent != "# Test Plan\nSteps..." {
+		t.Errorf("expected previous_content to be old content, got %q", got2.PreviousContent)
+	}
+
+	// Update again — previous_content should now be the v2 content
+	item3 := &types.ContentItem{
+		ID:          "item-1",
+		Title:       "Plan v3",
+		Content:     "# Plan v3\nFinal steps...",
+		ContentType: "markdown",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if err := d.UpsertContentItem("sess-1", item3); err != nil {
+		t.Fatalf("upsert v3: %v", err)
+	}
+
+	got3, err := d.GetContentItem("item-1")
+	if err != nil {
+		t.Fatalf("get v3 item: %v", err)
+	}
+	if got3.PreviousContent != "# Updated Plan\nNew steps..." {
+		t.Errorf("expected previous_content to be v2 content, got %q", got3.PreviousContent)
+	}
+
+	// Verify only one item exists (upsert, not insert)
+	items2, err := d.GetContentItems("sess-1")
+	if err != nil {
+		t.Fatalf("get items after updates: %v", err)
+	}
+	if len(items2) != 1 {
+		t.Errorf("expected 1 item after upserts, got %d", len(items2))
+	}
+	if items2[0].PreviousContent != "# Updated Plan\nNew steps..." {
+		t.Errorf("GetContentItems previous_content mismatch: %q", items2[0].PreviousContent)
+	}
 }
 
 func TestDeleteComment(t *testing.T) {

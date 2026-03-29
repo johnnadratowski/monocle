@@ -74,10 +74,16 @@ type diffViewModel struct {
 	mouseDragActive bool
 
 	// Content view mode (for plans/docs)
-	contentMode bool
-	contentID   string
-	contentTitle string
-	mdStyler    *markdownStyler
+	contentMode        bool
+	contentID          string
+	contentTitle       string
+	contentHasDiff     bool   // true when a previous version exists for diffing
+	contentDiffContent string // current content text, for toggling back from diff view
+	mdStyler           *markdownStyler
+
+	// Content diff auto-switch (from config diff_style)
+	preferredContentDiffStyle diffStyle // unified or split
+	autoContentDiff           bool      // true when plans should auto-show diffs on version 2+
 
 	// Additional file mode (external files, no diff)
 	additionalFilePath string
@@ -161,6 +167,8 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 		m.contentMode = true
 		m.contentID = msg.id
 		m.contentTitle = msg.title
+		m.contentHasDiff = msg.hasPreviousVersion
+		m.contentDiffContent = msg.content
 		m.additionalFilePath = ""
 		if msg.contentType != "" {
 			ext := msg.contentType
@@ -185,6 +193,31 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 			m.visualMode = false
 		}
 		m.hOffset = 0
+
+		// Auto-switch to preferred diff style when a previous version exists
+		if msg.autoSwitchDiff && m.autoContentDiff {
+			contentID := m.contentID
+			style := m.preferredContentDiffStyle
+			return m, func() tea.Msg {
+				return requestContentDiffMsg{contentID: contentID, preferredStyle: style}
+			}
+		}
+
+		return m, nil
+
+	case loadContentDiffMsg:
+		if msg.err != nil || msg.result == nil {
+			return m, nil // stay in content mode on error
+		}
+		m.contentMode = false
+		m.hunks = msg.result.Hunks
+		m.comments = msg.comments
+		m.style = msg.preferredStyle
+		m.buildLines()
+		m.cursor = m.nearestSelectable(0, 1)
+		m.offset = 0
+		m.hOffset = 0
+		m.visualMode = false
 		return m, nil
 
 	case loadFileContentMsg:
@@ -1304,11 +1337,43 @@ func (m *diffViewModel) ToggleWrap() {
 	m.ensureVisible()
 }
 
-// CycleDiffStyle cycles through unified → split → file display styles.
+// CycleDiffStyle cycles through display styles.
+// For file diffs: unified → split → file → unified.
+// For content items with a previous version: content → unified → split → content.
 func (m *diffViewModel) CycleDiffStyle() tea.Cmd {
-	if m.contentMode || m.additionalFilePath != "" {
+	if m.additionalFilePath != "" {
 		return nil
 	}
+
+	// Content mode: toggle into diff view if a previous version exists
+	if m.contentMode && m.contentHasDiff {
+		contentID := m.contentID
+		return func() tea.Msg {
+			return requestContentDiffMsg{contentID: contentID}
+		}
+	}
+
+	// Viewing a content diff: cycle unified → split → back to content
+	if !m.contentMode && m.contentID != "" {
+		switch m.style {
+		case diffStyleUnified:
+			m.style = diffStyleSplit
+			m.buildLines()
+			return nil
+		default:
+			// Back to content view
+			m.contentMode = true
+			m.style = diffStyleUnified
+			m.hunks = nil
+			m.buildContentLines(m.contentDiffContent)
+			m.cursor = m.nearestSelectable(0, 1)
+			m.offset = 0
+			m.hOffset = 0
+			return nil
+		}
+	}
+
+	// Regular file diffs
 	switch m.style {
 	case diffStyleUnified:
 		m.style = diffStyleSplit

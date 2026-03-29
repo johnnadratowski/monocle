@@ -231,6 +231,23 @@ func (e *Engine) GetContentItem(id string) (*types.ContentItem, error) {
 	return e.database.GetContentItem(id)
 }
 
+// GetContentDiff computes a diff between the previous and current version of a content item.
+// Returns nil if no previous version exists.
+func (e *Engine) GetContentDiff(id string) (*types.DiffResult, error) {
+	item, err := e.database.GetContentItem(id)
+	if err != nil {
+		return nil, err
+	}
+	if item.PreviousContent == "" {
+		return nil, nil
+	}
+	hunks, err := TextDiff(item.PreviousContent, item.Content)
+	if err != nil {
+		return nil, fmt.Errorf("compute content diff: %w", err)
+	}
+	return &types.DiffResult{Path: id, Hunks: hunks}, nil
+}
+
 // -- Additional files --
 
 func (e *Engine) GetAdditionalFiles() []types.AdditionalFile {
@@ -1049,6 +1066,7 @@ func (e *Engine) SubmitContentForReview(id, title, content, contentType string, 
 	found := false
 	for i := range session.ContentItems {
 		if session.ContentItems[i].ID == id {
+			session.ContentItems[i].PreviousContent = session.ContentItems[i].Content
 			session.ContentItems[i].Title = title
 			session.ContentItems[i].Content = content
 			session.ContentItems[i].ContentType = contentType
