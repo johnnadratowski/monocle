@@ -3,6 +3,7 @@
     ".": {
       "release-type": "go",
       "bump-minor-pre-major": true,
+      "versioning": "prerelease",
       "prerelease": true,
       "prerelease-type": "beta",
       "extra-files": [
