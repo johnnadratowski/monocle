@@ -77,12 +77,22 @@ func TestCycleDiffStyle_ContentWithoutDiff(t *testing.T) {
 	m.contentID = "plan-1"
 	m.contentDiffContent = "# Plan"
 	m.buildContentLines(m.contentDiffContent)
+	origLineCount := len(m.lines)
+	origStyle := m.style
 
 	cmd := m.CycleDiffStyle()
-	// Falls through to regular file diff handler; with no hunks and unified style,
-	// it switches to split and rebuilds (producing empty lines). Returns nil cmd.
+	// No previous version exists, so toggle should be a no-op.
 	if cmd != nil {
 		t.Error("expected nil cmd for content without diff")
+	}
+	if !m.contentMode {
+		t.Error("expected contentMode to remain true")
+	}
+	if m.style != origStyle {
+		t.Errorf("style changed from %d to %d, expected no change", origStyle, m.style)
+	}
+	if len(m.lines) != origLineCount {
+		t.Errorf("lines changed from %d to %d, expected no change", origLineCount, len(m.lines))
 	}
 }
 

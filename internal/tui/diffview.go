@@ -1366,7 +1366,10 @@ func (m *diffViewModel) CycleDiffStyle() tea.Cmd {
 	}
 
 	// Content mode: toggle into diff view if a previous version exists
-	if m.contentMode && m.contentHasDiff {
+	if m.contentMode && m.contentID != "" {
+		if !m.contentHasDiff {
+			return nil // no previous version, nothing to diff
+		}
 		contentID := m.contentID
 		style := m.preferredContentDiffStyle
 		return func() tea.Msg {
