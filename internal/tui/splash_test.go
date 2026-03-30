@@ -8,21 +8,27 @@ import (
 )
 
 func TestRenderSplashFullTier(t *testing.T) {
-	result := renderSplash(90, 24)
+	result := renderSplash(90, 30)
 	if !strings.Contains(result, "◉") {
 		t.Error("full splash should contain ◉ character")
-	}
-	if !strings.Contains(result, "plugin marketplace add") {
-		t.Error("full splash should contain marketplace install instruction")
-	}
-	if !strings.Contains(result, "/plugin install monocle@monocle") {
-		t.Error("full splash should contain plugin install instruction")
 	}
 	if !strings.Contains(result, "monocle register") {
 		t.Error("full splash should contain register instruction")
 	}
+	if !strings.Contains(result, "plugin/extension") {
+		t.Error("full splash at height 30 should contain plugin/extension examples")
+	}
 	if !strings.Contains(result, "to submit your review") {
 		t.Error("full splash should contain review hint")
+	}
+
+	// At height 20, extension examples should be omitted
+	compact := renderSplash(90, 20)
+	if !strings.Contains(compact, "monocle register") {
+		t.Error("compact full splash should still contain register instruction")
+	}
+	if strings.Contains(compact, "plugin/extension") {
+		t.Error("compact full splash at height 20 should omit plugin/extension examples")
 	}
 }
 

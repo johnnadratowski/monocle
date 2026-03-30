@@ -10,7 +10,7 @@ import (
 func renderSplash(width, height int) string {
 	var lines []string
 	if width >= 80 && height >= 20 {
-		lines = splashFull()
+		lines = splashFull(height)
 	} else {
 		lines = splashSmall()
 	}
@@ -18,7 +18,7 @@ func renderSplash(width, height int) string {
 }
 
 // splashFull renders the logo with getting-started instructions.
-func splashFull() []string {
+func splashFull(height int) []string {
 	logo := lipgloss.NewStyle().Foreground(lipgloss.Color("4")).Bold(true)
 	dim := lipgloss.NewStyle().Faint(true)
 	cmd := lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
@@ -31,17 +31,30 @@ func splashFull() []string {
 
 	section := lipgloss.NewStyle().Foreground(lipgloss.Color("6"))
 
-	return []string{
+	lines := []string{
 		logo.Render("o_(◉) monocle"),
 		dim.Render("code review companion for your AI agent"),
 		"",
-		dim.Render("For Claude Code, install the plugin for push notifications:"),
-		dim.Render("  " + cmd.Render("/plugin marketplace add josephschmitt/monocle")),
-		dim.Render("  " + cmd.Render("/plugin install monocle@monocle")),
-		"",
-		dim.Render("For other agents, register via the CLI:"),
+		dim.Render("To get started, register Monocle with your agent:"),
 		dim.Render("  " + cmd.Render("monocle register")),
 		"",
+	}
+
+	if height >= 30 {
+		lines = append(lines,
+			dim.Render("Or manually install via your agent's plugin/extension system:"),
+			"",
+			dim.Render("Claude Code:"),
+			dim.Render("  "+cmd.Render("/plugin marketplace add josephschmitt/monocle")),
+			dim.Render("  "+cmd.Render("/plugin install monocle@monocle")),
+			"",
+			dim.Render("Gemini CLI:"),
+			dim.Render("  "+cmd.Render("gemini extensions install josephschmitt/monocle")),
+			"",
+		)
+	}
+
+	lines = append(lines,
 		dim.Render("Diffs appear here as your agent works."),
 		"",
 		dim.Render("─────"),
@@ -53,11 +66,13 @@ func splashFull() []string {
 		"",
 		section.Render("Feedback"),
 		dim.Render("Submit sends your review to the feedback queue."),
-		dim.Render("The agent picks it up via ") + cmd.Render("get_feedback") + dim.Render("."),
+		dim.Render("The agent picks it up via the ") + cmd.Render("/get-feedback") + dim.Render(" skill."),
 		"",
 		hint("?", " for keybinding help"),
 		hint("q", " to quit"),
-	}
+	)
+
+	return lines
 }
 
 // splashSmall renders a minimal fallback for narrow/short panes.
