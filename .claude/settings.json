@@ -24,6 +24,7 @@
       "Bash(date:*)",
       "Bash(diff:*)",
       "Bash(devbox run -- make*)",
+      "Bash(monocle status:*)",
       "Bash(monocle review:*)",
       "Bash(./bin/monocle review:*)",
       "Skill(get-feedback)",
