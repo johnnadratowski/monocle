@@ -9,7 +9,7 @@
 
 Monocle is a TUI that runs alongside your AI coding agent. You review diffs in real time as the agent writes code, leave line-level comments — issues, suggestions, notes — and submit a structured review in one batch. The agent receives your feedback and starts fixing things immediately, just like a PR review but live.
 
-Monocle connects to your agent via [MCP](https://modelcontextprotocol.io/). With [Claude Code](https://claude.com/claude-code) and [MCP channels](https://code.claude.com/docs/en/channels-reference), feedback is pushed directly into the agent's context the moment you submit. Any other MCP-compatible agent — [OpenCode](https://opencode.ai), [Codex CLI](https://github.com/openai/codex), [Gemini CLI](https://github.com/google/gemini-cli) — retrieves feedback via the `get_feedback` tool.
+Monocle connects to your agent using Unix sockets. But with [Claude Code](https://claude.com/claude-code) and [MCP channels](https://code.claude.com/docs/en/channels-reference), it's able to push feedback directly into the agent's context the moment you submit. Other agents — [OpenCode](https://opencode.ai), [Codex CLI](https://github.com/openai/codex), [Gemini CLI](https://github.com/google/gemini-cli) — can still use skills or bash tools to retrieve feedback from monocle after it's been submitted and queued. MCP channels just make the process smoother.
 
 ## Why
 

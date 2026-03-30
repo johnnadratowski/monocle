@@ -7,6 +7,8 @@ description: Sends a plan file to Monocle and blocks until the reviewer responds
 
 Submits a plan file to Monocle and blocks until the reviewer responds with feedback.
 
+**Important:** This is for content that isn't already a tracked file change — plans, architecture docs, summaries, etc. You do NOT need to send regular code files; Monocle automatically picks up file changes in the workspace and shows them as diffs.
+
 ## Steps
 
 1. **Find the plan file** — if the user provided a path via `$ARGUMENTS`, use that. Otherwise, find the most recently modified plan file in the project.
