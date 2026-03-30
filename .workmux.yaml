@@ -3,7 +3,7 @@ window_prefix: wm-
 panes:
   - command: <agent>
     focus: true
-  - command: devbox run -- make run
+  - command: devbox run -- make build run
     split: horizontal
 
 files:
