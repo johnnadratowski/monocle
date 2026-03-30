@@ -36,12 +36,6 @@ brew install josephschmitt/tap/monocle
 <details>
 <summary>Other installation methods</summary>
 
-#### Go Install
-
-```bash
-go install github.com/josephschmitt/monocle/cmd/monocle@latest
-```
-
 #### Pre-built Binaries
 
 Download from [GitHub Releases](https://github.com/josephschmitt/monocle/releases):
