@@ -170,7 +170,7 @@ This means you can review the agent's *thinking* before it writes code — not j
 
 The `/review-plan-wait` skill submits content to your TUI **and blocks** until you respond with feedback. If you approve, the agent continues. If you request changes, the agent updates and submits again — iterating across as many rounds as it takes until you're satisfied.
 
-> **Note:** Monocle's skills are available to your agent but the agent decides when to use them on its own. If you want the agent to automatically submit plans for review, add instructions to your agent's project configuration. See the [plugin README](plugin/README.md#automatic-content-review) for a suggested prompt.
+> **Note:** Monocle's skills are available to your agent but the agent decides when to use them on its own. If you want the agent to automatically submit plans for review, add instructions to your agent's project configuration. See [Automatic content review](#automatic-content-review) below for a suggested prompt.
 
 ## Features
 
@@ -381,6 +381,21 @@ Override any action key by mapping the action name to a new key string:
 Available action names: `up`, `down`, `top`, `bottom`, `half_up`, `half_down`, `prev_file`, `next_file`, `select`, `focus_swap`, `toggle_sidebar`, `scroll_down`, `scroll_up`, `scroll_left`, `scroll_right`, `scroll_home`, `scroll_first_char`, `scroll_end`, `wrap`, `toggle_diff`, `tree_mode`, `collapse_all`, `expand_all`, `prev_section`, `next_section`, `comment`, `file_comment`, `suggest`, `visual`, `reviewed`, `submit`, `pause`, `dismiss_outdated`, `base_ref`, `cycle_layout`, `refresh`, `help`, `quit`, `command_mode`.
 
 The help overlay (`?`) dynamically reflects your custom bindings. Modal keys (Enter, Esc, Tab in overlays) are not configurable.
+
+## Automatic content review
+
+By default, Monocle's skills are available to your agent but the agent decides when to use them on its own. If you want the agent to automatically submit plans or other content for review, add instructions to your agent's project configuration (e.g. `CLAUDE.md`, `AGENTS.md`, etc.):
+
+````markdown
+## Monocle Integration
+
+When Monocle is running:
+- Use the `/review-plan` skill to send content (plans, decisions, summaries) for the reviewer to see
+- Use the content's filename as the identifier so updates replace the previous version
+- In plan mode, use `/review-plan-wait` instead — it blocks until the reviewer responds. If they request changes, update and resubmit until approved.
+````
+
+You can also use the `/review-plan` and `/review-plan-wait` skills manually at any time.
 
 ## How it works
 
