@@ -86,86 +86,69 @@ devbox run -- make build
 
 ## Quick Start
 
-### Claude Code (recommended — push notifications)
+### 1. Register Monocle with your agent
 
-Claude Code supports [MCP channels](https://code.claude.com/docs/en/channels-reference), which let Monocle push review feedback directly into the agent's context as a notification. This means the agent learns about your review the moment you submit — no manual step needed. It's the most seamless integration and the way Monocle was designed to be used.
+```bash
+monocle register          # interactive picker
+monocle register claude   # or: opencode, codex, gemini, all
+```
 
-#### 1. Install the plugin
+This installs skills and, for Claude Code, the MCP channel config for push notifications. Use `--global` to write to the user-level config directory instead of the project.
 
-In Claude Code, add Monocle as a plugin marketplace and install:
+| Agent       | Skills              | MCP config  |
+|-------------|---------------------|-------------|
+| Claude Code | `.claude/skills/`   | `.mcp.json` |
+| OpenCode    | `.opencode/skills/` | -           |
+| Codex CLI   | `.codex/skills/`    | -           |
+| Gemini CLI  | `.gemini/skills/`   | -           |
+
+<details>
+<summary>Alternative: use your agent's plugin/extension system</summary>
+
+#### Claude Code
 
 ```
 /plugin marketplace add josephschmitt/monocle
 /plugin install monocle@monocle
 ```
 
-#### 2. Start reviewing
-
-In one terminal, start Claude Code with the channel enabled (the flag is required during the [channels research preview](https://code.claude.com/docs/en/channels)):
-
-```bash
-claude --dangerously-load-development-channels plugin:monocle@monocle
-```
-
-In another, start Monocle:
-```bash
-monocle
-```
-
-Claude Code gets tools for checking review status, retrieving feedback, submitting content for review, and more — and starts receiving your review feedback as push notifications.
-
-> **Note:** The `--dangerously-load-development-channels` flag is required during the [channels research preview](https://code.claude.com/docs/en/channels-reference).
-
-> **Tip:** If you start or restart Monocle while Claude Code is already running, the MCP channel may need to reconnect. Type `/mcp` in Claude Code and select Monocle to reconnect.
-
-### Codex CLI
-
-Install the Monocle plugin from the Codex CLI plugin browser:
+#### Codex CLI
 
 ```
 /plugins
 ```
 
-Search for "monocle" and install. Then start Monocle in a separate terminal:
+Search for "monocle" and install.
 
-```bash
-monocle
-```
-
-### Gemini CLI
-
-Install the Monocle extension:
+#### Gemini CLI
 
 ```bash
 gemini extensions install josephschmitt/monocle
 ```
 
-Then start Monocle in a separate terminal:
+</details>
+
+### 2. Start reviewing
+
+Start your agent and Monocle in separate terminals:
 
 ```bash
 monocle
 ```
 
-### OpenCode / other agents (manual registration)
+Your agent gets skills for checking review status, retrieving feedback, and submitting content for review. When you submit a review, Monocle queues it for delivery. The agent retrieves it via the `/get-feedback` skill or on its own.
 
-For agents without a plugin system, use `monocle register` to write MCP config and slash commands directly:
+#### Push notifications (Claude Code only)
+
+Claude Code supports [MCP channels](https://code.claude.com/docs/en/channels-reference), which automate the `/get-feedback` step. When you submit a review, a push notification prompts the agent to retrieve your feedback immediately instead of waiting for the next poll. To enable channels, start Claude Code with the channel flag:
 
 ```bash
-monocle register opencode   # or: codex, gemini, all
+claude --dangerously-load-development-channels plugin:monocle@monocle
 ```
 
-You can also run `monocle register` with no argument to get an interactive picker. Each agent writes to its own config location:
+> **Note:** The `--dangerously-load-development-channels` flag is required during the [channels research preview](https://code.claude.com/docs/en/channels-reference).
 
-| Agent | Config file | Slash commands |
-|-------|-------------|----------------|
-| Claude Code | `.mcp.json` | `plugins/claude/commands/` |
-| OpenCode | `opencode.json` | `.opencode/commands/` |
-| Codex CLI | `.codex/config.toml` | `.codex-plugin/skills/` |
-| Gemini CLI | `.gemini/settings.json` | `.gemini/commands/` |
-
-> **Note:** `monocle register` is also available as a fallback for Claude Code, Codex CLI, and Gemini CLI if you prefer direct config over the plugin/extension system.
-
-Start your agent and Monocle in separate terminals. When you submit a review, Monocle queues it for delivery. The agent retrieves it by calling the `get_feedback` tool, either via the `/get-feedback` slash command or by calling the tool directly.
+> **Tip:** If you start or restart Monocle while Claude Code is already running, the MCP channel may need to reconnect. Type `/mcp` in Claude Code and select Monocle to reconnect.
 
 ### The review loop
 
@@ -219,95 +202,95 @@ The `submit_for_review_and_wait` tool submits content to your TUI **and blocks**
 
 Monocle exposes the following tools to your agent via its MCP server:
 
-| Tool | Description |
-|------|-------------|
-| `review_status` | Check the current review status, including whether feedback is pending or a pause has been requested |
-| `get_feedback` | Retrieve queued review feedback. When `wait` is true, blocks until feedback is available |
-| `submit_for_review` | Submit content for review in Monocle. Accepts inline content or a file path. Returns immediately after submission |
+| Tool                         | Description                                                                                                               |
+|------------------------------|---------------------------------------------------------------------------------------------------------------------------|
+| `review_status`              | Check the current review status, including whether feedback is pending or a pause has been requested                      |
+| `get_feedback`               | Retrieve queued review feedback. When `wait` is true, blocks until feedback is available                                  |
+| `submit_for_review`          | Submit content for review in Monocle. Accepts inline content or a file path. Returns immediately after submission         |
 | `submit_for_review_and_wait` | Submit content for review in Monocle and block until the reviewer responds. An empty response means no comments were left |
-| `add_files` | Add files or directories to the review session in Monocle. Accepts absolute paths |
+| `add_files`                  | Add files or directories to the review session in Monocle. Accepts absolute paths                                         |
 
-## Slash Commands
+## Skills
 
-Monocle ships slash commands for agents that support them. These are thin wrappers around the MCP tools above.
+Monocle ships skills for all supported agents. These are installed by `monocle register` into agent-specific skill directories.
 
-| Command | Available for | Description |
-|---------|---------------|-------------|
-| `/get-feedback` | Claude Code, Codex CLI, OpenCode, Gemini CLI | Retrieve pending review feedback |
-| `/review-plan` | Claude Code, Codex CLI, OpenCode, Gemini CLI | Find the active plan file and submit it for review via `submit_for_review` |
-| `/review-plan-wait` | Claude Code, Codex CLI, OpenCode, Gemini CLI | Find the active plan file and submit it for review via `submit_for_review_and_wait`, then iterate on feedback |
+| Skill               | Available for                                | Description                                                                                                    |
+|---------------------|----------------------------------------------|----------------------------------------------------------------------------------------------------------------|
+| `/get-feedback`     | Claude Code, Codex CLI, OpenCode, Gemini CLI | Retrieve pending review feedback                                                                               |
+| `/review-plan`      | Claude Code, Codex CLI, OpenCode, Gemini CLI | Find the active plan file and submit it for review via `submit_for_review`                                     |
+| `/review-plan-wait` | Claude Code, Codex CLI, OpenCode, Gemini CLI | Find the active plan file and submit it for review via `submit_for_review_and_wait`, then iterate on feedback  |
 
-Slash commands live in agent-specific directories (`plugins/claude/commands/` for Claude Code, `plugins/codex/skills/` for Codex CLI, `.opencode/commands/` for OpenCode, `plugins/gemini/commands/` for Gemini CLI).
+Skills live in agent-specific directories (`.claude/skills/` for Claude Code, `.codex/skills/` for Codex CLI, `.opencode/skills/` for OpenCode, `.gemini/skills/` for Gemini CLI).
 
 ## Keybindings
 
-| Key | Action |
-|-----|--------|
-| `j`/`k` | Move up/down |
-| `J`/`K` | Scroll diff up/down (any pane) |
-| `Ctrl+d`/`u` | Scroll diff half page (any pane) |
-| `g`/`G` | Top/bottom |
-| `h`/`l` | Scroll diff left/right |
-| `H`/`L` | Scroll diff left/right (any pane) |
-| `0` | Scroll to column 0 (any pane) |
-| `^` | Scroll to first non-space (any pane) |
-| `$` | Scroll to line end (any pane) |
-| `[`/`]` | Previous/next file (any pane) |
-| `{`/`}` | Previous/next sidebar section (any pane) |
-| `Enter` | Focus diff pane / toggle dir |
-| `Tab` | Switch pane focus |
-| `\` | Toggle sidebar visibility |
-| `1`/`2` | Jump to pane |
-| `w` | Toggle line wrapping (any pane) |
-| `f` | Toggle flat/tree view |
-| `z`/`e` | Collapse/expand all (tree) |
-| `b` | Change base ref |
-| `c` | Add comment at cursor (edit if on a comment) |
-| `s` | Suggest edit at cursor (pre-fills suggestion block) |
-| `C` | Add file-level comment |
-| `v` | Visual select (multi-line comments) |
-| `x` | Toggle comment resolved (on a comment line) |
-| `d` | Delete comment (on a comment line) |
-| `r` | Toggle file reviewed (auto-advances to next unreviewed) |
-| `/` | Cycle sidebar filter (all → unreviewed → reviewed) |
-| `t` | Cycle diff style (unified/split/file) (any pane) |
-| `T` | Cycle layout (auto/side-by-side/stacked) |
-| `R` | Force reload files |
-| `S` / `:submit` | Submit review |
-| `Ctrl+g` | Open external editor (comment/submit modal) |
-| `Ctrl+y` | Copy review to clipboard |
-| `P` / `:pause` | Pause the agent (wait for your review) |
-| `D` / `:clear` | Clear review (all comments, plans, reviewed states) |
-| `F` | Toggle focus mode (hide sidebar, enable wrap) |
-| `:mark-all-reviewed` | Mark all files as reviewed |
-| `:mark-all-unreviewed` | Mark all files as unreviewed |
-| `:discard` | Discard all pending comments |
-| `:history` | View past review submissions |
-| `I` | Connection info (socket path, subscriber count) |
-| `?` | Show all keybindings |
+| Key                    | Action                                                    |
+|------------------------|-----------------------------------------------------------|
+| `j`/`k`                | Move up/down                                              |
+| `J`/`K`                | Scroll diff up/down (any pane)                            |
+| `Ctrl+d`/`u`           | Scroll diff half page (any pane)                          |
+| `g`/`G`                | Top/bottom                                                |
+| `h`/`l`                | Scroll diff left/right                                    |
+| `H`/`L`                | Scroll diff left/right (any pane)                         |
+| `0`                    | Scroll to column 0 (any pane)                             |
+| `^`                    | Scroll to first non-space (any pane)                      |
+| `$`                    | Scroll to line end (any pane)                             |
+| `[`/`]`                | Previous/next file (any pane)                             |
+| `{`/`}`                | Previous/next sidebar section (any pane)                  |
+| `Enter`                | Focus diff pane / toggle dir                              |
+| `Tab`                  | Switch pane focus                                         |
+| `\`                    | Toggle sidebar visibility                                 |
+| `1`/`2`                | Jump to pane                                              |
+| `w`                    | Toggle line wrapping (any pane)                           |
+| `f`                    | Toggle flat/tree view                                     |
+| `z`/`e`                | Collapse/expand all (tree)                                |
+| `b`                    | Change base ref                                           |
+| `c`                    | Add comment at cursor (edit if on a comment)              |
+| `s`                    | Suggest edit at cursor (pre-fills suggestion block)       |
+| `C`                    | Add file-level comment                                    |
+| `v`                    | Visual select (multi-line comments)                       |
+| `x`                    | Toggle comment resolved (on a comment line)               |
+| `d`                    | Delete comment (on a comment line)                        |
+| `r`                    | Toggle file reviewed (auto-advances to next unreviewed)   |
+| `/`                    | Cycle sidebar filter (all -> unreviewed -> reviewed)      |
+| `t`                    | Cycle diff style (unified/split/file) (any pane)          |
+| `T`                    | Cycle layout (auto/side-by-side/stacked)                  |
+| `R`                    | Force reload files                                        |
+| `S` / `:submit`        | Submit review                                             |
+| `Ctrl+g`               | Open external editor (comment/submit modal)               |
+| `Ctrl+y`               | Copy review to clipboard                                  |
+| `P` / `:pause`         | Pause the agent (wait for your review)                    |
+| `D` / `:clear`         | Clear review (all comments, plans, reviewed states)       |
+| `F`                    | Toggle focus mode (hide sidebar, enable wrap)             |
+| `:mark-all-reviewed`   | Mark all files as reviewed                                |
+| `:mark-all-unreviewed` | Mark all files as unreviewed                              |
+| `:discard`             | Discard all pending comments                              |
+| `:history`             | View past review submissions                              |
+| `I`                    | Connection info (socket path, subscriber count)           |
+| `?`                    | Show all keybindings                                      |
 
 ### Comment editor
 
 The comment editor supports standard emacs-style shortcuts:
 
-| Key | Action |
-|-----|--------|
-| `←`/`→` or `Ctrl+B`/`Ctrl+F` | Move cursor left/right |
-| `↑`/`↓` or `Ctrl+P`/`Ctrl+N` | Move cursor up/down (multiline) |
-| `Home`/`Ctrl+A` | First non-whitespace, then start of line |
-| `End`/`Ctrl+E` | End of line |
-| `Ctrl+D` or `Delete` | Delete character at cursor |
-| `Ctrl+K` | Kill to end of line |
-| `Ctrl+U` | Kill to start of line |
-| `Ctrl+W` or `Alt+Backspace` | Delete word before cursor |
-| `Alt+D` | Delete word after cursor |
-| `Alt+←` or `Alt+B` | Move cursor back one word |
-| `Alt+→` or `Alt+F` | Move cursor forward one word |
-| `Shift+Enter` or `Alt+Enter` | Insert newline |
-| `Ctrl+G` | Open in external editor (`$VISUAL`/`$EDITOR`) |
-| `Tab` | Cycle comment type |
-| `Enter` | Save comment |
-| `Esc` | Cancel |
+| Key                                    | Action                                          |
+|----------------------------------------|-------------------------------------------------|
+| `<-`/`->` or `Ctrl+B`/`Ctrl+F`         | Move cursor left/right                          |
+| `up`/`down` or `Ctrl+P`/`Ctrl+N`       | Move cursor up/down (multiline)                 |
+| `Home`/`Ctrl+A`                        | First non-whitespace, then start of line        |
+| `End`/`Ctrl+E`                         | End of line                                     |
+| `Ctrl+D` or `Delete`                   | Delete character at cursor                      |
+| `Ctrl+K`                               | Kill to end of line                             |
+| `Ctrl+U`                               | Kill to start of line                           |
+| `Ctrl+W` or `Alt+Backspace`            | Delete word before cursor                       |
+| `Alt+D`                                | Delete word after cursor                        |
+| `Alt+<-` or `Alt+B`                    | Move cursor back one word                       |
+| `Alt+->` or `Alt+F`                    | Move cursor forward one word                    |
+| `Shift+Enter` or `Alt+Enter`           | Insert newline                                  |
+| `Ctrl+G`                               | Open in external editor (`$VISUAL`/`$EDITOR`)   |
+| `Tab`                                  | Cycle comment type                              |
+| `Enter`                                | Save comment                                    |
+| `Esc`                                  | Cancel                                          |
 
 ## CLI
 
@@ -375,22 +358,22 @@ Monocle loads settings from JSON config files:
 }
 ```
 
-| Setting | Values | Default | Description |
-|---------|--------|---------|-------------|
-| `layout` | `"auto"`, `"side-by-side"`, `"stacked"` | `"auto"` | Pane arrangement (`auto` switches based on terminal width) |
-| `diff_style` | `"unified"`, `"split"`, `"file"` | `"unified"` | Diff display mode (`file` shows raw content) |
-| `sidebar_style` | `"flat"`, `"tree"` | `"flat"` | File list display mode |
-| `wrap` | `true`, `false` | `false` | Word-wrap long lines in diffs |
-| `tab_size` | integer | `4` | Spaces per tab character |
-| `context_lines` | integer | `3` | Unchanged lines shown around diff hunks |
-| `ignore_patterns` | string array | `[]` | Glob patterns for files to exclude |
-| `min_diff_width` | integer | `80` | Minimum character width for the diff viewer in side-by-side layout |
-| `mouse` | `true`, `false` | `true` | Enable mouse interactions (click, scroll, drag) |
-| `auto_focus_mode` | `true`, `false` | `false` | Auto-enter focus mode (hide sidebar, enable wrap) when reviewing plans |
-| `keybindings` | object | `{}` | Custom key overrides (see below) |
-| `review_format.include_snippets` | `true`, `false` | `true` | Include code snippets in formatted reviews |
-| `review_format.max_snippet_lines` | integer | `10` | Truncate snippets longer than this |
-| `review_format.include_summary` | `true`, `false` | `true` | Include comment count summary in formatted reviews |
+| Setting                              | Values                                     | Default      | Description                                                              |
+|--------------------------------------|--------------------------------------------|--------------|--------------------------------------------------------------------------|
+| `layout`                             | `"auto"`, `"side-by-side"`, `"stacked"`    | `"auto"`     | Pane arrangement (`auto` switches based on terminal width)               |
+| `diff_style`                         | `"unified"`, `"split"`, `"file"`           | `"unified"`  | Diff display mode (`file` shows raw content)                             |
+| `sidebar_style`                      | `"flat"`, `"tree"`                         | `"flat"`     | File list display mode                                                   |
+| `wrap`                               | `true`, `false`                            | `false`      | Word-wrap long lines in diffs                                            |
+| `tab_size`                           | integer                                    | `4`          | Spaces per tab character                                                 |
+| `context_lines`                      | integer                                    | `3`          | Unchanged lines shown around diff hunks                                  |
+| `ignore_patterns`                    | string array                               | `[]`         | Glob patterns for files to exclude                                       |
+| `min_diff_width`                     | integer                                    | `80`         | Minimum character width for the diff viewer in side-by-side layout       |
+| `mouse`                              | `true`, `false`                            | `true`       | Enable mouse interactions (click, scroll, drag)                          |
+| `auto_focus_mode`                    | `true`, `false`                            | `false`      | Auto-enter focus mode (hide sidebar, enable wrap) when reviewing plans   |
+| `keybindings`                        | object                                     | `{}`         | Custom key overrides (see below)                                         |
+| `review_format.include_snippets`     | `true`, `false`                            | `true`       | Include code snippets in formatted reviews                               |
+| `review_format.max_snippet_lines`    | integer                                    | `10`         | Truncate snippets longer than this                                       |
+| `review_format.include_summary`      | `true`, `false`                            | `true`       | Include comment count summary in formatted reviews                       |
 
 Toggle keybindings (`T`, `t`, `w`, `f`) change settings for the current session only. Edit the config file to persist your preferences.
 
