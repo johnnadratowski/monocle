@@ -3,7 +3,7 @@ version: 2
 before:
   hooks:
     - sh -c "cd channel && bun install && bun run build.mjs"
-    - sh -c "mkdir -p dist && tar -czf dist/skills.tar.gz --exclude='*.go' -C skills ."
+    - sh -c "mkdir -p build && tar -czf build/skills.tar.gz --exclude='*.go' -C skills ."
     - go mod tidy
     - go mod download
 
@@ -76,4 +76,4 @@ release:
   prerelease: auto
   name_template: "{{.ProjectName}} v{{.Version}}"
   extra_files:
-    - glob: dist/skills.tar.gz
+    - glob: build/skills.tar.gz
