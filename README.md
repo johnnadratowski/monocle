@@ -136,7 +136,7 @@ Start your agent and Monocle in separate terminals:
 monocle
 ```
 
-Your agent gets skills for checking review status, retrieving feedback, and submitting content for review. When you submit a review, Monocle queues it for delivery. The agent retrieves it via the `/get-feedback` skill or on its own.
+Your agent gets [skills](#skills) for checking review status, retrieving feedback, and submitting content for review. When you submit a review, Monocle queues it for delivery. The agent retrieves it via the `/get-feedback` skill or on its own.
 
 #### Push notifications (Claude Code only)
 
@@ -154,36 +154,36 @@ claude --dangerously-load-development-channels plugin:monocle@monocle
 
 Navigate with `j`/`k`, add comments with `c`, and use `v` for visual (multi-line) selections. Press `?` to see all keybindings, or see the full [Keybindings](#keybindings) reference.
 
-**Submit** (`S`): Your review is formatted and queued for delivery. With Claude Code channels, a push notification prompts the agent to retrieve it immediately. With other agents, the review waits in the queue until the agent calls `get_feedback` or you trigger it with the `/get-feedback` command. Multiple reviews can accumulate in the queue — the agent receives them all combined when it pulls. If there are no comments, the review is treated as an approval. Toggle the "Copy to clipboard" checkbox with `Shift+Tab` in the submit modal to also copy the formatted review when submitting.
+**Submit** (`S`): Your review is formatted and queued for delivery. With Claude Code channels, a push notification prompts the agent to retrieve it immediately. With other agents, the review waits in the queue until the agent runs `/get-feedback` or calls `monocle review get-feedback`. Multiple reviews can accumulate in the queue — the agent receives them all combined when it pulls. If there are no comments, the review is treated as an approval. Toggle the "Copy to clipboard" checkbox with `Shift+Tab` in the submit modal to also copy the formatted review when submitting.
 
 **External editor** (`Ctrl+g`): In the comment or submit modal, opens the current text in your `$VISUAL` or `$EDITOR` (falls back to `vi`). Edit in your preferred editor, save and quit, and the text is brought back into the modal.
 
 **Yank** (`Ctrl+y`): In the submit modal, copies the formatted review to your system clipboard without submitting, then closes the modal.
 
-**Pause** (`P`): The agent receives a push notification to stop and wait. It calls `get_feedback` with `wait=true` and blocks until you submit your review. This is for when you want to review before the agent moves on. Pause requires MCP channel support (currently Claude Code only).
+**Pause** (`P`): The agent receives a push notification to stop and wait. It runs `monocle review get-feedback --wait` and blocks until you submit your review. This is for when you want to review before the agent moves on. Pause requires MCP channel support (currently Claude Code only).
 
 ### Plan review and focus mode
 
-Monocle isn't limited to reviewing file changes. Your agent can submit **plans, architecture decisions, summaries, and other content** directly to Monocle for review using the `submit_for_review` tool. These show up alongside your file diffs in the sidebar, and you can leave line-level comments on them the same way. You can also trigger this yourself with the `/review-plan` or `/review-plan-wait` slash commands — useful when you want to send the agent's plan to Monocle without waiting for the agent to do it on its own.
+Monocle isn't limited to reviewing file changes. Your agent can submit **plans, architecture decisions, summaries, and other content** directly to Monocle for review using `monocle review send-artifact`. These show up alongside your file diffs in the sidebar, and you can leave line-level comments on them the same way. You can also trigger this yourself with the `/review-plan` or `/review-plan-wait` skills — useful when you want to send the agent's plan to Monocle without waiting for the agent to do it on its own.
 
 This means you can review the agent's *thinking* before it writes code — not just the output. Ask the agent to submit its content first, review it, leave feedback, and only then let it proceed.
 
-The `submit_for_review_and_wait` tool submits content to your TUI **and blocks** until you respond with feedback. If you approve, the agent continues. If you request changes, the agent updates and submits again — iterating across as many rounds as it takes until you're satisfied.
+The `/review-plan-wait` skill submits content to your TUI **and blocks** until you respond with feedback. If you approve, the agent continues. If you request changes, the agent updates and submits again — iterating across as many rounds as it takes until you're satisfied.
 
-> **Note:** Monocle's tools are available to your agent but the agent decides when to use them on its own. If you want the agent to automatically submit plans for review, add instructions to your agent's project configuration. See the [plugin README](plugin/README.md#automatic-content-review) for a suggested prompt.
+> **Note:** Monocle's skills are available to your agent but the agent decides when to use them on its own. If you want the agent to automatically submit plans for review, add instructions to your agent's project configuration. See the [plugin README](plugin/README.md#automatic-content-review) for a suggested prompt.
 
 ## Features
 
-- **Works with any MCP agent** — Claude Code, OpenCode, Codex CLI, Gemini CLI, or any agent that supports MCP tool servers
+- **Works with any coding agent** — Claude Code, OpenCode, Codex CLI, Gemini CLI, or any agent that supports [skills](https://agentskills.io) or can call CLI commands
 - **Push notifications** — With Claude Code channels, feedback is pushed directly into the agent's context the moment you submit
-- **Pull-based feedback** — Agents without channel support retrieve feedback via the `get_feedback` tool; multiple reviews queue up and are delivered together
+- **Pull-based feedback** — Agents without channel support retrieve feedback via the `/get-feedback` skill or `monocle review get-feedback`; multiple reviews queue up and are delivered together
+- **Plan & architecture review** — Your agent can submit plans, architecture decisions, and other content for review with markdown rendering. When iterating, Monocle shows diffs between plan versions so you can see exactly what changed. Use focus mode (`F`) for distraction-free reading
+- **Review gating** — `/review-plan-wait` blocks the agent until you approve the submitted content before it proceeds
 - **Pause flow** — Ask your agent to stop and wait while you review, then release it when ready (requires MCP channel support)
 - **Live diff viewer** — Unified and split (side-by-side) views with syntax highlighting and intra-line diffs
 - **Structured comments** — Tag feedback as issues, suggestions, notes, or praise with line-level or file-level precision
 - **Suggested edits** — Press `s` to propose exact code changes with GitHub-style `suggestion` blocks
 - **Visual selection** — Select line ranges for comments with vim-style visual mode
-- **Content review + focus mode** — Your agent can submit plans, summaries, and other content for your review, with markdown rendering and distraction-free focus mode
-- **Review gating** — `submit_for_review_and_wait` blocks the agent until you approve the submitted content before it proceeds
 - **Markdown rendering** — Plans and changed `.md` files render with styled headings, bold, italic, lists, and code blocks
 - **Horizontal scrolling & line wrapping** — Navigate wide diffs with `h`/`l` or toggle wrapping with `w`
 - **Responsive layout** — Automatically stacks panes vertically in narrow terminals
@@ -193,22 +193,10 @@ The `submit_for_review_and_wait` tool submits content to your TUI **and blocks**
 - **Mouse support** — Click to focus panes, scroll with the wheel, click files to select, drag to make visual selections, and interact with modal controls
 - **External editor** — Open comment or submit text in `$VISUAL`/`$EDITOR` with `Ctrl+g` for full editing power
 - **Configurable keybindings** — Override any navigation or action key via config
-- **Feedback queue** — Submit reviews while the agent is working; delivered when the agent next calls `get_feedback`
+- **Feedback queue** — Submit reviews while the agent is working; delivered when the agent next runs `/get-feedback`
 - **Connection indicator** — See at a glance whether your agent is connected, with manual socket override for troubleshooting
 - **Review tracking** — Mark files as reviewed with `r` (auto-advances to next), filter sidebar to show only unreviewed or reviewed files with `/`, and all reviewed states reset on submit
 - **Session persistence** — Reviews survive restarts via SQLite
-
-## MCP Tools
-
-Monocle exposes the following tools to your agent via its MCP server:
-
-| Tool                         | Description                                                                                                               |
-|------------------------------|---------------------------------------------------------------------------------------------------------------------------|
-| `review_status`              | Check the current review status, including whether feedback is pending or a pause has been requested                      |
-| `get_feedback`               | Retrieve queued review feedback. When `wait` is true, blocks until feedback is available                                  |
-| `submit_for_review`          | Submit content for review in Monocle. Accepts inline content or a file path. Returns immediately after submission         |
-| `submit_for_review_and_wait` | Submit content for review in Monocle and block until the reviewer responds. An empty response means no comments were left |
-| `add_files`                  | Add files or directories to the review session in Monocle. Accepts absolute paths                                         |
 
 ## Skills
 
@@ -217,8 +205,8 @@ Monocle ships skills for all supported agents. These are installed by `monocle r
 | Skill               | Available for                                | Description                                                                                                    |
 |---------------------|----------------------------------------------|----------------------------------------------------------------------------------------------------------------|
 | `/get-feedback`     | Claude Code, Codex CLI, OpenCode, Gemini CLI | Retrieve pending review feedback                                                                               |
-| `/review-plan`      | Claude Code, Codex CLI, OpenCode, Gemini CLI | Find the active plan file and submit it for review via `submit_for_review`                                     |
-| `/review-plan-wait` | Claude Code, Codex CLI, OpenCode, Gemini CLI | Find the active plan file and submit it for review via `submit_for_review_and_wait`, then iterate on feedback  |
+| `/review-plan`      | Claude Code, Codex CLI, OpenCode, Gemini CLI | Find the active plan file and submit it for review via `monocle review send-artifact`                          |
+| `/review-plan-wait` | Claude Code, Codex CLI, OpenCode, Gemini CLI | Find the active plan file, submit for review, and iterate on feedback until approved                           |
 
 Skills live in agent-specific directories (`.claude/skills/` for Claude Code, `.codex/skills/` for Codex CLI, `.opencode/skills/` for OpenCode, `.gemini/skills/` for Gemini CLI).
 
@@ -411,8 +399,8 @@ The help overlay (`?`) dynamically reflects your custom bindings. Modal keys (En
 
 Feedback is always queued for reliability. How the agent learns about it depends on the integration:
 
-- **Claude Code with channels:** A push notification is sent through the MCP channel with a summary of the review (e.g., "Your reviewer requested changes — 2 issues, 1 suggestion"). The agent calls `get_feedback` to retrieve the full review. If the push fails silently (channels not enabled), the review stays in the queue.
-- **Any MCP agent:** The agent calls the `get_feedback` tool directly, either via a `/get-feedback` slash command or on its own. Multiple reviews accumulate in the queue and are delivered together.
+- **Claude Code with channels:** A push notification is sent through the MCP channel with a summary of the review (e.g., "Your reviewer requested changes — 2 issues, 1 suggestion"). The agent runs `/get-feedback` to retrieve the full review. If the push fails silently (channels not enabled), the review stays in the queue.
+- **Any agent:** The agent calls `monocle review get-feedback` via a skill or CLI command, either via a `/get-feedback` slash command or on its own. Multiple reviews accumulate in the queue and are delivered together.
 
 If you want the agent to pause and wait for you to finish reviewing, press `P` — the agent receives a pause notification and blocks until your review is ready.
 
