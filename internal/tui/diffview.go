@@ -91,6 +91,12 @@ type diffViewModel struct {
 	keys *KeyMap
 }
 
+// isViewingContentItem returns true when the diff view is showing a content item,
+// whether in content mode (raw text) or diff mode (unified/split diff).
+func (m diffViewModel) isViewingContentItem() bool {
+	return m.contentID != ""
+}
+
 func newDiffViewModel(theme *Theme, keys *KeyMap) diffViewModel {
 	return diffViewModel{
 		theme:    theme,
@@ -206,8 +212,8 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 		return m, nil
 
 	case loadContentDiffMsg:
-		if msg.err != nil || msg.result == nil {
-			return m, nil // stay in content mode on error
+		if msg.err != nil || msg.result == nil || len(msg.result.Hunks) == 0 {
+			return m, nil // stay in content mode on error or no changes
 		}
 		m.contentMode = false
 		m.hunks = msg.result.Hunks
@@ -1348,8 +1354,9 @@ func (m *diffViewModel) CycleDiffStyle() tea.Cmd {
 	// Content mode: toggle into diff view if a previous version exists
 	if m.contentMode && m.contentHasDiff {
 		contentID := m.contentID
+		style := m.preferredContentDiffStyle
 		return func() tea.Msg {
-			return requestContentDiffMsg{contentID: contentID}
+			return requestContentDiffMsg{contentID: contentID, preferredStyle: style}
 		}
 	}
 

@@ -460,15 +460,22 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		recalcStackedLayout(&m)
 		m.statusBar.fileCount = len(msg.files)
 		var diffCmd tea.Cmd
-		if msg.contentItem != nil && m.diffView.contentMode && m.diffView.contentID == msg.contentItem.ID {
-			m.diffView, diffCmd = m.diffView.Update(loadContentMsg{
-				id:                 msg.contentItem.ID,
-				title:              msg.contentItem.Title,
-				content:            msg.contentItem.Content,
-				contentType:        msg.contentItem.ContentType,
-				comments:           msg.contentComments,
-				hasPreviousVersion: msg.contentItem.PreviousContent != "",
-			})
+		if msg.contentItem != nil && m.diffView.isViewingContentItem() && m.diffView.contentID == msg.contentItem.ID {
+			// Only update if content or comments actually changed to avoid
+			// flicker from the content→auto-switch→diff cycle on every refresh tick.
+			contentChanged := msg.contentItem.Content != m.diffView.contentDiffContent
+			commentsChanged := len(msg.contentComments) != len(m.diffView.comments)
+			if contentChanged || commentsChanged {
+				m.diffView, diffCmd = m.diffView.Update(loadContentMsg{
+					id:                 msg.contentItem.ID,
+					title:              msg.contentItem.Title,
+					content:            msg.contentItem.Content,
+					contentType:        msg.contentItem.ContentType,
+					comments:           msg.contentComments,
+					hasPreviousVersion: msg.contentItem.PreviousContent != "",
+					autoSwitchDiff:     msg.contentItem.PreviousContent != "",
+				})
+			}
 		} else if msg.path != "" && msg.result != nil {
 			m.diffView, diffCmd = m.diffView.Update(loadDiffMsg{
 				path:     msg.path,
@@ -480,7 +487,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(msg.files) > 0 && !m.diffViewShowsValidFile() {
 			m.sidebar.selectPath(msg.files[0].Path)
 			return m, m.handleSidebarSelect(sidebarSelectMsg{path: msg.files[0].Path})
-		} else if len(msg.files) == 0 && !m.diffView.contentMode && m.diffView.path != "" {
+		} else if len(msg.files) == 0 && !m.diffView.isViewingContentItem() && !m.diffView.contentMode && m.diffView.path != "" {
 			m.diffView.path = ""
 			m.diffView.hunks = nil
 			m.diffView.lines = nil
@@ -516,7 +523,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(m.sidebar.files) > 0 && !m.diffViewShowsValidFile() {
 			m.sidebar.selectPath(m.sidebar.files[0].Path)
 			return m, m.handleSidebarSelect(sidebarSelectMsg{path: m.sidebar.files[0].Path})
-		} else if len(m.sidebar.files) == 0 && !m.diffView.contentMode && m.diffView.path != "" {
+		} else if len(m.sidebar.files) == 0 && !m.diffView.isViewingContentItem() && !m.diffView.contentMode && m.diffView.path != "" {
 			m.diffView.path = ""
 			m.diffView.hunks = nil
 			m.diffView.lines = nil
@@ -584,8 +591,8 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
-		// Refresh currently displayed content item if it matches
-		if m.diffView.contentMode && m.diffView.contentID == msg.id && msg.id != "" {
+		// Refresh currently displayed content item if it matches (content or diff mode)
+		if m.diffView.isViewingContentItem() && m.diffView.contentID == msg.id && msg.id != "" {
 			return m, m.handleSidebarSelect(sidebarSelectMsg{isContent: true, contentID: msg.id})
 		}
 		// Auto-select only if nothing else is available (no files, no current view)
@@ -1921,7 +1928,7 @@ func (m appModel) diffViewShowsValidFile() bool {
 	if m.diffView.path == "" {
 		return false
 	}
-	if m.diffView.contentMode {
+	if m.diffView.isViewingContentItem() {
 		for _, ci := range m.sidebar.contentItems {
 			if ci.ID == m.diffView.contentID {
 				return true
@@ -2197,7 +2204,7 @@ func (m appModel) contentItemForReview() *types.ContentItem {
 func (m appModel) refreshFiles() tea.Cmd {
 	engine := m.engine
 	currentPath := m.diffView.path
-	inContentMode := m.diffView.contentMode
+	isContentItem := m.diffView.isViewingContentItem()
 	contentID := m.diffView.contentID
 	inAdditionalFileMode := m.diffView.additionalFilePath != ""
 	return func() tea.Msg {
@@ -2208,8 +2215,8 @@ func (m appModel) refreshFiles() tea.Cmd {
 		}
 		session := engine.GetSession()
 
-		// Refresh content item if one is currently displayed
-		if inContentMode && contentID != "" {
+		// Refresh content item if one is currently displayed (content or diff mode)
+		if isContentItem && contentID != "" {
 			item, itemErr := engine.GetContentItem(contentID)
 			var contentComments []types.ReviewComment
 			if session != nil {
