@@ -281,6 +281,19 @@ const engine = new EngineConnection(
   (_connected: boolean) => {},
 );
 
+// Wait for engine connection after MCP handshake completes, then identify.
+// This gives Monocle up to 10s to start when Claude Code launches first.
+mcp.oninitialized = async () => {
+  if (!engine.isConnected) {
+    await engine.waitForConnection(10000);
+  }
+
+  const clientVersion = mcp.getClientVersion();
+  if (clientVersion?.name) {
+    engine.identify(clientVersion.name);
+  }
+};
+
 // -- Start --
 
 async function main() {
@@ -292,11 +305,6 @@ async function main() {
 
   const transport = new StdioServerTransport();
   await mcp.connect(transport);
-
-  const clientVersion = mcp.getClientVersion();
-  if (clientVersion?.name) {
-    engine.identify(clientVersion.name);
-  }
 
   process.on("SIGINT", () => {
     engine.close();
