@@ -1,6 +1,7 @@
 package adapters
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,7 +16,9 @@ func (a *CodexAdapter) Name() string  { return "codex" }
 func (a *CodexAdapter) Label() string { return "Codex CLI" }
 
 func (a *CodexAdapter) ConfigPaths(global bool) []string {
-	return SkillPaths(codexSkillsDir(global))
+	paths := []string{codexRulesPath(global)}
+	paths = append(paths, SkillPaths(codexSkillsDir(global))...)
+	return paths
 }
 
 func (a *CodexAdapter) HasConfig(global bool) bool {
@@ -34,7 +37,10 @@ func (a *CodexAdapter) Register(global bool) error {
 	// Clean up legacy MCP config if present
 	removeLegacyCodexMCP(global)
 
-	// Install skill files
+	if err := configureCodexRules(codexRulesPath(global)); err != nil {
+		return fmt.Errorf("configure rules: %w", err)
+	}
+
 	return InstallSkills(codexSkillsDir(global))
 }
 
@@ -42,7 +48,8 @@ func (a *CodexAdapter) Unregister(global bool) error {
 	// Remove legacy MCP config if present
 	removeLegacyCodexMCP(global)
 
-	// Remove skill files
+	_ = unconfigureCodexRules(codexRulesPath(global))
+
 	RemoveSkills(codexSkillsDir(global))
 
 	return nil
@@ -67,6 +74,31 @@ func codexSkillsDir(global bool) string {
 		}
 	}
 	return filepath.Join(".codex", "skills")
+}
+
+func codexRulesPath(global bool) string {
+	if global {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			return filepath.Join(home, ".codex", "rules", "monocle.rules")
+		}
+	}
+	return filepath.Join(".codex", "rules", "monocle.rules")
+}
+
+const codexMonocleRules = `prefix_rule(
+    pattern=["monocle"],
+    decision="allow",
+    justification="Allow monocle code review commands",
+)
+`
+
+func configureCodexRules(path string) error {
+	return WriteFileAtomic(path, []byte(codexMonocleRules))
+}
+
+func unconfigureCodexRules(path string) error {
+	return RemoveFileIfExists(path)
 }
 
 func codexConfigPath(global bool) string {

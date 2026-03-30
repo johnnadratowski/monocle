@@ -10,6 +10,15 @@ import (
 	"strings"
 )
 
+// MonocleClaudePermissions are the permission entries added to .claude/settings.json.
+var MonocleClaudePermissions = []string{
+	"Bash(monocle status:*)",
+	"Bash(monocle review:*)",
+	"Skill(get-feedback)",
+	"Skill(review-plan)",
+	"Skill(review-plan-wait)",
+}
+
 // ClaudeAdapter handles Claude Code MCP channel registration.
 type ClaudeAdapter struct{}
 
@@ -18,7 +27,7 @@ func (a *ClaudeAdapter) Label() string { return "Claude Code" }
 
 // ConfigPaths returns the files written by Register.
 func (a *ClaudeAdapter) ConfigPaths(global bool) []string {
-	paths := []string{mcpJSONPath(global)}
+	paths := []string{mcpJSONPath(global), claudeSettingsPath(global)}
 	paths = append(paths, SkillPaths(claudeSkillsDir(global))...)
 	return paths
 }
@@ -50,10 +59,13 @@ func (a *ClaudeAdapter) Detect() bool {
 	return false
 }
 
-// Register adds monocle to .mcp.json and installs skill files.
+// Register adds monocle to .mcp.json, configures permissions, and installs skill files.
 func (a *ClaudeAdapter) Register(global bool) error {
 	if err := a.configureMCP(global); err != nil {
 		return fmt.Errorf("configure mcp: %w", err)
+	}
+	if err := configureClaudeSettings(claudeSettingsPath(global)); err != nil {
+		return fmt.Errorf("configure settings: %w", err)
 	}
 	if err := InstallSkills(claudeSkillsDir(global)); err != nil {
 		return fmt.Errorf("install skills: %w", err)
@@ -61,10 +73,13 @@ func (a *ClaudeAdapter) Register(global bool) error {
 	return nil
 }
 
-// Unregister removes monocle from .mcp.json and removes skill files.
+// Unregister removes monocle from .mcp.json, removes permissions, and removes skill files.
 func (a *ClaudeAdapter) Unregister(global bool) error {
 	if err := a.unconfigureMCP(global); err != nil {
 		return fmt.Errorf("unconfigure mcp: %w", err)
+	}
+	if err := unconfigureClaudeSettings(claudeSettingsPath(global)); err != nil {
+		return fmt.Errorf("unconfigure settings: %w", err)
 	}
 	RemoveSkills(claudeSkillsDir(global))
 	return nil
@@ -291,6 +306,94 @@ func installedPluginsPath() string {
 		return ""
 	}
 	return filepath.Join(home, ".claude", "plugins", "installed_plugins.json")
+}
+
+// claudeSettingsPath returns the path for .claude/settings.json.
+func claudeSettingsPath(global bool) string {
+	if global {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return filepath.Join(".claude", "settings.json")
+		}
+		return filepath.Join(home, ".claude", "settings.json")
+	}
+	return filepath.Join(".claude", "settings.json")
+}
+
+// configureClaudeSettings adds monocle permissions to .claude/settings.json.
+func configureClaudeSettings(path string) error {
+	data, err := ReadJSONFile(path)
+	if err != nil {
+		return err
+	}
+
+	perms, ok := data["permissions"].(map[string]any)
+	if !ok {
+		perms = map[string]any{}
+		data["permissions"] = perms
+	}
+
+	allowRaw, _ := perms["allow"].([]any)
+	existing := make(map[string]bool, len(allowRaw))
+	for _, v := range allowRaw {
+		if s, ok := v.(string); ok {
+			existing[s] = true
+		}
+	}
+
+	for _, perm := range MonocleClaudePermissions {
+		if !existing[perm] {
+			allowRaw = append(allowRaw, perm)
+		}
+	}
+
+	perms["allow"] = allowRaw
+	return WriteJSONFile(path, data)
+}
+
+// unconfigureClaudeSettings removes monocle permissions from .claude/settings.json.
+func unconfigureClaudeSettings(path string) error {
+	data, err := ReadJSONFile(path)
+	if err != nil {
+		return err
+	}
+
+	perms, ok := data["permissions"].(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	allowRaw, ok := perms["allow"].([]any)
+	if !ok {
+		return nil
+	}
+
+	remove := make(map[string]bool, len(MonocleClaudePermissions))
+	for _, perm := range MonocleClaudePermissions {
+		remove[perm] = true
+	}
+
+	var filtered []any
+	for _, v := range allowRaw {
+		if s, ok := v.(string); ok && remove[s] {
+			continue
+		}
+		filtered = append(filtered, v)
+	}
+
+	if len(filtered) == 0 {
+		delete(perms, "allow")
+	} else {
+		perms["allow"] = filtered
+	}
+	if len(perms) == 0 {
+		delete(data, "permissions")
+	}
+
+	if len(data) == 0 {
+		return RemoveFileIfExists(path)
+	}
+	return WriteJSONFile(path, data)
 }
 
 // claudeSkillsDir returns the directory for Claude Code skill files.

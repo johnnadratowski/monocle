@@ -96,6 +96,82 @@ func TestCodexRegister_CleansLegacyMCP(t *testing.T) {
 	}
 }
 
+func TestCodexRegister_CreatesRulesFile(t *testing.T) {
+	setupTestSkills(t)
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "project")
+	os.MkdirAll(projDir, 0755)
+
+	origDir, _ := os.Getwd()
+	os.Chdir(projDir)
+	defer os.Chdir(origDir)
+
+	adapter := &CodexAdapter{}
+	if err := adapter.Register(false); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	rulesPath := filepath.Join(projDir, ".codex", "rules", "monocle.rules")
+	content, err := os.ReadFile(rulesPath)
+	if err != nil {
+		t.Fatalf("read rules: %v", err)
+	}
+	if !strings.Contains(string(content), `pattern=["monocle"]`) {
+		t.Error("rules file should contain monocle prefix pattern")
+	}
+	if !strings.Contains(string(content), `decision="allow"`) {
+		t.Error("rules file should allow monocle commands")
+	}
+}
+
+func TestCodexRegister_RulesIdempotent(t *testing.T) {
+	setupTestSkills(t)
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "project")
+	os.MkdirAll(projDir, 0755)
+
+	origDir, _ := os.Getwd()
+	os.Chdir(projDir)
+	defer os.Chdir(origDir)
+
+	adapter := &CodexAdapter{}
+	if err := adapter.Register(false); err != nil {
+		t.Fatalf("first register: %v", err)
+	}
+	if err := adapter.Register(false); err != nil {
+		t.Fatalf("second register: %v", err)
+	}
+
+	rulesPath := filepath.Join(projDir, ".codex", "rules", "monocle.rules")
+	if _, err := os.Stat(rulesPath); err != nil {
+		t.Fatalf("rules file should exist: %v", err)
+	}
+}
+
+func TestCodexUnregister_RemovesRulesFile(t *testing.T) {
+	setupTestSkills(t)
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "project")
+	os.MkdirAll(projDir, 0755)
+
+	origDir, _ := os.Getwd()
+	os.Chdir(projDir)
+	defer os.Chdir(origDir)
+
+	adapter := &CodexAdapter{}
+	if err := adapter.Register(false); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	if err := adapter.Unregister(false); err != nil {
+		t.Fatalf("unregister: %v", err)
+	}
+
+	rulesPath := filepath.Join(projDir, ".codex", "rules", "monocle.rules")
+	if _, err := os.Stat(rulesPath); !os.IsNotExist(err) {
+		t.Fatal("rules file should be removed after unregister")
+	}
+}
+
 func TestCodexRegister_PreservesOtherSections(t *testing.T) {
 	setupTestSkills(t)
 	dir := t.TempDir()

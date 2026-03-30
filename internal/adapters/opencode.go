@@ -1,6 +1,7 @@
 package adapters
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,7 +15,9 @@ func (a *OpenCodeAdapter) Name() string  { return "opencode" }
 func (a *OpenCodeAdapter) Label() string { return "OpenCode" }
 
 func (a *OpenCodeAdapter) ConfigPaths(global bool) []string {
-	return SkillPaths(openCodeSkillsDir(global))
+	paths := []string{openCodeConfigPath(global)}
+	paths = append(paths, SkillPaths(openCodeSkillsDir(global))...)
+	return paths
 }
 
 func (a *OpenCodeAdapter) HasConfig(global bool) bool {
@@ -33,7 +36,10 @@ func (a *OpenCodeAdapter) Register(global bool) error {
 	// Clean up legacy MCP config if present
 	removeLegacyOpenCodeMCP(global)
 
-	// Install skill files
+	if err := configureOpenCodePermissions(openCodeConfigPath(global)); err != nil {
+		return fmt.Errorf("configure permissions: %w", err)
+	}
+
 	return InstallSkills(openCodeSkillsDir(global))
 }
 
@@ -41,7 +47,8 @@ func (a *OpenCodeAdapter) Unregister(global bool) error {
 	// Remove legacy MCP config if present
 	removeLegacyOpenCodeMCP(global)
 
-	// Remove skill files
+	_ = unconfigureOpenCodePermissions(openCodeConfigPath(global))
+
 	RemoveSkills(openCodeSkillsDir(global))
 
 	// Also remove legacy command files
@@ -89,6 +96,61 @@ func openCodeConfigPath(global bool) string {
 		}
 	}
 	return "opencode.json"
+}
+
+// configureOpenCodePermissions adds monocle to permission.bash in opencode.json.
+func configureOpenCodePermissions(path string) error {
+	data, err := ReadJSONFile(path)
+	if err != nil {
+		return err
+	}
+
+	perm, ok := data["permission"].(map[string]any)
+	if !ok {
+		perm = map[string]any{}
+		data["permission"] = perm
+	}
+
+	bash, ok := perm["bash"].(map[string]any)
+	if !ok {
+		bash = map[string]any{}
+		perm["bash"] = bash
+	}
+
+	bash["monocle *"] = "allow"
+
+	return WriteJSONFile(path, data)
+}
+
+// unconfigureOpenCodePermissions removes monocle from permission.bash in opencode.json.
+func unconfigureOpenCodePermissions(path string) error {
+	data, err := ReadJSONFile(path)
+	if err != nil {
+		return err
+	}
+
+	perm, ok := data["permission"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	bash, ok := perm["bash"].(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	delete(bash, "monocle *")
+
+	if len(bash) == 0 {
+		delete(perm, "bash")
+	}
+	if len(perm) == 0 {
+		delete(data, "permission")
+	}
+
+	if len(data) == 0 {
+		return RemoveFileIfExists(path)
+	}
+	return WriteJSONFile(path, data)
 }
 
 // hasLegacyOpenCodeMCP checks if the old MCP config exists.

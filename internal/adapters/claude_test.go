@@ -300,6 +300,216 @@ func TestClaudeChannelUnregister(t *testing.T) {
 	}
 }
 
+func TestClaudeRegister_AddsPermissions(t *testing.T) {
+	setupTestSkills(t)
+	dir := t.TempDir()
+	t.Setenv("HOME", filepath.Join(dir, "home"))
+
+	origDir, _ := os.Getwd()
+	projDir := filepath.Join(dir, "project")
+	os.MkdirAll(projDir, 0755)
+	os.Chdir(projDir)
+	defer os.Chdir(origDir)
+
+	adapter := &ClaudeAdapter{}
+	if err := adapter.Register(false); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	data, err := ReadJSONFile(filepath.Join(projDir, ".claude", "settings.json"))
+	if err != nil {
+		t.Fatalf("read settings: %v", err)
+	}
+	perms, ok := data["permissions"].(map[string]any)
+	if !ok {
+		t.Fatal("permissions key should exist")
+	}
+	allow, ok := perms["allow"].([]any)
+	if !ok {
+		t.Fatal("permissions.allow should exist")
+	}
+
+	allowSet := make(map[string]bool)
+	for _, v := range allow {
+		if s, ok := v.(string); ok {
+			allowSet[s] = true
+		}
+	}
+	for _, perm := range MonocleClaudePermissions {
+		if !allowSet[perm] {
+			t.Errorf("missing permission: %s", perm)
+		}
+	}
+}
+
+func TestClaudeRegister_PreservesExistingPermissions(t *testing.T) {
+	setupTestSkills(t)
+	dir := t.TempDir()
+	t.Setenv("HOME", filepath.Join(dir, "home"))
+
+	origDir, _ := os.Getwd()
+	projDir := filepath.Join(dir, "project")
+	os.MkdirAll(projDir, 0755)
+	os.Chdir(projDir)
+	defer os.Chdir(origDir)
+
+	// Write existing settings with custom permissions
+	settingsPath := filepath.Join(projDir, ".claude", "settings.json")
+	existing := map[string]any{
+		"permissions": map[string]any{
+			"allow": []any{"Bash(ls:*)", "Bash(cat:*)"},
+		},
+		"hooks": map[string]any{"test": "value"},
+	}
+	if err := WriteJSONFile(settingsPath, existing); err != nil {
+		t.Fatalf("write existing settings: %v", err)
+	}
+
+	adapter := &ClaudeAdapter{}
+	if err := adapter.Register(false); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	data, err := ReadJSONFile(settingsPath)
+	if err != nil {
+		t.Fatalf("read settings: %v", err)
+	}
+
+	// Verify existing permissions are preserved
+	perms := data["permissions"].(map[string]any)
+	allow := perms["allow"].([]any)
+	allowSet := make(map[string]bool)
+	for _, v := range allow {
+		if s, ok := v.(string); ok {
+			allowSet[s] = true
+		}
+	}
+	if !allowSet["Bash(ls:*)"] {
+		t.Error("existing Bash(ls:*) permission should be preserved")
+	}
+	if !allowSet["Bash(cat:*)"] {
+		t.Error("existing Bash(cat:*) permission should be preserved")
+	}
+
+	// Verify hooks are preserved
+	if _, ok := data["hooks"]; !ok {
+		t.Error("hooks key should be preserved")
+	}
+}
+
+func TestClaudeRegister_PermissionsIdempotent(t *testing.T) {
+	setupTestSkills(t)
+	dir := t.TempDir()
+	t.Setenv("HOME", filepath.Join(dir, "home"))
+
+	origDir, _ := os.Getwd()
+	projDir := filepath.Join(dir, "project")
+	os.MkdirAll(projDir, 0755)
+	os.Chdir(projDir)
+	defer os.Chdir(origDir)
+
+	adapter := &ClaudeAdapter{}
+	if err := adapter.Register(false); err != nil {
+		t.Fatalf("first register: %v", err)
+	}
+	if err := adapter.Register(false); err != nil {
+		t.Fatalf("second register: %v", err)
+	}
+
+	data, err := ReadJSONFile(filepath.Join(projDir, ".claude", "settings.json"))
+	if err != nil {
+		t.Fatalf("read settings: %v", err)
+	}
+	allow := data["permissions"].(map[string]any)["allow"].([]any)
+
+	// Count monocle permissions — should not be duplicated
+	count := 0
+	for _, v := range allow {
+		s, _ := v.(string)
+		for _, perm := range MonocleClaudePermissions {
+			if s == perm {
+				count++
+			}
+		}
+	}
+	if count != len(MonocleClaudePermissions) {
+		t.Errorf("expected %d monocle permissions, got %d (duplicates?)", len(MonocleClaudePermissions), count)
+	}
+}
+
+func TestClaudeUnregister_RemovesPermissions(t *testing.T) {
+	setupTestSkills(t)
+	dir := t.TempDir()
+	t.Setenv("HOME", filepath.Join(dir, "home"))
+
+	origDir, _ := os.Getwd()
+	projDir := filepath.Join(dir, "project")
+	os.MkdirAll(projDir, 0755)
+	os.Chdir(projDir)
+	defer os.Chdir(origDir)
+
+	adapter := &ClaudeAdapter{}
+	if err := adapter.Register(false); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	if err := adapter.Unregister(false); err != nil {
+		t.Fatalf("unregister: %v", err)
+	}
+
+	// settings.json should be removed (was only monocle permissions)
+	settingsPath := filepath.Join(projDir, ".claude", "settings.json")
+	if _, err := os.Stat(settingsPath); !os.IsNotExist(err) {
+		t.Fatal("settings.json should be removed when only monocle permissions existed")
+	}
+}
+
+func TestClaudeUnregister_PreservesOtherPermissions(t *testing.T) {
+	setupTestSkills(t)
+	dir := t.TempDir()
+	t.Setenv("HOME", filepath.Join(dir, "home"))
+
+	origDir, _ := os.Getwd()
+	projDir := filepath.Join(dir, "project")
+	os.MkdirAll(projDir, 0755)
+	os.Chdir(projDir)
+	defer os.Chdir(origDir)
+
+	// Write settings with monocle + custom permissions
+	settingsPath := filepath.Join(projDir, ".claude", "settings.json")
+	existing := map[string]any{
+		"permissions": map[string]any{
+			"allow": []any{"Bash(ls:*)", "Bash(monocle review:*)", "Skill(get-feedback)"},
+		},
+	}
+	if err := WriteJSONFile(settingsPath, existing); err != nil {
+		t.Fatalf("write settings: %v", err)
+	}
+
+	// Register first (adds all monocle perms), then unregister
+	adapter := &ClaudeAdapter{}
+	if err := adapter.Register(false); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	if err := adapter.Unregister(false); err != nil {
+		t.Fatalf("unregister: %v", err)
+	}
+
+	data, err := ReadJSONFile(settingsPath)
+	if err != nil {
+		t.Fatalf("read settings: %v", err)
+	}
+
+	perms := data["permissions"].(map[string]any)
+	allow := perms["allow"].([]any)
+
+	if len(allow) != 1 {
+		t.Fatalf("expected 1 remaining permission, got %d: %v", len(allow), allow)
+	}
+	if allow[0] != "Bash(ls:*)" {
+		t.Errorf("expected Bash(ls:*) to remain, got %v", allow[0])
+	}
+}
+
 func writeInstalledPlugins(t *testing.T, homeDir string, plugins map[string]any) {
 	t.Helper()
 	pluginsDir := filepath.Join(homeDir, ".claude", "plugins")

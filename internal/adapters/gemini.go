@@ -1,6 +1,7 @@
 package adapters
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,7 +15,9 @@ func (a *GeminiAdapter) Name() string  { return "gemini" }
 func (a *GeminiAdapter) Label() string { return "Gemini CLI" }
 
 func (a *GeminiAdapter) ConfigPaths(global bool) []string {
-	return SkillPaths(geminiSkillsDir(global))
+	paths := []string{geminiPolicyPath(global)}
+	paths = append(paths, SkillPaths(geminiSkillsDir(global))...)
+	return paths
 }
 
 func (a *GeminiAdapter) HasConfig(global bool) bool {
@@ -39,7 +42,10 @@ func (a *GeminiAdapter) Register(global bool) error {
 		_ = RemoveFileIfExists(filepath.Join(cmdDir, name+".toml"))
 	}
 
-	// Install skill files
+	if err := configureGeminiPolicy(geminiPolicyPath(global)); err != nil {
+		return fmt.Errorf("configure policy: %w", err)
+	}
+
 	return InstallSkills(geminiSkillsDir(global))
 }
 
@@ -53,7 +59,8 @@ func (a *GeminiAdapter) Unregister(global bool) error {
 		_ = RemoveFileIfExists(filepath.Join(cmdDir, name+".toml"))
 	}
 
-	// Remove skill files
+	_ = unconfigureGeminiPolicy(geminiPolicyPath(global))
+
 	RemoveSkills(geminiSkillsDir(global))
 
 	return nil
@@ -78,6 +85,30 @@ func geminiSkillsDir(global bool) string {
 		}
 	}
 	return filepath.Join(".gemini", "skills")
+}
+
+func geminiPolicyPath(global bool) string {
+	if global {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			return filepath.Join(home, ".gemini", "policies", "monocle.toml")
+		}
+	}
+	return filepath.Join(".gemini", "policies", "monocle.toml")
+}
+
+const geminiMonoclePolicy = `[[rule]]
+toolName = "run_shell_command"
+commandPrefix = "monocle"
+decision = "allow"
+`
+
+func configureGeminiPolicy(path string) error {
+	return WriteFileAtomic(path, []byte(geminiMonoclePolicy))
+}
+
+func unconfigureGeminiPolicy(path string) error {
+	return RemoveFileIfExists(path)
 }
 
 func geminiConfigPath(global bool) string {
