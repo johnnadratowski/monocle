@@ -393,6 +393,7 @@ nav {
   border-radius: 8px; padding: 0.4rem 0.85rem;
   font-family: 'JetBrains Mono', monospace; font-size: 0.78rem;
   color: var(--subtext1); margin-bottom: 0.65rem;
+  white-space: nowrap;
 }
 .step p { font-size: 0.8rem; color: var(--overlay1); }
 
@@ -583,9 +584,29 @@ footer {
         <p>Review the agent's plan before it writes code. Leave feedback on the approach, then let it proceed once you're satisfied.</p>
       </div>
       <div class="feat dr4" data-reveal>
+        <div class="feat-bar" style="background:var(--sapphire)"></div>
+        <h3>Instant review loop</h3>
+        <p>Submit a review and the agent receives it immediately via <a href="https://code.claude.com/docs/en/channels-reference" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:underline;text-underline-offset:2px">MCP channels</a>. It fixes issues, you review again&nbsp;&mdash; a tight back-and-forth that converges fast.</p>
+      </div>
+      <div class="feat dr1" data-reveal>
         <div class="feat-bar" style="background:var(--peach)"></div>
         <h3>Pause &amp; resume</h3>
         <p>Pause the agent to catch up with your review. Submit feedback when you're ready and the agent picks up where it left off.</p>
+      </div>
+      <div class="feat dr2" data-reveal>
+        <div class="feat-bar" style="background:var(--yellow)"></div>
+        <h3>Suggested edits</h3>
+        <p>Propose exact code changes with GitHub-style suggestion blocks. The agent applies them directly&nbsp;&mdash; no copy-pasting needed.</p>
+      </div>
+      <div class="feat dr3" data-reveal>
+        <div class="feat-bar" style="background:var(--teal)"></div>
+        <h3>Multi-agent support</h3>
+        <p>Works with Claude Code, Codex, Gemini CLI, OpenCode, or any agent that supports skills or CLI commands.</p>
+      </div>
+      <div class="feat dr4" data-reveal>
+        <div class="feat-bar" style="background:var(--red)"></div>
+        <h3>Review gating</h3>
+        <p>Block the agent until you approve its plan. Iterate across as many rounds as it takes until you're satisfied.</p>
       </div>
     </div>
   </div>
