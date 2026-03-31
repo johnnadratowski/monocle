@@ -155,7 +155,7 @@ type commentExpandTickMsg struct {
 	seq int // must match m.expandSeq to be honoured
 }
 
-const commentExpandDelay = 500 * time.Millisecond
+const commentExpandDelay = 2 * time.Second
 
 // cursorMoved handles comment expansion state when the cursor changes position.
 // It collapses any expanded comment and schedules a new expand tick if the cursor
@@ -452,6 +452,19 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 			}
 			if m.path != "" {
 				return m, openFileCommentCmd(m.path, types.TargetFile)
+			}
+		case key == "space":
+			// Toggle expand/collapse on comment under cursor
+			if c := m.CursorComment(); c != nil {
+				if m.expandedCommentID == c.ID {
+					m.expandedCommentID = ""
+					m.expandSeq++
+				} else {
+					m.expandedCommentID = c.ID
+					m.expandSeq++
+					m.ensureVisible()
+				}
+				return m, nil
 			}
 		case key == "d":
 			// Delete comment under cursor
@@ -964,21 +977,15 @@ func (m diffViewModel) renderCommentLine(line diffViewLine, selected bool) strin
 
 	// Render each sub-line individually to preserve multi-line box structure
 	subLines := strings.Split(content, "\n")
-
-	// Track suggestion fence state for syntax highlighting
 	inCodeFence := false
-
 	var b strings.Builder
 	for i, sl := range subLines {
 		if i > 0 {
 			b.WriteString("\n")
 		}
 
-		// Detect suggestion fence boundaries in expanded comments.
-		// Check if the content after the │ prefix starts with ``` to avoid
-		// false positives from backticks inside code (e.g. strings.Contains(s, "```")).
 		if expanded {
-			if contentAfterPrefix := extractCommentContent(sl); strings.HasPrefix(contentAfterPrefix, "```") {
+			if after := extractCommentContent(sl); strings.HasPrefix(after, "```") {
 				inCodeFence = !inCodeFence
 				b.WriteString(style.Render(fmt.Sprintf("%-*s", m.width, sl)))
 				continue
@@ -1009,34 +1016,29 @@ func extractCommentContent(sl string) string {
 	return rest
 }
 
-// renderExpandedCodeLine renders a code line inside a suggestion fence with syntax
-// highlighting. The prefix (║) keeps the comment color; the code gets highlighted.
+// renderExpandedCodeLine renders a code line from a suggestion block with syntax
+// highlighting. The ║ prefix keeps the comment color; the code gets highlighted.
 func (m diffViewModel) renderExpandedCodeLine(sl string, commentStyle lipgloss.Style) string {
-	// Lines look like: "  ║ code here" — find the code after the prefix
-	prefixEnd := strings.Index(sl, "║")
-	if prefixEnd < 0 {
+	outerIdx := strings.Index(sl, "║")
+	if outerIdx < 0 {
 		return commentStyle.Render(fmt.Sprintf("%-*s", m.width, sl))
 	}
-	// Find the space after ║ (or ║ ✓)
-	rest := sl[prefixEnd:]
-	codeStart := strings.IndexByte(rest, ' ')
-	if codeStart < 0 {
-		return commentStyle.Render(fmt.Sprintf("%-*s", m.width, sl))
+
+	outerEnd := outerIdx + len("║")
+	if outerEnd < len(sl) && sl[outerEnd] == ' ' {
+		outerEnd++
 	}
-	codeStart++ // skip the space
+	outerPrefix := sl[:outerEnd]
+	code := sl[outerEnd:]
 
-	prefix := sl[:prefixEnd+codeStart]
-	code := rest[codeStart:]
-
-	// Render prefix with comment color, code with syntax highlighting
-	styledPrefix := commentStyle.Render(prefix)
-	codeWidth := m.width - ansi.StringWidth(prefix)
+	styledOuter := commentStyle.Render(outerPrefix)
+	codeWidth := m.width - ansi.StringWidth(outerPrefix)
 	if codeWidth < 1 {
 		codeWidth = 1
 	}
 	highlightedCode := m.hl.highlightLine(m.path, code, nil, nil, nil, codeWidth)
 
-	return styledPrefix + highlightedCode
+	return styledOuter + highlightedCode
 }
 
 func (m diffViewModel) renderContentLine(line diffViewLine, _, contentWidth int, selected, inVisual bool) string {
