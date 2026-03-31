@@ -1602,10 +1602,18 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case Matches(key, km.PrevSection):
+		if m.focus == focusMain {
+			m.diffView.jumpToPrevComment()
+			return m, nil
+		}
 		cmd := m.sidebar.jumpToPrevSection()
 		return m, cmd
 
 	case Matches(key, km.NextSection):
+		if m.focus == focusMain {
+			m.diffView.jumpToNextComment()
+			return m, nil
+		}
 		cmd := m.sidebar.jumpToNextSection()
 		return m, cmd
 
