@@ -187,11 +187,22 @@ nav {
   border-radius: 12px; border: 1px solid var(--surface0);
   overflow: hidden;
   box-shadow: 0 30px 60px -15px rgba(0,0,0,0.5), 0 0 120px -30px rgba(137,180,250,0.07);
-  transition: transform 0.5s cubic-bezier(0.16,1,0.3,1);
+  transition: box-shadow 0.4s ease;
 }
 .terminal-wrap:hover .terminal {
-  transform: rotateY(-1.5deg) rotateX(0.5deg) translateY(-4px);
+  box-shadow: 0 40px 80px -15px rgba(0,0,0,0.6), 0 0 140px -20px rgba(137,180,250,0.12);
 }
+/* Glare overlay that follows cursor */
+.terminal-glare {
+  position: absolute; inset: 0; z-index: 2;
+  border-radius: 12px;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(circle 300px at var(--mx, 50%) var(--my, 50%),
+    rgba(255,255,255,0.06) 0%, transparent 100%);
+  transition: opacity 0.4s ease;
+}
+.terminal-wrap:hover .terminal-glare { opacity: 1; }
 .term-bar {
   display: flex; align-items: center; justify-content: space-between;
   padding: 0.35rem 0.6rem;
@@ -560,6 +571,7 @@ footer {
 
   <!-- TUI mockup -->
   <div class="terminal-wrap af d5">
+    <div class="terminal-glare"></div>
     <div class="terminal">
       <div class="term-bar">
         <div class="term-dots"><span class="r"></span><span class="y"></span><span class="g"></span></div>
@@ -730,6 +742,74 @@ const observer = new IntersectionObserver(entries => {
   });
 }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
 document.querySelectorAll('[data-reveal]').forEach(el => observer.observe(el));
+
+// Reactive 3D tilt on terminal thumbnail — lerped for smoothness
+(function() {
+  const wrap = document.querySelector('.terminal-wrap');
+  if (!wrap) return;
+  const terminal = wrap.querySelector('.terminal');
+  const glare = wrap.querySelector('.terminal-glare');
+  const maxRotate = 6;
+  const maxLift = 8;
+  const lerpSpeed = 0.1; // lower = smoother/laggier
+
+  // Current and target values
+  let target = { rx: 0, ry: 0, lift: 0, gx: 50, gy: 50 };
+  let current = { rx: 0, ry: 0, lift: 0, gx: 50, gy: 50 };
+  let hovering = false;
+  let rafId = null;
+
+  function lerp(a, b, t) { return a + (b - a) * t; }
+
+  function tick() {
+    const speed = hovering ? lerpSpeed : 0.06;
+    current.rx = lerp(current.rx, target.rx, speed);
+    current.ry = lerp(current.ry, target.ry, speed);
+    current.lift = lerp(current.lift, target.lift, speed);
+    current.gx = lerp(current.gx, target.gx, speed);
+    current.gy = lerp(current.gy, target.gy, speed);
+
+    terminal.style.transform =
+      `rotateX(${current.rx}deg) rotateY(${current.ry}deg) translateY(${-current.lift}px)`;
+    glare.style.setProperty('--mx', current.gx + '%');
+    glare.style.setProperty('--my', current.gy + '%');
+
+    // Stop the loop once we've settled back to rest
+    const settled = !hovering &&
+      Math.abs(current.rx) < 0.01 && Math.abs(current.ry) < 0.01 && Math.abs(current.lift) < 0.01;
+    if (settled) {
+      terminal.style.transform = '';
+      rafId = null;
+      return;
+    }
+    rafId = requestAnimationFrame(tick);
+  }
+
+  function ensureLoop() {
+    if (!rafId) rafId = requestAnimationFrame(tick);
+  }
+
+  wrap.addEventListener('mousemove', function(e) {
+    const rect = wrap.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width - 0.5) * 2;
+    const y = ((e.clientY - rect.top) / rect.height - 0.5) * 2;
+
+    target.rx = -y * maxRotate;
+    target.ry = x * maxRotate;
+    target.lift = maxLift * (1 - Math.sqrt(x * x + y * y) * 0.3);
+    target.gx = (e.clientX - rect.left) / rect.width * 100;
+    target.gy = (e.clientY - rect.top) / rect.height * 100;
+    hovering = true;
+    ensureLoop();
+  });
+
+  wrap.addEventListener('mouseleave', function() {
+    target.rx = 0; target.ry = 0; target.lift = 0;
+    target.gx = 50; target.gy = 50;
+    hovering = false;
+    ensureLoop();
+  });
+})();
 
 </script>
 </body>
