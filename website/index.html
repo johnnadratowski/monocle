@@ -391,6 +391,14 @@ nav {
   font-size: 1.05rem; font-weight: 700; margin-bottom: 0.45rem;
 }
 .feat p { font-size: 0.875rem; color: var(--subtext0); line-height: 1.7; }
+.feat { position: relative; }
+.feat-play {
+  position: absolute; top: 1rem; right: 1rem;
+  width: 24px; height: 24px;
+  color: var(--overlay0);
+  transition: color 0.2s;
+}
+.feat:hover .feat-play { color: var(--overlay2); }
 
 /* ── Demo view (sidebar + player) ── */
 .feat-demo {
@@ -584,6 +592,7 @@ footer {
   .feat-demo.visible { flex-direction: column; max-width: 100%; }
   .feat-sidebar { flex: none; flex-direction: row; gap: 0.5rem; overflow-x: auto; padding-bottom: 0.5rem; }
   .feat-sidebar-item { flex: 0 0 auto; white-space: nowrap; }
+  .feat-player-body { aspect-ratio: auto; }
   .feat { padding: 1.25rem 1.25rem; }
   .section-pad { padding: 4rem 1rem; }
   .container { padding: 0 1rem; }
@@ -694,7 +703,7 @@ footer {
       <p>Your agent writes code fast. Monocle gives you the tools to keep up.</p>
     </div>
     <div class="feat-grid" id="feat-grid">
-      <div class="feat dr1" data-reveal data-color="var(--blue)">
+      <div class="feat dr1" data-reveal data-cast="assets/asciinema/diff.cast" data-color="var(--blue)">
         <div class="feat-bar" style="background:var(--blue)"></div>
         <h3>Diff review</h3>
         <p>See every file your agent changes in unified or side-by-side diff views with syntax highlighting and intra-line diffs.</p>
@@ -856,6 +865,12 @@ document.querySelectorAll('[data-reveal]').forEach(el => observer.observe(el));
   const STAGGER = 100;
   const FADE_OUT = 250;
 
+  // Add play icons to grid cards with demos
+  const playIcon = '<svg class="feat-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="10,8 16,12 10,16" fill="currentColor" stroke="none"/></svg>';
+  feats.forEach(feat => {
+    if (feat.dataset.cast) feat.insertAdjacentHTML('beforeend', playIcon);
+  });
+
   // Build sidebar items from grid features (once)
   feats.forEach((feat, i) => {
     const item = document.createElement('div');
@@ -873,7 +888,7 @@ document.querySelectorAll('[data-reveal]').forEach(el => observer.observe(el));
     if (player) { player.dispose(); player = null; }
     playerBody.innerHTML = '';
     player = AsciinemaPlayer.create(castUrl, playerBody, {
-      fit: 'both',
+      fit: window.innerWidth <= 960 ? 'width' : 'both',
       autoPlay: true,
       loop: true,
       idleTimeLimit: 3,
