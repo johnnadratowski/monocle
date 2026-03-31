@@ -524,6 +524,21 @@ footer {
   <div class="hero-text">
     <div class="eyebrow au">Open source terminal UI</div>
     <h1 class="au d1"><em>Review</em> every line<br>your agent <em>writes.</em></h1>
+    <script>
+    (function() {
+      var taglines = [
+        '<em>Review</em> every line<br>your agent <em>writes.</em>',
+        'Keep <em>an eye</em> \u{1F9D0} on what<br>your agent <em>makes.</em>',
+        '<em>Focus</em> on the code<br>your agent <em>ships.</em>',
+        'Your agent <em>codes.</em><br>You review every <em>diff.</em>',
+        'A second pair of <em>eyes</em><br>on every agent <em>commit.</em>'
+      ];
+      var i = (+localStorage.getItem('tagline') || 0) % taglines.length;
+      var h1 = document.currentScript.previousElementSibling;
+      h1.innerHTML = taglines[i];
+      localStorage.setItem('tagline', i + 1);
+    })();
+    </script>
     <p class="hero-body au d2">Monocle runs alongside your AI coding agent in a separate terminal. See diffs in real time, leave line-level comments, and submit structured feedback the agent acts on immediately.<br><span style="color:var(--subtext1);font-weight:500">Your agent writes fast. Monocle keeps you in the&nbsp;loop.</span></p>
     <div class="au d3">
       <div class="install-wrap">
