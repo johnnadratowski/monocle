@@ -311,6 +311,7 @@ nav {
 .agents-label {
   font-size: 0.75rem; font-weight: 600; color: var(--overlay0);
   letter-spacing: 0.08em; text-transform: uppercase;
+  width: 100%; text-align: center;
 }
 .agent-name {
   font-size: 0.9rem; font-weight: 500; color: var(--subtext1);
@@ -476,7 +477,11 @@ footer {
   .hero { grid-template-columns: 1fr; min-height: auto; padding: 7rem 1.5rem 3rem; gap: 3rem; }
   .tui-side { display: none; }
   .nav-links { display: none; }
-  .feat-grid { grid-template-columns: 1fr; max-width: 440px; }
+  .feat-grid { grid-template-columns: 1fr; max-width: 440px; margin: 0 auto; }
+  .feat { padding: 1.25rem 1.25rem; }
+  .section-pad { padding: 4rem 1rem; }
+  .container { padding: 0 1rem; }
+  .section-hdr { margin-bottom: 2rem; }
   .steps { grid-template-columns: 1fr; gap: 2rem; }
   .agents-inner { gap: 1.25rem; }
   .foot-inner { flex-direction: column; gap: 1.25rem; text-align: center; }
@@ -547,14 +552,14 @@ footer {
     <span class="agents-label">Works with</span>
     <span class="agent-name">Claude Code</span>
     <span class="agent-name">Codex</span>
-    <span class="agent-name">Gemini CLI</span>
+    <span class="agent-name">Gemini&nbsp;CLI</span>
     <span class="agent-name">OpenCode</span>
   </div>
 </div>
 
 <!-- ═══════ Problem ═══════ -->
 <section class="problem" data-reveal>
-  <h2>AI agents write thousands of lines per session. Without review, bugs compound.</h2>
+  <h2>AI agents write thousands of lines per session. Without review, bugs&nbsp;compound.</h2>
   <p>Monocle gives you a dedicated terminal to watch, comment on, and guide your agent's work&nbsp;&mdash; like a pull request review, but live.</p>
 </section>
 
