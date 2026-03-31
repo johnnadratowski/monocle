@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image/color"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -73,6 +74,10 @@ type diffViewModel struct {
 	// Mouse drag state
 	mouseDragActive bool
 
+	// Comment expansion on hover
+	expandedCommentID string // ID of the currently expanded comment (empty = none)
+	expandSeq         int    // sequence counter; incremented on each cursor move to debounce
+
 	// Content view mode (for plans/docs)
 	contentMode        bool
 	contentID          string
@@ -108,6 +113,8 @@ func (m *diffViewModel) clearFileState() {
 	m.offset = 0
 	m.hOffset = 0
 	m.visualMode = false
+	m.expandedCommentID = ""
+	m.expandSeq++
 }
 
 func newDiffViewModel(theme *Theme, keys *KeyMap) diffViewModel {
@@ -141,6 +148,30 @@ type loadAdditionalFileMsg struct {
 	content  string
 	err      error
 	comments []types.ReviewComment
+}
+
+// commentExpandTickMsg fires after a delay to expand a hovered comment.
+type commentExpandTickMsg struct {
+	seq int // must match m.expandSeq to be honoured
+}
+
+const commentExpandDelay = 300 * time.Millisecond
+
+// cursorMoved handles comment expansion state when the cursor changes position.
+// It collapses any expanded comment and schedules a new expand tick if the cursor
+// is now on a comment line.
+func (m *diffViewModel) cursorMoved() tea.Cmd {
+	m.expandSeq++
+	m.expandedCommentID = ""
+
+	c := m.CursorComment()
+	if c == nil {
+		return nil
+	}
+	seq := m.expandSeq
+	return tea.Tick(commentExpandDelay, func(time.Time) tea.Msg {
+		return commentExpandTickMsg{seq: seq}
+	})
 }
 
 func (m diffViewModel) Init() tea.Cmd {
@@ -291,10 +322,20 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 		m.visualMode = false
 		return m, nil
 
+	case commentExpandTickMsg:
+		if msg.seq == m.expandSeq {
+			if c := m.CursorComment(); c != nil {
+				m.expandedCommentID = c.ID
+				m.ensureVisible()
+			}
+		}
+		return m, nil
+
 	case tea.KeyPressMsg:
 		if !m.focused {
 			return m, nil
 		}
+		var expandCmd tea.Cmd
 		key := msg.String()
 		switch {
 		case Matches(key, m.keys.Down):
@@ -304,6 +345,7 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 				m.cursor = m.nextSelectable(m.cursor, 1)
 			}
 			m.ensureVisible()
+			expandCmd = m.cursorMoved()
 		case Matches(key, m.keys.Up):
 			if m.isCursorOffScreen() {
 				m.cursor = m.nearestSelectable(m.lastVisibleLine(), -1)
@@ -311,14 +353,17 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 				m.cursor = m.nextSelectable(m.cursor, -1)
 			}
 			m.ensureVisible()
+			expandCmd = m.cursorMoved()
 		case Matches(key, m.keys.Top):
 			m.cursor = m.nearestSelectable(0, 1)
 			m.ensureVisible()
+			expandCmd = m.cursorMoved()
 		case Matches(key, m.keys.Bottom):
 			if len(m.lines) > 0 {
 				m.cursor = m.nearestSelectable(len(m.lines)-1, -1)
 			}
 			m.ensureVisible()
+			expandCmd = m.cursorMoved()
 		case Matches(key, m.keys.Visual):
 			if !m.visualMode {
 				m.visualMode = true
@@ -420,6 +465,9 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 				commentID := c.ID
 				return m, func() tea.Msg { return resolveCommentMsg{commentID: commentID} }
 			}
+		}
+		if expandCmd != nil {
+			return m, expandCmd
 		}
 	}
 	return m, nil
@@ -906,8 +954,14 @@ func (m diffViewModel) renderCommentLine(line diffViewLine, selected bool) strin
 		style = style.Reverse(true)
 	}
 
+	// Use expanded format if this comment is expanded
+	content := line.content
+	if line.comment != nil && line.comment.ID == m.expandedCommentID {
+		content = formatExpandedComment(line.comment, m.width)
+	}
+
 	// Render each sub-line individually to preserve multi-line box structure
-	subLines := strings.Split(line.content, "\n")
+	subLines := strings.Split(content, "\n")
 	var b strings.Builder
 	for i, sl := range subLines {
 		if i > 0 {
@@ -1426,13 +1480,17 @@ func (m diffViewModel) contentWidthFor(line diffViewLine) int {
 // screenLinesFor returns how many screen lines a logical line occupies.
 // In non-wrap mode or for split/hunk/comment lines, this is always 1.
 func (m diffViewModel) screenLinesFor(idx int) int {
-	if !m.wrap {
-		return 1
-	}
 	if idx < 0 || idx >= len(m.lines) {
 		return 1
 	}
 	line := m.lines[idx]
+	// Expanded comments take multiple screen lines
+	if line.isComment && line.comment != nil && line.comment.ID == m.expandedCommentID {
+		return strings.Count(formatExpandedComment(line.comment, m.width), "\n") + 1
+	}
+	if !m.wrap {
+		return 1
+	}
 	if line.isHunk || line.isComment || line.isSplit {
 		return 1
 	}
@@ -2038,5 +2096,56 @@ func formatInlineComment(c *types.ReviewComment) string {
 	return fmt.Sprintf("  ┌─── %s %s", typeLabel, strings.Repeat("─", 20)) + "\n" +
 		fmt.Sprintf("  %s %s", prefix, body) + "\n" +
 		fmt.Sprintf("  └───%s", strings.Repeat("─", 25))
+}
+
+// formatExpandedComment renders a comment's full body word-wrapped to the given width.
+func formatExpandedComment(c *types.ReviewComment, width int) string {
+	typeLabel := strings.ToUpper(string(c.Type))
+	hasSuggestionBlock := strings.Contains(c.Body, "```suggestion")
+	if hasSuggestionBlock {
+		typeLabel = "✏ " + typeLabel
+	}
+	prefix := "│"
+	if c.Resolved {
+		prefix = "│ ✓"
+		typeLabel = "✓ " + typeLabel
+	}
+
+	// Box occupies full width minus the 2-char indent
+	boxWidth := width - 2
+	if boxWidth < 20 {
+		boxWidth = 20
+	}
+	// Body width: box minus "  " indent, prefix, and a space
+	bodyWidth := boxWidth - ansi.StringWidth(prefix) - 2
+	if bodyWidth < 10 {
+		bodyWidth = 10
+	}
+
+	headerDashes := boxWidth - ansi.StringWidth(typeLabel) - 6
+	if headerDashes < 0 {
+		headerDashes = 0
+	}
+	footerDashes := boxWidth - 4
+	if footerDashes < 0 {
+		footerDashes = 0
+	}
+
+	var lines []string
+	lines = append(lines, fmt.Sprintf("  ┌─── %s %s", typeLabel, strings.Repeat("─", headerDashes)))
+
+	for _, paragraph := range strings.Split(c.Body, "\n") {
+		if paragraph == "" {
+			lines = append(lines, fmt.Sprintf("  %s", prefix))
+			continue
+		}
+		wrapped := wrapContent(paragraph, bodyWidth)
+		for _, w := range wrapped {
+			lines = append(lines, fmt.Sprintf("  %s %s", prefix, w))
+		}
+	}
+
+	lines = append(lines, fmt.Sprintf("  └───%s", strings.Repeat("─", footerDashes)))
+	return strings.Join(lines, "\n")
 }
 

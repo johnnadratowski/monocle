@@ -1270,6 +1270,11 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.mouseEnabled {
 			return m.handleMouseRelease(msg)
 		}
+
+	case commentExpandTickMsg:
+		var cmd tea.Cmd
+		m.diffView, cmd = m.diffView.Update(msg)
+		return m, cmd
 	}
 
 	return m, nil

@@ -185,7 +185,7 @@ func (m appModel) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 		// Position cursor and start drag tracking
 		_, relY := layout.diff.translate(msg.X, msg.Y)
 		m.diffView.handleMouseClick(relY)
-		return m, nil
+		return m, m.diffView.cursorMoved()
 	}
 
 	return m, nil
@@ -242,7 +242,7 @@ func (m appModel) handleMouseMotion(msg tea.MouseMotionMsg) (tea.Model, tea.Cmd)
 	layout := computePaneLayout(&m)
 	_, relY := layout.diff.translate(msg.X, msg.Y)
 	m.diffView.handleMouseMotion(relY)
-	return m, nil
+	return m, m.diffView.cursorMoved()
 }
 
 // handleMouseRelease ends drag tracking and finalizes visual selection.
