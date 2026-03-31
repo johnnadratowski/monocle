@@ -155,7 +155,7 @@ type commentExpandTickMsg struct {
 	seq int // must match m.expandSeq to be honoured
 }
 
-const commentExpandDelay = 300 * time.Millisecond
+const commentExpandDelay = 500 * time.Millisecond
 
 // cursorMoved handles comment expansion state when the cursor changes position.
 // It collapses any expanded comment and schedules a new expand tick if the cursor
@@ -946,30 +946,97 @@ func (m diffViewModel) renderCommentLine(line diffViewLine, selected bool) strin
 		clr = lipgloss.Color("3")
 	}
 
+	// Use expanded format if this comment is expanded
+	content := line.content
+	expanded := line.comment != nil && line.comment.ID == m.expandedCommentID
+	if expanded {
+		content = formatExpandedComment(line.comment, m.width)
+	}
+
 	style := lipgloss.NewStyle().Foreground(clr)
 	if line.comment != nil && line.comment.Resolved {
 		style = style.Faint(true)
 	}
-	if selected {
+	// Expanded comments use a thick border to indicate selection instead of reverse
+	if selected && !expanded {
 		style = style.Reverse(true)
-	}
-
-	// Use expanded format if this comment is expanded
-	content := line.content
-	if line.comment != nil && line.comment.ID == m.expandedCommentID {
-		content = formatExpandedComment(line.comment, m.width)
 	}
 
 	// Render each sub-line individually to preserve multi-line box structure
 	subLines := strings.Split(content, "\n")
+
+	// Track suggestion fence state for syntax highlighting
+	inCodeFence := false
+
 	var b strings.Builder
 	for i, sl := range subLines {
 		if i > 0 {
 			b.WriteString("\n")
 		}
+
+		// Detect suggestion fence boundaries in expanded comments.
+		// Check if the content after the │ prefix starts with ``` to avoid
+		// false positives from backticks inside code (e.g. strings.Contains(s, "```")).
+		if expanded {
+			if contentAfterPrefix := extractCommentContent(sl); strings.HasPrefix(contentAfterPrefix, "```") {
+				inCodeFence = !inCodeFence
+				b.WriteString(style.Render(fmt.Sprintf("%-*s", m.width, sl)))
+				continue
+			}
+			if inCodeFence {
+				b.WriteString(m.renderExpandedCodeLine(sl, style))
+				continue
+			}
+		}
+
 		b.WriteString(style.Render(fmt.Sprintf("%-*s", m.width, sl)))
 	}
 	return b.String()
+}
+
+// extractCommentContent returns the text after the "║ " (or "║ ✓ ") prefix in
+// a formatted expanded comment line, or "" if no prefix is found.
+func extractCommentContent(sl string) string {
+	idx := strings.Index(sl, "║")
+	if idx < 0 {
+		return ""
+	}
+	rest := sl[idx+len("║"):]
+	rest = strings.TrimLeft(rest, " ✓")
+	if len(rest) > 0 && rest[0] == ' ' {
+		rest = rest[1:]
+	}
+	return rest
+}
+
+// renderExpandedCodeLine renders a code line inside a suggestion fence with syntax
+// highlighting. The prefix (║) keeps the comment color; the code gets highlighted.
+func (m diffViewModel) renderExpandedCodeLine(sl string, commentStyle lipgloss.Style) string {
+	// Lines look like: "  ║ code here" — find the code after the prefix
+	prefixEnd := strings.Index(sl, "║")
+	if prefixEnd < 0 {
+		return commentStyle.Render(fmt.Sprintf("%-*s", m.width, sl))
+	}
+	// Find the space after ║ (or ║ ✓)
+	rest := sl[prefixEnd:]
+	codeStart := strings.IndexByte(rest, ' ')
+	if codeStart < 0 {
+		return commentStyle.Render(fmt.Sprintf("%-*s", m.width, sl))
+	}
+	codeStart++ // skip the space
+
+	prefix := sl[:prefixEnd+codeStart]
+	code := rest[codeStart:]
+
+	// Render prefix with comment color, code with syntax highlighting
+	styledPrefix := commentStyle.Render(prefix)
+	codeWidth := m.width - ansi.StringWidth(prefix)
+	if codeWidth < 1 {
+		codeWidth = 1
+	}
+	highlightedCode := m.hl.highlightLine(m.path, code, nil, nil, nil, codeWidth)
+
+	return styledPrefix + highlightedCode
 }
 
 func (m diffViewModel) renderContentLine(line diffViewLine, _, contentWidth int, selected, inVisual bool) string {
@@ -2099,15 +2166,16 @@ func formatInlineComment(c *types.ReviewComment) string {
 }
 
 // formatExpandedComment renders a comment's full body word-wrapped to the given width.
+// Uses double-line box-drawing characters (╔═║╚) to visually distinguish from collapsed comments.
 func formatExpandedComment(c *types.ReviewComment, width int) string {
 	typeLabel := strings.ToUpper(string(c.Type))
 	hasSuggestionBlock := strings.Contains(c.Body, "```suggestion")
 	if hasSuggestionBlock {
 		typeLabel = "✏ " + typeLabel
 	}
-	prefix := "│"
+	prefix := "║"
 	if c.Resolved {
-		prefix = "│ ✓"
+		prefix = "║ ✓"
 		typeLabel = "✓ " + typeLabel
 	}
 
@@ -2132,7 +2200,7 @@ func formatExpandedComment(c *types.ReviewComment, width int) string {
 	}
 
 	var lines []string
-	lines = append(lines, fmt.Sprintf("  ┌─── %s %s", typeLabel, strings.Repeat("─", headerDashes)))
+	lines = append(lines, fmt.Sprintf("  ╔═══ %s %s", typeLabel, strings.Repeat("═", headerDashes)))
 
 	for _, paragraph := range strings.Split(c.Body, "\n") {
 		if paragraph == "" {
@@ -2145,7 +2213,7 @@ func formatExpandedComment(c *types.ReviewComment, width int) string {
 		}
 	}
 
-	lines = append(lines, fmt.Sprintf("  └───%s", strings.Repeat("─", footerDashes)))
+	lines = append(lines, fmt.Sprintf("  ╚═══%s", strings.Repeat("═", footerDashes)))
 	return strings.Join(lines, "\n")
 }
 
