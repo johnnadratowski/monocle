@@ -1,0 +1,135 @@
+---
+title: "Agent Setup"
+description: "Connect monocle to Claude Code, OpenCode, Codex CLI, or Gemini CLI."
+---
+
+monocle connects to your agent by installing skills — small instruction files that tell the agent how to check review status, retrieve feedback, and submit content for review. Run `monocle register` to install them.
+
+## Register monocle with your agent
+
+The `register` command installs skills into your agent's skill directory and, for Claude Code, writes the MCP channel config for push notifications.
+
+```bash
+monocle register          # interactive picker
+monocle register claude   # or: opencode, codex, gemini, all
+```
+
+Add `--global` to install at the user level instead of the current project:
+
+```bash
+monocle register claude --global
+```
+
+| Agent | Skills directory | MCP config |
+|-------|-----------------|------------|
+| Claude Code | `.claude/skills/` | `.mcp.json` |
+| OpenCode | `.opencode/skills/` | — |
+| Codex CLI | `.codex/skills/` | — |
+| Gemini CLI | `.gemini/skills/` | — |
+
+## Set up each agent
+
+<Tabs>
+  <Tab title="Claude Code">
+    ### Register via CLI
+
+    ```bash
+    monocle register claude
+    ```
+
+    This installs skills into `.claude/skills/` and writes the MCP channel config to `.mcp.json` for push notifications.
+
+    ### Enable push notifications
+
+    Claude Code supports [MCP channels](https://code.claude.com/docs/en/channels-reference), which deliver your review feedback directly into the agent's context the moment you submit — no polling needed. Start Claude Code with the channel flag to enable this:
+
+    ```bash
+    claude --dangerously-load-development-channels plugin:monocle@monocle
+    ```
+
+    <Note>
+      The `--dangerously-load-development-channels` flag is required during the [channels research preview](https://code.claude.com/docs/en/channels-reference).
+    </Note>
+
+    <Tip>
+      If you start or restart monocle while Claude Code is already running, the MCP channel may need to reconnect. Type `/mcp` in Claude Code and select monocle to reconnect.
+    </Tip>
+
+    ### Alternative: plugin marketplace
+
+    You can also install monocle through Claude Code's plugin system:
+
+    ```
+    /plugin marketplace add josephschmitt/monocle
+    /plugin install monocle@monocle
+    ```
+  </Tab>
+  <Tab title="OpenCode">
+    ### Register via CLI
+
+    ```bash
+    monocle register opencode
+    ```
+
+    This installs skills into `.opencode/skills/`. OpenCode uses pull-based feedback — the agent retrieves your reviews by running the `/get-feedback` skill.
+  </Tab>
+  <Tab title="Codex CLI">
+    ### Register via CLI
+
+    ```bash
+    monocle register codex
+    ```
+
+    This installs skills into `.codex/skills/`. Codex uses pull-based feedback — the agent retrieves your reviews by running the `/get-feedback` skill.
+
+    ### Alternative: plugin search
+
+    You can also install monocle through Codex CLI's plugin system:
+
+    ```
+    /plugins
+    ```
+
+    Search for "monocle" and install it from the results.
+  </Tab>
+  <Tab title="Gemini CLI">
+    ### Register via CLI
+
+    ```bash
+    monocle register gemini
+    ```
+
+    This installs skills into `.gemini/skills/`. Gemini CLI uses pull-based feedback — the agent retrieves your reviews by running the `/get-feedback` skill.
+
+    ### Alternative: extensions
+
+    You can also install monocle through Gemini CLI's extension system:
+
+    ```bash
+    gemini extensions install josephschmitt/monocle
+    ```
+  </Tab>
+  <Tab title="All agents">
+    Register monocle for every supported agent at once:
+
+    ```bash
+    monocle register all
+    ```
+
+    Use `--global` to install at the user level:
+
+    ```bash
+    monocle register all --global
+    ```
+  </Tab>
+</Tabs>
+
+## Verify the connection
+
+Start monocle in a terminal alongside your agent:
+
+```bash
+monocle
+```
+
+Press `I` in the TUI to see the socket path and confirm your agent is connected.

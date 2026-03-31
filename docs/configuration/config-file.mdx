@@ -1,0 +1,61 @@
+---
+title: "Config File"
+description: "Customize monocle's layout, diff style, and behavior with a JSON config file."
+---
+
+Monocle loads settings from JSON config files at startup. You can maintain a global config for personal preferences and a project config for repository-specific settings.
+
+## File locations
+
+Monocle loads config files in this order, with the project config taking precedence over the global one:
+
+1. **Global:** `~/.config/monocle/config.json` (or `$XDG_CONFIG_HOME/monocle/config.json`)
+2. **Project:** `.monocle/config.json` in your working directory
+
+Create either or both files — you only need to include the settings you want to override.
+
+## Example config
+
+```json
+{
+  "layout": "auto",
+  "diff_style": "unified",
+  "sidebar_style": "flat",
+  "wrap": false,
+  "tab_size": 4,
+  "context_lines": 3,
+  "ignore_patterns": [],
+  "keybindings": {},
+  "mouse": true,
+  "min_diff_width": 80,
+  "auto_focus_mode": false,
+  "review_format": {
+    "include_snippets": true,
+    "max_snippet_lines": 10,
+    "include_summary": true
+  }
+}
+```
+
+## Settings
+
+| Setting | Values | Default | Description |
+|---------|--------|---------|-------------|
+| `layout` | `"auto"`, `"side-by-side"`, `"stacked"` | `"auto"` | Pane arrangement (`auto` switches based on terminal width) |
+| `diff_style` | `"unified"`, `"split"`, `"file"` | `"unified"` | Diff display mode (`file` shows raw content) |
+| `sidebar_style` | `"flat"`, `"tree"` | `"flat"` | File list display mode |
+| `wrap` | `true`, `false` | `false` | Word-wrap long lines in diffs |
+| `tab_size` | integer | `4` | Spaces per tab character |
+| `context_lines` | integer | `3` | Unchanged lines shown around diff hunks |
+| `ignore_patterns` | string array | `[]` | Glob patterns for files to exclude |
+| `min_diff_width` | integer | `80` | Minimum character width for the diff viewer in side-by-side layout |
+| `mouse` | `true`, `false` | `true` | Enable mouse interactions (click, scroll, drag) |
+| `auto_focus_mode` | `true`, `false` | `false` | Auto-enter focus mode (hide sidebar, enable wrap) when reviewing plans |
+| `keybindings` | object | `{}` | Custom key overrides (see [Keybindings](/configuration/keybindings)) |
+| `review_format.include_snippets` | `true`, `false` | `true` | Include code snippets in formatted reviews |
+| `review_format.max_snippet_lines` | integer | `10` | Truncate snippets longer than this |
+| `review_format.include_summary` | `true`, `false` | `true` | Include comment count summary in formatted reviews |
+
+<Note>
+  Toggle keybindings (`T`, `t`, `w`, `f`) change settings for the current session only. Edit the config file to persist your preferences.
+</Note>

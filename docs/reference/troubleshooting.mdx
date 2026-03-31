@@ -1,0 +1,107 @@
+---
+title: "Troubleshooting"
+description: "Solutions for common monocle issues."
+---
+
+<AccordionGroup>
+
+  <Accordion title="Agent not connecting / socket mismatch">
+    Monocle creates a Unix socket based on its working directory. If your agent runs in a different directory, it looks for a socket in the wrong place and cannot connect.
+
+    **To diagnose:** Press `I` inside monocle to see the active socket path and how many subscribers are connected.
+
+    **Solution: set `MONOCLE_SOCKET`**
+
+    Copy the socket path shown by `I` and pass it to your agent commands via the environment variable:
+
+    ```bash
+    MONOCLE_SOCKET=/tmp/monocle-abc123.sock monocle review status
+    ```
+
+    **To start monocle on a specific socket:**
+
+    ```bash
+    monocle --socket /tmp/monocle-abc123.sock
+    ```
+
+    **For Claude Code MCP:** Add `MONOCLE_SOCKET` to the `env` block in `.mcp.json`:
+
+    ```json
+    {
+      "mcpServers": {
+        "monocle": {
+          "env": {
+            "MONOCLE_SOCKET": "/tmp/monocle-abc123.sock"
+          }
+        }
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="MCP channel not reconnecting (Claude Code)">
+    If you start or restart monocle while Claude Code is already running, the MCP channel connection may be stale and push notifications will not arrive.
+
+    **Solution:** Type `/mcp` in Claude Code and select monocle from the list to trigger a reconnect. You do not need to restart Claude Code.
+  </Accordion>
+
+  <Accordion title="Push notifications not working">
+    Push notifications require two things beyond a basic monocle installation:
+
+    1. A JavaScript runtime — [Bun](https://bun.sh), [Deno](https://deno.com), or [Node.js](https://nodejs.org) — must be installed and on your `PATH`.
+    2. Claude Code must be started with the `--dangerously-load-development-channels` flag:
+
+    ```bash
+    claude --dangerously-load-development-channels plugin:monocle@monocle
+    ```
+
+    <Note>
+      The `--dangerously-load-development-channels` flag is required during the MCP channels research preview.
+    </Note>
+
+    **Also check that monocle is registered:**
+
+    ```bash
+    monocle register claude
+    ```
+
+    **If push notifications remain unavailable:** Your feedback is not lost. It stays in the queue and will be delivered the next time the agent calls `/get-feedback` or runs `monocle review get-feedback`.
+  </Accordion>
+
+  <Accordion title="No feedback delivered to the agent">
+    <Steps>
+      <Step title="Confirm monocle is running in the right directory">
+        Monocle must be running in the same Git repository as your agent. Check the title bar or press `I` to see the working directory monocle is using.
+      </Step>
+      <Step title="Verify the connection">
+        Run this from the agent's working directory:
+
+        ```bash
+        monocle review status
+        ```
+
+        If monocle is reachable, this prints the current status. If it exits with an error, the agent cannot reach the socket — see the socket mismatch section above.
+      </Step>
+      <Step title="Override the socket if needed">
+        Press `I` in monocle to copy the socket path, then set `MONOCLE_SOCKET` for the agent:
+
+        ```bash
+        MONOCLE_SOCKET=/tmp/monocle-abc123.sock monocle review status
+        ```
+      </Step>
+    </Steps>
+  </Accordion>
+
+  <Accordion title="Review submitted but agent didn't respond">
+    Feedback is always queued for reliability — the agent does not receive it automatically unless push notifications are enabled.
+
+    - **With Claude Code and MCP channels:** A push notification prompts the agent to retrieve feedback immediately. If the notification did not arrive, check the push notifications section above.
+    - **With other agents:** The agent must run the `/get-feedback` skill or call `monocle review get-feedback` to pull the queued feedback. Trigger this manually if the agent has not done so on its own.
+    - **To request the agent stop and wait:** Press `P` in monocle to send a pause notification. The agent will call `monocle review get-feedback --wait` and block until you submit your review. Pause requires MCP channel support (currently Claude Code only).
+
+    <Note>
+      Multiple reviews accumulate in the queue and are delivered together as a single combined response when the agent next calls `get-feedback`.
+    </Note>
+  </Accordion>
+
+</AccordionGroup>

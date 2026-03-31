@@ -1,0 +1,65 @@
+---
+title: "Installation"
+description: "Install monocle on macOS or Linux."
+---
+
+## Requirements
+
+Before installing monocle, make sure you have:
+
+- A coding agent: [Claude Code](https://claude.com/claude-code), [OpenCode](https://opencode.ai), [Codex CLI](https://github.com/openai/codex), or [Gemini CLI](https://github.com/google/gemini-cli)
+- A terminal with 256-color or true color support
+- A JavaScript runtime ([Bun](https://bun.sh), [Deno](https://deno.com), or [Node.js](https://nodejs.org)) — required only for push notifications with Claude Code
+- A [Nerd Font](https://www.nerdfonts.com/) for file icons (optional but recommended)
+
+## Homebrew (recommended)
+
+The simplest way to install monocle on macOS or Linux:
+
+```bash
+brew install josephschmitt/tap/monocle
+```
+
+## Pre-built binaries
+
+Download and install a pre-built binary for your platform directly from GitHub Releases.
+
+<CodeGroup>
+
+```bash macOS (Apple Silicon)
+curl -Lo monocle.tar.gz https://github.com/josephschmitt/monocle/releases/download/v0.39.0/monocle_darwin_arm64.tar.gz
+tar xzf monocle.tar.gz
+sudo mv monocle /usr/local/bin/
+```
+
+```bash macOS (Intel)
+curl -Lo monocle.tar.gz https://github.com/josephschmitt/monocle/releases/download/v0.39.0/monocle_darwin_amd64.tar.gz
+tar xzf monocle.tar.gz
+sudo mv monocle /usr/local/bin/
+```
+
+```bash Linux (x86_64)
+curl -Lo monocle.tar.gz https://github.com/josephschmitt/monocle/releases/download/v0.39.0/monocle_linux_amd64.tar.gz
+tar xzf monocle.tar.gz
+sudo mv monocle /usr/local/bin/
+```
+
+```bash Linux (ARM64)
+curl -Lo monocle.tar.gz https://github.com/josephschmitt/monocle/releases/download/v0.39.0/monocle_linux_arm64.tar.gz
+tar xzf monocle.tar.gz
+sudo mv monocle /usr/local/bin/
+```
+
+</CodeGroup>
+
+## Verify the installation
+
+After installing, confirm monocle is available:
+
+```bash
+monocle --version
+```
+
+## Next steps
+
+Once monocle is installed, follow the [quick start guide](/quickstart) to register it with your agent and begin reviewing code.

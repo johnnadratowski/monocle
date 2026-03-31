@@ -1,0 +1,97 @@
+---
+title: "Skills"
+description: "Skills are the bridge between monocle and your AI coding agent."
+---
+
+Skills are standardized instruction files in the [agentskills.io](https://agentskills.io) format. They tell your agent how to interact with monocle — which CLI commands to run, when to retrieve feedback, and how to submit content for review.
+
+When you run `monocle register`, monocle installs its skills into the correct directory for each agent you've registered with. The agent picks them up automatically.
+
+## Available skills
+
+| Skill | Available for | Description |
+|-------|--------------|-------------|
+| `/get-feedback` | Claude Code, Codex CLI, OpenCode, Gemini CLI | Retrieve pending review feedback |
+| `/get-feedback-wait` | Claude Code, Codex CLI, OpenCode, Gemini CLI | Block until the reviewer submits feedback, then act on it |
+| `/review-plan` | Claude Code, Codex CLI, OpenCode, Gemini CLI | Find the active plan file and submit it for review |
+| `/review-plan-wait` | Claude Code, Codex CLI, OpenCode, Gemini CLI | Find the active plan file, submit for review, and iterate on feedback until approved |
+
+### `/get-feedback`
+
+Retrieves any feedback you've submitted and delivers it to the agent. If you've submitted multiple reviews since the agent last checked, they're all delivered together in one batch.
+
+With Claude Code and MCP channels, the agent calls this automatically after receiving a push notification. With other agents, the skill is invoked on demand — either by the agent on its own, or when you ask it to check for feedback.
+
+### `/get-feedback-wait`
+
+Like `/get-feedback`, but the agent blocks and waits until you submit feedback. Use this when a pause has been requested or when the agent should hold off until you've reviewed its current work. Once you submit your review, the agent receives it and continues.
+
+### `/review-plan`
+
+Tells the agent to find its current plan file and send it to monocle for review using `monocle review send-artifact`. The plan appears in your TUI alongside file diffs. You can leave line-level comments on it and submit feedback.
+
+This is useful when you want to review what the agent is planning before it starts writing code.
+
+### `/review-plan-wait`
+
+Like `/review-plan`, but the agent blocks after submitting the plan and waits for your response. If you request changes, the agent updates the plan and resubmits — iterating until you approve. If you approve (submit with no comments), the agent proceeds.
+
+This skill is what enables [review gating](/guides/review-gating): the agent cannot move forward until you sign off.
+
+## Where skills are installed
+
+`monocle register` writes skills into the agent's designated skill directory. Run it once per project, or with `--global` to apply across all projects.
+
+<CodeGroup>
+
+```bash Claude Code
+# Skills go to .claude/skills/
+monocle register claude
+```
+
+```bash OpenCode
+# Skills go to .opencode/skills/
+monocle register opencode
+```
+
+```bash Codex CLI
+# Skills go to .codex/skills/
+monocle register codex
+```
+
+```bash Gemini CLI
+# Skills go to .gemini/skills/
+monocle register gemini
+```
+
+```bash All agents
+# Register for every supported agent at once
+monocle register all
+```
+
+</CodeGroup>
+
+| Agent | Skills directory |
+|-------|-----------------|
+| Claude Code | `.claude/skills/` |
+| OpenCode | `.opencode/skills/` |
+| Codex CLI | `.codex/skills/` |
+| Gemini CLI | `.gemini/skills/` |
+
+## Making skills automatic
+
+Skills are available to your agent, but the agent decides when to use them on its own. If you want the agent to automatically submit plans for review or check for feedback at specific points in its workflow, add instructions to your agent's project configuration file (`CLAUDE.md`, `AGENTS.md`, etc.):
+
+```markdown
+## Monocle Integration
+
+When Monocle is running:
+- Use the `/review-plan` skill to send content (plans, decisions, summaries) for the reviewer to see
+- Use the content's filename as the identifier so updates replace the previous version
+- In plan mode, use `/review-plan-wait` instead — it blocks until the reviewer responds.
+  If they request changes, update and resubmit until approved.
+```
+
+<Tip>
+  You can also invoke `/review-plan` and `/review-plan-wait` yourself at any time by asking your agent to run them.
+</Tip>

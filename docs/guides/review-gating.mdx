@@ -1,0 +1,50 @@
+---
+title: "Review Gating"
+description: "Block your agent until you approve its plan or current work."
+---
+
+Review gating lets you pause your agent's progress until you've had a chance to review. monocle provides two mechanisms: plan gating, which holds the agent at a specific content submission, and pause flow, which stops the agent mid-session at any point.
+
+## Plan gating with `/review-plan-wait`
+
+The `/review-plan-wait` skill submits a plan to your TUI and blocks the agent until you respond.
+
+<Steps>
+  <Step title="Agent submits a plan">
+    Your agent runs `/review-plan-wait`, which calls `monocle review send-artifact --wait` under the hood. The plan appears in the monocle sidebar.
+  </Step>
+  <Step title="You review and respond">
+    Read the plan, leave any line-level comments (issues, suggestions, notes), and press `S` to submit your review. An empty review with no comments counts as an approval.
+  </Step>
+  <Step title="Agent receives your feedback">
+    If you approve, the agent unblocks and continues. If you request changes, the agent updates the plan and resubmits — the loop repeats until you're satisfied.
+  </Step>
+</Steps>
+
+This is content-level gating: you're reviewing a specific piece of content (the plan) before the agent acts on it.
+
+## Pause flow with `P`
+
+Pause flow lets you stop the agent at any point during a session — not just at a plan submission.
+
+Press `P` in the monocle TUI to send a pause notification. The agent receives it, runs `monocle review get-feedback --wait`, and blocks until you submit your review.
+
+Use this when:
+- The agent is mid-task and you want to catch up on its current diffs before it continues
+- You want to redirect the agent before it moves to the next step
+- You need the agent to stop while you review something it's already written
+
+Once you've reviewed and pressed `S` to submit, the agent unblocks and receives your feedback.
+
+<Warning>
+  Pause flow requires MCP channel support and is currently only available with Claude Code. Other agents (OpenCode, Codex CLI, Gemini CLI) do not support the push notification needed to trigger the pause.
+</Warning>
+
+## Choosing the right mechanism
+
+| | Plan gating | Pause flow |
+|---|---|---|
+| **What it gates** | A specific plan or artifact | The agent's entire session |
+| **When it triggers** | Agent calls `/review-plan-wait` | You press `P` in the TUI |
+| **Agent support** | All agents | Claude Code only |
+| **Use when** | You want to review the plan before the agent writes code | You want to pause everything while you catch up |

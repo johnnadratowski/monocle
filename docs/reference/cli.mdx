@@ -1,0 +1,92 @@
+---
+title: "CLI Reference"
+description: "Complete reference for all monocle command-line commands."
+---
+
+## `monocle`
+
+Start a review session in the current directory.
+
+```bash
+monocle [flags]
+```
+
+Monocle detects the Git repository root from the current working directory and opens the TUI. By default it starts a new session; use the session flags below to resume a previous one.
+
+### Flags
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--socket PATH` | | Override the Unix socket path. Also reads from the `MONOCLE_SOCKET` environment variable. |
+| `--additional-path PATH` | `-a` | Add an extra file or directory path to include in the review. Repeatable. |
+| `--continue` | `-c` | Resume the most recent session for this repository. |
+| `--resume` | `-r` | Show an interactive picker to resume a previous session. |
+| `--session ID` | `-s` | Resume a specific session by its ID. |
+| `--version` | | Print the monocle version and exit. |
+
+### Session flags
+
+`--continue`, `--resume`, and `--session` are mutually exclusive — only one may be used at a time.
+
+---
+
+## `monocle register`
+
+Register monocle with an agent. This installs skills into the agent's skill directory and, for Claude Code, the MCP channel config needed for push notifications.
+
+```bash
+monocle register [agent] [--global]
+```
+
+### Arguments
+
+| Argument | Description |
+|----------|-------------|
+| `agent` | The agent to register. One of `claude`, `opencode`, `codex`, `gemini`, or `all`. If omitted, an interactive picker lets you choose. |
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--global` | Write configuration to the user-level config directory instead of the current project directory. |
+
+### Agent config paths
+
+| Agent | Skills directory | MCP config |
+|-------|-----------------|------------|
+| Claude Code | `.claude/skills/` | `.mcp.json` |
+| OpenCode | `.opencode/skills/` | — |
+| Codex CLI | `.codex/skills/` | — |
+| Gemini CLI | `.gemini/skills/` | — |
+
+---
+
+## `monocle unregister`
+
+Remove monocle registration from an agent. This is the inverse of `monocle register`.
+
+```bash
+monocle unregister [agent] [--global]
+```
+
+### Arguments
+
+| Argument | Description |
+|----------|-------------|
+| `agent` | The agent to unregister. One of `claude`, `opencode`, `codex`, `gemini`, or `all`. If omitted, an interactive picker lets you choose. |
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--global` | Remove configuration from the user-level config directory instead of the current project directory. |
+
+---
+
+## `monocle --version`
+
+Print the installed monocle version and exit.
+
+```bash
+monocle --version
+```

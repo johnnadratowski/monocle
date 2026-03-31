@@ -1,0 +1,87 @@
+{
+  "projectType": "cli-tool",
+  "projectName": "monocle",
+  "projectDescription": "A terminal UI that lets you review your AI coding agent's diffs in real time, leave structured line-level comments, and push feedback back to the agent — all without leaving your terminal.",
+  "theme": "luma",
+  "primaryColor": "#dc7454",
+  "lightColor": null,
+  "darkColor": null,
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/review-loop",
+              "concepts/skills",
+              "concepts/push-notifications"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/agent-setup",
+              "guides/plan-review",
+              "guides/review-gating",
+              "guides/sessions"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/config-file",
+              "configuration/keybindings"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "reference/cli",
+              "reference/agent-commands",
+              "reference/keybindings",
+              "reference/troubleshooting"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Real-time diff viewer with unified and split (side-by-side) views",
+    "Line-level and file-level structured comments (issues, suggestions, notes, praise)",
+    "Push notifications via MCP channels (Claude Code) for instant feedback delivery",
+    "Pull-based feedback queue for all other agents (OpenCode, Codex CLI, Gemini CLI)",
+    "Plan & architecture review with markdown rendering and diff between versions",
+    "Review gating with /review-plan-wait to block the agent until you approve",
+    "Pause flow to stop the agent mid-session while you review",
+    "Suggested edits using GitHub-style suggestion blocks",
+    "Visual selection for multi-line comments with vim-style visual mode",
+    "Session persistence via SQLite with submission history",
+    "Configurable keybindings and layout options",
+    "Mouse support for click, scroll, drag, and modal interactions"
+  ],
+  "publicApiSurface": [
+    "monocle — Start a review session (TUI)",
+    "monocle register [agent] [--global] — Install skills and MCP config for an agent",
+    "monocle unregister [agent] [--global] — Remove agent registration",
+    "monocle review status [--json] — Check review status",
+    "monocle review get-feedback [--wait] [--json] — Retrieve pending review feedback",
+    "monocle review send-artifact --title T [--file F] [--id ID] [--type EXT] [--wait] [--json] — Send content for review",
+    "monocle review add-files <paths...> [--json] — Add files to the review session",
+    "monocle --version — Print version",
+    "/get-feedback skill — Agent skill to retrieve pending feedback",
+    "/review-plan skill — Agent skill to submit a plan for review",
+    "/review-plan-wait skill — Agent skill to submit plan and block until approved",
+    "MONOCLE_SOCKET env var — Override the Unix socket path"
+  ]
+}

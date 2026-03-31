@@ -1,0 +1,78 @@
+---
+title: "Keybindings"
+description: "Override any monocle keybinding with your preferred keys."
+---
+
+Monocle lets you remap any action to a key of your choice. Add a `keybindings` object to your [config file](/configuration/config-file) and map action names to key strings.
+
+## How to configure
+
+Add entries to the `keybindings` object in your config file:
+
+```json
+{
+  "keybindings": {
+    "quit": "Q",
+    "submit": "ctrl+s",
+    "scroll_down": "ctrl+j"
+  }
+}
+```
+
+Each key in the object is an action name; the value is the key string to bind. Only include the actions you want to override — unspecified actions keep their defaults.
+
+<Tip>
+  Press `?` in monocle to see the current effective keybindings, including any overrides you've applied.
+</Tip>
+
+## Available actions
+
+| Action | Default key | Description |
+|--------|-------------|-------------|
+| `up` | `k` | Move cursor up |
+| `down` | `j` | Move cursor down |
+| `top` | `g` | Jump to top |
+| `bottom` | `G` | Jump to bottom |
+| `half_up` | `ctrl+u` | Scroll up half a page |
+| `half_down` | `ctrl+d` | Scroll down half a page |
+| `prev_file` | `[` | Go to previous file |
+| `next_file` | `]` | Go to next file |
+| `select` | `enter` | Focus diff pane / toggle directory |
+| `focus_swap` | `tab` | Switch pane focus |
+| `toggle_sidebar` | `\` | Toggle sidebar visibility |
+| `scroll_down` | `J` | Scroll diff down |
+| `scroll_up` | `K` | Scroll diff up |
+| `scroll_left` | `H` | Scroll diff left |
+| `scroll_right` | `L` | Scroll diff right |
+| `scroll_home` | `0` | Scroll to column 0 |
+| `scroll_first_char` | `^` | Scroll to first non-space character |
+| `scroll_end` | `$` | Scroll to end of line |
+| `wrap` | `w` | Toggle line wrapping |
+| `toggle_diff` | `t` | Cycle diff style (unified / split / file) |
+| `tree_mode` | `f` | Toggle flat / tree view |
+| `collapse_all` | `z` | Collapse all tree nodes |
+| `expand_all` | `e` | Expand all tree nodes |
+| `prev_section` | `{` | Go to previous sidebar section |
+| `next_section` | `}` | Go to next sidebar section |
+| `filter_reviewed` | `/` | Cycle sidebar filter (all → unreviewed → reviewed) |
+| `comment` | `c` | Add comment at cursor |
+| `file_comment` | `C` | Add file-level comment |
+| `suggest` | `s` | Suggest edit at cursor |
+| `visual` | `v` | Start visual (multi-line) selection |
+| `reviewed` | `r` | Toggle file reviewed |
+| `submit` | `S` | Submit review |
+| `pause` | `P` | Pause the agent |
+| `clear_review` | `D` | Clear all comments, plans, and reviewed states |
+| `dismiss_outdated` | — | Dismiss outdated comments |
+| `toggle_focus_mode` | `F` | Toggle focus mode (hide sidebar, enable wrap) |
+| `open_in_editor` | `ctrl+g` | Open current text in `$VISUAL`/`$EDITOR` |
+| `base_ref` | `b` | Change base ref |
+| `cycle_layout` | `T` | Cycle layout (auto / side-by-side / stacked) |
+| `refresh` | `R` | Force reload files |
+| `help` | `?` | Show keybindings overlay |
+| `quit` | `q` | Quit monocle |
+| `command_mode` | `:` | Enter command mode |
+
+<Note>
+  Modal keys — Enter, Esc, and Tab inside overlays — are not configurable.
+</Note>

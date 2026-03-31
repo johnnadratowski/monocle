@@ -1,0 +1,95 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "name": "o_(◉) monocle",
+  "theme": "luma",
+  "favicon": "/images/logo-mark.svg",
+  "colors": {
+    "primary": "#89b4fa",
+    "light": "#b4befe",
+    "dark": "#1e1e2e"
+  },
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/josephschmitt/monocle"
+    }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/review-loop",
+              "concepts/skills",
+              "concepts/push-notifications"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/agent-setup",
+              "guides/plan-review",
+              "guides/review-gating",
+              "guides/sessions"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/config-file",
+              "configuration/keybindings"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "reference/cli",
+              "reference/agent-commands",
+              "reference/keybindings",
+              "reference/troubleshooting"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "appearance": {
+    "strict": true,
+    "default": "dark"
+  },
+  "background": {
+    "color": {
+      "light": "#cdd6f4",
+      "dark": "#11111b"
+    }
+  },
+  "fonts": {
+    "family": "Plus Jakarta Sans",
+    "weight": 400,
+    "source": "https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap",
+    "format": "woff2",
+    "heading": {
+      "family": "Instrument Serif",
+      "weight": 600
+    },
+    "body": {
+      "family": "Plus Jakarta Sans",
+      "weight": 400
+    }
+  },
+  "styling": {
+    "codeblocks": "dark"
+  },
+  "description": "Review your AI agent's code as it writes it. Leave comments on diffs, submit structured feedback, and watch the agent fix things in real time — all from your terminal."
+}

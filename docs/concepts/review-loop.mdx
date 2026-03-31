@@ -1,0 +1,102 @@
+---
+title: "Review Loop"
+description: "Understand how monocle's review loop works between you and your AI agent."
+---
+
+The review loop is the core interaction pattern in monocle: your agent writes code, you review the diffs, leave comments, submit, and the agent addresses your feedback. Then you do it again — iterating until you're satisfied.
+
+## Architecture
+
+Monocle connects to your agent over a Unix socket. For Claude Code, a lightweight MCP server (`channel.ts`) sits in between and enables push notifications:
+
+```
+Agent <--stdio/MCP--> channel.ts (MCP server) <---socket---> monocle (TUI)
+```
+
+For all other agents, the connection goes directly over the socket, and feedback is retrieved on demand via the `/get-feedback` skill or `monocle review get-feedback`.
+
+## How the loop works
+
+<Steps>
+  <Step title="Agent writes code">
+    Your agent works in its own terminal, making file changes as it goes. Monocle watches the working directory and shows updated diffs as files change.
+  </Step>
+  <Step title="You review the diffs">
+    Navigate the file list in the sidebar with `j`/`k`, select a file, and inspect the diff. Add comments at any point — you don't need to wait for the agent to finish.
+  </Step>
+  <Step title="Leave comments">
+    Press `c` on a diff line to add a line-level comment. Press `C` to add a file-level comment. Use `v` to enter visual mode and select a range of lines before commenting. Press `Tab` in the comment editor to cycle through comment types.
+  </Step>
+  <Step title="Submit your review">
+    Press `S` to open the submit modal. Your review is formatted and queued for delivery. The agent picks it up and starts addressing each comment.
+  </Step>
+  <Step title="Iterate">
+    After the agent makes changes, the diffs update in your TUI. Review again, leave new comments if needed, and submit. Repeat until you're satisfied.
+  </Step>
+</Steps>
+
+## Diff viewer modes
+
+Press `t` (or `T` for layout) to cycle between display modes. You can also set your preferred default in [config](/configuration/config-file).
+
+| Mode | Description |
+|------|-------------|
+| **Unified** | Added and removed lines interleaved in a single column. Best for most terminals. |
+| **Split** | Side-by-side view with old content on the left and new on the right. Best on wide terminals. |
+| **File** | Shows raw file content without diff markers. Useful for reading context. |
+
+<Tip>
+  Use `w` to toggle line wrapping for wide diffs, and `h`/`l` to scroll horizontally without wrapping.
+</Tip>
+
+## Comment types
+
+When you add a comment, press `Tab` in the comment editor to cycle through these types:
+
+| Type | Use for |
+|------|---------|
+| **Issue** | Problems that need to be fixed before you approve |
+| **Suggestion** | Improvements that would be nice but aren't blockers |
+| **Note** | Observations, context, or questions |
+| **Praise** | Things the agent did well |
+
+### Line-level vs file-level comments
+
+- **Line-level** (`c`): Attached to a specific diff line. Press `s` instead to pre-fill a `suggestion` block with the existing code, ready for you to propose an exact edit.
+- **Visual selection** (`v`): Enter visual mode to select a range of lines, then press `c` to attach a comment spanning the entire selection.
+- **File-level** (`C`): Attached to the file as a whole, not a specific line. Use for high-level feedback about a file's structure or approach.
+
+<Note>
+  You can mark a comment as resolved with `x`. Resolved comments are excluded from submitted reviews. To delete a comment entirely, press `d` while on a comment line.
+</Note>
+
+## The feedback queue
+
+When you submit a review, monocle doesn't send it directly — it queues it for reliable delivery. This means:
+
+- You can submit a review even if your agent is busy working on something else.
+- Multiple reviews can accumulate in the queue. When the agent next retrieves feedback, it receives all queued reviews combined.
+- If the agent disconnects and reconnects, queued reviews are still waiting.
+
+How the agent learns about queued feedback depends on your setup. See [Push Notifications](/concepts/push-notifications) for details.
+
+## The submit flow
+
+Press `S` to open the submit modal. From here:
+
+- **Submit**: Formats your comments into a structured review and queues it for delivery. All reviewed states reset so you can start fresh on the next round.
+- **Copy to clipboard**: Toggle the checkbox with `Shift+Tab` to also copy the formatted review to your clipboard when submitting.
+- **Yank without submitting**: Press `Ctrl+y` in the submit modal to copy the formatted review to your clipboard and close the modal without queuing it.
+- **External editor**: Press `Ctrl+g` in the submit modal (or any comment modal) to open the current text in your `$VISUAL` or `$EDITOR`. Edit, save, and quit — the text comes back into monocle.
+
+### Approval
+
+If you submit a review with no comments, monocle treats it as an approval. The agent receives an approval signal and knows it can proceed.
+
+## Pausing the agent
+
+If you want the agent to stop and wait while you finish reviewing, press `P`. The agent receives a pause notification and blocks on `monocle review get-feedback --wait` until you submit your review.
+
+<Note>
+  Pause requires MCP channel support and is currently only available with Claude Code.
+</Note>

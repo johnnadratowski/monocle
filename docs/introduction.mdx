@@ -1,0 +1,63 @@
+---
+title: "Introduction"
+description: "monocle is a terminal-based code review companion for AI coding agents."
+---
+
+monocle is a TUI (terminal UI) that runs alongside your AI coding agent. As the agent writes code, you review diffs in real time, leave line-level comments, and submit structured feedback in one batch. The agent receives your review and starts fixing things immediately — just like a pull request review, but live.
+
+## The problem
+
+Without a tool like monocle, reviewing agent-written code means rubber-stamping diffs you didn't read, copy-pasting feedback into a chat window, or just hoping the agent got it right. There's no way to say "fix these three issues and show me again."
+
+monocle gives you a proper review loop without slowing the agent down. It doesn't gate each file change behind an approval — your agent keeps working while you review at your own pace. When you're ready, leave line-level comments and submit. You see the updated diffs, review again, and iterate.
+
+## Supported agents
+
+monocle works with any coding agent that supports [agent skills](https://agentskills.io) or can call CLI commands:
+
+- [Claude Code](https://claude.com/claude-code)
+- [OpenCode](https://opencode.ai)
+- [Codex CLI](https://github.com/openai/codex)
+- [Gemini CLI](https://github.com/google/gemini-cli)
+
+## Key capabilities
+
+<CardGroup cols={2}>
+  <Card title="Real-time diff review" icon="eye">
+    Watch diffs appear as your agent writes code. Unified and split views with syntax highlighting and intra-line diffs.
+  </Card>
+  <Card title="Line-level comments" icon="message-square">
+    Tag feedback as issues, suggestions, notes, or praise — at the line or file level. Propose exact code changes with suggestion blocks.
+  </Card>
+  <Card title="Structured review submission" icon="send">
+    Submit all comments in one batch. Your agent receives the formatted review immediately and starts addressing your feedback.
+  </Card>
+  <Card title="Plan and architecture review" icon="file-text">
+    Review your agent's plans and architecture decisions before it writes code, not just the output.
+  </Card>
+  <Card title="Push notifications" icon="bell">
+    With Claude Code and MCP channels, feedback is pushed directly into the agent's context the moment you submit.
+  </Card>
+  <Card title="Review gating" icon="lock">
+    Block the agent until you approve submitted content using the `/review-plan-wait` skill.
+  </Card>
+</CardGroup>
+
+## How it works
+
+1. Your agent writes code — monocle shows you the diffs in real time.
+2. You navigate with `j`/`k`, add comments with `c`, and submit with `S`.
+3. monocle queues your review for delivery.
+4. The agent picks up your feedback — immediately via push notification (Claude Code with MCP channels) or on the next poll — and starts making fixes.
+5. You see the updated diffs, review again, and iterate.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install monocle via Homebrew or pre-built binaries.
+  </Card>
+  <Card title="Quick start" icon="rocket" href="/quickstart">
+    Register monocle with your agent and start your first review session.
+  </Card>
+</CardGroup>

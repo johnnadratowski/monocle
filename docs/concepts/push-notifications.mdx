@@ -1,0 +1,84 @@
+---
+title: "Push Notifications"
+description: "How monocle delivers your review feedback to your AI agent."
+---
+
+Monocle always queues your reviews for reliability. How the agent learns about queued feedback depends on the integration: Claude Code can receive push notifications the moment you submit, while all other agents retrieve feedback on demand.
+
+## Push notifications (Claude Code only)
+
+When you submit a review, monocle sends a push notification through the MCP channel immediately. The notification includes a brief summary — for example, "Your reviewer requested changes — 2 issues, 1 suggestion" — and prompts Claude Code to call `/get-feedback` to retrieve the full review.
+
+This means the agent doesn't need to poll or wait for its next natural checkpoint. Feedback arrives the moment you press `S`.
+
+### Requirements
+
+Push notifications require:
+
+- A JavaScript runtime: [Bun](https://bun.sh), [Deno](https://deno.com), or [Node.js](https://nodejs.org)
+- Claude Code with MCP channel support
+- Monocle registered with Claude Code (`monocle register claude`)
+
+### Starting Claude Code with channels
+
+Launch Claude Code with the MCP channel flag to enable push notifications:
+
+```bash
+claude --dangerously-load-development-channels plugin:monocle@monocle
+```
+
+<Note>
+  The `--dangerously-load-development-channels` flag is required during the [channels research preview](https://code.claude.com/docs/en/channels-reference).
+</Note>
+
+<Tip>
+  If you start or restart monocle while Claude Code is already running, the MCP channel may need to reconnect. Type `/mcp` in Claude Code and select monocle to reconnect.
+</Tip>
+
+### What happens when push fails silently
+
+If Claude Code is running without channels enabled, push notifications fail silently. Your review stays in the queue and the agent will retrieve it the next time it calls `/get-feedback` — nothing is lost.
+
+## Pull-based feedback (all agents)
+
+All agents can retrieve feedback by running `/get-feedback` (via the skill) or `monocle review get-feedback` directly. This works regardless of whether push notifications are enabled.
+
+Key behaviors:
+
+- Multiple reviews accumulate in the queue between fetches. When the agent retrieves feedback, it receives all queued reviews combined in one delivery.
+- The agent can call this at any point in its workflow, or you can ask it to check.
+- With Claude Code and channels, this call happens automatically after a push notification. Without channels, the agent uses the skill on its own schedule.
+
+<CardGroup cols={2}>
+  <Card title="Push (Claude Code)" icon="bolt">
+    You submit → push notification → agent calls `/get-feedback` immediately.
+  </Card>
+  <Card title="Pull (all agents)" icon="rotate">
+    You submit → review queues → agent calls `/get-feedback` when ready.
+  </Card>
+</CardGroup>
+
+## The pause flow
+
+The pause flow lets you stop the agent and make it wait for your review before proceeding. Press `P` in the TUI to trigger it.
+
+<Steps>
+  <Step title="Press P in monocle">
+    The agent receives a push notification telling it to pause.
+  </Step>
+  <Step title="Agent blocks">
+    The agent runs `monocle review get-feedback --wait`, which blocks until you submit a review.
+  </Step>
+  <Step title="You review and submit">
+    Take your time reviewing the current diffs. Add comments, then press `S` to submit.
+  </Step>
+  <Step title="Agent continues">
+    The `--wait` call unblocks, the agent receives your feedback, and proceeds.
+  </Step>
+</Steps>
+
+<Warning>
+  Pause requires MCP channel support and is currently only available with Claude Code. Pressing `P` with other agents has no effect.
+</Warning>
+
+This is useful when the agent is moving quickly and you want to ensure it reviews your feedback before moving on to the next task.

@@ -1,0 +1,88 @@
+---
+title: "Quick Start"
+description: "Get monocle running alongside your AI coding agent in minutes."
+---
+
+<Steps>
+  <Step title="Install monocle">
+    Follow the [installation guide](/installation) to install monocle via Homebrew or a pre-built binary.
+  </Step>
+
+  <Step title="Register monocle with your agent">
+    Run `monocle register` from your project directory to install the skills your agent needs to interact with monocle:
+
+    ```bash
+    monocle register          # interactive picker
+    monocle register claude   # or: opencode, codex, gemini, all
+    ```
+
+    The interactive picker lets you select which agents to register. Pass a named agent — `claude`, `opencode`, `codex`, `gemini`, or `all` — to skip the picker. Use `--global` to write to your user-level config directory instead of the current project.
+
+    This installs skills into the agent-specific directory for your project and, for Claude Code, also writes the MCP channel config to `.mcp.json` for push notifications.
+
+    | Agent | Skills directory | MCP config |
+    |---|---|---|
+    | Claude Code | `.claude/skills/` | `.mcp.json` |
+    | OpenCode | `.opencode/skills/` | — |
+    | Codex CLI | `.codex/skills/` | — |
+    | Gemini CLI | `.gemini/skills/` | — |
+  </Step>
+
+  <Step title="Start monocle">
+    Open a separate terminal in your project directory and run:
+
+    ```bash
+    monocle
+    ```
+
+    Keep this terminal open alongside the terminal where your agent is running. monocle connects to your agent automatically using Unix sockets.
+  </Step>
+
+  <Step title="Review your agent's code">
+    As your agent writes code, diffs appear in the monocle TUI. Use the following keys to review:
+
+    - `j` / `k` — move up and down through the file list and diff
+    - `c` — add a comment at the cursor (tag it as an issue, suggestion, note, or praise)
+    - `v` — start a visual selection for multi-line comments
+    - `S` — submit your review
+
+    When you submit, monocle formats your comments and queues the review for delivery. The agent receives your feedback and starts addressing it. You see the updated diffs, review again, and iterate.
+
+    <Tip>
+      Press `?` at any time to see the full list of keybindings.
+    </Tip>
+  </Step>
+
+  <Step title="Enable push notifications (Claude Code only)">
+    By default, your agent retrieves feedback by running `/get-feedback` on its own. With Claude Code and MCP channels, monocle can push feedback directly into the agent's context the moment you submit.
+
+    To enable push notifications, start Claude Code with the channel flag:
+
+    ```bash
+    claude --dangerously-load-development-channels plugin:monocle@monocle
+    ```
+
+    <Note>
+      The `--dangerously-load-development-channels` flag is required because MCP channel support is currently in a research preview. See the [Claude Code channels reference](https://code.claude.com/docs/en/channels-reference) for details.
+    </Note>
+
+    If you start or restart monocle while Claude Code is already running, the MCP channel may need to reconnect. Type `/mcp` in Claude Code and select monocle to reconnect.
+  </Step>
+</Steps>
+
+## What happens when you submit
+
+When you press `S`:
+
+1. monocle formats your comments into a structured review and queues it for delivery.
+2. **Claude Code with MCP channels** — a push notification prompts the agent to retrieve your feedback immediately.
+3. **Other agents** — the review waits in the queue until the agent runs `/get-feedback` or calls `monocle review get-feedback`. Multiple reviews accumulate and are delivered together.
+4. If there are no comments, the review is treated as an approval.
+
+## Pause the agent
+
+If you want the agent to stop and wait while you review, press `P`. The agent receives a pause notification and blocks until you submit your review.
+
+<Note>
+  Pause requires MCP channel support and is currently available for Claude Code only.
+</Note>

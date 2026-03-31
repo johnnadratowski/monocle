@@ -1,0 +1,53 @@
+---
+title: "monocle"
+description: "Review your AI agent's code as it writes it. Leave comments on diffs, submit structured feedback, and watch the agent fix things in real time — all from your terminal."
+---
+
+monocle is a terminal UI that runs alongside your AI coding agent. You review diffs in real time as the agent writes code, leave line-level comments, and submit a structured review in one batch. The agent receives your feedback and starts fixing things immediately — like a PR review, but live.
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install monocle via Homebrew or download a pre-built binary for macOS or Linux.
+  </Card>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Register monocle with your agent and start your first review session in minutes.
+  </Card>
+  <Card title="Agent Setup" icon="robot" href="/guides/agent-setup">
+    Connect monocle to Claude Code, OpenCode, Codex CLI, or Gemini CLI.
+  </Card>
+  <Card title="Configuration" icon="sliders" href="/configuration/config-file">
+    Customize layouts, diff styles, keybindings, and review formatting.
+  </Card>
+</CardGroup>
+
+## How it works
+
+<Steps>
+  <Step title="Install monocle">
+    Download monocle and install it on your system with a single command.
+  </Step>
+  <Step title="Register with your agent">
+    Run `monocle register` to install skills and (for Claude Code) the MCP channel config.
+  </Step>
+  <Step title="Start reviewing">
+    Run `monocle` in a separate terminal alongside your agent. Review diffs as they appear, leave comments, and submit.
+  </Step>
+  <Step title="Agent fixes your feedback">
+    Your agent receives the review and addresses each comment. You see the updated diffs and can iterate.
+  </Step>
+</Steps>
+
+## Supported agents
+
+monocle works with any agent that supports [agent skills](https://agentskills.io), with enhanced push notification support for Claude Code.
+
+| Agent | Skills | Push notifications |
+|-------|--------|-------------------|
+| Claude Code | Yes | Yes (via MCP channels) |
+| OpenCode | Yes | No (pull-based) |
+| Codex CLI | Yes | No (pull-based) |
+| Gemini CLI | Yes | No (pull-based) |
+
+<Note>
+  Push notifications require a JavaScript runtime (Bun, Deno, or Node.js) and are currently only supported with Claude Code via MCP channels.
+</Note>

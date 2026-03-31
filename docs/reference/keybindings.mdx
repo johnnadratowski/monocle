@@ -1,0 +1,98 @@
+---
+title: "Keybindings"
+description: "Complete keyboard shortcut reference for monocle."
+---
+
+<Tip>
+  Press `?` inside monocle to see the current effective keybindings, including any custom overrides you have configured.
+</Tip>
+
+## Navigation
+
+| Key | Action |
+|-----|--------|
+| `j` / `k` | Move up / down |
+| `J` / `K` | Scroll diff up / down (any pane) |
+| `Ctrl+d` / `Ctrl+u` | Scroll diff half page (any pane) |
+| `g` / `G` | Jump to top / bottom |
+| `h` / `l` | Scroll diff left / right |
+| `H` / `L` | Scroll diff left / right (any pane) |
+| `0` | Scroll to column 0 (any pane) |
+| `^` | Scroll to first non-space character (any pane) |
+| `$` | Scroll to end of line (any pane) |
+| `[` / `]` | Previous / next file (any pane) |
+| `{` / `}` | Previous / next sidebar section (any pane) |
+
+## View and layout
+
+| Key | Action |
+|-----|--------|
+| `Enter` | Focus the diff pane / toggle directory open |
+| `Tab` | Switch pane focus |
+| `\` | Toggle sidebar visibility |
+| `1` / `2` | Jump directly to pane 1 or 2 |
+| `w` | Toggle line wrapping (any pane) |
+| `f` | Toggle flat / tree view |
+| `z` / `e` | Collapse all / expand all (tree view) |
+| `t` | Cycle diff style: unified → split → file (any pane) |
+| `T` | Cycle layout: auto → side-by-side → stacked |
+| `F` | Toggle focus mode (hides sidebar and enables line wrapping) |
+| `R` | Force reload files |
+
+## Commenting
+
+| Key | Action |
+|-----|--------|
+| `c` | Add a comment at the cursor line (opens editor on an existing comment) |
+| `s` | Suggest an edit at the cursor (pre-fills a `suggestion` block) |
+| `C` | Add a file-level comment |
+| `v` | Enter visual select mode for multi-line comments |
+| `x` | Toggle a comment resolved / unresolved (when on a comment line) |
+| `d` | Delete a comment (when on a comment line) |
+
+## Review actions
+
+| Key | Action |
+|-----|--------|
+| `b` | Change the base ref |
+| `r` | Toggle the current file as reviewed (auto-advances to the next unreviewed file) |
+| `/` | Cycle the sidebar filter: all → unreviewed → reviewed |
+| `S` / `:submit` | Submit your review |
+| `Ctrl+g` | Open the current text in your `$VISUAL` / `$EDITOR` (comment or submit modal) |
+| `Ctrl+y` | Copy the formatted review to the clipboard without submitting |
+| `P` / `:pause` | Send a pause notification to the agent (requires MCP channel support) |
+| `D` / `:clear` | Clear the review: removes all comments, plans, and reviewed states |
+
+## Commands
+
+| Key | Action |
+|-----|--------|
+| `:mark-all-reviewed` | Mark every file in the session as reviewed |
+| `:mark-all-unreviewed` | Mark every file in the session as unreviewed |
+| `:discard` | Discard all pending (unsaved) comments |
+| `:history` | View past review submissions |
+| `I` | Show connection info: socket path and subscriber count |
+| `?` | Show all keybindings |
+
+## Comment editor
+
+The comment editor uses standard Emacs-style shortcuts.
+
+| Key | Action |
+|-----|--------|
+| `←` / `→` or `Ctrl+B` / `Ctrl+F` | Move cursor left / right |
+| `↑` / `↓` or `Ctrl+P` / `Ctrl+N` | Move cursor up / down (multiline) |
+| `Home` / `Ctrl+A` | Jump to first non-whitespace, then to start of line |
+| `End` / `Ctrl+E` | Jump to end of line |
+| `Ctrl+D` or `Delete` | Delete character at cursor |
+| `Ctrl+K` | Kill (delete) to end of line |
+| `Ctrl+U` | Kill (delete) to start of line |
+| `Ctrl+W` or `Alt+Backspace` | Delete word before cursor |
+| `Alt+D` | Delete word after cursor |
+| `Alt+←` or `Alt+B` | Move cursor back one word |
+| `Alt+→` or `Alt+F` | Move cursor forward one word |
+| `Shift+Enter` or `Alt+Enter` | Insert a newline |
+| `Ctrl+G` | Open in external editor (`$VISUAL` / `$EDITOR`) |
+| `Tab` | Cycle comment type (issue, suggestion, note, praise) |
+| `Enter` | Save the comment |
+| `Esc` | Cancel without saving |

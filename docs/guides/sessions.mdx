@@ -1,0 +1,90 @@
+---
+title: "Sessions"
+description: "Manage review sessions, track files, and persist your work across restarts."
+---
+
+A monocle session holds your comments, plans, and reviewed states for a given working directory. Sessions are stored on disk, so your work survives restarts.
+
+## Starting a session
+
+```bash
+monocle                        # start a new session
+monocle --continue             # resume the most recent session
+monocle --resume               # open a picker to choose a previous session
+monocle --session <ID>         # resume a specific session by ID
+```
+
+## Adding files to review
+
+By default, monocle reviews the git diff in your working directory. To include files outside the diff — or files from other paths — you can add them explicitly.
+
+**At startup**, use `--additional-path` (repeatable):
+
+```bash
+monocle --additional-path ./docs --additional-path ./scripts
+```
+
+**While running**, use the agent-facing command:
+
+```bash
+monocle review add-files <paths...>
+```
+
+Your agent can also call this via a skill to add files mid-session.
+
+## Tracking review progress
+
+Mark a file as reviewed by pressing `r` when it's selected. monocle automatically advances to the next unreviewed file.
+
+Filter the sidebar with `/` to cycle through views:
+
+- **All** — every file in the session
+- **Unreviewed** — only files you haven't marked reviewed
+- **Reviewed** — only files you've already reviewed
+
+To mark every file at once, use the command palette:
+
+- `:mark-all-reviewed` — mark all files as reviewed
+- `:mark-all-unreviewed` — mark all files as unreviewed
+
+Reviewed states reset automatically when you submit a review.
+
+## Submission history
+
+To see past review submissions for the current session, run:
+
+```
+:history
+```
+
+This opens a list of previous submissions with their comments and timestamps.
+
+## Clearing a review
+
+To remove all comments, plans, and reviewed states from the current session, press `D` or run:
+
+```
+:clear
+```
+
+This is useful when you want to start fresh after a major round of changes.
+
+## Connection info and troubleshooting
+
+Press `I` in the TUI to see the current socket path and subscriber count — useful for confirming your agent is connected.
+
+If monocle and your agent are running in different working directories, auto-pairing may fail. Override the socket path manually:
+
+**Start monocle with a specific socket:**
+
+```bash
+monocle --socket /tmp/monocle-abc123.sock
+```
+
+**Point agent commands at the same socket:**
+
+```bash
+MONOCLE_SOCKET=/tmp/monocle-abc123.sock monocle review status
+```
+
+For Claude Code's MCP channel, set `MONOCLE_SOCKET` in the `env` section of your `.mcp.json`.
