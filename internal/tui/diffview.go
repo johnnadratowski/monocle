@@ -1840,44 +1840,6 @@ func (m diffViewModel) nextSelectable(from, dir int) int {
 	return next
 }
 
-// jumpToNextComment moves the cursor to the next comment line, wrapping to the first comment at the end.
-func (m *diffViewModel) jumpToNextComment() {
-	for i := m.cursor + 1; i < len(m.lines); i++ {
-		if m.lines[i].isComment {
-			m.cursor = i
-			m.ensureVisible()
-			return
-		}
-	}
-	// Wrap: search from the beginning up to cursor.
-	for i := 0; i <= m.cursor; i++ {
-		if m.lines[i].isComment {
-			m.cursor = i
-			m.ensureVisible()
-			return
-		}
-	}
-}
-
-// jumpToPrevComment moves the cursor to the previous comment line, wrapping to the last comment at the top.
-func (m *diffViewModel) jumpToPrevComment() {
-	for i := m.cursor - 1; i >= 0; i-- {
-		if m.lines[i].isComment {
-			m.cursor = i
-			m.ensureVisible()
-			return
-		}
-	}
-	// Wrap: search from the end down to cursor.
-	for i := len(m.lines) - 1; i >= m.cursor; i-- {
-		if m.lines[i].isComment {
-			m.cursor = i
-			m.ensureVisible()
-			return
-		}
-	}
-}
-
 // nearestSelectable finds the closest selectable line from pos, preferring the given direction.
 func (m diffViewModel) nearestSelectable(pos, dir int) int {
 	if pos < 0 {

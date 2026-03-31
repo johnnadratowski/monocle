@@ -99,7 +99,7 @@ func (m helpModel) View() string {
 			{Label(km.ScrollEnd), "Scroll to line end (any pane)"},
 			{Label(km.Wrap), "Toggle line wrapping (any pane)"},
 			{Label(km.PrevFile) + "/" + Label(km.NextFile), "Previous/next file (any pane)"},
-			{Label(km.PrevSection) + "/" + Label(km.NextSection), "Previous/next section; comment in viewer"},
+			{Label(km.PrevSection) + "/" + Label(km.NextSection), "Previous/next section (any pane)"},
 			{Label(km.Select), "Focus diff pane / toggle dir"},
 			{Label(km.FocusSwap), "Switch pane focus"},
 			{Label(km.ToggleSidebar), "Toggle sidebar"},
