@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Monocle | The Terminal UI for AI Coding Agents</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Manrope:wght@300;400;500;600;700&amp;family=Inter:wght@300;400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "secondary-fixed": "#eedbff",
+              "surface-container-lowest": "#0d0d1c",
+              "inverse-on-surface": "#2f2f40",
+              "tertiary-fixed-dim": "#87d5c8",
+              "surface-tint": "#a8c8ff",
+              "secondary-container": "#593981",
+              "on-error": "#690005",
+              "error-container": "#93000a",
+              "on-secondary": "#3f1e66",
+              "primary": "#b5cfff",
+              "inverse-surface": "#e3e0f7",
+              "tertiary": "#8edccf",
+              "surface-container-high": "#292839",
+              "on-background": "#e3e0f7",
+              "on-primary": "#003062",
+              "on-tertiary-container": "#004e46",
+              "on-tertiary": "#003731",
+              "surface-dim": "#121221",
+              "surface-bright": "#383849",
+              "tertiary-container": "#73c0b4",
+              "on-surface-variant": "#c3c6d2",
+              "inverse-primary": "#305f9f",
+              "secondary-fixed-dim": "#d9b9ff",
+              "secondary": "#d9b9ff",
+              "surface-container-highest": "#333344",
+              "on-primary-container": "#094583",
+              "surface": "#121221",
+              "on-secondary-fixed-variant": "#57377f",
+              "error": "#ffb4ab",
+              "outline-variant": "#424750",
+              "on-tertiary-fixed": "#00201c",
+              "outline": "#8d919b",
+              "primary-fixed-dim": "#a8c8ff",
+              "primary-container": "#89b4fa",
+              "primary-fixed": "#d5e3ff",
+              "on-tertiary-fixed-variant": "#005048",
+              "surface-variant": "#333344",
+              "on-secondary-fixed": "#290350",
+              "on-surface": "#e3e0f7",
+              "surface-container": "#1e1e2e",
+              "surface-container-low": "#1a1a2a",
+              "on-error-container": "#ffdad6",
+              "on-primary-fixed-variant": "#0e4685",
+              "on-secondary-container": "#cda8fa",
+              "background": "#121221",
+              "tertiary-fixed": "#a3f1e4",
+              "on-primary-fixed": "#001b3c"
+            },
+            fontFamily: {
+              "headline": ["Space Grotesk"],
+              "body": ["Manrope"],
+              "label": ["Inter"],
+              "mono": ["JetBrains Mono"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+      .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      }
+      body {
+        background-color: #121221;
+        color: #e3e0f7;
+        font-family: 'Manrope', sans-serif;
+      }
+      .glass-card {
+        background: rgba(51, 51, 68, 0.7);
+        backdrop-filter: blur(20px);
+      }
+      .mono-gradient {
+        background: linear-gradient(135deg, #b5cfff 0%, #89b4fa 100%);
+      }
+    </style>
+</head>
+<body class="selection:bg-primary/30 selection:text-primary">
+<!-- TopNavBar -->
+<nav class="fixed top-0 w-full z-50 bg-[#121221]/80 backdrop-blur-xl shadow-2xl shadow-[#0d0d1c]/50">
+<div class="flex justify-between items-center px-8 py-4 max-w-7xl mx-auto">
+<div class="flex items-center">
+<span class="text-2xl font-bold tracking-tight text-[#b5cfff] font-mono select-none">o_(◉) monocle</span>
+</div>
+<div class="hidden md:flex items-center gap-8">
+<a class="font-['Space_Grotesk'] font-medium tracking-tight text-[#b5cfff] border-b-2 border-[#b5cfff] pb-1" href="#">Features</a>
+<a class="font-['Space_Grotesk'] font-medium tracking-tight text-[#c3c6d2] hover:text-[#e3e0f7] transition-colors" href="#">How it works</a>
+<a class="font-['Space_Grotesk'] font-medium tracking-tight text-[#c3c6d2] hover:text-[#e3e0f7] transition-colors" href="#">Pricing</a>
+<a class="font-['Space_Grotesk'] font-medium tracking-tight text-[#c3c6d2] hover:text-[#e3e0f7] transition-colors" href="#">Docs</a>
+</div>
+<div class="flex items-center gap-4">
+<button class="px-6 py-2.5 rounded-xl mono-gradient text-on-primary font-semibold font-['Space_Grotesk'] active:scale-95 transition-all duration-200 shadow-lg shadow-primary/20">
+                    Get Started
+                </button>
+</div>
+</div>
+</nav>
+<main class="pt-24">
+<!-- Hero Section -->
+<section class="relative px-8 pt-20 pb-32 overflow-hidden">
+<div class="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+<div class="relative z-10">
+<div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-surface-container-high border border-outline-variant/20 mb-6">
+<span class="w-2 h-2 rounded-full bg-tertiary animate-pulse"></span>
+<span class="text-xs font-mono text-tertiary tracking-widest uppercase">Now in Beta v0.8.2</span>
+</div>
+<h1 class="text-5xl md:text-7xl font-headline font-bold text-on-surface leading-[1.1] tracking-tight mb-8">
+                        Review AI agent code <span class="text-transparent bg-clip-text mono-gradient">as it writes</span>
+</h1>
+<p class="text-lg md:text-xl text-on-surface-variant leading-relaxed mb-10 max-w-xl">
+                        Review your AI agent’s code as it writes it. Leave line-level comments on diffs, submit structured feedback, and watch the agent fix things in real time — all from your terminal.
+                    </p>
+<div class="flex flex-wrap gap-4">
+<button class="px-8 py-4 rounded-xl mono-gradient text-on-primary font-bold font-headline text-lg hover:shadow-2xl hover:shadow-primary/30 transition-all active:scale-95">
+                            Get Started Free
+                        </button>
+<button class="px-8 py-4 rounded-xl bg-surface-container-highest text-on-surface font-bold font-headline text-lg hover:bg-surface-bright transition-all flex items-center gap-3 active:scale-95">
+<span class="material-symbols-outlined">grade</span>
+                            Star on GitHub
+                        </button>
+</div>
+</div>
+<div class="relative group">
+<div class="absolute -inset-4 bg-primary/10 rounded-3xl blur-3xl group-hover:bg-primary/20 transition-all duration-700"></div>
+<div class="relative bg-surface-container-lowest rounded-2xl border border-outline-variant/30 overflow-hidden shadow-2xl">
+<!-- Terminal Header -->
+<div class="flex items-center justify-between px-4 py-3 bg-surface-container-low border-b border-outline-variant/10">
+<div class="flex gap-2">
+<div class="w-3 h-3 rounded-full bg-error/40"></div>
+<div class="w-3 h-3 rounded-full bg-yellow/40"></div>
+<div class="w-3 h-3 rounded-full bg-tertiary/40"></div>
+</div>
+<div class="text-xs font-mono text-on-surface-variant/50">monocle — agent-session-42</div>
+<div class="w-8"></div>
+</div>
+<!-- Terminal Content -->
+<div class="p-6 font-mono text-sm leading-relaxed overflow-hidden aspect-video">
+<div class="flex gap-4">
+<span class="text-on-surface-variant/30 italic">01</span>
+<span class="text-[#f9e2af]">import</span> <span class="text-[#89b4fa]">{</span> curator <span class="text-[#89b4fa]">}</span> <span class="text-[#f9e2af]">from</span> <span class="text-[#a6e3a1]">"@monocle/core"</span><span class="text-[#89b4fa]">;</span>
+</div>
+<div class="flex gap-4 bg-tertiary/10 border-l-4 border-tertiary -mx-6 px-6 py-0.5">
+<span class="text-tertiary/50">+02</span>
+<span class="text-tertiary">const agent = await curator.spawn("coder-v4");</span>
+</div>
+<div class="flex gap-4">
+<span class="text-on-surface-variant/30 italic">03</span>
+<span> </span>
+</div>
+<div class="flex gap-4">
+<span class="text-on-surface-variant/30 italic">04</span>
+<span class="text-[#f9e2af]">async function</span> <span class="text-[#89b4fa]">main</span><span class="text-[#89b4fa]">() {</span>
+</div>
+<div class="mt-4 p-3 bg-surface-container-high rounded-lg border border-primary/20 flex gap-3 items-start">
+<span class="material-symbols-outlined text-primary text-sm mt-0.5">comment</span>
+<div>
+<p class="text-xs text-primary font-bold mb-1">Curator Suggestion:</p>
+<p class="text-xs text-on-surface-variant">The agent is attempting to refactor `auth.ts`. Allow this change?</p>
+<div class="flex gap-2 mt-2">
+<button class="px-2 py-1 bg-primary/20 text-primary text-[10px] rounded uppercase font-bold tracking-wider">Approve</button>
+<button class="px-2 py-1 bg-error/20 text-error text-[10px] rounded uppercase font-bold tracking-wider">Reject</button>
+</div>
+</div>
+</div>
+</div>
+<img class="hidden" data-alt="close up high resolution screenshot of a dark terminal coding interface with syntax highlighting in catppuccin mocha theme colors with subtle glow effects" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAk4ZXdAuE3_-8ilqYXll4Y8zhuNOSHpBIJhWRS4_stRLCJyIOnP6UxTzrB5DXBmhQExU6PUo11aNCXQTGuVJ2OnwEIk-nV4AjCo8VSxOFkozjzbMlwOXqadWI3y63KO1saHVU4Yl0FJBqg76V0NO39E49Cm_TF0oOT53rCmgkCG3DdgO5M59JwfCM4fIg9-JVzDebUmxazXZibsETfM4SbkmkNdH-jnlZnroF4Nke46SJP7kHTCr7UHTRNFLU0uxzePoeOfmDxhhiK"/>
+</div>
+</div>
+</div>
+</section>
+<!-- Feature Grid -->
+<section class="py-24 bg-surface-container-lowest">
+<div class="max-w-7xl mx-auto px-8">
+<div class="mb-16 text-center">
+<h2 class="text-4xl font-headline font-bold text-on-surface mb-4">Built for precision agents</h2>
+<p class="text-on-surface-variant max-w-2xl mx-auto">Stop guessing what your agent is doing. Get full visibility into every token written.</p>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+<!-- Feature 1 -->
+<div class="p-8 rounded-2xl bg-surface-container-low border border-outline-variant/10 hover:border-primary/30 transition-all group">
+<div class="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary mb-6 group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-2xl">difference</span>
+</div>
+<h3 class="text-xl font-headline font-bold text-on-surface mb-3">Live diff viewer</h3>
+<p class="text-on-surface-variant text-sm leading-relaxed">Stream line-by-line changes from your agent directly to your terminal buffer with full syntax highlighting.</p>
+</div>
+<!-- Feature 2 -->
+<div class="p-8 rounded-2xl bg-surface-container-low border border-outline-variant/10 hover:border-tertiary/30 transition-all group">
+<div class="w-12 h-12 rounded-xl bg-tertiary/10 flex items-center justify-center text-tertiary mb-6 group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-2xl">quick_phrases</span>
+</div>
+<h3 class="text-xl font-headline font-bold text-on-surface mb-3">Structured comments</h3>
+<p class="text-on-surface-variant text-sm leading-relaxed">Tag code blocks and provide feedback. Monocle translates your intent into actionable instructions for the LLM.</p>
+</div>
+<!-- Feature 3 -->
+<div class="p-8 rounded-2xl bg-surface-container-low border border-outline-variant/10 hover:border-secondary/30 transition-all group">
+<div class="w-12 h-12 rounded-xl bg-secondary/10 flex items-center justify-center text-secondary mb-6 group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-2xl">account_tree</span>
+</div>
+<h3 class="text-xl font-headline font-bold text-on-surface mb-3">Plan review</h3>
+<p class="text-on-surface-variant text-sm leading-relaxed">Review the agent's multi-step plan before it touches a single file. Prune actions or re-order tasks.</p>
+</div>
+<!-- Feature 4 -->
+<div class="p-8 rounded-2xl bg-surface-container-low border border-outline-variant/10 hover:border-error/30 transition-all group">
+<div class="w-12 h-12 rounded-xl bg-error/10 flex items-center justify-center text-error mb-6 group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-2xl">notifications_active</span>
+</div>
+<h3 class="text-xl font-headline font-bold text-on-surface mb-3">Push notifications</h3>
+<p class="text-on-surface-variant text-sm leading-relaxed">Get notified on your OS when an agent needs a decision or completes a complex task.</p>
+</div>
+</div>
+</div>
+</section>
+<!-- How it Works -->
+<section class="py-24 overflow-hidden">
+<div class="max-w-7xl mx-auto px-8">
+<div class="flex flex-col lg:flex-row justify-between items-end mb-16 gap-8">
+<div class="max-w-xl">
+<h2 class="text-4xl font-headline font-bold text-on-surface mb-4">Integrate in seconds</h2>
+<p class="text-on-surface-variant">Monocle sits between you and your AI agent, acting as a high-fidelity lens for code generation.</p>
+</div>
+<div class="flex gap-2">
+<div class="w-12 h-1 bg-surface-container-high rounded-full overflow-hidden">
+<div class="h-full bg-primary w-1/4"></div>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+<!-- Step 1 -->
+<div class="relative">
+<div class="text-6xl font-headline font-black text-surface-container-highest mb-4 opacity-50 italic">01</div>
+<h4 class="text-lg font-bold text-on-surface mb-2">Install Monocle</h4>
+<p class="text-on-surface-variant text-sm">Download our lightweight CLI binary via Homebrew or NPM.</p>
+<div class="hidden lg:block absolute top-1/2 -right-4 translate-x-1/2 text-outline-variant/30">
+<span class="material-symbols-outlined text-4xl">arrow_forward</span>
+</div>
+</div>
+<!-- Step 2 -->
+<div class="relative">
+<div class="text-6xl font-headline font-black text-surface-container-highest mb-4 opacity-50 italic">02</div>
+<h4 class="text-lg font-bold text-on-surface mb-2">Register agent</h4>
+<p class="text-on-surface-variant text-sm">Point your agent's output stream to Monocle's local port.</p>
+<div class="hidden lg:block absolute top-1/2 -right-4 translate-x-1/2 text-outline-variant/30">
+<span class="material-symbols-outlined text-4xl">arrow_forward</span>
+</div>
+</div>
+<!-- Step 3 -->
+<div class="relative">
+<div class="text-6xl font-headline font-black text-surface-container-highest mb-4 opacity-50 italic">03</div>
+<h4 class="text-lg font-bold text-on-surface mb-2">Start reviewing</h4>
+<p class="text-on-surface-variant text-sm">Watch code flow into your terminal buffer in real-time.</p>
+<div class="hidden lg:block absolute top-1/2 -right-4 translate-x-1/2 text-outline-variant/30">
+<span class="material-symbols-outlined text-4xl">arrow_forward</span>
+</div>
+</div>
+<!-- Step 4 -->
+<div class="relative">
+<div class="text-6xl font-headline font-black text-surface-container-highest mb-4 opacity-50 italic">04</div>
+<h4 class="text-lg font-bold text-on-surface mb-2">Submit feedback</h4>
+<p class="text-on-surface-variant text-sm">Approve, reject, or comment to guide your agent's work.</p>
+</div>
+</div>
+</div>
+</section>
+<!-- CLI Highlights -->
+<section class="py-24 bg-surface-container-low/50">
+<div class="max-w-7xl mx-auto px-8">
+<div class="glass-card rounded-3xl p-12 border border-outline-variant/20 relative overflow-hidden">
+<div class="absolute top-0 right-0 w-64 h-64 bg-primary/5 blur-3xl rounded-full -translate-y-1/2 translate-x-1/2"></div>
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+<div>
+<h2 class="text-4xl font-headline font-bold text-on-surface mb-6">Designed for terminal purists</h2>
+<p class="text-on-surface-variant mb-8 text-lg">No electron apps, no heavy web dashboards. Monocle is a native binary that respects your terminal environment, keybindings, and color schemes.</p>
+<ul class="space-y-4">
+<li class="flex items-center gap-3 text-on-surface">
+<span class="material-symbols-outlined text-tertiary">check_circle</span>
+<span>Supports Vim/Tmux workflows</span>
+</li>
+<li class="flex items-center gap-3 text-on-surface">
+<span class="material-symbols-outlined text-tertiary">check_circle</span>
+<span>Full NerdFont/Material Icon support</span>
+</li>
+<li class="flex items-center gap-3 text-on-surface">
+<span class="material-symbols-outlined text-tertiary">check_circle</span>
+<span>Zero latency streaming over gRPC</span>
+</li>
+</ul>
+</div>
+<div class="space-y-4">
+<div class="p-5 bg-surface-container-lowest rounded-xl font-mono text-sm border border-outline-variant/20">
+<div class="flex items-center justify-between mb-4 border-b border-outline-variant/10 pb-2">
+<span class="text-on-surface-variant/50">Install via Brew</span>
+<span class="material-symbols-outlined text-xs">content_copy</span>
+</div>
+<div class="text-[#f9e2af]">brew <span class="text-[#a6e3a1]">install</span> josephschmitt/tap/monocle</div>
+</div>
+<div class="p-5 bg-surface-container-lowest rounded-xl font-mono text-sm border border-outline-variant/20">
+<div class="flex items-center justify-between mb-4 border-b border-outline-variant/10 pb-2">
+<span class="text-on-surface-variant/50">Register Local Agent</span>
+<span class="material-symbols-outlined text-xs">content_copy</span>
+</div>
+<div class="text-[#f9e2af]">monocle <span class="text-[#a6e3a1]">register</span> <span class="text-[#89b4fa]">--port</span> 8080 <span class="text-[#89b4fa]">--name</span> "dev-bot"</div>
+</div>
+<div class="p-5 bg-surface-container-lowest rounded-xl font-mono text-sm border border-outline-variant/20">
+<div class="flex items-center justify-between mb-4 border-b border-outline-variant/10 pb-2">
+<span class="text-on-surface-variant/50">Listen for Diff Streams</span>
+<span class="material-symbols-outlined text-xs">content_copy</span>
+</div>
+<div class="text-[#f9e2af]">monocle <span class="text-[#a6e3a1]">listen</span> <span class="text-[#89b4fa]">--watch</span> .</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Footer -->
+<footer class="bg-[#0d0d1c] w-full py-12 border-t border-[#424750]/15 mt-20">
+<div class="grid grid-cols-2 md:grid-cols-4 gap-8 px-8 max-w-7xl mx-auto">
+<div class="col-span-2 md:col-span-1">
+<div class="flex items-center mb-6">
+<span class="text-xl font-bold text-[#b5cfff] font-mono select-none">o_(◉) monocle</span>
+</div>
+<p class="font-['Inter'] text-sm text-[#c3c6d2] max-w-xs mb-6">
+                    © 2024 Monocle Terminal. Built for the era of AI curation.
+                </p>
+<div class="flex gap-4">
+<span class="material-symbols-outlined text-[#c3c6d2] hover:text-[#b5cfff] transition-colors cursor-pointer">terminal</span>
+<span class="material-symbols-outlined text-[#c3c6d2] hover:text-[#b5cfff] transition-colors cursor-pointer">code</span>
+<span class="material-symbols-outlined text-[#c3c6d2] hover:text-[#b5cfff] transition-colors cursor-pointer">hub</span>
+</div>
+</div>
+<div>
+<h5 class="text-[#b5cfff] font-headline font-bold mb-4">Product</h5>
+<ul class="space-y-3 font-['Inter'] text-sm text-[#c3c6d2]">
+<li><a class="hover:text-[#b5cfff] transition-colors" href="#">Features</a></li>
+<li><a class="hover:text-[#b5cfff] transition-colors" href="#">How it works</a></li>
+<li><a class="hover:text-[#b5cfff] transition-colors" href="#">Pricing</a></li>
+<li><a class="hover:text-[#b5cfff] transition-colors" href="#">Docs</a></li>
+</ul>
+</div>
+<div>
+<h5 class="text-[#b5cfff] font-headline font-bold mb-4">Ecosystem</h5>
+<ul class="space-y-3 font-['Inter'] text-sm text-[#c3c6d2]">
+<li><a class="hover:text-[#b5cfff] transition-colors" href="#">GitHub</a></li>
+<li><a class="hover:text-[#b5cfff] transition-colors" href="#">Discord</a></li>
+<li><a class="hover:text-[#b5cfff] transition-colors" href="#">Twitter</a></li>
+<li><a class="hover:text-[#b5cfff] transition-colors" href="#">NPM Package</a></li>
+</ul>
+</div>
+<div>
+<h5 class="text-[#b5cfff] font-headline font-bold mb-4">Status</h5>
+<div class="p-4 rounded-xl bg-surface-container border border-outline-variant/10">
+<div class="flex items-center gap-2 mb-2">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span>
+<span class="text-xs font-bold text-on-surface">Systems Operational</span>
+</div>
+<p class="text-[10px] text-on-surface-variant uppercase tracking-widest">Global gRPC latency: 14ms</p>
+</div>
+</div>
+</div>
+</footer>
+</body></html>
