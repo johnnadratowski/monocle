@@ -963,7 +963,8 @@ func (m diffViewModel) renderCommentLine(line diffViewLine, selected bool) strin
 	content := line.content
 	expanded := line.comment != nil && line.comment.ID == m.expandedCommentID
 	if expanded {
-		content = formatExpandedComment(line.comment, m.width)
+		origCode := m.originalCodeForComment(line.comment)
+		content = formatExpandedComment(line.comment, m.width, origCode)
 	}
 
 	style := lipgloss.NewStyle().Foreground(clr)
@@ -994,6 +995,13 @@ func (m diffViewModel) renderCommentLine(line diffViewLine, selected bool) strin
 				b.WriteString(m.renderExpandedCodeLine(sl, style))
 				continue
 			}
+			// Render suggestion diff lines with diff colors (only for suggestion comments)
+			if line.comment != nil && strings.Contains(line.comment.Body, "```suggestion") {
+				if after := extractCommentContent(sl); strings.HasPrefix(after, "- ") || strings.HasPrefix(after, "+ ") {
+					b.WriteString(m.renderSuggestionDiffLine(sl, style))
+					continue
+				}
+			}
 		}
 
 		b.WriteString(style.Render(fmt.Sprintf("%-*s", m.width, sl)))
@@ -1014,6 +1022,78 @@ func extractCommentContent(sl string) string {
 		rest = rest[1:]
 	}
 	return rest
+}
+
+// originalCodeForComment extracts the original (new-file) code lines that a
+// comment targets, based on its LineStart..LineEnd range.
+func (m diffViewModel) originalCodeForComment(c *types.ReviewComment) string {
+	if c == nil || c.LineStart == 0 {
+		return ""
+	}
+	end := c.LineEnd
+	if end == 0 {
+		end = c.LineStart
+	}
+	var codeLines []string
+	for _, line := range m.lines {
+		if line.isComment || line.isHunk {
+			continue
+		}
+		ln := line.rightLineNum
+		if ln == 0 {
+			ln = line.newLineNum
+		}
+		if ln == 0 {
+			continue
+		}
+		if ln >= c.LineStart && ln <= end {
+			content := line.content
+			if line.isSplit {
+				content = line.rightContent
+			}
+			codeLines = append(codeLines, content)
+		}
+	}
+	return strings.Join(codeLines, "\n")
+}
+
+// renderSuggestionDiffLine renders a diff line (prefixed with "- " or "+ ") inside
+// an expanded suggestion comment, using red/green diff background colors.
+func (m diffViewModel) renderSuggestionDiffLine(sl string, commentStyle lipgloss.Style) string {
+	outerIdx := strings.Index(sl, "║")
+	if outerIdx < 0 {
+		return commentStyle.Render(fmt.Sprintf("%-*s", m.width, sl))
+	}
+
+	outerEnd := outerIdx + len("║")
+	if outerEnd < len(sl) && sl[outerEnd] == ' ' {
+		outerEnd++
+	}
+	outerPrefix := sl[:outerEnd]
+	after := sl[outerEnd:]
+
+	styledOuter := commentStyle.Render(outerPrefix)
+	codeWidth := m.width - ansi.StringWidth(outerPrefix)
+	if codeWidth < 1 {
+		codeWidth = 1
+	}
+
+	var bg color.Color
+	if strings.HasPrefix(after, "- ") {
+		bg = m.theme.RemovedBg
+	} else if strings.HasPrefix(after, "+ ") {
+		bg = m.theme.AddedBg
+	}
+
+	// Syntax-highlight the code portion (after the +/- prefix)
+	prefix := after[:2]
+	code := after[2:]
+	highlightedCode := m.hl.highlightLine(m.path, code, nil, nil, bg, codeWidth-2)
+	prefixStyle := lipgloss.NewStyle()
+	if bg != nil {
+		prefixStyle = prefixStyle.Background(bg)
+	}
+	return styledOuter + prefixStyle.Render(prefix) + highlightedCode
 }
 
 // renderExpandedCodeLine renders a code line from a suggestion block with syntax
@@ -1555,7 +1635,8 @@ func (m diffViewModel) screenLinesFor(idx int) int {
 	line := m.lines[idx]
 	// Expanded comments take multiple screen lines
 	if line.isComment && line.comment != nil && line.comment.ID == m.expandedCommentID {
-		return strings.Count(formatExpandedComment(line.comment, m.width), "\n") + 1
+		origCode := m.originalCodeForComment(line.comment)
+		return strings.Count(formatExpandedComment(line.comment, m.width, origCode), "\n") + 1
 	}
 	if !m.wrap {
 		return 1
@@ -2129,9 +2210,38 @@ func formatInlineComment(c *types.ReviewComment) string {
 		fmt.Sprintf("  └───%s", strings.Repeat("─", 25))
 }
 
+// extractSuggestionCode extracts the code content from a ```suggestion block.
+// Returns the code lines and true if a suggestion block was found.
+func extractSuggestionCode(body string) (string, bool) {
+	start := strings.Index(body, "```suggestion")
+	if start < 0 {
+		return "", false
+	}
+	// Skip past the opening fence line
+	codeStart := strings.Index(body[start:], "\n")
+	if codeStart < 0 {
+		return "", false
+	}
+	codeStart += start + 1
+
+	// Find closing fence
+	codeEnd := strings.Index(body[codeStart:], "\n```")
+	if codeEnd < 0 {
+		// Try without leading newline (fence at end of body)
+		if strings.HasSuffix(body, "```") {
+			codeEnd = len(body) - codeStart - 3
+		} else {
+			return "", false
+		}
+	}
+	return body[codeStart : codeStart+codeEnd], true
+}
+
 // formatExpandedComment renders a comment's full body word-wrapped to the given width.
 // Uses double-line box-drawing characters (╔═║╚) to visually distinguish from collapsed comments.
-func formatExpandedComment(c *types.ReviewComment, width int) string {
+// For suggestion comments with original code available, renders a diff preview instead
+// of the raw suggestion block.
+func formatExpandedComment(c *types.ReviewComment, width int, originalCode string) string {
 	typeLabel := strings.ToUpper(string(c.Type))
 	hasSuggestionBlock := strings.Contains(c.Body, "```suggestion")
 	if hasSuggestionBlock {
@@ -2166,14 +2276,69 @@ func formatExpandedComment(c *types.ReviewComment, width int) string {
 	var lines []string
 	lines = append(lines, fmt.Sprintf("  ╔═══ %s %s", typeLabel, strings.Repeat("═", headerDashes)))
 
-	for _, paragraph := range strings.Split(c.Body, "\n") {
-		if paragraph == "" {
-			lines = append(lines, fmt.Sprintf("  %s", prefix))
-			continue
+	// For suggestions with original code, render a diff preview
+	suggestionCode, hasSuggestion := extractSuggestionCode(c.Body)
+	if hasSuggestion && originalCode != "" {
+		// Render any text before the suggestion block
+		body := c.Body
+		fenceStart := strings.Index(body, "```suggestion")
+		if fenceStart > 0 {
+			before := strings.TrimSpace(body[:fenceStart])
+			if before != "" {
+				for _, paragraph := range strings.Split(before, "\n") {
+					if paragraph == "" {
+						lines = append(lines, fmt.Sprintf("  %s", prefix))
+						continue
+					}
+					wrapped := wrapContent(paragraph, bodyWidth)
+					for _, w := range wrapped {
+						lines = append(lines, fmt.Sprintf("  %s %s", prefix, w))
+					}
+				}
+				lines = append(lines, fmt.Sprintf("  %s", prefix))
+			}
 		}
-		wrapped := wrapContent(paragraph, bodyWidth)
-		for _, w := range wrapped {
-			lines = append(lines, fmt.Sprintf("  %s %s", prefix, w))
+
+		// Render removed lines (original code)
+		for _, origLine := range strings.Split(originalCode, "\n") {
+			lines = append(lines, fmt.Sprintf("  %s - %s", prefix, origLine))
+		}
+		// Render added lines (suggestion code)
+		for _, sugLine := range strings.Split(suggestionCode, "\n") {
+			lines = append(lines, fmt.Sprintf("  %s + %s", prefix, sugLine))
+		}
+
+		// Render any text after the suggestion block
+		fenceEnd := strings.Index(body[fenceStart:], "\n```")
+		if fenceEnd >= 0 {
+			afterStart := fenceStart + fenceEnd + 4 // skip "\n```"
+			if afterStart < len(body) {
+				after := strings.TrimSpace(body[afterStart:])
+				if after != "" {
+					lines = append(lines, fmt.Sprintf("  %s", prefix))
+					for _, paragraph := range strings.Split(after, "\n") {
+						if paragraph == "" {
+							lines = append(lines, fmt.Sprintf("  %s", prefix))
+							continue
+						}
+						wrapped := wrapContent(paragraph, bodyWidth)
+						for _, w := range wrapped {
+							lines = append(lines, fmt.Sprintf("  %s %s", prefix, w))
+						}
+					}
+				}
+			}
+		}
+	} else {
+		for _, paragraph := range strings.Split(c.Body, "\n") {
+			if paragraph == "" {
+				lines = append(lines, fmt.Sprintf("  %s", prefix))
+				continue
+			}
+			wrapped := wrapContent(paragraph, bodyWidth)
+			for _, w := range wrapped {
+				lines = append(lines, fmt.Sprintf("  %s %s", prefix, w))
+			}
 		}
 	}
 

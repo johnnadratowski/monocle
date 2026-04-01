@@ -3,6 +3,8 @@ package tui
 import (
 	"strings"
 	"testing"
+
+	"github.com/josephschmitt/monocle/internal/types"
 )
 
 func TestWrapContent(t *testing.T) {
@@ -232,6 +234,138 @@ func TestRenderWrappedLineNonMarkdown(t *testing.T) {
 	// The raw content should pass through (not transformed into a styled header)
 	if !strings.Contains(result, "#") {
 		t.Errorf("non-markdown file should preserve raw content, got: %s", result)
+	}
+}
+
+func TestExtractSuggestionCode(t *testing.T) {
+	tests := []struct {
+		name     string
+		body     string
+		wantCode string
+		wantOK   bool
+	}{
+		{
+			name:     "simple suggestion",
+			body:     "```suggestion\nfoo := bar()\n```",
+			wantCode: "foo := bar()",
+			wantOK:   true,
+		},
+		{
+			name:     "multi-line suggestion",
+			body:     "```suggestion\nline1\nline2\nline3\n```",
+			wantCode: "line1\nline2\nline3",
+			wantOK:   true,
+		},
+		{
+			name:     "suggestion with surrounding text",
+			body:     "Consider this change:\n```suggestion\nnewCode()\n```\nThis is better.",
+			wantCode: "newCode()",
+			wantOK:   true,
+		},
+		{
+			name:   "no suggestion block",
+			body:   "This is a regular comment",
+			wantOK: false,
+		},
+		{
+			name:     "empty suggestion",
+			body:     "```suggestion\n\n```",
+			wantCode: "",
+			wantOK:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			code, ok := extractSuggestionCode(tt.body)
+			if ok != tt.wantOK {
+				t.Fatalf("extractSuggestionCode() ok = %v, want %v", ok, tt.wantOK)
+			}
+			if ok && code != tt.wantCode {
+				t.Errorf("extractSuggestionCode() code = %q, want %q", code, tt.wantCode)
+			}
+		})
+	}
+}
+
+func TestFormatExpandedCommentSuggestionDiff(t *testing.T) {
+	comment := &types.ReviewComment{
+		Type: types.CommentSuggestion,
+		Body: "```suggestion\nnewFunc()\n```",
+	}
+
+	// With original code: should render diff lines
+	result := formatExpandedComment(comment, 80, "oldFunc()")
+	if !strings.Contains(result, "- oldFunc()") {
+		t.Errorf("expected diff to contain removed line '- oldFunc()', got:\n%s", result)
+	}
+	if !strings.Contains(result, "+ newFunc()") {
+		t.Errorf("expected diff to contain added line '+ newFunc()', got:\n%s", result)
+	}
+	// Should NOT contain the raw fence markers
+	if strings.Contains(result, "```suggestion") {
+		t.Errorf("expected suggestion fence to be replaced by diff, got:\n%s", result)
+	}
+
+	// Without original code: should fall back to raw body
+	resultNoOrig := formatExpandedComment(comment, 80, "")
+	if !strings.Contains(resultNoOrig, "```suggestion") {
+		t.Errorf("expected raw fence when no original code, got:\n%s", resultNoOrig)
+	}
+}
+
+func TestFormatExpandedCommentSuggestionDiffWithSurroundingText(t *testing.T) {
+	comment := &types.ReviewComment{
+		Type: types.CommentSuggestion,
+		Body: "Consider this:\n```suggestion\nnewFunc()\n```\nBetter approach.",
+	}
+
+	result := formatExpandedComment(comment, 80, "oldFunc()")
+	if !strings.Contains(result, "Consider this:") {
+		t.Errorf("expected text before suggestion, got:\n%s", result)
+	}
+	if !strings.Contains(result, "- oldFunc()") {
+		t.Errorf("expected removed line, got:\n%s", result)
+	}
+	if !strings.Contains(result, "+ newFunc()") {
+		t.Errorf("expected added line, got:\n%s", result)
+	}
+	if !strings.Contains(result, "Better approach.") {
+		t.Errorf("expected text after suggestion, got:\n%s", result)
+	}
+}
+
+func TestOriginalCodeForComment(t *testing.T) {
+	m := diffViewModel{
+		lines: []diffViewLine{
+			{newLineNum: 1, content: "line one"},
+			{newLineNum: 2, content: "line two"},
+			{newLineNum: 3, content: "line three"},
+			{newLineNum: 4, content: "line four"},
+			{isComment: true, comment: &types.ReviewComment{ID: "c1"}},
+			{newLineNum: 5, content: "line five"},
+		},
+	}
+
+	comment := &types.ReviewComment{LineStart: 2, LineEnd: 4}
+	got := m.originalCodeForComment(comment)
+	want := "line two\nline three\nline four"
+	if got != want {
+		t.Errorf("originalCodeForComment() = %q, want %q", got, want)
+	}
+
+	// Single line
+	comment2 := &types.ReviewComment{LineStart: 3, LineEnd: 0}
+	got2 := m.originalCodeForComment(comment2)
+	if got2 != "line three" {
+		t.Errorf("single line: got %q, want %q", got2, "line three")
+	}
+
+	// File-level comment (LineStart=0)
+	comment3 := &types.ReviewComment{LineStart: 0}
+	got3 := m.originalCodeForComment(comment3)
+	if got3 != "" {
+		t.Errorf("file-level comment: got %q, want empty", got3)
 	}
 }
 
