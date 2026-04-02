@@ -65,16 +65,24 @@ type AdditionalFile struct {
 }
 
 type ContentItem struct {
-	ID              string
-	Title           string
-	Content         string
-	PreviousContent string // previous version for diffing (empty if first version)
-	ContentType     string
-	IsPlan      bool
-	Reviewed    bool
-	Comments    []ReviewComment
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID           string
+	Title        string
+	Content      string
+	ContentType  string
+	IsPlan       bool
+	Reviewed     bool
+	VersionCount int // number of versions stored (derived from content_versions table)
+	Comments     []ReviewComment
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
+type ContentVersion struct {
+	ContentItemID string
+	Version       int
+	Title         string
+	Content       string
+	CreatedAt     time.Time
 }
 
 type ReviewComment struct {

@@ -80,6 +80,8 @@ type EngineAPI interface {
 	GetFileContent(path string) (string, error)
 	GetContentItem(id string) (*types.ContentItem, error)
 	GetContentDiff(id string) (*types.DiffResult, error)
+	GetContentVersions(id string) ([]types.ContentVersion, error)
+	GetContentDiffBetweenVersions(id string, fromVersion, toVersion int) (*types.DiffResult, error)
 
 	// Additional files
 	GetAdditionalFiles() []types.AdditionalFile

@@ -188,6 +188,7 @@ The `/review-plan-wait` skill submits content to your TUI **and blocks** until y
 - **Horizontal scrolling & line wrapping** — Navigate wide diffs with `h`/`l` or toggle wrapping with `w`
 - **Responsive layout** — Automatically stacks panes vertically in narrow terminals
 - **Ref picker** — Change the base ref on the fly to compare against any branch or commit
+- **Version history** — Browse all versions of a plan or artifact and diff any version against the latest
 - **Comment resolution** — Mark individual comments as resolved (`x`); resolved comments are excluded from submitted reviews
 - **Submission history** — View past review submissions with `:history`
 - **Mouse support** — Click to focus panes, scroll with the wheel, click files to select, drag to make visual selections, and interact with modal controls
@@ -254,6 +255,7 @@ Skills live in agent-specific directories (`.claude/skills/` for Claude Code, `.
 | `:mark-all-unreviewed` | Mark all files as unreviewed                              |
 | `:discard`             | Discard all pending comments                              |
 | `:history`             | View past review submissions                              |
+| `:artifact-versions`   | Browse artifact version history                           |
 | `I`                    | Connection info (socket path, subscriber count)           |
 | `?`                    | Show all keybindings                                      |
 

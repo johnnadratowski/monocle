@@ -127,6 +127,7 @@ func (m helpModel) View() string {
 			{":mark-all-unreviewed", "Mark all files as unreviewed"},
 			{":discard", "Discard all pending comments"},
 			{":history", "View submission history"},
+			{":artifact-versions", "Browse artifact version history"},
 		}},
 		{"Text Editing (comment/submit)", []struct{ key, desc string }{
 			{"←/→ or Ctrl+B/F", "Move cursor left/right"},

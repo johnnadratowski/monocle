@@ -106,7 +106,7 @@ func DefaultKeyMap() KeyMap {
 
 		OpenInEditor: []string{"ctrl+g"},
 		BaseRef:      []string{"b"},
-		CycleLayout: []string{"T"},
+		CycleLayout:  []string{"T"},
 		Refresh:     []string{"R"},
 		Help:        []string{"?"},
 		Quit:        []string{"q"},

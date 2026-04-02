@@ -5,11 +5,12 @@ import (
 	"fmt"
 )
 
-const schemaVersion = 5
+const schemaVersion = 6
 
 const dropSQL = `
 DROP TABLE IF EXISTS review_submissions;
 DROP TABLE IF EXISTS comments;
+DROP TABLE IF EXISTS content_versions;
 DROP TABLE IF EXISTS content_items;
 DROP TABLE IF EXISTS additional_files;
 DROP TABLE IF EXISTS changed_files;
@@ -47,12 +48,22 @@ CREATE TABLE IF NOT EXISTS content_items (
 	session_id TEXT NOT NULL REFERENCES sessions(id),
 	title TEXT NOT NULL,
 	content TEXT NOT NULL,
-	previous_content TEXT NOT NULL DEFAULT '',
 	content_type TEXT NOT NULL DEFAULT 'text',
 	is_plan INTEGER NOT NULL DEFAULT 0,
 	reviewed INTEGER NOT NULL DEFAULT 0,
 	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS content_versions (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	content_item_id TEXT NOT NULL,
+	session_id TEXT NOT NULL REFERENCES sessions(id),
+	version INTEGER NOT NULL,
+	title TEXT NOT NULL,
+	content TEXT NOT NULL,
+	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	UNIQUE(content_item_id, version)
 );
 
 CREATE TABLE IF NOT EXISTS comments (
@@ -94,6 +105,7 @@ CREATE TABLE IF NOT EXISTS additional_files (
 
 CREATE INDEX IF NOT EXISTS idx_changed_files_session ON changed_files(session_id);
 CREATE INDEX IF NOT EXISTS idx_content_items_session ON content_items(session_id);
+CREATE INDEX IF NOT EXISTS idx_content_versions_item ON content_versions(content_item_id);
 CREATE INDEX IF NOT EXISTS idx_comments_session ON comments(session_id);
 CREATE INDEX IF NOT EXISTS idx_comments_target ON comments(target_type, target_ref);
 CREATE INDEX IF NOT EXISTS idx_review_submissions_session ON review_submissions(session_id);

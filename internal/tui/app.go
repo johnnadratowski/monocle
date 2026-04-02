@@ -49,6 +49,7 @@ const (
 	overlayHistory
 	overlaySessionPicker
 	overlayInfo
+	overlayVersionPicker
 )
 
 // Engine event messages bridged from core.EngineAPI callbacks.
@@ -92,6 +93,8 @@ type loadContentDiffMsg struct {
 	comments       []types.ReviewComment
 	err            error
 	preferredStyle diffStyle // style to render the diff in
+	fromVersion    int       // base version for the diff (0 = default latest-vs-previous)
+	toVersion      int       // target version for the diff
 }
 
 type feedbackPickedUpMsg struct{}
@@ -145,7 +148,10 @@ type openConfirmMsg struct {
 
 type mcpRegisterPromptMsg struct{}
 
-type openInfoBannerMsg struct{}
+type openInfoBannerMsg struct {
+	title   string
+	message string
+}
 
 type mcpRegisterResultMsg struct {
 	err error
@@ -183,6 +189,7 @@ type appModel struct {
 	connectionInfo connectionInfoModel
 	history        historyModel
 	sessionPicker  sessionPickerModel
+	versionPicker  versionPickerModel
 
 	focus         focusTarget
 	overlay       overlayKind
@@ -290,6 +297,7 @@ func NewApp(engine core.EngineAPI, opts ...AppOptions) appModel {
 		connectionInfo: newConnectionInfoModel(theme),
 		history:        newHistoryModel(theme),
 		sessionPicker:  newSessionPickerModel(theme),
+		versionPicker:  newVersionPickerModel(theme),
 		registerPrompt: newRegisterPromptModel(theme),
 		infoBanner:     newInfoBannerModel(theme),
 		focus:         focusSidebar,
@@ -343,7 +351,10 @@ func (m appModel) Init() tea.Cmd {
 	}
 	if m.nonGitMode {
 		cmds = append(cmds, func() tea.Msg {
-			return openInfoBannerMsg{}
+			return openInfoBannerMsg{
+				title:   "Directory Mode",
+				message: "This directory is not a Git repository.\nMonocle will display file contents instead of diffs.",
+			}
 		})
 	}
 	return tea.Batch(cmds...)
@@ -483,8 +494,8 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					content:            msg.contentItem.Content,
 					contentType:        msg.contentItem.ContentType,
 					comments:           msg.contentComments,
-					hasPreviousVersion: msg.contentItem.PreviousContent != "",
-					autoSwitchDiff:     msg.contentItem.PreviousContent != "" && m.diffView.contentMode,
+					versionCount:   msg.contentItem.VersionCount,
+					autoSwitchDiff: msg.contentItem.VersionCount > 1 && m.diffView.contentMode,
 				})
 			}
 		} else if msg.path != "" && msg.result != nil {
@@ -689,6 +700,54 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case cancelRefPickerMsg:
 		m.overlay = overlayNone
 		m.refPicker.active = false
+		return m, nil
+
+	case openVersionPickerMsg:
+		// Reverse to newest-first order (matching ref picker convention)
+		reversed := make([]types.ContentVersion, len(msg.versions))
+		for i, v := range msg.versions {
+			reversed[len(msg.versions)-1-i] = v
+		}
+		m.versionPicker.versions = reversed
+		m.versionPicker.contentID = msg.contentID
+		m.versionPicker.active = true
+		m.versionPicker.width = m.width
+		m.versionPicker.height = m.height
+		m.versionPicker.offset = 0
+		m.versionPicker.cursor = 1 // start at first selectable (index 0 is current)
+		m.versionPicker.ensureVisible()
+		m.overlay = overlayVersionPicker
+		return m, nil
+
+	case selectVersionMsg:
+		m.overlay = overlayNone
+		m.versionPicker.active = false
+		engine := m.engine
+		contentID := msg.contentID
+		fromVersion := msg.fromVersion
+		toVersion := msg.toVersion
+		return m, func() tea.Msg {
+			result, err := engine.GetContentDiffBetweenVersions(contentID, fromVersion, toVersion)
+			if err != nil || result == nil {
+				return nil
+			}
+			item, err := engine.GetContentItem(contentID)
+			if err != nil {
+				return nil
+			}
+			return loadContentDiffMsg{
+				contentID:      contentID,
+				result:         result,
+				comments:       item.Comments,
+				preferredStyle: diffStyleUnified,
+				fromVersion:    fromVersion,
+				toVersion:      toVersion,
+			}
+		}
+
+	case cancelVersionPickerMsg:
+		m.overlay = overlayNone
+		m.versionPicker.active = false
 		return m, nil
 
 	case openSessionPickerMsg:
@@ -1139,10 +1198,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case openInfoBannerMsg:
-		m.infoBanner.open(
-			"Directory Mode",
-			"This directory is not a Git repository.\nMonocle will display file contents instead of diffs.",
-		)
+		m.infoBanner.open(msg.title, msg.message)
 		m.overlay = overlayInfo
 		return m, nil
 
@@ -1315,6 +1371,11 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
+		return m, cmd
+	}
+	if m.overlay == overlayVersionPicker {
+		var cmd tea.Cmd
+		m.versionPicker, cmd = m.versionPicker.Update(msg)
 		return m, cmd
 	}
 	if m.overlay == overlayConfirm {
@@ -1795,6 +1856,35 @@ func (m appModel) executeCommand(cmd string) tea.Cmd {
 			_ = engine.ResetAllReviewed()
 			return fileChangedMsg{}
 		}
+
+	case "artifact-versions":
+		if !m.diffView.isViewingContentItem() {
+			return func() tea.Msg {
+				return openInfoBannerMsg{
+					title:   "No Artifact Selected",
+					message: "Select a plan or artifact in the sidebar to browse its version history.",
+				}
+			}
+		}
+		if m.diffView.contentVersionCount < 2 {
+			return func() tea.Msg {
+				return openInfoBannerMsg{
+					title:   "No Version History",
+					message: "This artifact has only one version. Submit updated versions to build a history.",
+				}
+			}
+		}
+		contentID := m.diffView.contentID
+		return func() tea.Msg {
+			versions, err := engine.GetContentVersions(contentID)
+			if err != nil || len(versions) < 2 {
+				return nil
+			}
+			return openVersionPickerMsg{
+				contentID: contentID,
+				versions:  versions,
+			}
+		}
 	}
 
 	// Handle :ref commands
@@ -2037,13 +2127,13 @@ func (m appModel) handleSidebarSelect(msg sidebarSelectMsg) tea.Cmd {
 				}
 			}
 			return loadContentMsg{
-				id:                 item.ID,
-				title:              item.Title,
-				content:            item.Content,
-				contentType:        item.ContentType,
-				comments:           comments,
-				hasPreviousVersion: item.PreviousContent != "",
-				autoSwitchDiff:     item.PreviousContent != "",
+				id:             item.ID,
+				title:          item.Title,
+				content:        item.Content,
+				contentType:    item.ContentType,
+				comments:       comments,
+				versionCount:   item.VersionCount,
+				autoSwitchDiff: item.VersionCount > 1,
 			}
 		}
 	}
@@ -2145,12 +2235,12 @@ func (m appModel) handleSaveComment(msg saveCommentMsg) tea.Cmd {
 				}
 			}
 			return loadContentMsg{
-				id:                 item.ID,
-				title:              item.Title,
-				content:            item.Content,
-				contentType:        item.ContentType,
-				comments:           comments,
-				hasPreviousVersion: item.PreviousContent != "",
+				id:           item.ID,
+				title:        item.Title,
+				content:      item.Content,
+				contentType:  item.ContentType,
+				comments:     comments,
+				versionCount: item.VersionCount,
 			}
 		}
 
@@ -2355,13 +2445,13 @@ type refreshResultMsg struct {
 
 // loadContentMsg carries content item data for rendering in the diff view.
 type loadContentMsg struct {
-	id                 string
-	title              string
-	content            string
-	contentType        string
-	comments           []types.ReviewComment
-	hasPreviousVersion bool // true if a previous version exists for diffing
-	autoSwitchDiff     bool // true to auto-switch to preferred diff style
+	id             string
+	title          string
+	content        string
+	contentType    string
+	comments       []types.ReviewComment
+	versionCount   int  // number of versions stored for this content item
+	autoSwitchDiff bool // true to auto-switch to preferred diff style
 }
 
 // View renders the full TUI layout.
@@ -2445,6 +2535,8 @@ func (m appModel) View() tea.View {
 	m.statusBar.diffStyle = m.diffView.style
 	m.statusBar.contentMode = m.diffView.contentMode
 	m.statusBar.contentID = m.diffView.contentID
+	m.statusBar.diffBaseVersion = m.diffView.diffBaseVersion
+	m.statusBar.diffToVersion = m.diffView.diffToVersion
 	statusView := m.statusBar.View()
 	full := lipgloss.JoinVertical(lipgloss.Left, titleBar, body, statusView)
 
@@ -2466,6 +2558,11 @@ func (m appModel) View() tea.View {
 		}
 	} else if m.overlay == overlayRefPicker {
 		overlayContent := m.refPicker.View()
+		if overlayContent != "" {
+			full = overlayOn(full, overlayContent, m.width, m.height)
+		}
+	} else if m.overlay == overlayVersionPicker {
+		overlayContent := m.versionPicker.View()
 		if overlayContent != "" {
 			full = overlayOn(full, overlayContent, m.width, m.height)
 		}

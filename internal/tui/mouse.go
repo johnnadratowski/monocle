@@ -312,6 +312,12 @@ func (m appModel) handleOverlayClick(x, y int) (tea.Model, tea.Cmd) {
 			m.overlay = overlayNone
 			return m, cmd
 		}
+	case overlayVersionPicker:
+		cmd, handled := m.versionPicker.handleClick(cy)
+		if handled {
+			m.overlay = overlayNone
+			return m, cmd
+		}
 	}
 
 	return m, nil

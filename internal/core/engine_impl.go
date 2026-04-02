@@ -234,16 +234,40 @@ func (e *Engine) GetContentItem(id string) (*types.ContentItem, error) {
 // GetContentDiff computes a diff between the previous and current version of a content item.
 // Returns nil if no previous version exists.
 func (e *Engine) GetContentDiff(id string) (*types.DiffResult, error) {
-	item, err := e.database.GetContentItem(id)
+	versions, err := e.database.GetContentVersions(id)
 	if err != nil {
 		return nil, err
 	}
-	if item.PreviousContent == "" {
+	if len(versions) < 2 {
 		return nil, nil
 	}
-	hunks, err := TextDiff(item.PreviousContent, item.Content)
+	prev := versions[len(versions)-2]
+	curr := versions[len(versions)-1]
+	hunks, err := TextDiff(prev.Content, curr.Content)
 	if err != nil {
 		return nil, fmt.Errorf("compute content diff: %w", err)
+	}
+	return &types.DiffResult{Path: id, Hunks: hunks}, nil
+}
+
+// GetContentVersions returns all versions of a content item.
+func (e *Engine) GetContentVersions(id string) ([]types.ContentVersion, error) {
+	return e.database.GetContentVersions(id)
+}
+
+// GetContentDiffBetweenVersions computes a diff between two specific versions of a content item.
+func (e *Engine) GetContentDiffBetweenVersions(id string, fromVersion, toVersion int) (*types.DiffResult, error) {
+	from, err := e.database.GetContentVersion(id, fromVersion)
+	if err != nil {
+		return nil, fmt.Errorf("get version %d: %w", fromVersion, err)
+	}
+	to, err := e.database.GetContentVersion(id, toVersion)
+	if err != nil {
+		return nil, fmt.Errorf("get version %d: %w", toVersion, err)
+	}
+	hunks, err := TextDiff(from.Content, to.Content)
+	if err != nil {
+		return nil, fmt.Errorf("compute version diff: %w", err)
 	}
 	return &types.DiffResult{Path: id, Hunks: hunks}, nil
 }
@@ -1067,7 +1091,6 @@ func (e *Engine) SubmitContentForReview(id, title, content, contentType string, 
 	found := false
 	for i := range session.ContentItems {
 		if session.ContentItems[i].ID == id {
-			session.ContentItems[i].PreviousContent = session.ContentItems[i].Content
 			session.ContentItems[i].Title = title
 			session.ContentItems[i].Content = content
 			session.ContentItems[i].ContentType = contentType
@@ -1083,8 +1106,18 @@ func (e *Engine) SubmitContentForReview(id, title, content, contentType string, 
 	}
 	e.mu.Unlock()
 
-	// Persist to DB
+	// Persist to DB (also creates a new version row and updates item.VersionCount)
 	_ = e.database.UpsertContentItem(session.ID, &item)
+
+	// Update in-memory version count
+	e.mu.Lock()
+	for i := range session.ContentItems {
+		if session.ContentItems[i].ID == id {
+			session.ContentItems[i].VersionCount = item.VersionCount
+			break
+		}
+	}
+	e.mu.Unlock()
 
 	e.emit(EventContentItemAdded, EventPayload{
 		Kind:   EventContentItemAdded,

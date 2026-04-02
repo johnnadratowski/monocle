@@ -51,8 +51,11 @@ func (d *DB) DeleteChangedFiles(sessionID string) error {
 	return err
 }
 
-// DeleteContentItems removes all content item records for a session.
+// DeleteContentItems removes all content item records and their versions for a session.
 func (d *DB) DeleteContentItems(sessionID string) error {
+	if _, err := d.Exec(`DELETE FROM content_versions WHERE session_id = ?`, sessionID); err != nil {
+		return err
+	}
 	_, err := d.Exec(`DELETE FROM content_items WHERE session_id = ?`, sessionID)
 	return err
 }
@@ -144,23 +147,41 @@ func (d *DB) MarkContentItemReviewed(sessionID, id string, reviewed bool) error 
 	return err
 }
 
-// UpsertContentItem inserts or updates a content item.
-// On update, the existing content is preserved as previous_content for diffing.
+// UpsertContentItem inserts or updates a content item and records a new version.
 func (d *DB) UpsertContentItem(sessionID string, item *types.ContentItem) error {
 	_, err := d.Exec(
-		`INSERT INTO content_items (id, session_id, title, content, previous_content, content_type, is_plan, reviewed, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		 ON CONFLICT(id) DO UPDATE SET previous_content = content_items.content, title = excluded.title, content = excluded.content, content_type = excluded.content_type, is_plan = excluded.is_plan, updated_at = excluded.updated_at`,
-		item.ID, sessionID, item.Title, item.Content, item.PreviousContent, item.ContentType, boolToInt(item.IsPlan), boolToInt(item.Reviewed), item.CreatedAt, item.UpdatedAt,
+		`INSERT INTO content_items (id, session_id, title, content, content_type, is_plan, reviewed, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(id) DO UPDATE SET title = excluded.title, content = excluded.content, content_type = excluded.content_type, is_plan = excluded.is_plan, updated_at = excluded.updated_at`,
+		item.ID, sessionID, item.Title, item.Content, item.ContentType, boolToInt(item.IsPlan), boolToInt(item.Reviewed), item.CreatedAt, item.UpdatedAt,
 	)
+	if err != nil {
+		return err
+	}
+
+	// Record a new version
+	_, err = d.Exec(
+		`INSERT INTO content_versions (content_item_id, session_id, version, title, content, created_at)
+		 VALUES (?, ?, COALESCE((SELECT MAX(version) FROM content_versions WHERE content_item_id = ?), 0) + 1, ?, ?, ?)`,
+		item.ID, sessionID, item.ID, item.Title, item.Content, item.UpdatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("insert content version: %w", err)
+	}
+
+	// Update the version count on the item
+	err = d.QueryRow(
+		`SELECT COUNT(*) FROM content_versions WHERE content_item_id = ?`, item.ID,
+	).Scan(&item.VersionCount)
 	return err
 }
 
 // GetContentItems returns all content items for a session.
 func (d *DB) GetContentItems(sessionID string) ([]types.ContentItem, error) {
 	rows, err := d.Query(
-		`SELECT id, title, content, previous_content, content_type, is_plan, reviewed, created_at, updated_at
-		 FROM content_items WHERE session_id = ? ORDER BY created_at`, sessionID,
+		`SELECT c.id, c.title, c.content, c.content_type, c.is_plan, c.reviewed, c.created_at, c.updated_at,
+		 (SELECT COUNT(*) FROM content_versions WHERE content_item_id = c.id) AS version_count
+		 FROM content_items c WHERE c.session_id = ? ORDER BY c.created_at`, sessionID,
 	)
 	if err != nil {
 		return nil, err
@@ -171,7 +192,7 @@ func (d *DB) GetContentItems(sessionID string) ([]types.ContentItem, error) {
 	for rows.Next() {
 		var item types.ContentItem
 		var isPlan, reviewed int
-		if err := rows.Scan(&item.ID, &item.Title, &item.Content, &item.PreviousContent, &item.ContentType, &isPlan, &reviewed, &item.CreatedAt, &item.UpdatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.Title, &item.Content, &item.ContentType, &isPlan, &reviewed, &item.CreatedAt, &item.UpdatedAt, &item.VersionCount); err != nil {
 			return nil, err
 		}
 		item.IsPlan = isPlan != 0
@@ -186,15 +207,51 @@ func (d *DB) GetContentItem(id string) (*types.ContentItem, error) {
 	item := &types.ContentItem{}
 	var isPlan, reviewed int
 	err := d.QueryRow(
-		`SELECT id, title, content, previous_content, content_type, is_plan, reviewed, created_at, updated_at
-		 FROM content_items WHERE id = ?`, id,
-	).Scan(&item.ID, &item.Title, &item.Content, &item.PreviousContent, &item.ContentType, &isPlan, &reviewed, &item.CreatedAt, &item.UpdatedAt)
+		`SELECT c.id, c.title, c.content, c.content_type, c.is_plan, c.reviewed, c.created_at, c.updated_at,
+		 (SELECT COUNT(*) FROM content_versions WHERE content_item_id = c.id) AS version_count
+		 FROM content_items c WHERE c.id = ?`, id,
+	).Scan(&item.ID, &item.Title, &item.Content, &item.ContentType, &isPlan, &reviewed, &item.CreatedAt, &item.UpdatedAt, &item.VersionCount)
 	if err != nil {
 		return nil, err
 	}
 	item.IsPlan = isPlan != 0
 	item.Reviewed = reviewed != 0
 	return item, nil
+}
+
+// GetContentVersions returns all versions of a content item, ordered by version ascending.
+func (d *DB) GetContentVersions(contentItemID string) ([]types.ContentVersion, error) {
+	rows, err := d.Query(
+		`SELECT content_item_id, version, title, content, created_at
+		 FROM content_versions WHERE content_item_id = ? ORDER BY version ASC`, contentItemID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var versions []types.ContentVersion
+	for rows.Next() {
+		var v types.ContentVersion
+		if err := rows.Scan(&v.ContentItemID, &v.Version, &v.Title, &v.Content, &v.CreatedAt); err != nil {
+			return nil, err
+		}
+		versions = append(versions, v)
+	}
+	return versions, rows.Err()
+}
+
+// GetContentVersion returns a single version of a content item.
+func (d *DB) GetContentVersion(contentItemID string, version int) (*types.ContentVersion, error) {
+	v := &types.ContentVersion{}
+	err := d.QueryRow(
+		`SELECT content_item_id, version, title, content, created_at
+		 FROM content_versions WHERE content_item_id = ? AND version = ?`, contentItemID, version,
+	).Scan(&v.ContentItemID, &v.Version, &v.Title, &v.Content, &v.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return v, nil
 }
 
 // CreateComment inserts a new comment.

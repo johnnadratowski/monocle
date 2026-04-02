@@ -19,9 +19,11 @@ type statusBarModel struct {
 	commandMode     bool
 	commandBuffer   string
 	contextHints    string // override hints when set (e.g. comment-specific keybinds)
-	diffStyle       diffStyle
-	contentMode      bool // true when viewing content (plan/doc) in raw mode
+	diffStyle        diffStyle
+	contentMode      bool   // true when viewing content (plan/doc) in raw mode
 	contentID        string // non-empty when viewing a content item (raw or diff)
+	diffBaseVersion  int    // base version being diffed from (0 = default)
+	diffToVersion    int    // target version being diffed to
 	waitingForReview bool
 	width            int
 	theme            Theme
@@ -78,12 +80,14 @@ func (m statusBarModel) View() string {
 
 	if m.contentID != "" && !m.contentMode {
 		// Viewing a content item diff
-		switch m.diffStyle {
-		case diffStyleUnified:
-			parts = append(parts, lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Bold(true).Render("[DIFF]"))
-		case diffStyleSplit:
-			parts = append(parts, lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Bold(true).Render("[SPLIT]"))
+		diffLabel := "DIFF"
+		if m.diffStyle == diffStyleSplit {
+			diffLabel = "SPLIT"
 		}
+		if m.diffBaseVersion > 0 {
+			diffLabel = fmt.Sprintf("v%d\u2192v%d %s", m.diffBaseVersion, m.diffToVersion, diffLabel)
+		}
+		parts = append(parts, lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Bold(true).Render("["+diffLabel+"]"))
 	} else if m.diffStyle == diffStyleFile {
 		parts = append(parts, lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Bold(true).Render("[FILE]"))
 	}

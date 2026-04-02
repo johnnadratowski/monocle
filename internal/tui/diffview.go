@@ -82,7 +82,10 @@ type diffViewModel struct {
 	contentMode        bool
 	contentID          string
 	contentTitle       string
-	contentHasDiff     bool   // true when a previous version exists for diffing
+	contentHasDiff      bool // true when multiple versions exist for diffing
+	contentVersionCount int  // number of versions for this content item
+	diffBaseVersion     int  // base version being diffed from (0 = default latest-vs-previous)
+	diffToVersion       int  // target version being diffed to
 	contentDiffContent string // current content text, for toggling back from diff view
 	mdStyler           *markdownStyler
 
@@ -217,7 +220,10 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 		m.contentMode = true
 		m.contentID = msg.id
 		m.contentTitle = msg.title
-		m.contentHasDiff = msg.hasPreviousVersion
+		m.contentVersionCount = msg.versionCount
+		m.contentHasDiff = msg.versionCount > 1
+		m.diffBaseVersion = 0
+		m.diffToVersion = 0
 		m.contentDiffContent = msg.content
 		m.additionalFilePath = ""
 		if msg.contentType != "" {
@@ -263,6 +269,8 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 		m.hunks = msg.result.Hunks
 		m.comments = msg.comments
 		m.style = msg.preferredStyle
+		m.diffBaseVersion = msg.fromVersion
+		m.diffToVersion = msg.toVersion
 		m.buildLines()
 		m.cursor = m.nearestSelectable(0, 1)
 		m.offset = 0

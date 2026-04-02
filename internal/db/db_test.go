@@ -190,11 +190,11 @@ func TestContentItems(t *testing.T) {
 	if got.Content != "# Test Plan\nSteps..." {
 		t.Errorf("unexpected content: %q", got.Content)
 	}
-	if got.PreviousContent != "" {
-		t.Errorf("expected empty previous_content for first version, got %q", got.PreviousContent)
+	if got.VersionCount != 1 {
+		t.Errorf("expected version count 1 for first version, got %d", got.VersionCount)
 	}
 
-	// Update the same item — previous_content should capture the old content
+	// Update the same item — version count should increase
 	item2 := &types.ContentItem{
 		ID:          "item-1",
 		Title:       "Updated Plan",
@@ -214,11 +214,11 @@ func TestContentItems(t *testing.T) {
 	if got2.Content != "# Updated Plan\nNew steps..." {
 		t.Errorf("unexpected content after update: %q", got2.Content)
 	}
-	if got2.PreviousContent != "# Test Plan\nSteps..." {
-		t.Errorf("expected previous_content to be old content, got %q", got2.PreviousContent)
+	if got2.VersionCount != 2 {
+		t.Errorf("expected version count 2, got %d", got2.VersionCount)
 	}
 
-	// Update again — previous_content should now be the v2 content
+	// Update again — version count should be 3
 	item3 := &types.ContentItem{
 		ID:          "item-1",
 		Title:       "Plan v3",
@@ -235,8 +235,8 @@ func TestContentItems(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get v3 item: %v", err)
 	}
-	if got3.PreviousContent != "# Updated Plan\nNew steps..." {
-		t.Errorf("expected previous_content to be v2 content, got %q", got3.PreviousContent)
+	if got3.VersionCount != 3 {
+		t.Errorf("expected version count 3, got %d", got3.VersionCount)
 	}
 
 	// Verify only one item exists (upsert, not insert)
@@ -247,8 +247,35 @@ func TestContentItems(t *testing.T) {
 	if len(items2) != 1 {
 		t.Errorf("expected 1 item after upserts, got %d", len(items2))
 	}
-	if items2[0].PreviousContent != "# Updated Plan\nNew steps..." {
-		t.Errorf("GetContentItems previous_content mismatch: %q", items2[0].PreviousContent)
+	if items2[0].VersionCount != 3 {
+		t.Errorf("expected version count 3 from GetContentItems, got %d", items2[0].VersionCount)
+	}
+
+	// Verify version history
+	versions, err := d.GetContentVersions("item-1")
+	if err != nil {
+		t.Fatalf("get versions: %v", err)
+	}
+	if len(versions) != 3 {
+		t.Fatalf("expected 3 versions, got %d", len(versions))
+	}
+	if versions[0].Version != 1 || versions[0].Content != "# Test Plan\nSteps..." {
+		t.Errorf("version 1 mismatch: %+v", versions[0])
+	}
+	if versions[1].Version != 2 || versions[1].Content != "# Updated Plan\nNew steps..." {
+		t.Errorf("version 2 mismatch: %+v", versions[1])
+	}
+	if versions[2].Version != 3 || versions[2].Content != "# Plan v3\nFinal steps..." {
+		t.Errorf("version 3 mismatch: %+v", versions[2])
+	}
+
+	// Verify single version fetch
+	v2, err := d.GetContentVersion("item-1", 2)
+	if err != nil {
+		t.Fatalf("get version 2: %v", err)
+	}
+	if v2.Content != "# Updated Plan\nNew steps..." {
+		t.Errorf("version 2 content mismatch: %q", v2.Content)
 	}
 }
 
