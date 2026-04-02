@@ -111,12 +111,13 @@ User reviews, adds comments, submits → FeedbackQueue releases → notification
 
 ## Documentation
 
-**Keep README.md up to date when adding or changing user-facing features.** Specifically:
+**Keep README.md and the Mintlify docs (`docs/`) up to date when adding or changing user-facing features.** Specifically:
 
-- **Keybindings** — If you add, remove, or change a keybinding in the TUI, update both `internal/tui/help.go` and the keybinding table in `README.md`.
-- **Config options** — If you add or change a field in `types.Config`, update the Configuration section in `README.md` (the example JSON, the settings table, and defaults in `internal/core/config.go`).
-- **CLI commands** — If you add or change a subcommand, update the CLI section in `README.md`.
+- **Keybindings** — If you add, remove, or change a keybinding in the TUI, update `internal/tui/help.go`, the keybinding table in `README.md`, and the docs (`docs/reference/keybindings.mdx`, `docs/configuration/keybindings.mdx`).
+- **Config options** — If you add or change a field in `types.Config`, update the Configuration section in `README.md` and `docs/configuration/config-file.mdx` (the example JSON and settings table).
+- **CLI commands** — If you add or change a subcommand, update the CLI section in `README.md` and the relevant reference page (`docs/reference/cli.mdx` or `docs/reference/agent-commands.mdx`).
 - **Features list** — If you add a significant new capability, add it to the Features bullet list in `README.md`.
+- **Mintlify docs** — See `docs/AGENTS.md` for the full mapping of source-of-truth files to documentation pages.
 
 ## Common Tasks
 
