@@ -75,8 +75,9 @@ type diffViewModel struct {
 	mouseDragActive bool
 
 	// Comment expansion on hover
-	expandedCommentID string // ID of the currently expanded comment (empty = none)
-	expandSeq         int    // sequence counter; incremented on each cursor move to debounce
+	expandedCommentID string        // ID of the currently expanded comment (empty = none)
+	expandSeq         int           // sequence counter; incremented on each cursor move to debounce
+	commentExpandDelay time.Duration // <0 = disabled, 0 = instant, >0 = delay before auto-expand
 
 	// Content view mode (for plans/docs)
 	contentMode        bool
@@ -122,10 +123,11 @@ func (m *diffViewModel) clearFileState() {
 
 func newDiffViewModel(theme *Theme, keys *KeyMap) diffViewModel {
 	return diffViewModel{
-		theme:    theme,
-		hl:       newHighlighter(),
-		mdStyler: newMarkdownStyler(*theme),
-		keys:     keys,
+		theme:              theme,
+		hl:                 newHighlighter(),
+		mdStyler:           newMarkdownStyler(*theme),
+		keys:               keys,
+		commentExpandDelay: 2 * time.Second,
 	}
 }
 
@@ -162,8 +164,6 @@ type commentExpandTickMsg struct {
 	seq int // must match m.expandSeq to be honoured
 }
 
-const commentExpandDelay = 2 * time.Second
-
 // cursorMoved handles comment expansion state when the cursor changes position.
 // It collapses any expanded comment and schedules a new expand tick if the cursor
 // is now on a comment line.
@@ -172,17 +172,22 @@ func (m *diffViewModel) cursorMoved() tea.Cmd {
 	m.expandedCommentID = ""
 
 	c := m.CursorComment()
-	if c == nil {
+	if c == nil || m.commentExpandDelay < 0 {
+		return nil
+	}
+	if m.commentExpandDelay == 0 {
+		m.expandedCommentID = c.ID
+		m.ensureVisible()
 		return nil
 	}
 	seq := m.expandSeq
-	return tea.Tick(commentExpandDelay, func(time.Time) tea.Msg {
+	return tea.Tick(m.commentExpandDelay, func(time.Time) tea.Msg {
 		return commentExpandTickMsg{seq: seq}
 	})
 }
 
 // selectComment moves the cursor to the comment with the given ID and
-// schedules it to auto-expand after the normal delay.
+// schedules it to auto-expand after the configured delay.
 func (m *diffViewModel) selectComment(commentID string) tea.Cmd {
 	if commentID == "" {
 		return nil
@@ -193,8 +198,16 @@ func (m *diffViewModel) selectComment(commentID string) tea.Cmd {
 			m.expandedCommentID = ""
 			m.expandSeq++
 			m.ensureVisible()
+			if m.commentExpandDelay < 0 {
+				return nil
+			}
+			if m.commentExpandDelay == 0 {
+				m.expandedCommentID = commentID
+				m.ensureVisible()
+				return nil
+			}
 			seq := m.expandSeq
-			return tea.Tick(commentExpandDelay, func(time.Time) tea.Msg {
+			return tea.Tick(m.commentExpandDelay, func(time.Time) tea.Msg {
 				return commentExpandTickMsg{seq: seq}
 			})
 		}

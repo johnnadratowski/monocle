@@ -277,6 +277,11 @@ func NewApp(engine core.EngineAPI, opts ...AppOptions) appModel {
 			if cfg.MinDiffWidth > 0 {
 				minDiffW = cfg.MinDiffWidth
 			}
+			if cfg.CommentExpand != nil && !*cfg.CommentExpand {
+				dv.commentExpandDelay = -1
+			} else if cfg.CommentExpandDelay > 0 {
+				dv.commentExpandDelay = time.Duration(cfg.CommentExpandDelay) * time.Millisecond
+			}
 		}
 	}
 

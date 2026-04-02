@@ -11,8 +11,10 @@ type Config struct {
 	ContextLines   int               `json:"context_lines"`
 	ReviewFormat      ReviewFormatConfig `json:"review_format"`
 	AutoFocusMode     bool               `json:"auto_focus_mode"`
-	Mouse             *bool              `json:"mouse"`
-	MinDiffWidth      int               `json:"min_diff_width"`
+	Mouse              *bool `json:"mouse"`
+	MinDiffWidth       int   `json:"min_diff_width"`
+	CommentExpand      *bool `json:"comment_expand"`
+	CommentExpandDelay int   `json:"comment_expand_delay"`
 }
 
 type ReviewFormatConfig struct {

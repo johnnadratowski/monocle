@@ -339,6 +339,8 @@ Monocle loads settings from JSON config files:
   "mouse": true,
   "min_diff_width": 80,
   "auto_focus_mode": false,
+  "comment_expand": true,
+  "comment_expand_delay": 2000,
   "review_format": {
     "include_snippets": true,
     "max_snippet_lines": 10,
@@ -359,6 +361,8 @@ Monocle loads settings from JSON config files:
 | `min_diff_width`                     | integer                                    | `80`         | Minimum character width for the diff viewer in side-by-side layout       |
 | `mouse`                              | `true`, `false`                            | `true`       | Enable mouse interactions (click, scroll, drag)                          |
 | `auto_focus_mode`                    | `true`, `false`                            | `false`      | Auto-enter focus mode (hide sidebar, enable wrap) when reviewing plans   |
+| `comment_expand`                     | `true`, `false`                            | `true`       | Auto-expand comments on hover                                            |
+| `comment_expand_delay`               | integer (ms)                               | `2000`       | Delay before auto-expanding a selected comment (0 = instant)             |
 | `keybindings`                        | object                                     | `{}`         | Custom key overrides (see below)                                         |
 | `review_format.include_snippets`     | `true`, `false`                            | `true`       | Include code snippets in formatted reviews                               |
 | `review_format.max_snippet_lines`    | integer                                    | `10`         | Truncate snippets longer than this                                       |
