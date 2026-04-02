@@ -311,19 +311,18 @@ nav {
 
 /* ───── Agents bar ───── */
 .agents {
-  padding: 2.5rem 2rem;
+  padding: 2rem;
   border-top: 1px solid var(--surface0); border-bottom: 1px solid var(--surface0);
   background: var(--mantle);
 }
 .agents-inner {
   max-width: 1200px; margin: 0 auto;
   display: flex; align-items: center; justify-content: center;
-  gap: 2.5rem; flex-wrap: wrap;
+  gap: 1.5rem; flex-wrap: wrap;
 }
 .agents-label {
   font-size: 0.75rem; font-weight: 600; color: var(--overlay0);
   letter-spacing: 0.08em; text-transform: uppercase;
-  width: 100%; text-align: center;
 }
 .agent-name {
   font-size: 0.9rem; font-weight: 500; color: var(--subtext1);
@@ -594,7 +593,9 @@ footer {
 
 /* ───── Responsive ───── */
 @media (max-width: 960px) {
-  .hero { grid-template-columns: 1fr; min-height: auto; padding: 7rem 1.5rem 3rem; gap: 3rem; }
+  .hero { grid-template-columns: 1fr; height: auto; min-height: auto; padding: 7rem 1.5rem 5rem; gap: 3rem; }
+  .hero-text { min-width: 0; }
+  .terminal-wrap { min-width: 0; }
   .tui-side { display: none; }
   .nav-links { display: none; }
   .feat-grid { grid-template-columns: 1fr; max-width: 440px; margin: 0 auto; }
@@ -607,7 +608,8 @@ footer {
   .container { padding: 0 1rem; }
   .section-hdr { margin-bottom: 2rem; }
   .steps { grid-template-columns: 1fr; gap: 2rem; }
-  .agents-inner { gap: 1.25rem; }
+  .agents-inner { gap: 1rem; }
+  .agents-label { width: 100%; text-align: center; }
   .foot-inner { flex-direction: column; gap: 1.25rem; text-align: center; }
 }
 @media (max-width: 480px) {
