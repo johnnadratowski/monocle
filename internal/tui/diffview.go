@@ -130,27 +130,31 @@ func newDiffViewModel(theme *Theme, keys *KeyMap) diffViewModel {
 }
 
 type loadDiffMsg struct {
-	path     string
-	result   *types.DiffResult
-	comments []types.ReviewComment
+	path            string
+	result          *types.DiffResult
+	comments        []types.ReviewComment
+	selectCommentID string // if set, auto-select and expand this comment after loading
 }
 
 type requestFileContentMsg struct {
-	path string
+	path            string
+	selectCommentID string
 }
 
 type loadFileContentMsg struct {
-	path     string
-	content  string
-	err      error
-	comments []types.ReviewComment
+	path            string
+	content         string
+	err             error
+	comments        []types.ReviewComment
+	selectCommentID string
 }
 
 type loadAdditionalFileMsg struct {
-	path     string
-	content  string
-	err      error
-	comments []types.ReviewComment
+	path            string
+	content         string
+	err             error
+	comments        []types.ReviewComment
+	selectCommentID string
 }
 
 // commentExpandTickMsg fires after a delay to expand a hovered comment.
@@ -177,6 +181,27 @@ func (m *diffViewModel) cursorMoved() tea.Cmd {
 	})
 }
 
+// selectComment moves the cursor to the comment with the given ID and
+// schedules it to auto-expand after the normal delay.
+func (m *diffViewModel) selectComment(commentID string) tea.Cmd {
+	if commentID == "" {
+		return nil
+	}
+	for i, line := range m.lines {
+		if line.isComment && line.comment != nil && line.comment.ID == commentID {
+			m.cursor = i
+			m.expandedCommentID = ""
+			m.expandSeq++
+			m.ensureVisible()
+			seq := m.expandSeq
+			return tea.Tick(commentExpandDelay, func(time.Time) tea.Msg {
+				return commentExpandTickMsg{seq: seq}
+			})
+		}
+	}
+	return nil
+}
+
 func (m diffViewModel) Init() tea.Cmd {
 	return nil
 }
@@ -199,7 +224,8 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 		// If in file view mode, store hunks but fetch file content instead
 		if m.style == diffStyleFile {
 			path := m.path
-			return m, func() tea.Msg { return requestFileContentMsg{path: path} }
+			selectID := msg.selectCommentID
+			return m, func() tea.Msg { return requestFileContentMsg{path: path, selectCommentID: selectID} }
 		}
 		prevCursor := m.cursor
 		prevOffset := m.offset
@@ -213,7 +239,7 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 			m.hOffset = 0
 			m.visualMode = false
 		}
-		return m, nil
+		return m, m.selectComment(msg.selectCommentID)
 
 	case loadContentMsg:
 		isReload := m.contentMode && m.contentID == msg.id
@@ -249,6 +275,7 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 			m.visualMode = false
 		}
 		m.hOffset = 0
+		selectCmd := m.selectComment(msg.selectCommentID)
 
 		// Auto-switch to preferred diff style when a previous version exists
 		if msg.autoSwitchDiff && m.autoContentDiff {
@@ -259,7 +286,7 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 			}
 		}
 
-		return m, nil
+		return m, selectCmd
 
 	case loadContentDiffMsg:
 		if msg.err != nil || msg.result == nil || len(msg.result.Hunks) == 0 {
@@ -309,7 +336,7 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 			m.visualMode = false
 		}
 		m.hOffset = 0
-		return m, nil
+		return m, m.selectComment(msg.selectCommentID)
 
 	case loadAdditionalFileMsg:
 		if msg.err != nil {
@@ -328,7 +355,7 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 		m.offset = 0
 		m.hOffset = 0
 		m.visualMode = false
-		return m, nil
+		return m, m.selectComment(msg.selectCommentID)
 
 	case commentExpandTickMsg:
 		if msg.seq == m.expandSeq {

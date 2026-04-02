@@ -817,6 +817,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case requestFileContentMsg:
 		engine := m.engine
 		path := msg.path
+		selectID := msg.selectCommentID
 		return m, func() tea.Msg {
 			content, err := engine.GetFileContent(path)
 			if err != nil {
@@ -832,9 +833,10 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 			return loadFileContentMsg{
-				path:     path,
-				content:  content,
-				comments: comments,
+				path:            path,
+				content:         content,
+				comments:        comments,
+				selectCommentID: selectID,
 			}
 		}
 
@@ -2191,10 +2193,15 @@ func (m appModel) handleSaveComment(msg saveCommentMsg) tea.Cmd {
 			LineEnd:    msg.lineEnd,
 		}
 
+		var commentID string
 		if msg.editingID != "" {
 			_, _ = m.engine.EditComment(msg.editingID, msg.commentType, msg.body)
+			commentID = msg.editingID
 		} else {
-			_, _ = m.engine.AddComment(target, msg.commentType, msg.body)
+			created, _ := m.engine.AddComment(target, msg.commentType, msg.body)
+			if created != nil {
+				commentID = created.ID
+			}
 		}
 
 		// Additional files: reload as additional file view
@@ -2213,9 +2220,10 @@ func (m appModel) handleSaveComment(msg saveCommentMsg) tea.Cmd {
 				}
 			}
 			return loadAdditionalFileMsg{
-				path:     msg.path,
-				content:  content,
-				comments: comments,
+				path:            msg.path,
+				content:         content,
+				comments:        comments,
+				selectCommentID: commentID,
 			}
 		}
 
@@ -2235,12 +2243,13 @@ func (m appModel) handleSaveComment(msg saveCommentMsg) tea.Cmd {
 				}
 			}
 			return loadContentMsg{
-				id:           item.ID,
-				title:        item.Title,
-				content:      item.Content,
-				contentType:  item.ContentType,
-				comments:     comments,
-				versionCount: item.VersionCount,
+				id:              item.ID,
+				title:           item.Title,
+				content:         item.Content,
+				contentType:     item.ContentType,
+				comments:        comments,
+				versionCount:    item.VersionCount,
+				selectCommentID: commentID,
 			}
 		}
 
@@ -2259,9 +2268,10 @@ func (m appModel) handleSaveComment(msg saveCommentMsg) tea.Cmd {
 			}
 		}
 		return loadDiffMsg{
-			path:     msg.path,
-			result:   result,
-			comments: comments,
+			path:            msg.path,
+			result:          result,
+			comments:        comments,
+			selectCommentID: commentID,
 		}
 	}
 }
@@ -2445,13 +2455,14 @@ type refreshResultMsg struct {
 
 // loadContentMsg carries content item data for rendering in the diff view.
 type loadContentMsg struct {
-	id             string
-	title          string
-	content        string
-	contentType    string
-	comments       []types.ReviewComment
-	versionCount   int  // number of versions stored for this content item
-	autoSwitchDiff bool // true to auto-switch to preferred diff style
+	id              string
+	title           string
+	content         string
+	contentType     string
+	comments        []types.ReviewComment
+	versionCount    int    // number of versions stored for this content item
+	autoSwitchDiff  bool   // true to auto-switch to preferred diff style
+	selectCommentID string // if set, auto-select and expand this comment after loading
 }
 
 // View renders the full TUI layout.
