@@ -19,8 +19,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/mshaugh/nerdfont-webfonts@v3.3.0/build/jetbrainsmono-nf.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/asciinema-player@3/dist/bundle/asciinema-player.css">
 <style>
 /* ───── Reset ───── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -423,8 +421,8 @@ nav {
   transition: opacity 0.5s ease, background 0.2s ease;
 }
 .feat-sidebar-item.show { opacity: 1; }
-.feat-sidebar-item:not([data-cast]) { opacity: 0; pointer-events: none; }
-.feat-sidebar-item:not([data-cast]).show { opacity: 0.35; }
+.feat-sidebar-item:not([data-demo]) { opacity: 0; pointer-events: none; }
+.feat-sidebar-item:not([data-demo]).show { opacity: 0.35; }
 .feat-sidebar-item h3 {
   font-family: 'Plus Jakarta Sans', sans-serif;
   font-size: 0.9rem; font-weight: 700;
@@ -437,7 +435,7 @@ nav {
   border-color: var(--surface1);
   border-left-color: var(--feat-color, var(--blue));
 }
-.feat-sidebar-item:not([data-cast]) h3::after {
+.feat-sidebar-item:not([data-demo]) h3::after {
   content: 'Demo Soon';
   font-family: 'JetBrains Mono', monospace;
   font-size: 0.6rem; font-weight: 500;
@@ -480,9 +478,8 @@ nav {
 }
 .feat-player-close:hover { background: var(--surface0); color: var(--text); }
 .feat-player-close svg { width: 14px; height: 14px; }
-.feat-player-body { flex: 1; position: relative; aspect-ratio: 16/9; background: var(--base); }
-.feat-player-body div[id^="player"] { height: 100%; }
-.feat-player-body .ap-wrapper, .feat-player-body .ap-player { background: var(--base) !important; }
+.feat-player-body { flex: 1; position: relative; background: var(--base); padding: 0.5rem; }
+.feat-player-body img { width: 100%; display: block; border-radius: 4px; }
 
 /* ───── How it works ───── */
 .steps {
@@ -715,22 +712,22 @@ footer {
       <p>Your agent writes code fast. Monocle gives you the tools to keep up.</p>
     </div>
     <div class="feat-grid" id="feat-grid">
-      <div class="feat dr1" data-reveal data-cast="assets/asciinema/diff.cast" data-color="var(--blue)">
+      <div class="feat dr1" data-reveal data-demo="assets/diff.gif" data-color="var(--blue)">
         <div class="feat-bar" style="background:var(--blue)"></div>
         <h3>Diff review</h3>
         <p>See every file your agent changes in unified or side-by-side diff views with syntax highlighting and intra-line diffs.</p>
       </div>
-      <div class="feat dr2" data-reveal data-cast="assets/asciinema/structured-feedback.cast" data-color="var(--green)">
+      <div class="feat dr2" data-reveal data-demo="assets/structure-feedback.gif" data-color="var(--green)">
         <div class="feat-bar" style="background:var(--green)"></div>
         <h3>Structured feedback</h3>
         <p>Leave line-level comments&nbsp;&mdash; issues, suggestions, notes&nbsp;&mdash; then submit a structured review the agent receives and acts on.</p>
       </div>
-      <div class="feat dr3" data-reveal data-cast="assets/asciinema/plan-review.cast" data-color="var(--mauve)">
+      <div class="feat dr3" data-reveal data-demo="assets/plan-review.gif" data-color="var(--mauve)">
         <div class="feat-bar" style="background:var(--mauve)"></div>
         <h3>Plan review</h3>
         <p>Review the agent's plan before it writes code. Leave feedback on the approach, then let it proceed once you're satisfied.</p>
       </div>
-      <div class="feat dr4" data-reveal data-color="var(--sapphire)">
+      <div class="feat dr4" data-reveal data-demo="assets/instant-review-loop.gif" data-color="var(--sapphire)">
         <div class="feat-bar" style="background:var(--sapphire)"></div>
         <h3>Instant review loop</h3>
         <p>Submit a review and the agent receives it immediately via <a href="https://code.claude.com/docs/en/channels-reference" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:underline;text-underline-offset:2px">MCP channels</a>. It fixes issues, you review again&nbsp;&mdash; a tight back-and-forth that converges fast.</p>
@@ -866,7 +863,6 @@ const observer = new IntersectionObserver(entries => {
 document.querySelectorAll('[data-reveal]').forEach(el => observer.observe(el));
 
 </script>
-<script src="https://cdn.jsdelivr.net/npm/asciinema-player@3/dist/bundle/asciinema-player.min.js"></script>
 <script>
 (function() {
   const grid = document.getElementById('feat-grid');
@@ -877,7 +873,6 @@ document.querySelectorAll('[data-reveal]').forEach(el => observer.observe(el));
   const playerBody = document.getElementById('feat-player-body');
   const playerTitle = playerPanel.querySelector('.feat-player-title');
   const closeBtn = playerPanel.querySelector('.feat-player-close');
-  let player = null;
   let animating = false;
   const STAGGER = 100;
   const FADE_OUT = 250;
@@ -885,7 +880,7 @@ document.querySelectorAll('[data-reveal]').forEach(el => observer.observe(el));
   // Add play icons to grid cards with demos
   const playIcon = '<svg class="feat-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="10,8 16,12 10,16" fill="currentColor" stroke="none"/></svg>';
   feats.forEach(feat => {
-    if (feat.dataset.cast) feat.insertAdjacentHTML('beforeend', playIcon);
+    if (feat.dataset.demo) feat.insertAdjacentHTML('beforeend', playIcon);
   });
 
   // Build sidebar items from grid features (once)
@@ -894,34 +889,26 @@ document.querySelectorAll('[data-reveal]').forEach(el => observer.observe(el));
     item.className = 'feat-sidebar-item';
     item.style.setProperty('--feat-color', feat.dataset.color);
     item.innerHTML = '<h3>' + feat.querySelector('h3').textContent + '</h3>';
-    if (feat.dataset.cast) item.dataset.cast = feat.dataset.cast;
+    if (feat.dataset.demo) item.dataset.demo = feat.dataset.demo;
     item.dataset.index = i;
     item.addEventListener('click', () => onSidebarClick(item));
     sidebar.appendChild(item);
   });
   const sidebarItems = [...sidebar.querySelectorAll('.feat-sidebar-item')];
 
-  function createPlayer(castUrl) {
-    if (player) { player.dispose(); player = null; }
-    playerBody.innerHTML = '';
-    player = AsciinemaPlayer.create(castUrl, playerBody, {
-      fit: window.innerWidth <= 960 ? 'width' : 'both',
-      autoPlay: true,
-      loop: true,
-      idleTimeLimit: 3,
-      terminalFontFamily: "'JetBrainsMono NF', 'JetBrains Mono', monospace",
-    });
+  function showGif(url) {
+    playerBody.innerHTML = '<img src="' + url + '" alt="Demo">';
   }
 
   function onSidebarClick(item) {
-    if (!item.dataset.cast || item.classList.contains('selected')) return;
+    if (!item.dataset.demo || item.classList.contains('selected')) return;
     sidebarItems.forEach(s => s.classList.remove('selected'));
     item.classList.add('selected');
     playerTitle.textContent = item.querySelector('h3').textContent;
-    createPlayer(item.dataset.cast);
+    showGif(item.dataset.demo);
   }
 
-  function openDemo(featIndex, castUrl, title) {
+  function openDemo(featIndex, demoUrl, title) {
     if (animating) return;
     animating = true;
 
@@ -947,7 +934,7 @@ document.querySelectorAll('[data-reveal]').forEach(el => observer.observe(el));
       // Phase 4: fade in player shortly after sidebar starts
       setTimeout(() => {
         playerPanel.classList.add('show');
-        createPlayer(castUrl);
+        showGif(demoUrl);
         animating = false;
       }, 100);
     }, FADE_OUT);
@@ -957,7 +944,6 @@ document.querySelectorAll('[data-reveal]').forEach(el => observer.observe(el));
     if (animating) return;
     animating = true;
 
-    if (player) { player.dispose(); player = null; }
     playerBody.innerHTML = '';
 
     // Phase 1: fade out sidebar + player
@@ -987,8 +973,8 @@ document.querySelectorAll('[data-reveal]').forEach(el => observer.observe(el));
   // Grid card click handlers
   feats.forEach((feat, i) => {
     feat.addEventListener('click', () => {
-      if (!feat.dataset.cast || animating) return;
-      openDemo(i, feat.dataset.cast, feat.querySelector('h3').textContent);
+      if (!feat.dataset.demo || animating) return;
+      openDemo(i, feat.dataset.demo, feat.querySelector('h3').textContent);
     });
   });
 
