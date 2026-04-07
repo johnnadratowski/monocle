@@ -23,7 +23,7 @@ import (
 var version = "dev"
 
 type CLI struct {
-	Run             RunCmd             `cmd:"" default:"withargs" help:"Start a review session"`
+	Run             RunCmd             `cmd:"" default:"withargs" help:"Start a review session" hidden:""`
 	Review          ReviewCmd          `cmd:"review" help:"Commands for interacting with a Monocle review session"`
 	Register        RegisterCmd        `cmd:"" help:"Register Monocle for an agent"`
 	Unregister      UnregisterCmd      `cmd:"" help:"Remove Monocle registration"`
