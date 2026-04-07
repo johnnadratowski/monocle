@@ -182,11 +182,6 @@ func (a *ClaudeAdapter) NeedsRegister() bool {
 	return !a.HasMCPConfig() && !a.HasPluginConfig()
 }
 
-// RegisterDetails returns info about what was registered.
-func (a *ClaudeAdapter) RegisterDetails(global bool) []string {
-	return []string{fmt.Sprintf("mcp → %s", mcpJSONPath(global))}
-}
-
 // effectiveMode returns the integration mode, defaulting to MCP tools.
 func (a *ClaudeAdapter) effectiveMode() IntegrationMode {
 	if a.Mode == "" {

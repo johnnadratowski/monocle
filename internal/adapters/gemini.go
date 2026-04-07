@@ -17,7 +17,9 @@ func (a *GeminiAdapter) Label() string { return "Gemini CLI" }
 
 func (a *GeminiAdapter) ConfigPaths(global bool) []string {
 	if a.Mode == ModeMCPTools {
-		return CommandPaths(geminiCommandsDir(global), ".toml")
+		paths := []string{geminiConfigPath(global)}
+		paths = append(paths, CommandPaths(geminiCommandsDir(global), ".toml")...)
+		return paths
 	}
 	paths := []string{geminiPolicyPath(global)}
 	paths = append(paths, SkillPaths(geminiSkillsDir(global))...)

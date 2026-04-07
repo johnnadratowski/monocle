@@ -154,11 +154,16 @@ func (cmd *RegisterCmd) Run() error {
 		if err := a.Register(cmd.Global); err != nil {
 			return fmt.Errorf("register %s: %w", a.Name(), err)
 		}
+
+		action := "registered"
 		if wasRegistered {
-			fmt.Printf("  ✓ %s: updated\n", a.Name())
-		} else {
-			fmt.Printf("  ✓ %s: registered\n", a.Name())
+			action = "updated"
 		}
+		modeLabel := "skills"
+		if mode == adapters.ModeMCPTools {
+			modeLabel = "mcp tools"
+		}
+		fmt.Printf("  ✓ %s: %s (%s)\n", a.Label(), action, modeLabel)
 		for _, p := range a.ConfigPaths(cmd.Global) {
 			fmt.Printf("    → %s\n", p)
 		}
