@@ -2,6 +2,8 @@ package mcp
 
 import (
 	"context"
+	_ "embed"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,25 +13,46 @@ import (
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+//go:embed tools.json
+var toolsJSON []byte
+
+type toolDef struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+// toolDescriptions returns a map of tool name → description loaded from tools.json.
+func toolDescriptions() map[string]string {
+	var defs []toolDef
+	json.Unmarshal(toolsJSON, &defs)
+	m := make(map[string]string, len(defs))
+	for _, d := range defs {
+		m[d.Name] = d.Description
+	}
+	return m
+}
+
 func registerTools(s *sdkmcp.Server) {
+	desc := toolDescriptions()
+
 	sdkmcp.AddTool(s, &sdkmcp.Tool{
 		Name:        "review_status",
-		Description: "Check the current Monocle review status. Returns whether feedback is pending, a pause was requested, or no feedback is available.",
+		Description: desc["review_status"],
 	}, handleReviewStatus)
 
 	sdkmcp.AddTool(s, &sdkmcp.Tool{
 		Name:        "get_feedback",
-		Description: "Retrieve review feedback from Monocle. With wait=true, blocks until the reviewer submits feedback.",
+		Description: desc["get_feedback"],
 	}, handleGetFeedback)
 
 	sdkmcp.AddTool(s, &sdkmcp.Tool{
 		Name:        "send_artifact",
-		Description: "Send content to Monocle for the reviewer to see. Provide content directly or pass file_path to read from disk.",
+		Description: desc["send_artifact"],
 	}, handleSendArtifact)
 
 	sdkmcp.AddTool(s, &sdkmcp.Tool{
 		Name:        "add_files",
-		Description: "Add file paths to the current Monocle review session.",
+		Description: desc["add_files"],
 	}, handleAddFiles)
 }
 
