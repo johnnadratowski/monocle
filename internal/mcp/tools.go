@@ -36,14 +36,14 @@ func registerTools(s *sdkmcp.Server) {
 type reviewStatusParams struct{}
 
 type getFeedbackParams struct {
-	Wait bool `json:"wait"`
+	Wait bool `json:"wait,omitempty"`
 }
 
 type sendArtifactParams struct {
 	ID          string `json:"id"`
 	Title       string `json:"title"`
 	Content     string `json:"content"`
-	ContentType string `json:"content_type,omitempty"`
+	ContentType string `json:"content_type,omitempty" jsonschema:"optional"`
 }
 
 type addFilesParams struct {
