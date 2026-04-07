@@ -1,4 +1,4 @@
-.PHONY: build run test vet lint sync-skills skills-tarball
+.PHONY: build run install uninstall test vet lint sync-skills skills-tarball
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
@@ -10,6 +10,9 @@ run: build
 
 install:
 	go install ./cmd/monocle
+
+uninstall:
+	rm -f $(shell go env GOPATH)/bin/monocle
 
 test:
 	go test ./internal/...
