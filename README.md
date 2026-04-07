@@ -101,6 +101,13 @@ This installs skills and, for Claude Code, the MCP channel config for push notif
 | Codex CLI   | `.codex/skills/`    | -           |
 | Gemini CLI  | `.gemini/skills/`   | -           |
 
+#### Other agents
+
+If your agent isn't natively supported, you can set up Monocle manually:
+
+- **MCP tools**: If your agent supports MCP servers via stdio, point it at `monocle serve-mcp`. This exposes review tools (`review_status`, `get_feedback`, `send_artifact`, `add_files`) over stdio.
+- **Skills**: Download `skills.tar.gz` from the [latest release](https://github.com/josephschmitt/monocle/releases/latest) and extract the skill files into wherever your agent expects its skills.
+
 ### 2. Start reviewing
 
 Start your agent and Monocle in separate terminals:
