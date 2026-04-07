@@ -50,6 +50,14 @@ func TestClaudeRegister_MCPToolsMode(t *testing.T) {
 		t.Fatal("MCP tools mode should not create settings.json")
 	}
 
+	// Should have command files
+	if _, err := os.Stat(filepath.Join(projDir, ".claude", "commands", "get-feedback.md")); err != nil {
+		t.Fatal("MCP tools mode should install get-feedback command")
+	}
+	if _, err := os.Stat(filepath.Join(projDir, ".claude", "commands", "review-plan.md")); err != nil {
+		t.Fatal("MCP tools mode should install review-plan command")
+	}
+
 	if !adapter.HasMCPConfig() {
 		t.Fatal("should have MCP config after register")
 	}

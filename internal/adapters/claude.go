@@ -46,6 +46,8 @@ func (a *ClaudeAdapter) ConfigPaths(global bool) []string {
 	if a.effectiveMode() == ModeSkills {
 		paths = append(paths, claudeSettingsPath(global))
 		paths = append(paths, SkillPaths(claudeSkillsDir(global))...)
+	} else {
+		paths = append(paths, CommandPaths(claudeCommandsDir(global), ".md")...)
 	}
 	return paths
 }
@@ -92,11 +94,15 @@ func (a *ClaudeAdapter) Register(global bool) error {
 		if err := InstallSkills(claudeSkillsDir(global)); err != nil {
 			return fmt.Errorf("install skills: %w", err)
 		}
+	} else {
+		if err := InstallMarkdownCommands(claudeCommandsDir(global)); err != nil {
+			return fmt.Errorf("install commands: %w", err)
+		}
 	}
 	return nil
 }
 
-// Unregister removes monocle from .mcp.json, removes permissions, and removes skill files.
+// Unregister removes monocle from .mcp.json, removes permissions, skills, and commands.
 func (a *ClaudeAdapter) Unregister(global bool) error {
 	if err := a.unconfigureMCP(global); err != nil {
 		return fmt.Errorf("unconfigure mcp: %w", err)
@@ -105,6 +111,7 @@ func (a *ClaudeAdapter) Unregister(global bool) error {
 		return fmt.Errorf("unconfigure settings: %w", err)
 	}
 	RemoveSkills(claudeSkillsDir(global))
+	RemoveCommands(claudeCommandsDir(global), ".md")
 	return nil
 }
 
@@ -386,6 +393,18 @@ func claudeSkillsDir(global bool) string {
 		return filepath.Join(home, ".claude", "skills")
 	}
 	return filepath.Join(".claude", "skills")
+}
+
+// claudeCommandsDir returns the directory for Claude Code command files.
+func claudeCommandsDir(global bool) string {
+	if global {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return filepath.Join(".claude", "commands")
+		}
+		return filepath.Join(home, ".claude", "commands")
+	}
+	return filepath.Join(".claude", "commands")
 }
 
 // mcpJSONPath returns the path for .mcp.json.
