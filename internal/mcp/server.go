@@ -7,7 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
+	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // Options configures the MCP server.
@@ -23,18 +23,67 @@ func Run(opts Options) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	serverOpts := &mcp.ServerOptions{
+	serverOpts := &sdkmcp.ServerOptions{
 		Instructions: toolInstructions,
 	}
 
-	server := mcp.NewServer(&mcp.Implementation{
+	if opts.EnableChannels {
+		serverOpts.Capabilities = &sdkmcp.ServerCapabilities{
+			Experimental: map[string]any{
+				"claude/channel": map[string]any{},
+			},
+		}
+		serverOpts.Instructions = toolInstructions + "\n" + channelInstructions
+	}
+
+	server := sdkmcp.NewServer(&sdkmcp.Implementation{
 		Name:    "monocle",
 		Version: version(),
 	}, serverOpts)
 
 	registerTools(server)
 
-	return server.Run(ctx, &mcp.StdioTransport{})
+	transport := &sdkmcp.StdioTransport{}
+
+	if opts.EnableChannels {
+		// Use Connect instead of Run so we can capture the connection
+		// for sending custom channel notifications.
+		ct := &capturingTransport{inner: transport}
+		session, err := server.Connect(ctx, ct, nil)
+		if err != nil {
+			return err
+		}
+
+		engine := newEngineConn(ct.conn)
+		defer engine.close()
+
+		// Identify agent after handshake
+		if p := session.InitializeParams(); p != nil && p.ClientInfo.Name != "" {
+			engine.identify(p.ClientInfo.Name)
+		}
+
+		go engine.run(ctx)
+
+		return session.Wait()
+	}
+
+	return server.Run(ctx, transport)
+}
+
+// capturingTransport wraps a Transport to capture the Connection for sending
+// custom notifications (used for MCP channel support).
+type capturingTransport struct {
+	inner sdkmcp.Transport
+	conn  sdkmcp.Connection
+}
+
+func (t *capturingTransport) Connect(ctx context.Context) (sdkmcp.Connection, error) {
+	conn, err := t.inner.Connect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	t.conn = conn
+	return conn, nil
 }
 
 // version returns the binary version, falling back to "dev".
@@ -52,3 +101,6 @@ const toolInstructions = `Use the review_status tool to check if feedback is pen
 Use the get_feedback tool to retrieve review feedback.
 Use the send_artifact tool to send content for review.
 Use the add_files tool to add files to the review.`
+
+const channelInstructions = `When you receive a feedback_submitted event, use the get_feedback tool to retrieve the review.
+When you receive a pause_requested event, use the get_feedback tool with wait=true to block until the reviewer submits feedback.`
