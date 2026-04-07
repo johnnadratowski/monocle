@@ -489,6 +489,11 @@ nav {
 .feat-player-close svg { width: 14px; height: 14px; }
 .feat-player-body { position: relative; background: var(--base); padding: 0 0.5rem; padding-bottom: calc(58.78% + 0rem); }
 .feat-player-body img { position: absolute; top: 0; left: 0.5rem; width: calc(100% - 1rem); height: 100%; object-fit: contain; display: block; border-radius: 4px; }
+.feat-player-desc {
+  padding: 0.75rem 1rem;
+  font-size: 0.82rem; color: var(--subtext0); line-height: 1.5;
+  border-top: 1px solid var(--surface0);
+}
 
 /* ───── How it works ───── */
 .steps {
@@ -825,6 +830,7 @@ footer {
           </button>
         </div>
         <div class="feat-player-body" id="feat-player-body"></div>
+        <div class="feat-player-desc" id="feat-player-desc"></div>
       </div>
     </div>
   </div>
@@ -952,6 +958,7 @@ document.querySelectorAll('[data-reveal]').forEach(el => observer.observe(el));
   const playerPanel = document.getElementById('feat-player');
   const playerBody = document.getElementById('feat-player-body');
   const playerTitle = playerPanel.querySelector('.feat-player-title');
+  const playerDesc = document.getElementById('feat-player-desc');
   const closeBtn = playerPanel.querySelector('.feat-player-close');
   let animating = false;
   const STAGGER = 100;
@@ -970,6 +977,7 @@ document.querySelectorAll('[data-reveal]').forEach(el => observer.observe(el));
     item.style.setProperty('--feat-color', feat.dataset.color);
     item.innerHTML = '<h3>' + feat.querySelector('h3').textContent + '</h3>';
     if (feat.dataset.demo) item.dataset.demo = feat.dataset.demo;
+    item.dataset.desc = feat.querySelector('p').innerHTML;
     item.dataset.index = i;
     item.addEventListener('click', () => onSidebarClick(item));
     sidebar.appendChild(item);
@@ -994,10 +1002,11 @@ document.querySelectorAll('[data-reveal]').forEach(el => observer.observe(el));
     sidebarItems.forEach(s => s.classList.remove('selected'));
     item.classList.add('selected');
     playerTitle.textContent = item.querySelector('h3').textContent;
+    playerDesc.innerHTML = item.dataset.desc;
     showGif(item.dataset.demo);
   }
 
-  function openDemo(featIndex, demoUrl, title) {
+  function openDemo(featIndex, demoUrl, title, desc) {
     if (animating) return;
     animating = true;
 
@@ -1013,6 +1022,7 @@ document.querySelectorAll('[data-reveal]').forEach(el => observer.observe(el));
       sidebarItems.forEach(s => s.classList.remove('selected', 'show'));
       sidebarItems[featIndex].classList.add('selected');
       playerTitle.textContent = title;
+      playerDesc.innerHTML = desc;
       playerPanel.classList.remove('show');
 
       // Phase 3: stagger fade-in sidebar items
@@ -1063,7 +1073,7 @@ document.querySelectorAll('[data-reveal]').forEach(el => observer.observe(el));
   feats.forEach((feat, i) => {
     feat.addEventListener('click', () => {
       if (!feat.dataset.demo || animating) return;
-      openDemo(i, feat.dataset.demo, feat.querySelector('h3').textContent);
+      openDemo(i, feat.dataset.demo, feat.querySelector('h3').textContent, feat.querySelector('p').innerHTML);
     });
   });
 
