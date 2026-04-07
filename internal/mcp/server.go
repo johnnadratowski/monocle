@@ -4,9 +4,12 @@ package mcp
 
 import (
 	"context"
+	"net/url"
+	"os"
 	"os/signal"
 	"syscall"
 
+	"github.com/josephschmitt/monocle/internal/adapters"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -62,29 +65,57 @@ func Run(opts Options) error {
 
 	transport := &sdkmcp.StdioTransport{}
 
-	if wantChannels {
-		// Use Connect instead of Run so we can capture the connection
-		// for sending custom channel notifications.
-		ct := &capturingTransport{inner: transport}
-		session, err := server.Connect(ctx, ct, nil)
-		if err != nil {
-			return err
-		}
+	// Always use Connect (not Run) so we get a session for ListRoots.
+	ct := &capturingTransport{inner: transport}
+	session, err := server.Connect(ctx, ct, nil)
+	if err != nil {
+		return err
+	}
 
+	// Resolve the engine socket path from MCP roots.
+	// If MONOCLE_SOCKET is already set, this is a no-op.
+	resolveSocketFromRoots(ctx, session)
+
+	if wantChannels {
 		engine := newEngineConn(ct.conn, opts.ChannelsOnly)
 		defer engine.close()
 
-		// Identify agent after handshake
 		if p := session.InitializeParams(); p != nil && p.ClientInfo.Name != "" {
 			engine.identify(p.ClientInfo.Name)
 		}
 
 		go engine.run(ctx)
-
-		return session.Wait()
 	}
 
-	return server.Run(ctx, transport)
+	return session.Wait()
+}
+
+// resolveSocketFromRoots queries the client for its roots and sets MONOCLE_SOCKET
+// if not already set. This allows the MCP server to find the engine socket when
+// launched from a context without the correct working directory (e.g., desktop apps).
+func resolveSocketFromRoots(ctx context.Context, session *sdkmcp.ServerSession) {
+	if os.Getenv("MONOCLE_SOCKET") != "" {
+		return
+	}
+
+	res, err := session.ListRoots(ctx, nil)
+	if err != nil || len(res.Roots) == 0 {
+		return
+	}
+
+	for _, root := range res.Roots {
+		path, err := url.Parse(root.URI)
+		if err != nil || path.Scheme != "file" {
+			continue
+		}
+		dir := path.Path
+		repoRoot := adapters.FindRepoRoot(dir)
+		socketPath := adapters.DefaultSocketPath(repoRoot)
+		if _, err := os.Stat(socketPath); err == nil {
+			os.Setenv("MONOCLE_SOCKET", socketPath)
+			return
+		}
+	}
 }
 
 // capturingTransport wraps a Transport to capture the Connection for sending
