@@ -12,11 +12,19 @@ type GeminiAdapter struct {
 	Mode IntegrationMode
 }
 
-func (a *GeminiAdapter) Name() string  { return "gemini" }
-func (a *GeminiAdapter) Label() string { return "Gemini CLI" }
+func (a *GeminiAdapter) Name() string             { return "gemini" }
+func (a *GeminiAdapter) Label() string            { return "Gemini CLI" }
+func (a *GeminiAdapter) SetMode(m IntegrationMode) { a.Mode = m }
+
+func (a *GeminiAdapter) effectiveMode() IntegrationMode {
+	if a.Mode == "" {
+		return ModeSkills
+	}
+	return a.Mode
+}
 
 func (a *GeminiAdapter) ConfigPaths(global bool) []string {
-	if a.Mode == ModeMCPTools {
+	if a.effectiveMode() == ModeMCPTools {
 		paths := []string{geminiConfigPath(global)}
 		paths = append(paths, CommandPaths(geminiCommandsDir(global), ".toml")...)
 		return paths
@@ -42,7 +50,7 @@ func (a *GeminiAdapter) Register(global bool) error {
 	// Clean up legacy MCP config if present
 	_ = unconfigureMCPServersJSON(geminiConfigPath(global))
 
-	if a.Mode == ModeMCPTools {
+	if a.effectiveMode() == ModeMCPTools {
 		if err := configureMCPServersJSON(geminiConfigPath(global), ResolveCommand(global), []string{"serve-mcp"}); err != nil {
 			return fmt.Errorf("configure mcp: %w", err)
 		}

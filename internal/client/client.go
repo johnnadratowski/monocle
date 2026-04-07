@@ -43,14 +43,9 @@ func Connect(socketPath string) (*Client, error) {
 // ConnectDefault resolves the socket path from the current working directory
 // and connects. Respects the MONOCLE_SOCKET environment variable.
 func ConnectDefault() (*Client, error) {
-	socketPath := os.Getenv("MONOCLE_SOCKET")
+	socketPath := adapters.ResolveSocketPath()
 	if socketPath == "" {
-		cwd, err := os.Getwd()
-		if err != nil {
-			return nil, fmt.Errorf("get cwd: %w", err)
-		}
-		repoRoot := adapters.FindRepoRoot(cwd)
-		socketPath = adapters.DefaultSocketPath(repoRoot)
+		return nil, fmt.Errorf("get cwd: unable to resolve socket path")
 	}
 	return Connect(socketPath)
 }

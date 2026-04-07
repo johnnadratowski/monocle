@@ -104,17 +104,13 @@ func resolveSocketFromRoots(ctx context.Context, session *sdkmcp.ServerSession) 
 	}
 
 	for _, root := range res.Roots {
-		path, err := url.Parse(root.URI)
-		if err != nil || path.Scheme != "file" {
+		parsed, err := url.Parse(root.URI)
+		if err != nil || parsed.Scheme != "file" {
 			continue
 		}
-		dir := path.Path
-		repoRoot := adapters.FindRepoRoot(dir)
-		socketPath := adapters.DefaultSocketPath(repoRoot)
-		if _, err := os.Stat(socketPath); err == nil {
-			os.Setenv("MONOCLE_SOCKET", socketPath)
-			return
-		}
+		repoRoot := adapters.FindRepoRoot(parsed.Path)
+		os.Setenv("MONOCLE_SOCKET", adapters.DefaultSocketPath(repoRoot))
+		return
 	}
 }
 

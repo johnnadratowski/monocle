@@ -130,17 +130,7 @@ func (cmd *RegisterCmd) Run() error {
 	// so ConfigPaths() reflects the correct mode in the preview.
 	allAdapters := adapters.AllAdapters()
 	for _, a := range allAdapters {
-		mode := cmd.resolveMode(a)
-		switch v := a.(type) {
-		case *adapters.ClaudeAdapter:
-			v.Mode = mode
-		case *adapters.OpenCodeAdapter:
-			v.Mode = mode
-		case *adapters.GeminiAdapter:
-			v.Mode = mode
-		case *adapters.CodexAdapter:
-			v.Mode = mode
-		}
+		a.SetMode(cmd.resolveMode(a))
 	}
 
 	agents, err := resolveAgentsFrom(allAdapters, cmd.Agent, "Select agents to register")

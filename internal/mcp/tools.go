@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/josephschmitt/monocle/internal/client"
 	"github.com/josephschmitt/monocle/internal/protocol"
@@ -21,15 +22,24 @@ type toolDef struct {
 	Description string `json:"description"`
 }
 
+var (
+	toolsOnce    sync.Once
+	toolDescMap  map[string]string
+)
+
 // toolDescriptions returns a map of tool name → description loaded from tools.json.
 func toolDescriptions() map[string]string {
-	var defs []toolDef
-	json.Unmarshal(toolsJSON, &defs)
-	m := make(map[string]string, len(defs))
-	for _, d := range defs {
-		m[d.Name] = d.Description
-	}
-	return m
+	toolsOnce.Do(func() {
+		var defs []toolDef
+		if err := json.Unmarshal(toolsJSON, &defs); err != nil {
+			panic(fmt.Sprintf("parse embedded tools.json: %v", err))
+		}
+		toolDescMap = make(map[string]string, len(defs))
+		for _, d := range defs {
+			toolDescMap[d.Name] = d.Description
+		}
+	})
+	return toolDescMap
 }
 
 func registerTools(s *sdkmcp.Server) {

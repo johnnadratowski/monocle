@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"os"
 	"time"
 
 	"github.com/josephschmitt/monocle/internal/adapters"
@@ -31,30 +30,26 @@ func newEngineConn(conn mcp.Connection, channelsOnly bool) *engineConn {
 // run connects to the engine and listens for events, forwarding them as
 // channel notifications. It reconnects with backoff on connection loss.
 func (e *engineConn) run(ctx context.Context) {
-	socketPath := os.Getenv("MONOCLE_SOCKET")
+	socketPath := adapters.ResolveSocketPath()
 	if socketPath == "" {
-		cwd, err := os.Getwd()
-		if err != nil {
-			return
-		}
-		repoRoot := adapters.FindRepoRoot(cwd)
-		socketPath = adapters.DefaultSocketPath(repoRoot)
+		return
 	}
 
-	delay := 2 * time.Second
+	const initialDelay = 2 * time.Second
+	delay := initialDelay
 	for {
-		if err := e.connectAndListen(ctx, socketPath); err != nil {
-			// Context cancelled — shutting down
-			if ctx.Err() != nil {
-				return
-			}
+		err := e.connectAndListen(ctx, socketPath)
+		if ctx.Err() != nil {
+			return
+		}
+		if err == nil {
+			delay = initialDelay // reset after clean disconnect
 		}
 
 		select {
 		case <-ctx.Done():
 			return
 		case <-time.After(delay):
-			// Exponential backoff, cap at 10s
 			delay = min(delay*2, 10*time.Second)
 		}
 	}

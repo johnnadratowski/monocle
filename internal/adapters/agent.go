@@ -11,6 +11,8 @@ type AgentAdapter interface {
 	Name() string
 	// Label returns a human-readable name (e.g. "Claude Code").
 	Label() string
+	// SetMode sets the integration mode (MCP tools or skills).
+	SetMode(IntegrationMode)
 	// ConfigPaths returns the file paths this adapter writes for display.
 	ConfigPaths(global bool) []string
 	// HasConfig returns true if monocle is already registered for this agent at the given scope.

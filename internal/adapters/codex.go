@@ -13,11 +13,19 @@ type CodexAdapter struct {
 	Mode IntegrationMode
 }
 
-func (a *CodexAdapter) Name() string  { return "codex" }
-func (a *CodexAdapter) Label() string { return "Codex CLI" }
+func (a *CodexAdapter) Name() string             { return "codex" }
+func (a *CodexAdapter) Label() string            { return "Codex CLI" }
+func (a *CodexAdapter) SetMode(m IntegrationMode) { a.Mode = m }
+
+func (a *CodexAdapter) effectiveMode() IntegrationMode {
+	if a.Mode == "" {
+		return ModeSkills
+	}
+	return a.Mode
+}
 
 func (a *CodexAdapter) ConfigPaths(global bool) []string {
-	if a.Mode == ModeMCPTools {
+	if a.effectiveMode() == ModeMCPTools {
 		return []string{codexConfigPath(global)}
 	}
 	paths := []string{codexRulesPath(global)}
@@ -41,7 +49,7 @@ func (a *CodexAdapter) Register(global bool) error {
 	// Clean up legacy MCP config if present
 	removeLegacyCodexMCP(global)
 
-	if a.Mode == ModeMCPTools {
+	if a.effectiveMode() == ModeMCPTools {
 		return configureCodexMCP(codexConfigPath(global), ResolveCommand(global))
 	}
 

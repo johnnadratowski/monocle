@@ -37,6 +37,19 @@ func IsGitRepo(dir string) bool {
 	return err == nil
 }
 
+// ResolveSocketPath returns the engine socket path, checking MONOCLE_SOCKET
+// first, then deriving from the current working directory's repo root.
+func ResolveSocketPath() string {
+	if p := os.Getenv("MONOCLE_SOCKET"); p != "" {
+		return p
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	return DefaultSocketPath(FindRepoRoot(cwd))
+}
+
 // DefaultSocketPath computes a deterministic socket path from a directory.
 // Returns /tmp/monocle-<sha256_first12>.sock (30 chars, well within the
 // ~104-byte macOS socket path limit).

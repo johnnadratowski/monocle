@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 //go:embed commands.json
@@ -19,18 +20,24 @@ type CommandDef struct {
 	Body        string `json:"body"`
 }
 
-// loadCommands parses the embedded command definitions.
-func loadCommands() ([]CommandDef, error) {
-	var defs []CommandDef
-	if err := json.Unmarshal(commandsJSON, &defs); err != nil {
-		return nil, fmt.Errorf("parse commands.json: %w", err)
-	}
-	return defs, nil
+var (
+	commandsOnce sync.Once
+	commandDefs  []CommandDef
+)
+
+// loadCommands returns the embedded command definitions, parsing once.
+func loadCommands() []CommandDef {
+	commandsOnce.Do(func() {
+		if err := json.Unmarshal(commandsJSON, &commandDefs); err != nil {
+			panic(fmt.Sprintf("parse embedded commands.json: %v", err))
+		}
+	})
+	return commandDefs
 }
 
 // CommandNames returns the names of all defined commands.
 func CommandNames() []string {
-	defs, _ := loadCommands()
+	defs := loadCommands()
 	names := make([]string, len(defs))
 	for i, d := range defs {
 		names[i] = d.Name
@@ -41,10 +48,7 @@ func CommandNames() []string {
 // InstallMarkdownCommands writes command files in markdown format (Claude Code, OpenCode).
 // Each command becomes dir/<name>.md with YAML frontmatter.
 func InstallMarkdownCommands(dir string) error {
-	defs, err := loadCommands()
-	if err != nil {
-		return err
-	}
+	defs := loadCommands()
 	for _, cmd := range defs {
 		content := fmt.Sprintf("---\ndescription: %s\n---\n\n%s\n", cmd.Description, cmd.Body)
 		dest := filepath.Join(dir, cmd.Name+".md")
@@ -58,10 +62,7 @@ func InstallMarkdownCommands(dir string) error {
 // InstallTOMLCommands writes command files in TOML format (Gemini CLI).
 // Each command becomes dir/<name>.toml with description and prompt fields.
 func InstallTOMLCommands(dir string) error {
-	defs, err := loadCommands()
-	if err != nil {
-		return err
-	}
+	defs := loadCommands()
 	for _, cmd := range defs {
 		// Escape any triple quotes in body for TOML multi-line strings
 		body := strings.ReplaceAll(cmd.Body, `"""`, `\"\"\"`)
@@ -76,7 +77,7 @@ func InstallTOMLCommands(dir string) error {
 
 // RemoveCommands removes installed command files with the given extension.
 func RemoveCommands(dir string, ext string) {
-	defs, _ := loadCommands()
+	defs := loadCommands()
 	for _, cmd := range defs {
 		_ = RemoveFileIfExists(filepath.Join(dir, cmd.Name+ext))
 	}
@@ -86,7 +87,7 @@ func RemoveCommands(dir string, ext string) {
 
 // CommandPaths returns the paths of command files that would be installed.
 func CommandPaths(dir string, ext string) []string {
-	defs, _ := loadCommands()
+	defs := loadCommands()
 	paths := make([]string, len(defs))
 	for i, d := range defs {
 		paths[i] = filepath.Join(dir, d.Name+ext)

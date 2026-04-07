@@ -12,12 +12,20 @@ type OpenCodeAdapter struct {
 	Mode IntegrationMode
 }
 
-func (a *OpenCodeAdapter) Name() string  { return "opencode" }
-func (a *OpenCodeAdapter) Label() string { return "OpenCode" }
+func (a *OpenCodeAdapter) Name() string             { return "opencode" }
+func (a *OpenCodeAdapter) Label() string            { return "OpenCode" }
+func (a *OpenCodeAdapter) SetMode(m IntegrationMode) { a.Mode = m }
+
+func (a *OpenCodeAdapter) effectiveMode() IntegrationMode {
+	if a.Mode == "" {
+		return ModeSkills
+	}
+	return a.Mode
+}
 
 func (a *OpenCodeAdapter) ConfigPaths(global bool) []string {
 	paths := []string{openCodeConfigPath(global)}
-	if a.Mode == ModeMCPTools {
+	if a.effectiveMode() == ModeMCPTools {
 		paths = append(paths, CommandPaths(openCodeCommandsDir(global), ".md")...)
 	} else {
 		paths = append(paths, SkillPaths(openCodeSkillsDir(global))...)
@@ -41,7 +49,7 @@ func (a *OpenCodeAdapter) Register(global bool) error {
 	// Clean up legacy MCP config if present
 	removeLegacyOpenCodeMCP(global)
 
-	if a.Mode == ModeMCPTools {
+	if a.effectiveMode() == ModeMCPTools {
 		if err := configureOpenCodeMCP(openCodeConfigPath(global), ResolveCommand(global)); err != nil {
 			return fmt.Errorf("configure mcp: %w", err)
 		}

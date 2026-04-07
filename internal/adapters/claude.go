@@ -37,8 +37,9 @@ type ClaudeAdapter struct {
 	Mode IntegrationMode
 }
 
-func (a *ClaudeAdapter) Name() string  { return "claude" }
-func (a *ClaudeAdapter) Label() string { return "Claude Code" }
+func (a *ClaudeAdapter) Name() string          { return "claude" }
+func (a *ClaudeAdapter) Label() string         { return "Claude Code" }
+func (a *ClaudeAdapter) SetMode(m IntegrationMode) { a.Mode = m }
 
 // ConfigPaths returns the files written by Register.
 func (a *ClaudeAdapter) ConfigPaths(global bool) []string {
