@@ -54,14 +54,14 @@ func TestClaudeChannelRegister(t *testing.T) {
 		t.Fatal("monocle should be in mcpServers")
 	}
 
-	// Verify the entry points to monocle serve-mcp-channel
+	// Verify the entry points to monocle serve-mcp --experimental-channels
 	command, _ := entry["command"].(string)
 	if command != "monocle" {
 		t.Fatalf("command should be 'monocle', got %q", command)
 	}
 	args, _ := entry["args"].([]any)
-	if len(args) != 1 || args[0] != "serve-mcp-channel" {
-		t.Fatalf("args should be ['serve-mcp-channel'], got %v", args)
+	if len(args) != 2 || args[0] != "serve-mcp" || args[1] != "--experimental-channels" {
+		t.Fatalf("args should be ['serve-mcp', '--experimental-channels'], got %v", args)
 	}
 
 	// Should no longer need registration

@@ -84,7 +84,7 @@ func (a *ClaudeAdapter) Unregister(global bool) error {
 }
 
 // HasMCPConfig checks if monocle is correctly configured in any .mcp.json (global or local).
-// Returns true only if the entry uses the serve-mcp-channel subcommand (not old-style bun/node configs).
+// Returns true for both serve-mcp and legacy serve-mcp-channel entries.
 func (a *ClaudeAdapter) HasMCPConfig() bool {
 	for _, global := range []bool{true, false} {
 		if hasMCPServersEntry(mcpJSONPath(global)) {
@@ -157,7 +157,11 @@ func (a *ClaudeAdapter) RegisterDetails(global bool) []string {
 
 // configureMCP adds monocle to .mcp.json.
 func (a *ClaudeAdapter) configureMCP(global bool) error {
-	return configureMCPServersJSON(mcpJSONPath(global), ResolveCommand(global))
+	return configureMCPServersJSON(
+		mcpJSONPath(global),
+		ResolveCommand(global),
+		[]string{"serve-mcp", "--experimental-channels"},
+	)
 }
 
 // unconfigureMCP removes monocle from .mcp.json.
@@ -166,8 +170,7 @@ func (a *ClaudeAdapter) unconfigureMCP(global bool) error {
 }
 
 // configureMCPServersJSON adds monocle to a JSON file with an "mcpServers" key.
-// Used by Claude (.mcp.json) and Gemini (.gemini/settings.json).
-func configureMCPServersJSON(path, command string) error {
+func configureMCPServersJSON(path, command string, args []string) error {
 	data, err := ReadJSONFile(path)
 	if err != nil {
 		return err
@@ -179,9 +182,13 @@ func configureMCPServersJSON(path, command string) error {
 		data["mcpServers"] = servers
 	}
 
+	anyArgs := make([]any, len(args))
+	for i, a := range args {
+		anyArgs[i] = a
+	}
 	servers["monocle"] = map[string]any{
 		"command": command,
-		"args":    []any{"serve-mcp-channel"},
+		"args":    anyArgs,
 	}
 
 	return WriteJSONFile(path, data)
@@ -213,7 +220,7 @@ func unconfigureMCPServersJSON(path string) error {
 }
 
 // hasMCPServersEntry checks if a JSON file has a monocle entry under "mcpServers"
-// with the serve-mcp-channel subcommand.
+// with a recognized serve-mcp or serve-mcp-channel subcommand.
 func hasMCPServersEntry(path string) bool {
 	data, err := ReadJSONFile(path)
 	if err != nil {
@@ -229,8 +236,11 @@ func hasMCPServersEntry(path string) bool {
 	}
 	args, _ := entry["args"].([]any)
 	if len(args) > 0 {
-		if arg, ok := args[0].(string); ok && arg == "serve-mcp-channel" {
-			return true
+		if arg, ok := args[0].(string); ok {
+			switch arg {
+			case "serve-mcp", "serve-mcp-channel":
+				return true
+			}
 		}
 	}
 	return false
