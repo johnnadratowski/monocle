@@ -778,22 +778,22 @@ footer {
       <p>Your agent writes code fast. Monocle gives you the tools to keep up.</p>
     </div>
     <div class="feat-grid" id="feat-grid">
-      <div class="feat dr1" data-reveal data-demo="assets/diff.gif" data-color="var(--blue)">
+      <div class="feat dr1" data-reveal data-demo="assets/diff.gif" data-demo-desc="Browse multi-file diffs with full syntax highlighting and intra-line char diffs that show exactly what changed. Toggle between unified, side-by-side, and raw file views to read the code however you prefer." data-color="var(--blue)">
         <div class="feat-bar" style="background:var(--blue)"></div>
         <h3>Diff review</h3>
         <p>See every file your agent changes in unified or side-by-side diff views with syntax highlighting and intra-line diffs.</p>
       </div>
-      <div class="feat dr2" data-reveal data-demo="assets/structure-feedback.gif" data-color="var(--green)">
+      <div class="feat dr2" data-reveal data-demo="assets/structure-feedback.gif" data-demo-desc="Select a range of lines to leave praise, flag a bug as an issue, or add a file-level note. Toggle comments between resolved and unresolved, then submit a structured review the agent picks up automatically." data-color="var(--green)">
         <div class="feat-bar" style="background:var(--green)"></div>
         <h3>Structured feedback</h3>
         <p>Leave line-level comments&nbsp;&mdash; issues, suggestions, notes&nbsp;&mdash; then submit a structured review the agent receives and acts on.</p>
       </div>
-      <div class="feat dr3" data-reveal data-demo="assets/plan-review.gif" data-color="var(--mauve)">
+      <div class="feat dr3" data-reveal data-demo="assets/plan-review.gif" data-demo-desc="Review the agent's plan as rendered markdown before any code is written. Leave inline comments to request changes, then see the updated plan arrive as a diff between versions. Use the version picker to compare any revision against the latest." data-color="var(--mauve)">
         <div class="feat-bar" style="background:var(--mauve)"></div>
         <h3>Plan review</h3>
         <p>Review the agent's plan before it writes code. Leave feedback on the approach, then let it proceed once you're satisfied.</p>
       </div>
-      <div class="feat dr4" data-reveal data-demo="assets/instant-review-loop.gif" data-color="var(--sapphire)">
+      <div class="feat dr4" data-reveal data-demo="assets/instant-review-loop.gif" data-demo-desc="Claude writes code while Monocle shows the diffs live. Flag an issue, submit a review, and the agent receives your feedback instantly via push notification. It fixes the code and the diff updates&nbsp;&mdash; a tight loop without leaving the terminal." data-color="var(--sapphire)">
         <div class="feat-bar" style="background:var(--sapphire)"></div>
         <h3>Instant review loop</h3>
         <p>Submit a review and the agent receives it immediately via <a href="https://code.claude.com/docs/en/channels-reference" target="_blank" rel="noopener" style="color:var(--blue);text-decoration:underline;text-underline-offset:2px">MCP tools</a>. It fixes issues, you review again&nbsp;&mdash; a tight back-and-forth that converges fast.</p>
@@ -977,7 +977,7 @@ document.querySelectorAll('[data-reveal]').forEach(el => observer.observe(el));
     item.style.setProperty('--feat-color', feat.dataset.color);
     item.innerHTML = '<h3>' + feat.querySelector('h3').textContent + '</h3>';
     if (feat.dataset.demo) item.dataset.demo = feat.dataset.demo;
-    item.dataset.desc = feat.querySelector('p').innerHTML;
+    item.dataset.desc = feat.dataset.demoDesc || feat.querySelector('p').innerHTML;
     item.dataset.index = i;
     item.addEventListener('click', () => onSidebarClick(item));
     sidebar.appendChild(item);
@@ -1073,7 +1073,7 @@ document.querySelectorAll('[data-reveal]').forEach(el => observer.observe(el));
   feats.forEach((feat, i) => {
     feat.addEventListener('click', () => {
       if (!feat.dataset.demo || animating) return;
-      openDemo(i, feat.dataset.demo, feat.querySelector('h3').textContent, feat.querySelector('p').innerHTML);
+      openDemo(i, feat.dataset.demo, feat.querySelector('h3').textContent, feat.dataset.demoDesc || feat.querySelector('p').innerHTML);
     });
   });
 
