@@ -18,36 +18,38 @@ devbox run -- make lint               # Vet + build check
 Single binary with CLI subcommands:
 - **`monocle`** — TUI (Kong). Manages sessions, renders diffs/plans, collects comments, delivers reviews.
 - **`monocle review`** — Agent-facing CLI commands: `status`, `get-feedback`, `send-artifact`, `add-files`.
-- **`monocle register`** — Install skills and (for Claude) MCP channel config.
-- **`monocle unregister`** — Remove skills and MCP channel config.
-- **`monocle serve-mcp-channel`** — (hidden) Run the MCP channel server for push notifications. Called by Claude Code, not users.
+- **`monocle register`** — Register Monocle for an agent (prompts for MCP tools vs skills mode for Claude).
+- **`monocle unregister`** — Remove Monocle registration.
+- **`monocle serve-mcp`** — (hidden) Run the MCP server. Supports `--experimental-channels` (tools + push notifications) and `--experimental-channels-only` (push notifications only, for skills mode).
 
-### Integration Model: CLI + Push Notifications
+### Integration Model: MCP Tools + CLI + Push Notifications
 
-Agents interact with Monocle via **CLI commands** (`monocle review ...`) for pull-based operations and **MCP channel notifications** (Claude Code only) for push-based events.
+Agents interact with Monocle via **MCP tools** (recommended for Claude Code) or **CLI commands** (for other agents), with optional **MCP channel notifications** for push-based events.
 
-- **CLI commands** — `monocle review status`, `get-feedback`, `send-artifact`, `add-files` connect to the engine's Unix socket, send a request, print the response, and exit. All agents use these via skills.
-- **MCP channel** (Claude Code only) — a slim stdio MCP server that forwards push notifications (`feedback_submitted`, `pause_requested`) as channel events. No tools — all operations are CLI commands.
-- **Skills** — standardized `SKILL.md` files (agentskills.io format) embedded in the binary and installed by `monocle register`. Skills instruct agents to run the CLI commands.
+- **MCP tools** (Claude Code, MCP tools mode) — `review_status`, `get_feedback`, `send_artifact`, `add_files`. The MCP server connects to the engine's Unix socket and handles all operations.
+- **CLI commands** — `monocle review status`, `get-feedback`, `send-artifact`, `add-files` connect to the engine's Unix socket, send a request, print the response, and exit. Used by agents in skills mode.
+- **MCP channels** (Claude Code only, experimental) — push notifications (`feedback_submitted`, `pause_requested`) forwarded as MCP channel events.
+- **Skills** — standardized `SKILL.md` files (agentskills.io format) embedded in the binary. Skills instruct agents to run CLI commands. Used in skills mode.
 
 **Key design:**
-- **Push+pull** — Claude Code gets push notifications via MCP channel, then runs CLI commands to retrieve feedback. Other agents use skills to poll.
+- **MCP tools mode** — Claude Code calls MCP tools directly + receives push notifications. No skills or bash permissions needed.
+- **Skills mode** — Agent runs CLI commands via skills + receives push notifications via MCP channels.
 - **User-initiated review** — reviewer works at their own pace, submits when ready
-- **Pause flow** — reviewer can request a pause; agent runs `monocle review get-feedback --wait` to block
+- **Pause flow** — reviewer can request a pause; agent blocks until feedback is ready
 
 ### Package Layout
 
 ```
 cmd/monocle/          Main CLI entry point (Kong commands, including monocle review subcommands)
-channel/              MCP channel source (TypeScript) + esbuild bundling (push notifications only)
 skills/               Embedded SKILL.md files (agentskills.io format) shared by all agents
 internal/
   types/              Domain types (ReviewSession, ChangedFile, ReviewComment, Config)
   protocol/           NDJSON message types + marshal/unmarshal (GetReviewStatus, PollFeedback, SubmitContent)
-  client/             Socket client for CLI commands (connects to engine socket)
+  client/             Socket client for CLI commands and MCP tool handlers (connects to engine socket)
+  mcp/                Go MCP server — tools, channel notifications, engine connection
   db/                 SQLite layer (schema, migrations, typed queries)
   core/               Engine, git client, feedback queue, formatter, session manager, socket server
-  adapters/           Agent registration, skill installation, repo/socket utilities
+  adapters/           Agent registration, skill installation, mode picker, repo/socket utilities
   tui/                Bubble Tea v2 UI (app shell, sidebar, diff view, plan view, modals, theme)
 ```
 

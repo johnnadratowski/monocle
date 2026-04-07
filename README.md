@@ -20,7 +20,6 @@ Monocle gives you a proper review loop without slowing the agent down. It doesn'
 ## Requirements
 
 - A coding agent: [Claude Code](https://claude.com/claude-code), [OpenCode](https://opencode.ai), [Codex CLI](https://github.com/openai/codex), [Gemini CLI](https://github.com/google/gemini-cli), or any agent that supports [agent skills](https://agentskills.io)
-- For push notifications (Claude Code only): a JavaScript runtime ([Bun](https://bun.sh), [Deno](https://deno.com), or [Node.js](https://nodejs.org)) and [MCP channel support](https://code.claude.com/docs/en/channels-reference)
 - A terminal with 256-color or true color support
 - A [Nerd Font](https://www.nerdfonts.com/) for file icons (optional but recommended)
 
