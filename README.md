@@ -101,32 +101,6 @@ This installs skills and, for Claude Code, the MCP channel config for push notif
 | Codex CLI   | `.codex/skills/`    | -           |
 | Gemini CLI  | `.gemini/skills/`   | -           |
 
-<details>
-<summary>Alternative: use your agent's plugin/extension system</summary>
-
-#### Claude Code
-
-```
-/plugin marketplace add josephschmitt/monocle
-/plugin install monocle@monocle
-```
-
-#### Codex CLI
-
-```
-/plugins
-```
-
-Search for "monocle" and install.
-
-#### Gemini CLI
-
-```bash
-gemini extensions install josephschmitt/monocle
-```
-
-</details>
-
 ### 2. Start reviewing
 
 Start your agent and Monocle in separate terminals:
@@ -135,19 +109,13 @@ Start your agent and Monocle in separate terminals:
 monocle
 ```
 
-Your agent gets [skills](#skills) for checking review status, retrieving feedback, and submitting content for review. When you submit a review, Monocle queues it for delivery. The agent retrieves it via the `/get-feedback` skill or on its own.
+For Claude Code, Monocle registers an MCP server that exposes review tools directly — no bash permissions or skills needed. Other agents get [skills](#skills) that instruct them to run CLI commands.
 
 #### Push notifications (Claude Code only)
 
-Claude Code supports [MCP channels](https://code.claude.com/docs/en/channels-reference), which automate the `/get-feedback` step. When you submit a review, a push notification prompts the agent to retrieve your feedback immediately instead of waiting for the next poll. To enable channels, start Claude Code with the channel flag:
+Claude Code supports [MCP channels](https://code.claude.com/docs/en/channels-reference), which deliver feedback automatically. When you submit a review, a push notification prompts the agent to retrieve your feedback immediately instead of waiting for the next poll.
 
-```bash
-claude --dangerously-load-development-channels plugin:monocle@monocle
-```
-
-> **Note:** The `--dangerously-load-development-channels` flag is required during the [channels research preview](https://code.claude.com/docs/en/channels-reference).
-
-> **Tip:** If you start or restart Monocle while Claude Code is already running, the MCP channel may need to reconnect. Type `/mcp` in Claude Code and select Monocle to reconnect.
+> **Tip:** If you start or restart Monocle while Claude Code is already running, the MCP server may need to reconnect. Type `/mcp` in Claude Code and select Monocle to reconnect.
 
 ### The review loop
 

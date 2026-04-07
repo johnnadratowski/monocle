@@ -18,7 +18,7 @@ func renderSplash(width, height int) string {
 }
 
 // splashFull renders the logo with getting-started instructions.
-func splashFull(height int) []string {
+func splashFull(_ int) []string {
 	logo := lipgloss.NewStyle().Foreground(lipgloss.Color("4")).Bold(true)
 	dim := lipgloss.NewStyle().Faint(true)
 	cmd := lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
@@ -40,20 +40,6 @@ func splashFull(height int) []string {
 		"",
 	}
 
-	if height >= 30 {
-		lines = append(lines,
-			dim.Render("Or manually install via your agent's plugin/extension system:"),
-			"",
-			dim.Render("Claude Code:"),
-			dim.Render("  "+cmd.Render("/plugin marketplace add josephschmitt/monocle")),
-			dim.Render("  "+cmd.Render("/plugin install monocle@monocle")),
-			"",
-			dim.Render("Gemini CLI:"),
-			dim.Render("  "+cmd.Render("gemini extensions install josephschmitt/monocle")),
-			"",
-		)
-	}
-
 	lines = append(lines,
 		dim.Render("Diffs appear here as your agent works."),
 		"",
@@ -66,7 +52,7 @@ func splashFull(height int) []string {
 		"",
 		section.Render("Feedback"),
 		dim.Render("Submit sends your review to the feedback queue."),
-		dim.Render("The agent picks it up via the ") + cmd.Render("/get-feedback") + dim.Render(" skill."),
+		dim.Render("The agent retrieves it automatically or on request."),
 		"",
 		hint("?", " for keybinding help"),
 		hint("q", " to quit"),
