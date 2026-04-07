@@ -1,8 +1,6 @@
 package adapters
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"os"
 	"os/exec"
@@ -154,68 +152,7 @@ func (a *ClaudeAdapter) NeedsRegister() bool {
 
 // RegisterDetails returns info about what was registered.
 func (a *ClaudeAdapter) RegisterDetails(global bool) []string {
-	var details []string
-	details = append(details, fmt.Sprintf("mcp → %s", mcpJSONPath(global)))
-
-	rt, err := DetectJSRuntime()
-	if err != nil {
-		details = append(details, "warning: no JavaScript runtime found — install bun, deno, or node")
-	} else {
-		details = append(details, fmt.Sprintf("runtime → %s", rt.Name))
-	}
-
-	return details
-}
-
-// JSRuntime represents a detected JavaScript runtime.
-type JSRuntime struct {
-	Name string // "bun", "deno", "node"
-}
-
-// DetectJSRuntime finds the first available runtime in preference order: bun, deno, node.
-func DetectJSRuntime() (*JSRuntime, error) {
-	for _, name := range []string{"bun", "deno", "node"} {
-		if _, err := exec.LookPath(name); err == nil {
-			return &JSRuntime{Name: name}, nil
-		}
-	}
-	return nil, fmt.Errorf("no JavaScript runtime found (install bun, deno, or node)")
-}
-
-// ExecArgs returns the binary path and argv for running the given script file.
-// The binary path is an absolute path suitable for syscall.Exec.
-func (r *JSRuntime) ExecArgs(scriptPath string) (string, []string, error) {
-	binPath, err := exec.LookPath(r.Name)
-	if err != nil {
-		return "", nil, fmt.Errorf("lookup %s: %w", r.Name, err)
-	}
-	switch r.Name {
-	case "deno":
-		return binPath, []string{"deno", "run", "--allow-all", scriptPath}, nil
-	default: // bun, node
-		return binPath, []string{r.Name, scriptPath}, nil
-	}
-}
-
-// ChannelBundlePath returns the path where the channel bundle should be written.
-// Uses a content hash so the file is only written once per version.
-func ChannelBundlePath() string {
-	hash := sha256.Sum256(ChannelBundle)
-	hexHash := hex.EncodeToString(hash[:])[:8]
-	return filepath.Join(os.TempDir(), fmt.Sprintf("monocle-channel-%s.mjs", hexHash))
-}
-
-// WriteChannelBundle writes the embedded channel bundle to its temp path if needed.
-// Returns the path to the written file.
-func WriteChannelBundle() (string, error) {
-	path := ChannelBundlePath()
-	if _, err := os.Stat(path); err == nil {
-		return path, nil // already exists with correct hash
-	}
-	if err := os.WriteFile(path, ChannelBundle, 0644); err != nil {
-		return "", fmt.Errorf("write channel bundle: %w", err)
-	}
-	return path, nil
+	return []string{fmt.Sprintf("mcp → %s", mcpJSONPath(global))}
 }
 
 // configureMCP adds monocle to .mcp.json.

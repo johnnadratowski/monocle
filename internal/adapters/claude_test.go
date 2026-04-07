@@ -626,30 +626,3 @@ func TestNeedsRegister_PluginRegistered(t *testing.T) {
 	}
 }
 
-func TestWriteChannelBundle(t *testing.T) {
-	path, err := WriteChannelBundle()
-	if err != nil {
-		t.Fatalf("WriteChannelBundle: %v", err)
-	}
-
-	// Verify the file was written
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read bundle: %v", err)
-	}
-	if len(data) == 0 {
-		t.Fatal("bundle should not be empty")
-	}
-
-	// Verify idempotency - second call should return same path
-	path2, err := WriteChannelBundle()
-	if err != nil {
-		t.Fatalf("second WriteChannelBundle: %v", err)
-	}
-	if path != path2 {
-		t.Fatalf("paths should be the same: %q vs %q", path, path2)
-	}
-
-	// Clean up
-	os.Remove(path)
-}

@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"syscall"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/alecthomas/kong"
@@ -86,6 +85,8 @@ type UnregisterCmd struct {
 	Global bool   `help:"Remove from user-level config instead of project" default:"false"`
 }
 
+// ServeMCPChannelCmd is the deprecated MCP channel command.
+// Kept as a hidden alias for backward compatibility; will be wired to serve-mcp.
 type ServeMCPChannelCmd struct{}
 
 type InstallCmd struct {
@@ -180,25 +181,8 @@ func resolveAgents(name, pickerTitle string) ([]adapters.AgentAdapter, error) {
 }
 
 func (cmd *ServeMCPChannelCmd) Run() error {
-	// Write the embedded bundle to a temp file
-	bundlePath, err := adapters.WriteChannelBundle()
-	if err != nil {
-		return err
-	}
-
-	// Detect JS runtime
-	rt, err := adapters.DetectJSRuntime()
-	if err != nil {
-		return fmt.Errorf("monocle serve-mcp-channel requires a JavaScript runtime: %w", err)
-	}
-
-	// Exec into the JS runtime, replacing this process
-	binPath, argv, err := rt.ExecArgs(bundlePath)
-	if err != nil {
-		return err
-	}
-
-	return syscall.Exec(binPath, argv, os.Environ())
+	fmt.Fprintln(os.Stderr, "Note: 'monocle serve-mcp-channel' is deprecated, use 'monocle serve-mcp --experimental-channels' instead")
+	return fmt.Errorf("serve-mcp-channel has been replaced by serve-mcp")
 }
 
 // Deprecated: use 'monocle register' instead.

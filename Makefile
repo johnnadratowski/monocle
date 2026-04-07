@@ -1,17 +1,14 @@
-.PHONY: build run test vet lint bundle sync-skills skills-tarball
+.PHONY: build run test vet lint sync-skills skills-tarball
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
-bundle:
-	cd channel && bun install && bun run build.mjs
-
-build: bundle
+build:
 	go build -ldflags "-X main.version=$(VERSION)" -o bin/monocle ./cmd/monocle
 
 run: build
 	./bin/monocle
 
-install: bundle
+install:
 	go install ./cmd/monocle
 
 test:

@@ -2,7 +2,6 @@ version: 2
 
 before:
   hooks:
-    - sh -c "cd channel && bun install && bun run build.mjs"
     - sh -c "mkdir -p build && tar -czf build/skills.tar.gz --exclude='*.go' -C skills ."
     - go mod tidy
     - go mod download
