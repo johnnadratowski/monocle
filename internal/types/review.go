@@ -151,6 +151,26 @@ type ReviewSummary struct {
 	PraiseCt               int
 }
 
+type ReviewSnapshot struct {
+	ID           int
+	SessionID    string
+	SubmissionID string
+	ReviewRound  int
+	HeadRef      string
+	BaseRef      string
+	Files        []SnapshotFile
+	FilesByPath  map[string]*SnapshotFile // built at load time for O(1) lookup
+	CreatedAt    time.Time
+}
+
+type SnapshotFile struct {
+	Path     string
+	Status   FileChangeStatus
+	Reviewed bool
+	BlobSHA  string // git blob SHA (git mode)
+	Content  string // raw content fallback (non-git mode)
+}
+
 type SessionSummary struct {
 	ID           string
 	Agent        string

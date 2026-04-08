@@ -21,6 +21,9 @@ type GitAPI interface {
 	FileContent(ref, path string) (string, error)
 	RecentCommits(n int) ([]LogEntry, error)
 	ResolveRef(ref string) (string, error)
+	HashObject(path string) (string, error)     // writes blob to object store
+	HashObjectDry(path string) (string, error)  // computes SHA without writing
+	CatFile(sha string) (string, error)
 }
 
 // GitClient wraps git operations for a repository.
@@ -193,6 +196,37 @@ func (g *GitClient) ResolveRef(ref string) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
+// HashObject writes a file's content into the git object store and returns its blob SHA.
+// This works with uncommitted files — it hashes the working tree content.
+func (g *GitClient) HashObject(path string) (string, error) {
+	absPath := filepath.Join(g.repoRoot, path)
+	out, err := g.run("hash-object", "-w", absPath)
+	if err != nil {
+		return "", fmt.Errorf("git hash-object %s: %w", path, err)
+	}
+	return strings.TrimSpace(out), nil
+}
+
+// HashObjectDry computes a file's blob SHA without writing to the object store.
+// Used for comparison-only operations (e.g. checking if a file changed since a snapshot).
+func (g *GitClient) HashObjectDry(path string) (string, error) {
+	absPath := filepath.Join(g.repoRoot, path)
+	out, err := g.run("hash-object", absPath)
+	if err != nil {
+		return "", fmt.Errorf("git hash-object %s: %w", path, err)
+	}
+	return strings.TrimSpace(out), nil
+}
+
+// CatFile retrieves content from the git object store by SHA.
+func (g *GitClient) CatFile(sha string) (string, error) {
+	out, err := g.run("cat-file", "-p", sha)
+	if err != nil {
+		return "", fmt.Errorf("git cat-file %s: %w", sha, err)
+	}
+	return out, nil
+}
+
 func (g *GitClient) run(args ...string) (string, error) {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = g.repoRoot
@@ -217,8 +251,18 @@ func (g *GitClient) run(args ...string) (string, error) {
 // buildSyntheticDiff creates a single hunk showing the entire content as added lines.
 // Used for untracked files that have no base version to diff against.
 func buildSyntheticDiff(content string) []types.DiffHunk {
+	return buildSyntheticHunks(content, types.DiffLineAdded)
+}
+
+// buildSyntheticDeleteDiff creates a single hunk showing the entire content as removed lines.
+// Used for files that existed in a snapshot but have been deleted.
+func buildSyntheticDeleteDiff(content string) []types.DiffHunk {
+	return buildSyntheticHunks(content, types.DiffLineRemoved)
+}
+
+// buildSyntheticHunks creates a single hunk showing entire content as either all-added or all-removed.
+func buildSyntheticHunks(content string, kind types.DiffLineKind) []types.DiffHunk {
 	lines := strings.Split(content, "\n")
-	// Trim trailing empty line from final newline
 	if len(lines) > 0 && lines[len(lines)-1] == "" {
 		lines = lines[:len(lines)-1]
 	}
@@ -226,18 +270,23 @@ func buildSyntheticDiff(content string) []types.DiffHunk {
 		return nil
 	}
 
-	hunk := types.DiffHunk{
-		OldStart: 0,
-		OldCount: 0,
-		NewStart: 1,
-		NewCount: len(lines),
+	hunk := types.DiffHunk{}
+	if kind == types.DiffLineAdded {
+		hunk.NewStart = 1
+		hunk.NewCount = len(lines)
+	} else {
+		hunk.OldStart = 1
+		hunk.OldCount = len(lines)
 	}
+
 	for i, line := range lines {
-		hunk.Lines = append(hunk.Lines, types.DiffLine{
-			Kind:       types.DiffLineAdded,
-			Content:    line,
-			NewLineNum: i + 1,
-		})
+		dl := types.DiffLine{Kind: kind, Content: line}
+		if kind == types.DiffLineAdded {
+			dl.NewLineNum = i + 1
+		} else {
+			dl.OldLineNum = i + 1
+		}
+		hunk.Lines = append(hunk.Lines, dl)
 	}
 	return []types.DiffHunk{hunk}
 }

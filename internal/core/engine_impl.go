@@ -33,6 +33,11 @@ type Engine struct {
 	lastKnownHead  string
 	selectedRef    string // the commit the user picked (BaseRef stores its parent for diffing)
 
+	// activeSnapshot: when non-nil, diffs are computed against this snapshot's stored state
+	activeSnapshot *types.ReviewSnapshot
+	// latestSnapshot: cached latest snapshot for auto-unmark comparison (avoids DB queries per refresh)
+	latestSnapshot *types.ReviewSnapshot
+
 	// event subscribers: EventKind -> subscriber ID -> callback
 	subscribers map[EventKind]map[int]EventCallback
 	nextSubID   int
@@ -194,6 +199,11 @@ func (e *Engine) RefreshChangedFiles() ([]types.ChangedFile, error) {
 
 	e.mu.Lock()
 	if e.current != nil && e.current.ID == session.ID {
+		// Auto-unmark files and content items that changed since the latest snapshot
+		if e.latestSnapshot != nil {
+			e.autoUnmarkChangedFiles(session, files, e.latestSnapshot)
+			e.autoUnmarkChangedContent(session, e.latestSnapshot)
+		}
 		e.current.ChangedFiles = files
 	}
 	e.mu.Unlock()
@@ -222,10 +232,17 @@ func (e *Engine) GetContentItems() []types.ContentItem {
 func (e *Engine) GetFileDiff(path string) (*types.DiffResult, error) {
 	e.mu.RLock()
 	session := e.current
+	snapshot := e.activeSnapshot
 	e.mu.RUnlock()
 	if session == nil {
 		return nil, fmt.Errorf("no active session")
 	}
+
+	// Snapshot mode: diff stored content against current working tree
+	if snapshot != nil {
+		return e.snapshotFileDiff(snapshot, path)
+	}
+
 	return e.git.FileDiff(session.BaseRef, path, e.cfg.ContextLines)
 }
 
@@ -878,6 +895,21 @@ func (e *Engine) Submit(action types.SubmitAction, body string) (*SubmitResult, 
 	}
 	_ = e.database.CreateSubmission(session.ID, sub)
 
+	// Snapshot lifecycle: request_changes creates a snapshot, approve wipes all.
+	// markReviewedOnSubmit and ResetAllReviewed acquire e.mu internally,
+	// so snapshot operations that access e.current/e.activeSnapshot must
+	// run under a separate lock scope.
+	if action == types.ActionRequestChanges {
+		e.markReviewedOnSubmit(session)
+		e.mu.Lock()
+		_ = e.createSnapshot(session, sub.ID)
+		e.mu.Unlock()
+	} else {
+		e.mu.Lock()
+		e.deleteSnapshots()
+		e.mu.Unlock()
+	}
+
 	// Reset all reviewed states after submitting
 	_ = e.ResetAllReviewed()
 
@@ -1013,6 +1045,9 @@ func (e *Engine) SetBaseRef(ref string) error {
 	e.selectedRef = selected
 	_ = e.database.UpdateSession(e.current)
 
+	// Wipe snapshots — changing base ref invalidates old review state
+	e.deleteSnapshots()
+
 	return nil
 }
 
@@ -1024,6 +1059,8 @@ func (e *Engine) SetAutoAdvanceRef(enabled bool) {
 	if enabled {
 		e.lastKnownHead = "" // Force HEAD re-detection on next refresh
 		e.selectedRef = ""
+		// Wipe snapshots — switching to auto mode invalidates review state
+		e.deleteSnapshots()
 	}
 }
 
@@ -1046,6 +1083,267 @@ func (e *Engine) IsAutoAdvanceRef() bool {
 // RecentCommits returns recent commits for the ref picker.
 func (e *Engine) RecentCommits(n int) ([]LogEntry, error) {
 	return e.git.RecentCommits(n)
+}
+
+// -- Review snapshots --
+
+// GetSnapshots returns all review snapshots for the current session.
+func (e *Engine) GetSnapshots() ([]types.ReviewSnapshot, error) {
+	e.mu.RLock()
+	session := e.current
+	e.mu.RUnlock()
+	if session == nil {
+		return nil, fmt.Errorf("no active session")
+	}
+	return e.database.GetSnapshots(session.ID)
+}
+
+// SetSnapshotBase activates snapshot-based diffing against the given snapshot.
+func (e *Engine) SetSnapshotBase(snapshotID int) error {
+	snap, err := e.database.GetSnapshot(snapshotID)
+	if err != nil {
+		return fmt.Errorf("get snapshot: %w", err)
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.activeSnapshot = snap
+	return nil
+}
+
+// ClearSnapshotBase deactivates snapshot-based diffing.
+func (e *Engine) ClearSnapshotBase() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.activeSnapshot = nil
+}
+
+// GetActiveSnapshot returns the currently active snapshot, or nil if not in snapshot mode.
+func (e *Engine) GetActiveSnapshot() *types.ReviewSnapshot {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.activeSnapshot
+}
+
+// HasSnapshots returns true if any snapshots exist for the current session.
+func (e *Engine) HasSnapshots() (bool, error) {
+	e.mu.RLock()
+	session := e.current
+	e.mu.RUnlock()
+	if session == nil {
+		return false, fmt.Errorf("no active session")
+	}
+	return e.database.HasSnapshots(session.ID)
+}
+
+// createSnapshot captures the current state of all changed files into a snapshot.
+func (e *Engine) createSnapshot(session *types.ReviewSession, submissionID string) error {
+	if e.git == nil {
+		return nil
+	}
+
+	headRef, err := e.git.CurrentRef()
+	if err != nil {
+		headRef = "unknown"
+	}
+
+	var snapshotFiles []types.SnapshotFile
+	for _, f := range session.ChangedFiles {
+		sf := types.SnapshotFile{
+			Path:     f.Path,
+			Status:   f.Status,
+			Reviewed: f.Reviewed,
+		}
+
+		// Hash the working tree content into git's object store
+		if f.Status != types.FileDeleted {
+			sha, err := e.git.HashObject(f.Path)
+			if err != nil {
+				// Fallback: try reading content directly (non-git mode)
+				content, readErr := e.git.FileContent("", f.Path)
+				if readErr == nil {
+					sf.Content = content
+				}
+			} else {
+				sf.BlobSHA = sha
+			}
+		}
+
+		snapshotFiles = append(snapshotFiles, sf)
+	}
+
+	snapshotID, err := e.database.CreateSnapshot(
+		session.ID, submissionID, session.ReviewRound,
+		headRef, session.BaseRef, snapshotFiles,
+	)
+	if err != nil {
+		return err
+	}
+
+	// Cache the latest snapshot for auto-unmark comparison
+	snap, loadErr := e.database.GetSnapshot(int(snapshotID))
+	if loadErr == nil {
+		e.latestSnapshot = snap
+	}
+	return nil
+}
+
+// deleteSnapshots removes all snapshots for the current session and clears cached state.
+func (e *Engine) deleteSnapshots() {
+	if e.current != nil {
+		_ = e.database.DeleteSnapshots(e.current.ID)
+	}
+	e.activeSnapshot = nil
+	e.latestSnapshot = nil
+}
+
+// markReviewedOnSubmit marks files as reviewed based on the config setting.
+func (e *Engine) markReviewedOnSubmit(session *types.ReviewSession) {
+	var mode string
+	if e.cfg != nil {
+		mode = e.cfg.MarkReviewedOnSubmit
+	}
+	if mode == "" {
+		mode = "all"
+	}
+
+	switch mode {
+	case "all":
+		_ = e.MarkAllReviewed()
+	case "commented":
+		// Mark only files that have unresolved comments
+		commentedPaths := make(map[string]bool)
+		for _, c := range session.Comments {
+			if !c.Resolved && c.TargetType == types.TargetFile {
+				commentedPaths[c.TargetRef] = true
+			}
+		}
+		for _, f := range session.ChangedFiles {
+			if commentedPaths[f.Path] {
+				_ = e.MarkReviewed(f.Path)
+			}
+		}
+	case "manual":
+		// Do nothing — respect only explicit r toggles
+	}
+}
+
+// autoUnmarkChangedFiles compares current files against the latest snapshot and
+// marks files as unreviewed if their content changed since the snapshot.
+func (e *Engine) autoUnmarkChangedFiles(session *types.ReviewSession, files []types.ChangedFile, snapshot *types.ReviewSnapshot) {
+	// Build lookup from snapshot files
+	snapshotBySHA := make(map[string]string) // path -> blob_sha
+	for _, sf := range snapshot.Files {
+		if sf.BlobSHA != "" {
+			snapshotBySHA[sf.Path] = sf.BlobSHA
+		}
+	}
+
+	for i := range files {
+		f := &files[i]
+		snapshotSHA, inSnapshot := snapshotBySHA[f.Path]
+
+		if !inSnapshot {
+			// New file since snapshot — should be unreviewed
+			if f.Reviewed {
+				f.Reviewed = false
+				session.FileStatuses[f.Path] = false
+				_ = e.database.MarkFileReviewed(session.ID, f.Path, false)
+			}
+			continue
+		}
+
+		if f.Status == types.FileDeleted {
+			// File deleted — mark unreviewed
+			if f.Reviewed {
+				f.Reviewed = false
+				session.FileStatuses[f.Path] = false
+				_ = e.database.MarkFileReviewed(session.ID, f.Path, false)
+			}
+			continue
+		}
+
+		// Compare current content hash against snapshot (dry: don't write to object store)
+		currentSHA, err := e.git.HashObjectDry(f.Path)
+		if err != nil {
+			continue // can't hash, skip
+		}
+
+		if currentSHA != snapshotSHA {
+			// Content changed since snapshot — unmark reviewed
+			if f.Reviewed {
+				f.Reviewed = false
+				session.FileStatuses[f.Path] = false
+				_ = e.database.MarkFileReviewed(session.ID, f.Path, false)
+			}
+		} else if !f.Reviewed {
+			// Content unchanged since snapshot — mark as reviewed
+			f.Reviewed = true
+			session.FileStatuses[f.Path] = true
+			_ = e.database.MarkFileReviewed(session.ID, f.Path, true)
+		}
+	}
+}
+
+// autoUnmarkChangedContent marks content items as unreviewed if they were updated
+// after the snapshot was created. Uses existing version timestamps — no separate
+// snapshot table needed since content items already have version history.
+func (e *Engine) autoUnmarkChangedContent(session *types.ReviewSession, snapshot *types.ReviewSnapshot) {
+	for i := range session.ContentItems {
+		item := &session.ContentItems[i]
+		if item.UpdatedAt.After(snapshot.CreatedAt) {
+			if item.Reviewed {
+				item.Reviewed = false
+				_ = e.database.MarkContentItemReviewed(session.ID, item.ID, false)
+			}
+		}
+	}
+}
+
+// snapshotFileDiff computes a diff between the snapshot's stored content and the current working tree.
+func (e *Engine) snapshotFileDiff(snapshot *types.ReviewSnapshot, path string) (*types.DiffResult, error) {
+	// Find the file in the snapshot
+	snapshotFile := snapshot.FilesByPath[path]
+
+	// Get current working tree content
+	currentContent, currentErr := e.git.FileContent("", path)
+
+	if snapshotFile == nil {
+		// File is new since snapshot — show as all-added
+		if currentErr != nil {
+			return &types.DiffResult{Path: path}, nil
+		}
+		hunks := buildSyntheticDiff(currentContent)
+		return &types.DiffResult{Path: path, Hunks: hunks}, nil
+	}
+
+	// Get snapshot content
+	var oldContent string
+	if snapshotFile.BlobSHA != "" {
+		var err error
+		oldContent, err = e.git.CatFile(snapshotFile.BlobSHA)
+		if err != nil {
+			return nil, fmt.Errorf("retrieve snapshot content for %s: %w", path, err)
+		}
+	} else {
+		oldContent = snapshotFile.Content
+	}
+
+	if currentErr != nil {
+		// File was deleted since snapshot — show as all-removed
+		hunks := buildSyntheticDeleteDiff(oldContent)
+		return &types.DiffResult{Path: path, Hunks: hunks}, nil
+	}
+
+	// Both exist — compute text diff
+	if oldContent == currentContent {
+		return &types.DiffResult{Path: path}, nil // no changes
+	}
+
+	hunks, err := TextDiff(oldContent, currentContent)
+	if err != nil {
+		return nil, fmt.Errorf("compute snapshot diff for %s: %w", path, err)
+	}
+	return &types.DiffResult{Path: path, Hunks: hunks}, nil
 }
 
 // -- Server --

@@ -163,7 +163,7 @@ This means you can review the agent's *thinking* before it writes code — not j
 - **Configurable keybindings** — Override any navigation or action key via config
 - **Feedback queue** — Submit reviews while the agent is working; delivered when the agent next runs `/get-feedback`
 - **Connection indicator** — See at a glance whether your agent is connected, with manual socket override for troubleshooting
-- **Review tracking** — Mark files as reviewed with `r` (auto-advances to next), filter sidebar to show only unreviewed or reviewed files with `/`, and all reviewed states reset on submit
+- **Review tracking** — Mark files as reviewed with `r` (auto-advances to next), filter sidebar with `/`. When you submit feedback, monocle snapshots file state so it can automatically detect what changed on the next round — filter to unreviewed to see only what's new
 - **Session persistence** — Reviews survive restarts via SQLite
 
 ## Agent Operations
@@ -310,6 +310,7 @@ Monocle loads settings from JSON config files:
   "auto_focus_mode": false,
   "comment_expand": true,
   "comment_expand_delay": 2000,
+  "mark_reviewed_on_submit": "all",
   "review_format": {
     "include_snippets": true,
     "max_snippet_lines": 10,
@@ -332,6 +333,7 @@ Monocle loads settings from JSON config files:
 | `auto_focus_mode`                    | `true`, `false`                            | `false`      | Auto-enter focus mode (hide sidebar, enable wrap) when reviewing plans   |
 | `comment_expand`                     | `true`, `false`                            | `true`       | Auto-expand comments on hover                                            |
 | `comment_expand_delay`               | integer (ms)                               | `2000`       | Delay before auto-expanding a selected comment (0 = instant)             |
+| `mark_reviewed_on_submit`            | `"all"`, `"commented"`, `"manual"`         | `"all"`      | Which files to mark as reviewed when submitting a review                  |
 | `keybindings`                        | object                                     | `{}`         | Custom key overrides (see below)                                         |
 | `review_format.include_snippets`     | `true`, `false`                            | `true`       | Include code snippets in formatted reviews                               |
 | `review_format.max_snippet_lines`    | integer                                    | `10`         | Truncate snippets longer than this                                       |
