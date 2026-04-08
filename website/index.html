@@ -1106,6 +1106,10 @@ document.querySelectorAll('[data-reveal]').forEach(el => observer.observe(el));
 
   [...carousel.children].forEach(img => observer.observe(img));
 })();
+
+if (location.hash === '#sneak-peek') {
+  document.getElementById('sneak-peek').classList.add('open');
+}
 </script>
 </body>
 </html>
