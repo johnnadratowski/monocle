@@ -42,18 +42,26 @@ type ReviewCmd struct {
 	AddFiles     ReviewAddFilesCmd     `cmd:"add-files" help:"Add files to the review session"`
 }
 
+// WorkDirFlag is embedded by commands that support --workdir.
+type WorkDirFlag struct {
+	WorkDir string `help:"Override working directory (pair with a repo at this path)" name:"workdir" short:"C" type:"path" default:"" env:"MONOCLE_WORKDIR"`
+}
+
 type ReviewStatusCmd struct {
+	WorkDirFlag
 	Socket string `help:"Override socket path" env:"MONOCLE_SOCKET" default:""`
 	JSON   bool   `help:"Output as JSON" default:"false"`
 }
 
 type ReviewGetFeedbackCmd struct {
+	WorkDirFlag
 	Socket string `help:"Override socket path" env:"MONOCLE_SOCKET" default:""`
 	Wait   bool   `help:"Block until feedback is available" default:"false"`
 	JSON   bool   `help:"Output as JSON" default:"false"`
 }
 
 type ReviewSendArtifactCmd struct {
+	WorkDirFlag
 	Socket      string `help:"Override socket path" env:"MONOCLE_SOCKET" default:""`
 	Title       string `help:"Title for the content" required:""`
 	File        string `help:"Path to file to submit" type:"path" default:""`
@@ -64,12 +72,14 @@ type ReviewSendArtifactCmd struct {
 }
 
 type ReviewAddFilesCmd struct {
+	WorkDirFlag
 	Socket string   `help:"Override socket path" env:"MONOCLE_SOCKET" default:""`
 	Paths  []string `arg:"" required:"" help:"File or directory paths to add for review"`
 	JSON   bool     `help:"Output as JSON" default:"false"`
 }
 
 type RunCmd struct {
+	WorkDirFlag
 	Socket         string   `help:"Override socket path for MCP channel connection" env:"MONOCLE_SOCKET" default:""`
 	AdditionalPath []string `help:"Additional file or directory paths to include for review (repeatable)" name:"additional-path" short:"a" type:"path"`
 	Continue       bool     `help:"Resume the most recent session for this repo" name:"continue" short:"c" xor:"session-mode"`
@@ -123,7 +133,7 @@ func main() {
 }
 
 func (cmd *RunCmd) Run() error {
-	return runTUI(cmd.Socket, cmd.AdditionalPath, cmd.Continue, cmd.Resume, cmd.Session)
+	return runTUI(cmd.Socket, cmd.WorkDir, cmd.AdditionalPath, cmd.Continue, cmd.Resume, cmd.Session)
 }
 
 func (cmd *RegisterCmd) Run() error {
@@ -253,7 +263,11 @@ func (cmd *UninstallCmd) Run() error {
 // -- Review subcommand implementations --
 
 func (cmd *ReviewStatusCmd) Run() error {
-	c, err := client.ConnectWithOverride(cmd.Socket)
+	socketPath, err := resolveSocketForWorkDir(cmd.Socket, cmd.WorkDir)
+	if err != nil {
+		return err
+	}
+	c, err := client.Connect(socketPath)
 	if err != nil {
 		if errors.Is(err, client.ErrNotRunning) {
 			fmt.Fprintln(os.Stderr, err)
@@ -284,7 +298,11 @@ func (cmd *ReviewStatusCmd) Run() error {
 }
 
 func (cmd *ReviewGetFeedbackCmd) Run() error {
-	c, err := client.ConnectWithOverride(cmd.Socket)
+	socketPath, err := resolveSocketForWorkDir(cmd.Socket, cmd.WorkDir)
+	if err != nil {
+		return err
+	}
+	c, err := client.Connect(socketPath)
 	if err != nil {
 		if errors.Is(err, client.ErrNotRunning) {
 			fmt.Fprintln(os.Stderr, err)
@@ -343,7 +361,11 @@ func (cmd *ReviewSendArtifactCmd) Run() error {
 		}
 	}
 
-	c, err := client.ConnectWithOverride(cmd.Socket)
+	socketPath, err := resolveSocketForWorkDir(cmd.Socket, cmd.WorkDir)
+	if err != nil {
+		return err
+	}
+	c, err := client.Connect(socketPath)
 	if err != nil {
 		if errors.Is(err, client.ErrNotRunning) {
 			fmt.Fprintln(os.Stderr, err)
@@ -379,7 +401,7 @@ func (cmd *ReviewSendArtifactCmd) Run() error {
 
 	// --wait: open a new connection and block for feedback
 	c.Close()
-	c2, err := client.ConnectWithOverride(cmd.Socket)
+	c2, err := client.Connect(socketPath)
 	if err != nil {
 		return fmt.Errorf("reconnect for wait: %w", err)
 	}
@@ -416,7 +438,11 @@ func (cmd *ReviewAddFilesCmd) Run() error {
 		absPaths[i] = abs
 	}
 
-	c, err := client.ConnectWithOverride(cmd.Socket)
+	socketPath, err := resolveSocketForWorkDir(cmd.Socket, cmd.WorkDir)
+	if err != nil {
+		return err
+	}
+	c, err := client.Connect(socketPath)
 	if err != nil {
 		if errors.Is(err, client.ErrNotRunning) {
 			fmt.Fprintln(os.Stderr, err)
@@ -449,6 +475,51 @@ func printJSON(v any) error {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	return enc.Encode(v)
+}
+
+// resolveRepoRoot returns the repo root and git mode.
+// If workdir is non-empty it is used instead of the current working directory.
+func resolveRepoRoot(workdir string) (repoRoot string, nonGitMode bool, err error) {
+	if workdir != "" {
+		info, err := os.Stat(workdir)
+		if err != nil {
+			return "", false, fmt.Errorf("--workdir: %w", err)
+		}
+		if !info.IsDir() {
+			return "", false, fmt.Errorf("--workdir: %s is not a directory", workdir)
+		}
+		repoRoot = adapters.FindRepoRoot(workdir)
+	} else {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return "", false, fmt.Errorf("get cwd: %w", err)
+		}
+		repoRoot = adapters.FindRepoRoot(cwd)
+	}
+	// Check for .git directly — repoRoot is already resolved, so skip
+	// IsGitRepo which would redundantly call FindRepoRoot again.
+	_, statErr := os.Stat(filepath.Join(repoRoot, ".git"))
+	nonGitMode = statErr != nil
+	return repoRoot, nonGitMode, nil
+}
+
+// resolveSocketForWorkDir computes the socket path considering --socket and --workdir.
+// Precedence: explicit socket > workdir-derived > CWD-derived.
+func resolveSocketForWorkDir(socketOverride, workdir string) (string, error) {
+	if socketOverride != "" {
+		return socketOverride, nil
+	}
+	if workdir != "" {
+		info, err := os.Stat(workdir)
+		if err != nil {
+			return "", fmt.Errorf("--workdir: %w", err)
+		}
+		if !info.IsDir() {
+			return "", fmt.Errorf("--workdir: %s is not a directory", workdir)
+		}
+		return adapters.DefaultSocketPath(adapters.FindRepoRoot(workdir)), nil
+	}
+	return adapters.ResolveSocketPath(), nil
 }
 
 func startNewSession(engine core.EngineAPI, repoRoot string) error {
@@ -493,7 +564,7 @@ func resolveSession(engine core.EngineAPI, repoRoot string, continueSession bool
 	}
 }
 
-func runTUI(socketOverride string, additionalPaths []string, continueSession bool, resumePicker bool, sessionID string) error {
+func runTUI(socketOverride string, workdir string, additionalPaths []string, continueSession bool, resumePicker bool, sessionID string) error {
 	// Load config
 	cfg, err := core.LoadConfig()
 	if err != nil {
@@ -507,13 +578,11 @@ func runTUI(socketOverride string, additionalPaths []string, continueSession boo
 	}
 	defer database.Close()
 
-	// Get repo root
-	repoRoot, err := os.Getwd()
+	// Get repo root — use --workdir if provided, otherwise CWD
+	repoRoot, nonGitMode, err := resolveRepoRoot(workdir)
 	if err != nil {
-		return fmt.Errorf("get cwd: %w", err)
+		return err
 	}
-	repoRoot = adapters.FindRepoRoot(repoRoot)
-	nonGitMode := !adapters.IsGitRepo(repoRoot)
 
 	// Create engine
 	engine, err := core.NewEngine(cfg, database, repoRoot, nonGitMode)
