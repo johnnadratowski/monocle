@@ -99,7 +99,7 @@ func TestDecodeHookInput_ParsesClaudePayload(t *testing.T) {
       "permission_mode": "plan",
       "hook_event_name": "PermissionRequest",
       "tool_name": "ExitPlanMode",
-      "tool_input": {"plan": "# Plan\n- step 1", "plan_filename": "p.md"}
+      "tool_input": {"plan": "# Plan\n- step 1", "planFilePath": "/home/me/.claude/plans/p.md"}
     }`
 	in, err := decodeHookInput(strings.NewReader(payload))
 	if err != nil {
@@ -108,7 +108,7 @@ func TestDecodeHookInput_ParsesClaudePayload(t *testing.T) {
 	if in.SessionID != "sess-123" {
 		t.Errorf("session id: %q", in.SessionID)
 	}
-	if in.ToolInput.Plan == "" || in.ToolInput.PlanFilename != "p.md" {
+	if in.ToolInput.Plan == "" || in.ToolInput.PlanFilePath != "/home/me/.claude/plans/p.md" {
 		t.Errorf("tool_input not parsed: %+v", in.ToolInput)
 	}
 }

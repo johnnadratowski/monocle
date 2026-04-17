@@ -5,7 +5,7 @@
         "serve-mcp",
         "--experimental-channels"
       ],
-      "command": "./bin/monocle"
+      "command": "monocle"
     }
   }
 }

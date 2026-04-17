@@ -1,4 +1,40 @@
 {
+  "hooks": {
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "command": "./bin/monocle hooks exit-plan --agent claude",
+            "timeout": 345600,
+            "type": "command"
+          }
+        ],
+        "matcher": "ExitPlanMode"
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "./bin/monocle hooks enter-plan --agent claude",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "ExitPlanMode"
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "echo 'export PATH=\"./bin:$PATH\"' \u003e\u003e \"$CLAUDE_ENV_FILE\"",
+            "type": "command"
+          }
+        ]
+      }
+    ]
+  },
   "permissions": {
     "allow": [
       "Bash(find:*)",
@@ -26,18 +62,6 @@
       "Bash(devbox run -- make*)",
       "Bash(monocle review:*)",
       "Bash(./bin/monocle review:*)"
-    ]
-  },
-  "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "echo 'export PATH=\"./bin:$PATH\"' >> \"$CLAUDE_ENV_FILE\""
-          }
-        ]
-      }
     ]
   }
 }

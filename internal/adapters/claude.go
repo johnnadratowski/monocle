@@ -137,7 +137,8 @@ func (a *ClaudeAdapter) Register(global bool) error {
 	}
 
 	if !a.SkipPlanHook {
-		if err := configureClaudeHooks(claudeSettingsPath(global), ResolveCommand(global)); err != nil {
+		settingsPath := claudeSettingsPath(global)
+		if err := configureClaudeHooks(settingsPath, ResolveHookCommand(settingsPath, global)); err != nil {
 			return fmt.Errorf("configure hooks: %w", err)
 		}
 	}

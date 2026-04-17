@@ -3,6 +3,8 @@ package adapters
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 )
 
 // AgentAdapter handles MCP registration for a specific coding agent.
@@ -55,4 +57,50 @@ func ResolveCommand(global bool) string {
 		}
 	}
 	return "monocle"
+}
+
+// ResolveHookCommand returns the monocle binary path to record in a
+// settings.json hook entry. Unlike MCP-server invocations, which inherit
+// the Claude Code session's PATH (including any PATH-extending SessionStart
+// hooks), hook subprocesses spawned by Claude Code do NOT reliably inherit
+// that environment. A PATH-resolved "monocle" can therefore pick up an
+// older/global install that predates the hooks subcommand, which fails
+// silently (exit 80, empty stdout) and looks exactly like "my hook isn't
+// firing."
+//
+// Resolution:
+//   - If the running binary sits inside the settings file's project root
+//     (the directory containing .claude/), emit a repo-relative path like
+//     "./bin/monocle" so the settings.json stays portable across machines
+//     that each build to the same relative location.
+//   - Otherwise emit the absolute path of the running binary.
+//   - Global-scope configs always use the absolute path — a path relative
+//     to $HOME would be misleading.
+func ResolveHookCommand(settingsPath string, global bool) string {
+	exePath, err := os.Executable()
+	if err != nil {
+		return "monocle"
+	}
+	absExe, err := filepath.Abs(exePath)
+	if err != nil {
+		return exePath
+	}
+
+	if global {
+		return absExe
+	}
+
+	settingsAbs, err := filepath.Abs(settingsPath)
+	if err != nil {
+		return absExe
+	}
+	// settingsPath is typically ".claude/settings.json"; strip two levels
+	// to get the directory that contains .claude/.
+	projectRoot := filepath.Dir(filepath.Dir(settingsAbs))
+
+	rel, err := filepath.Rel(projectRoot, absExe)
+	if err != nil || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
+		return absExe
+	}
+	return "./" + filepath.ToSlash(rel)
 }

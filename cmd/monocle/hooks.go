@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -58,8 +59,31 @@ type hookInput struct {
 }
 
 type hookToolInput struct {
-	Plan         string `json:"plan"`
-	PlanFilename string `json:"plan_filename"`
+	Plan string `json:"plan"`
+	// PlanFilePath is Claude Code's path to the on-disk plan file backing
+	// this ExitPlanMode call (e.g. "/.../claude/plans/my-plan.md"). When
+	// present it is stable across revisions of the same plan within a
+	// session, so we use its basename as the engine ID for upsert-style
+	// versioning.
+	PlanFilePath string `json:"planFilePath"`
+}
+
+// hookDebug writes a debug line to the file named by MONOCLE_HOOK_DEBUG.
+// No-op when the env var is unset. Used to diagnose silent-fallback paths
+// when Claude Code invokes the hook but nothing appears to happen.
+func hookDebug(format string, args ...any) {
+	path := os.Getenv("MONOCLE_HOOK_DEBUG")
+	if path == "" {
+		return
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	fmt.Fprintf(f, "[%s] ", time.Now().Format("15:04:05.000"))
+	fmt.Fprintf(f, format, args...)
+	fmt.Fprintln(f)
 }
 
 func decodeHookInput(r io.Reader) (hookInput, error) {
@@ -71,6 +95,7 @@ func decodeHookInput(r io.Reader) (hookInput, error) {
 	if len(data) == 0 {
 		return in, errors.New("empty stdin")
 	}
+	hookDebug("stdin payload: %s", string(data))
 	if err := json.Unmarshal(data, &in); err != nil {
 		return in, fmt.Errorf("parse hook input: %w", err)
 	}
@@ -90,17 +115,19 @@ func firstHeading(body string) string {
 }
 
 func (cmd *ExitPlanHookCmd) Run() error {
+	hookDebug("exit-plan: invoked, agent=%q socket=%q workdir=%q", cmd.Agent, cmd.Socket, cmd.WorkDir)
 	in, err := decodeHookInput(os.Stdin)
 	if err != nil {
-		// No usable payload — let the agent fall back to its default prompt.
+		hookDebug("exit-plan: decode stdin failed: %v", err)
 		return nil
 	}
+	hookDebug("exit-plan: decoded session=%q cwd=%q tool=%q plan_len=%d", in.SessionID, in.CWD, in.ToolName, len(in.ToolInput.Plan))
 
 	switch cmd.Agent {
 	case "claude":
 		return cmd.runClaude(in)
 	default:
-		// Unsupported agent — exit cleanly so the harness falls back.
+		hookDebug("exit-plan: unsupported agent %q", cmd.Agent)
 		return nil
 	}
 }
@@ -108,6 +135,7 @@ func (cmd *ExitPlanHookCmd) Run() error {
 func (cmd *ExitPlanHookCmd) runClaude(in hookInput) error {
 	plan := in.ToolInput.Plan
 	if plan == "" {
+		hookDebug("exit-plan/claude: empty plan body, exiting silently")
 		return nil
 	}
 
@@ -118,13 +146,16 @@ func (cmd *ExitPlanHookCmd) runClaude(in hookInput) error {
 
 	socketPath, err := resolveSocketForWorkDir(cmd.Socket, workdir)
 	if err != nil {
+		hookDebug("exit-plan/claude: socket resolve failed: %v (workdir=%q)", err, workdir)
 		return nil
 	}
+	hookDebug("exit-plan/claude: resolved socket=%q (workdir=%q)", socketPath, workdir)
 
-	planID := in.ToolInput.PlanFilename
-	if planID == "" {
+	planID := filepath.Base(in.ToolInput.PlanFilePath)
+	if planID == "" || planID == "." || planID == "/" {
 		planID = fmt.Sprintf("exit-plan-%s.md", in.SessionID)
 	}
+	hookDebug("exit-plan/claude: using plan id=%q (from planFilePath=%q)", planID, in.ToolInput.PlanFilePath)
 	title := firstHeading(plan)
 	if title == "" {
 		title = planID
@@ -132,7 +163,7 @@ func (cmd *ExitPlanHookCmd) runClaude(in hookInput) error {
 
 	submit, err := client.Connect(socketPath)
 	if err != nil {
-		// Engine not running — let Claude show its normal permission prompt.
+		hookDebug("exit-plan/claude: connect failed: %v", err)
 		return nil
 	}
 	if _, err := submit.Request(
@@ -146,15 +177,18 @@ func (cmd *ExitPlanHookCmd) runClaude(in hookInput) error {
 		},
 		client.DefaultTimeout,
 	); err != nil {
+		hookDebug("exit-plan/claude: submit request failed: %v", err)
 		submit.Close()
 		return nil
 	}
 	submit.Close()
+	hookDebug("exit-plan/claude: submitted, now blocking on feedback")
 
 	// Second connection for the blocking poll — the socket server rejects
 	// overlapping blocking calls on the same connection.
 	wait, err := client.Connect(socketPath)
 	if err != nil {
+		hookDebug("exit-plan/claude: reconnect for poll failed: %v", err)
 		return nil
 	}
 	defer wait.Close()
@@ -164,12 +198,16 @@ func (cmd *ExitPlanHookCmd) runClaude(in hookInput) error {
 		0,
 	)
 	if err != nil {
+		hookDebug("exit-plan/claude: poll request failed: %v", err)
 		return nil
 	}
 	feedback, ok := resp.(*protocol.PollFeedbackResponse)
 	if !ok {
+		hookDebug("exit-plan/claude: poll response is not PollFeedbackResponse (got %T)", resp)
 		return nil
 	}
+	hookDebug("exit-plan/claude: got feedback action=%q has_feedback=%v comment_count=%d body_len=%d",
+		feedback.Action, feedback.HasFeedback, feedback.CommentCount, len(feedback.Feedback))
 
 	return emitClaudePermissionDecision(os.Stdout, feedback)
 }
@@ -191,7 +229,13 @@ func emitClaudePermissionDecision(w io.Writer, feedback *protocol.PollFeedbackRe
 			"decision":      decision,
 		},
 	}
-	return json.NewEncoder(w).Encode(payload)
+	buf, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	hookDebug("exit-plan/claude: emitting decision=%s", string(buf))
+	_, err = fmt.Fprintln(w, string(buf))
+	return err
 }
 
 func (cmd *EnterPlanHookCmd) Run() error {
