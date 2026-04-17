@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 
 	"github.com/josephschmitt/monocle/internal/adapters"
 	"github.com/josephschmitt/monocle/internal/tui"
@@ -22,52 +21,43 @@ func updateConfirm(m Model, key string) (tea.Model, tea.Cmd) {
 }
 
 // viewConfirm renders the pre-execute summary.
-func viewConfirm(s WizardState, width int) string {
+func viewConfirm(s WizardState) string {
 	var b strings.Builder
-	faint := lipgloss.NewStyle().Faint(true)
-	bold := lipgloss.NewStyle().Bold(true)
 
 	title := confirmTitleRegister
 	help := confirmHelpRegister
+	prefix := "+ "
 	if s.mode == ModeUnregister {
 		title = confirmTitleUnregister
 		help = confirmHelpUnregister
+		prefix = "- "
 	}
-	b.WriteString(bold.Render(title) + "\n\n")
-	b.WriteString(faint.Render(help) + "\n\n")
+	b.WriteString(styleBold.Render(title) + "\n\n")
+	b.WriteString(styleFaint.Render(help) + "\n\n")
 
 	scope := "project"
 	if s.scope {
 		scope = "user"
 	}
-	b.WriteString(fmt.Sprintf("Scope: %s\n\n", bold.Render(scope)))
+	fmt.Fprintf(&b, "Scope: %s\n\n", styleBold.Render(scope))
 
 	for _, a := range s.selectedAdapters() {
 		applyAdapterConfiguration(s, a)
-		b.WriteString(bold.Render(a.Label()))
+		b.WriteString(styleBold.Render(a.Label()))
 		if s.mode == ModeRegister {
 			b.WriteString("  ")
-			b.WriteString(faint.Render(fmt.Sprintf("(%s)", describeMode(s, a))))
+			fmt.Fprintf(&b, "%s", styleFaint.Render("("+describeMode(s, a)+")"))
 		}
 		b.WriteString("\n")
-		paths := a.ConfigPaths(s.scope)
-		if s.mode == ModeRegister {
-			for _, p := range paths {
-				b.WriteString("  ")
-				b.WriteString(faint.Render("+ " + p))
-				b.WriteString("\n")
-			}
-		} else {
-			for _, p := range paths {
-				b.WriteString("  ")
-				b.WriteString(faint.Render("- " + p))
-				b.WriteString("\n")
-			}
+		for _, p := range a.ConfigPaths(s.scope) {
+			b.WriteString("  ")
+			b.WriteString(styleFaint.Render(prefix + p))
+			b.WriteString("\n")
 		}
 		b.WriteString("\n")
 	}
 
-	b.WriteString(faint.Render("Press enter to proceed."))
+	b.WriteString(styleFaint.Render("Press enter to proceed."))
 	return b.String()
 }
 

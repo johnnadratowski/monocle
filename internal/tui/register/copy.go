@@ -52,8 +52,7 @@ const (
 	// Execute step.
 	executeTitleRegister   = "Registering…"
 	executeTitleUnregister = "Unregistering…"
-	executeDoneRegister    = "Done. Press enter to close."
-	executeDoneUnregister  = "Done. Press enter to close."
+	executeDone            = "Done. Press enter to close."
 )
 
 // hookRow is the audit detail shown under each Claude toggle so power users

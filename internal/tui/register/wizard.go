@@ -33,12 +33,12 @@ type Result struct {
 	Results   []AgentResult
 }
 
-// AgentResult is the public-facing version of agentResult.
+// AgentResult holds the outcome for one adapter after StepExecute runs it.
 type AgentResult struct {
 	Name   string
 	Label  string
 	Paths  []string
-	Action string
+	Action string // "registered", "updated", "removed", "nothing"
 	Err    error
 }
 
@@ -56,17 +56,7 @@ func Run(opts Options) (Result, error) {
 	if !ok {
 		return Result{}, fmt.Errorf("wizard: unexpected model type %T", final)
 	}
-	r := Result{Cancelled: fm.state.cancelled}
-	for _, res := range fm.state.results {
-		r.Results = append(r.Results, AgentResult{
-			Name:   res.name,
-			Label:  res.label,
-			Paths:  res.paths,
-			Action: res.action,
-			Err:    res.err,
-		})
-	}
-	return r, nil
+	return Result{Cancelled: fm.state.cancelled, Results: fm.state.results}, nil
 }
 
 func (m Model) Init() tea.Cmd { return nil }
@@ -106,7 +96,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case agentFinishedMsg:
 		for len(m.state.results) <= msg.index {
-			m.state.results = append(m.state.results, agentResult{})
+			m.state.results = append(m.state.results, AgentResult{})
 		}
 		m.state.results[msg.index] = msg.result
 		m.state.runIndex = msg.index + 1
@@ -174,35 +164,32 @@ func (m Model) View() tea.View {
 		outerWidth = contentWidth + frame
 	}
 
-	header := renderHeader(m.state, contentWidth)
+	header := renderHeader(m.state)
 
 	var body string
 	switch m.state.step {
 	case StepAgents:
-		body = viewAgents(m.state, contentWidth)
+		body = viewAgents(m.state)
 	case StepClaude:
 		body = viewClaude(m.state, contentWidth)
 	case StepConfirm:
-		body = viewConfirm(m.state, contentWidth)
+		body = viewConfirm(m.state)
 	case StepExecute:
-		body = viewExecute(m.state, contentWidth)
+		body = viewExecute(m.state)
 	}
 
-	footer := renderFooter(m.state)
+	footer := renderFooter()
 
 	content := strings.Join([]string{header, body, footer}, "\n")
 	return tea.NewView(m.state.theme.ModalBorder.Width(outerWidth).Render(content))
 }
 
-func renderHeader(s WizardState, width int) string {
+func renderHeader(s WizardState) string {
 	verb := titleRegister
 	if s.mode == ModeUnregister {
 		verb = titleUnregister
 	}
-	logoStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("4"))
-	sepStyle := lipgloss.NewStyle().Faint(true)
-	verbStyle := lipgloss.NewStyle().Bold(true)
-	title := logoStyle.Render("o_(◉) monocle") + sepStyle.Render("  │  ") + verbStyle.Render(verb)
+	title := styleLogo.Render("o_(◉) monocle") + styleFaint.Render("  │  ") + styleBold.Render(verb)
 	steps := []string{"Agents", "Claude", "Confirm", "Run"}
 	if !s.claudeSelected() {
 		steps = []string{"Agents", "Confirm", "Run"}
@@ -222,31 +209,27 @@ func renderHeader(s WizardState, width int) string {
 	case StepExecute:
 		active = len(steps) - 1
 	}
-	faint := lipgloss.NewStyle().Faint(true)
-	cur := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6"))
-	var trail []string
-	for i, s := range steps {
+	trail := make([]string, 0, len(steps))
+	for i, label := range steps {
 		if i == active {
-			trail = append(trail, cur.Render(s))
+			trail = append(trail, styleBreadcrumb.Render(label))
 		} else {
-			trail = append(trail, faint.Render(s))
+			trail = append(trail, styleFaint.Render(label))
 		}
 	}
-	trailStr := strings.Join(trail, faint.Render(" › "))
+	trailStr := strings.Join(trail, styleFaint.Render(" › "))
 	return title + "\n" + trailStr + "\n"
 }
 
-func renderFooter(s WizardState) string {
-	faint := lipgloss.NewStyle().Faint(true)
-	return "\n" + faint.Render(helpHint)
+func renderFooter() string {
+	return "\n" + styleFaint.Render(helpHint)
 }
 
 // lockNote renders the "(via --flag)" annotation for pre-filled fields.
 func lockNote(flag string) string {
-	return lipgloss.NewStyle().Faint(true).Italic(true).Render("  (via " + flag + ")")
+	return styleFaintItalic.Render("  (via " + flag + ")")
 }
 
-// checkbox renders [x] or [ ] styled appropriately.
 // Nerd Font glyphs for the wizard's toggle rows. Using circular variants to
 // match the main TUI's icon vocabulary and read as a modern checkbox rather
 // than the ASCII `[x]`/`[ ]` the old picker used.
@@ -255,17 +238,32 @@ const (
 	glyphUnchecked = "\uf10c" //  nf-fa-circle_o
 )
 
-func checkbox(checked bool, locked bool) string {
-	on := lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
-	off := lipgloss.NewStyle().Faint(true)
-	if locked {
-		on = on.Faint(true)
-		off = off.Faint(true)
-	}
+// Shared styles hoisted to package scope so View() renders (every keypress)
+// don't reallocate them. All lipgloss styles are immutable values — safe to
+// share across goroutines or re-render calls.
+var (
+	styleFaint        = lipgloss.NewStyle().Faint(true)
+	styleBold         = lipgloss.NewStyle().Bold(true)
+	styleFaintItalic  = lipgloss.NewStyle().Faint(true).Italic(true)
+	styleCursorBar    = lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true)
+	styleLabelActive  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("15"))
+	styleCheckboxOn   = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
+	styleCheckboxLock = lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Faint(true)
+	styleOk           = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
+	styleBad          = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
+	styleLogo         = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("4"))
+	styleBreadcrumb   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("6"))
+	styleCode         = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
+)
+
+func checkbox(checked, locked bool) string {
 	if checked {
-		return on.Render(glyphChecked)
+		if locked {
+			return styleCheckboxLock.Render(glyphChecked)
+		}
+		return styleCheckboxOn.Render(glyphChecked)
 	}
-	return off.Render(glyphUnchecked)
+	return styleFaint.Render(glyphUnchecked)
 }
 
 // rowCursor is a 2-char gutter rendered at the start of every selectable row.
@@ -273,8 +271,7 @@ func checkbox(checked bool, locked bool) string {
 // inactive rows get blank space so the alignment stays stable.
 func rowCursor(active bool) string {
 	if active {
-		bar := lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true).Render("▌")
-		return bar + " "
+		return styleCursorBar.Render("▌") + " "
 	}
 	return "  "
 }
@@ -283,7 +280,7 @@ func rowCursor(active bool) string {
 // row state. Active rows get bright + bold; inactive rows render as-is.
 func highlightLabel(label string, active bool) string {
 	if active {
-		return lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("15")).Render(label)
+		return styleLabelActive.Render(label)
 	}
 	return label
 }
@@ -319,11 +316,11 @@ func indentedWrap(text string, indent, width int) string {
 	return strings.Join(lines, "\n")
 }
 
-// runForwardDispatch is a helper for step files to emit advanceMsg.
+// advanceCmd emits the advanceMsg used by step updaters to walk forward.
 func advanceCmd() tea.Cmd { return func() tea.Msg { return advanceMsg{} } }
 
-// resolveIntegrationModeForState returns the effective mode for an agent,
-// respecting a locked global override from Options.
+// resolveIntegrationModeForAgent returns the effective mode for an agent in
+// the wizard's current state.
 func (s WizardState) resolveIntegrationModeForAgent(a adapters.AgentAdapter) adapters.IntegrationMode {
 	return resolveIntegrationMode(a.Name(), s.integration[a.Name()])
 }

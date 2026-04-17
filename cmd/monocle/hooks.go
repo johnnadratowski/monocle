@@ -52,12 +52,10 @@ type EnterPlanHookCmd struct {
 // Other agents will need their own decoder when they're added to the --agent
 // enum.
 type hookInput struct {
-	SessionID      string             `json:"session_id"`
-	CWD            string             `json:"cwd"`
-	PermissionMode string             `json:"permission_mode"`
-	HookEventName  string             `json:"hook_event_name"`
-	ToolName       string             `json:"tool_name"`
-	ToolInput      hookToolInput      `json:"tool_input"`
+	SessionID string        `json:"session_id"`
+	CWD       string        `json:"cwd"`
+	ToolName  string        `json:"tool_name"`
+	ToolInput hookToolInput `json:"tool_input"`
 }
 
 type hookToolInput struct {

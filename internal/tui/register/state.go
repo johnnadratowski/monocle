@@ -79,14 +79,6 @@ type Options struct {
 	KeepReviewGateLocked bool
 }
 
-// agentResult holds the outcome for one adapter after StepExecute runs it.
-type agentResult struct {
-	name   string
-	label  string
-	paths  []string
-	action string // "registered", "updated", "removed", "nothing"
-	err    error
-}
 
 // WizardState is the full state used by every step. Steps read/write fields
 // here via the Model; there's no per-step sub-model — all state lives in one
@@ -120,7 +112,7 @@ type WizardState struct {
 
 	// Execute step
 	runIndex int
-	results  []agentResult
+	results  []AgentResult
 
 	cancelled bool
 }
@@ -142,7 +134,7 @@ type runNextMsg struct{}
 // agentFinishedMsg reports the outcome of one adapter invocation.
 type agentFinishedMsg struct {
 	index  int
-	result agentResult
+	result AgentResult
 }
 
 // executeDoneMsg means every adapter has finished.

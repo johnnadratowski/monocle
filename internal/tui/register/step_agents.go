@@ -25,11 +25,11 @@ func updateAgents(m Model, key string) (tea.Model, tea.Cmd) {
 	s := m.state
 
 	switch {
-	case tui.Matches(key, s.keys.Up) || key == "up":
+	case tui.Matches(key, s.keys.Up):
 		if s.agentCursor > 0 {
 			s.agentCursor--
 		}
-	case tui.Matches(key, s.keys.Down) || key == "down":
+	case tui.Matches(key, s.keys.Down):
 		if s.agentCursor < len(s.adapters)-1 {
 			s.agentCursor++
 		}
@@ -42,7 +42,7 @@ func updateAgents(m Model, key string) (tea.Model, tea.Cmd) {
 			name := s.adapters[s.agentCursor].Name()
 			s.selected[name] = !s.selected[name]
 		}
-	case key == "enter":
+	case tui.Matches(key, s.keys.WizardAdvance):
 		if s.anySelected() {
 			m.state = s
 			return m, advanceCmd()
@@ -53,11 +53,8 @@ func updateAgents(m Model, key string) (tea.Model, tea.Cmd) {
 }
 
 // viewAgents renders the Agents + Scope step.
-func viewAgents(s WizardState, width int) string {
+func viewAgents(s WizardState) string {
 	var b strings.Builder
-	faint := lipgloss.NewStyle().Faint(true)
-	bold := lipgloss.NewStyle().Bold(true)
-	cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("6"))
 
 	intro := agentsIntroRegister
 	if s.mode == ModeUnregister {
@@ -66,12 +63,12 @@ func viewAgents(s WizardState, width int) string {
 	b.WriteString(intro + "\n\n")
 
 	// Scope row.
-	b.WriteString(renderScopeRow(s, cursorStyle, bold, faint))
+	b.WriteString(renderScopeRow(s))
 	b.WriteString("\n\n")
 
 	if len(s.adapters) == 0 && s.mode == ModeUnregister {
 		b.WriteString("\n")
-		b.WriteString(faint.Render(agentsEmptyUnregister))
+		b.WriteString(styleFaint.Render(agentsEmptyUnregister))
 		b.WriteString("\n")
 		return b.String()
 	}
@@ -79,7 +76,7 @@ func viewAgents(s WizardState, width int) string {
 	// Agent rows.
 	for i, a := range s.adapters {
 		onRow := s.agentCursor == i
-		b.WriteString(renderAgentRow(s, i, a, onRow, cursorStyle, bold, faint))
+		b.WriteString(renderAgentRow(s, a, onRow))
 	}
 	return b.String()
 }
@@ -93,66 +90,65 @@ var (
 	scopeProjectColor color.Color = lipgloss.Color("2") // green
 )
 
-func renderScopeRow(s WizardState, cursorStyle, bold, faint lipgloss.Style) string {
-	tab := func(label string, active bool, tint color.Color) string {
-		if active {
-			return lipgloss.NewStyle().
-				Background(tint).
-				Foreground(lipgloss.Color("0")).
-				Bold(true).
-				Padding(0, 1).
-				Render(label)
-		}
-		return lipgloss.NewStyle().
-			Foreground(tint).
-			Padding(0, 1).
-			Render(label)
-	}
-	userStr := tab(scopeUser, s.scope, scopeUserColor)
-	projStr := tab(scopeProject, !s.scope, scopeProjectColor)
+func renderScopeRow(s WizardState) string {
+	userStr := scopeTab(scopeUser, s.scope, scopeUserColor)
+	projStr := scopeTab(scopeProject, !s.scope, scopeProjectColor)
 
 	var b strings.Builder
-	b.WriteString(bold.Render(scopeLabel))
+	b.WriteString(styleBold.Render(scopeLabel))
 	b.WriteString(" ")
 	b.WriteString(projStr + " " + userStr)
 	if s.opts.GlobalLocked {
 		b.WriteString("  " + lockNote("--global"))
 	} else {
-		b.WriteString("  " + faint.Render("(Tab)"))
+		b.WriteString("  " + styleFaint.Render("(Tab)"))
 	}
 	b.WriteString("\n")
-	b.WriteString(faint.Render(scopeHelp))
+	b.WriteString(styleFaint.Render(scopeHelp))
 	return b.String()
 }
 
-func renderAgentRow(s WizardState, i int, a interface {
+// scopeTab renders one of the scope-picker tab chips in its colored style.
+func scopeTab(label string, active bool, tint color.Color) string {
+	if active {
+		return lipgloss.NewStyle().
+			Background(tint).
+			Foreground(lipgloss.Color("0")).
+			Bold(true).
+			Padding(0, 1).
+			Render(label)
+	}
+	return lipgloss.NewStyle().
+		Foreground(tint).
+		Padding(0, 1).
+		Render(label)
+}
+
+func renderAgentRow(s WizardState, a interface {
 	Name() string
 	Label() string
 	ConfigPaths(bool) []string
-}, onRow bool, cursorStyle, bold, faint lipgloss.Style) string {
-	cur := rowCursor(onRow)
+}, onRow bool) string {
 	label := highlightLabel(a.Label(), onRow)
 	paths := a.ConfigPaths(s.scope)
 	var pathSummary string
 	if len(paths) > 0 {
 		if len(paths) == 1 {
-			pathSummary = faint.Render("(" + paths[0] + ")")
+			pathSummary = styleFaint.Render("(" + paths[0] + ")")
 		} else {
-			pathSummary = faint.Render(fmt.Sprintf("(%s + %d more)", paths[0], len(paths)-1))
+			pathSummary = styleFaint.Render(fmt.Sprintf("(%s + %d more)", paths[0], len(paths)-1))
 		}
 	}
 
 	checked := s.selected[a.Name()]
-	line := fmt.Sprintf("%s%s %s %s", cur, checkbox(checked, false), label, pathSummary)
 	b := strings.Builder{}
-	b.WriteString(line)
-	b.WriteString("\n")
+	fmt.Fprintf(&b, "%s%s %s %s\n", rowCursor(onRow), checkbox(checked, false), label, pathSummary)
 
 	// Full path list on the focused row so users see exactly what's touched.
 	if onRow {
 		for _, p := range paths {
 			b.WriteString("       ")
-			b.WriteString(faint.Render("→ " + p))
+			b.WriteString(styleFaint.Render("→ " + p))
 			b.WriteString("\n")
 		}
 	}

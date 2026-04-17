@@ -190,7 +190,7 @@ func (cmd *RegisterCmd) runHeadless(allAdapters []adapters.AgentAdapter) error {
 		a.SetMode(cmd.resolveMode(a))
 	}
 
-	agents, err := resolveAgentsFrom(allAdapters, cmd.Agent, "Select agents to register")
+	agents, err := resolveAgentsFrom(allAdapters, cmd.Agent)
 	if err != nil {
 		return err
 	}
@@ -294,7 +294,7 @@ func (cmd *UnregisterCmd) runWizard(allAdapters []adapters.AgentAdapter) error {
 }
 
 func (cmd *UnregisterCmd) runHeadless(allAdapters []adapters.AgentAdapter) error {
-	agents, err := resolveAgentsFrom(allAdapters, cmd.Agent, "Select agents to unregister")
+	agents, err := resolveAgentsFrom(allAdapters, cmd.Agent)
 	if err != nil {
 		return err
 	}
@@ -359,7 +359,7 @@ func reportWizardResults(res register.Result) error {
 // paths. The empty-name case (interactive selection) is handled by the wizard
 // callers; reaching it here means --no-tui was passed without an agent, which
 // we treat as "all" for CI friendliness.
-func resolveAgentsFrom(agents []adapters.AgentAdapter, name, _pickerTitle string) ([]adapters.AgentAdapter, error) {
+func resolveAgentsFrom(agents []adapters.AgentAdapter, name string) ([]adapters.AgentAdapter, error) {
 	switch name {
 	case "", "all":
 		return agents, nil

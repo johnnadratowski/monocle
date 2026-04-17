@@ -15,11 +15,11 @@ import (
 func updateClaude(m Model, key string) (tea.Model, tea.Cmd) {
 	s := m.state
 	switch {
-	case tui.Matches(key, s.keys.Up) || key == "up":
+	case tui.Matches(key, s.keys.Up):
 		if s.claudeCursor > 0 {
 			s.claudeCursor--
 		}
-	case tui.Matches(key, s.keys.Down) || key == "down":
+	case tui.Matches(key, s.keys.Down):
 		if s.claudeCursor < 1 {
 			s.claudeCursor++
 		}
@@ -68,12 +68,13 @@ func (s WizardState) gateInstalled() bool {
 	return s.gateToggle
 }
 
+// codeTokens lists substrings in claudeExplain that should render in code
+// color rather than faint prose.
+var codeTokens = []string{"--dangerously-load-development-channels"}
+
 // viewClaude renders the hooks step for both modes.
 func viewClaude(s WizardState, width int) string {
 	var b strings.Builder
-	faint := lipgloss.NewStyle().Faint(true)
-	bold := lipgloss.NewStyle().Bold(true)
-	cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("6"))
 
 	title := claudeTitleRegister
 	subtitle := claudeSubtitleRegister
@@ -81,8 +82,8 @@ func viewClaude(s WizardState, width int) string {
 		title = claudeTitleUnregister
 		subtitle = claudeSubtitleUnregister
 	}
-	b.WriteString(bold.Render(title) + "\n")
-	b.WriteString(faint.Render(subtitle) + "\n\n")
+	b.WriteString(styleBold.Render(title) + "\n")
+	b.WriteString(styleFaint.Render(subtitle) + "\n\n")
 
 	planLabel := planToggleRegister
 	gateLabel := gateToggleRegister
@@ -91,9 +92,9 @@ func viewClaude(s WizardState, width int) string {
 		gateLabel = gateToggleUnregister
 	}
 
-	b.WriteString(renderHookToggle(s, 0, planLabel, planToggleDesc, s.planInstalled(), s.planLocked(), planHookRows, width, cursorStyle, bold, faint))
+	b.WriteString(renderHookToggle(s, 0, planLabel, planToggleDesc, s.planInstalled(), s.planLocked(), planHookRows, width))
 	b.WriteString("\n")
-	b.WriteString(renderHookToggle(s, 1, gateLabel, gateToggleDesc, s.gateInstalled(), s.gateLocked(), reviewGateRows, width, cursorStyle, bold, faint))
+	b.WriteString(renderHookToggle(s, 1, gateLabel, gateToggleDesc, s.gateInstalled(), s.gateLocked(), reviewGateRows, width))
 
 	b.WriteString("\n")
 	explain := claudeExplain
@@ -101,28 +102,20 @@ func viewClaude(s WizardState, width int) string {
 		explain = claudeExplainUnregister
 	}
 	// Word-wrap against the available width before styling so the note flows
-	// naturally in wide terminals instead of breaking at the hardcoded
-	// newlines the source literal used to ship.
-	b.WriteString(renderExplain(indentedWrap(explain, 0, width), faint))
+	// naturally in wide terminals instead of breaking at hardcoded newlines.
+	b.WriteString(renderExplain(indentedWrap(explain, 0, width)))
 	return b.String()
 }
 
 // renderExplain styles the compat note at the bottom of the Claude step,
-// rendering code-like tokens (currently just the channels flag) in yellow —
-// the same color the main TUI uses for MarkdownCode — while leaving the
-// surrounding prose faint.
-//
-// The text is split per-line so a single `faint.Render` call never receives
-// an embedded newline; lipgloss block-pads multi-line inputs, which pushed
-// subsequent styled spans to the far right of the available width.
-func renderExplain(text string, faint lipgloss.Style) string {
-	code := lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
-	codeTokens := []string{"--dangerously-load-development-channels"}
-
+// rendering code-like tokens in yellow and the rest in faint prose. Splits
+// per-line so lipgloss doesn't block-pad multi-line input — that padding
+// pushed styled spans to the far right of the available width.
+func renderExplain(text string) string {
 	var out strings.Builder
 	lines := strings.Split(text, "\n")
 	for i, line := range lines {
-		out.WriteString(styleLineTokens(line, faint, code, codeTokens))
+		out.WriteString(styleLineTokens(line, styleFaint, styleCode, codeTokens))
 		if i < len(lines)-1 {
 			out.WriteString("\n")
 		}
@@ -161,7 +154,7 @@ func styleLineTokens(line string, baseStyle, tokenStyle lipgloss.Style, tokens [
 	return out.String()
 }
 
-func renderHookToggle(s WizardState, idx int, label, desc string, checked, locked bool, rows []hookRow, width int, cursorStyle, bold, faint lipgloss.Style) string {
+func renderHookToggle(s WizardState, idx int, label, desc string, checked, locked bool, rows []hookRow, width int) string {
 	var b strings.Builder
 	onRow := s.claudeCursor == idx
 	// Match the agents step layout: rowCursor gutter (2 cols) + checkbox
@@ -171,36 +164,37 @@ func renderHookToggle(s WizardState, idx int, label, desc string, checked, locke
 	b.WriteString(" ")
 	b.WriteString(highlightLabel(label, onRow))
 	if locked {
-		flag := "--no-plan-hook"
-		if s.mode == ModeUnregister {
-			flag = "--keep-plan-hook"
-		}
-		if idx == 1 {
-			if s.mode == ModeUnregister {
-				flag = "--keep-review-gate"
-			} else {
-				flag = "--no-review-gate"
-			}
-		}
-		b.WriteString(lockNote(flag))
+		b.WriteString(lockNote(hookFlagName(s.mode, idx)))
 	}
 	b.WriteString("\n")
 
-	// Description indented to line up with the label text. We wrap + prefix
-	// manually rather than using lipgloss PaddingLeft + Width because the
-	// outer ModalBorder re-flows the content block and strips the inner
-	// padding from continuation lines. Gutter: 2 cols cursor + 1 col
-	// checkbox + 1 col space = 4 cols.
-	b.WriteString(faint.Render(indentedWrap(desc, 4, width)))
+	// Description wraps + prefix manually — lipgloss PaddingLeft + Width
+	// doesn't survive the outer ModalBorder re-flow. Gutter: 2 cursor +
+	// 1 checkbox + 1 space = 4 cols to align with the label.
+	b.WriteString(styleFaint.Render(indentedWrap(desc, 4, width)))
 	b.WriteString("\n")
 
-	// Tool sublist indented at the same 7-col depth as the agents-step
-	// path sublist so the two screens read as the same layout.
+	// Tool sublist matches the agents-step path sublist depth (7 cols).
 	for _, r := range rows {
 		b.WriteString("       ")
-		b.WriteString(faint.Render("• " + r.label + "  "))
-		b.WriteString(faint.Render("(" + r.note + ")"))
+		b.WriteString(styleFaint.Render("• " + r.label + "  "))
+		b.WriteString(styleFaint.Render("(" + r.note + ")"))
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+// hookFlagName returns the CLI flag associated with toggle `idx` in the
+// current wizard mode, for the "(via --flag)" lock annotation.
+func hookFlagName(mode Mode, idx int) string {
+	switch {
+	case mode == ModeRegister && idx == 0:
+		return "--no-plan-hook"
+	case mode == ModeRegister && idx == 1:
+		return "--no-review-gate"
+	case mode == ModeUnregister && idx == 0:
+		return "--keep-plan-hook"
+	default:
+		return "--keep-review-gate"
+	}
 }
