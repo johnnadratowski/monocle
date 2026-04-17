@@ -27,6 +27,7 @@ type CLI struct {
 	Review          ReviewCmd          `cmd:"review" help:"Commands for interacting with a Monocle review session"`
 	Register        RegisterCmd        `cmd:"" help:"Register Monocle for an agent"`
 	Unregister      UnregisterCmd      `cmd:"" help:"Remove Monocle registration"`
+	Hooks           HooksCmd           `cmd:"" help:"Hook handlers for agent lifecycle events (invoked by the agent harness)"`
 	ServeMcp        ServeMCPCmd        `cmd:"serve-mcp" help:"Run the MCP server" hidden:""`
 	ServeMcpChannel ServeMCPChannelCmd `cmd:"serve-mcp-channel" help:"Run the MCP channel server (deprecated)" hidden:""`
 	Install         InstallCmd         `cmd:"" help:"Install MCP channel (alias for register)" hidden:""`
@@ -91,6 +92,7 @@ type RegisterCmd struct {
 	Agent           string `arg:"" optional:"" help:"Agent to register (claude, opencode, codex, gemini, all)"`
 	Global          bool   `help:"Register in user-level config instead of project" default:"false"`
 	IntegrationMode string `help:"Override the default integration mode (auto, mcp, or skills)" enum:"auto,mcp,skills" default:"auto"`
+	NoPlanHook      bool   `help:"Skip installing the Claude Code ExitPlanMode hook" name:"no-plan-hook" default:"false"`
 }
 
 type UnregisterCmd struct {
@@ -150,6 +152,15 @@ func (cmd *RegisterCmd) Run() error {
 	}
 	if len(agents) == 0 {
 		return nil // user cancelled picker
+	}
+
+	// --no-plan-hook overrides whatever the interactive picker decided.
+	if cmd.NoPlanHook {
+		for _, a := range agents {
+			if claude, ok := a.(*adapters.ClaudeAdapter); ok {
+				claude.SkipPlanHook = true
+			}
+		}
 	}
 
 	for _, a := range agents {

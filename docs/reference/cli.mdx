@@ -36,7 +36,7 @@ Monocle detects the Git repository root from the current working directory and o
 Register monocle with an agent. Depending on the integration mode, this either configures an MCP server with tools or installs skill files into the agent's skill directory.
 
 ```bash
-monocle register [agent] [--global] [--integration-mode MODE]
+monocle register [agent] [--global] [--integration-mode MODE] [--no-plan-hook]
 ```
 
 ### Arguments
@@ -51,6 +51,18 @@ monocle register [agent] [--global] [--integration-mode MODE]
 |------|-------------|
 | `--global` | Write configuration to the user-level config directory instead of the current project directory. |
 | `--integration-mode MODE` | Override the default integration mode. One of `auto`, `mcp`, or `skills`. Defaults to `auto`. |
+| `--no-plan-hook` | Skip installation of the Claude Code `ExitPlanMode` hook. By default registration installs two hooks (`PreToolUse` + `PermissionRequest`) on `ExitPlanMode` so every plan the agent produces in plan mode is automatically routed through the Monocle reviewer. |
+
+### Plan-mode hooks (Claude Code)
+
+When registering Claude Code, monocle adds two entries to `.claude/settings.json`:
+
+| Hook event | Matcher | Command | Timeout |
+|---|---|---|---|
+| `PreToolUse` | `ExitPlanMode` | `monocle hooks enter-plan --agent claude` | 5s |
+| `PermissionRequest` | `ExitPlanMode` | `monocle hooks exit-plan --agent claude` | 345600s |
+
+The `PreToolUse` hook fires right before Claude drafts its plan and injects a short context string telling the agent the plan will be reviewed. The `PermissionRequest` hook fires when Claude is about to exit plan mode; it sends the plan to the Monocle TUI, blocks until you submit feedback, and converts "approve" to `allow` or "request changes" to `deny` with your feedback as the reason. If Monocle isn't running the hook exits silently so Claude falls back to its default plan-approval prompt. Pass `--no-plan-hook` at registration to skip installing these entries.
 
 ### Integration modes
 
@@ -103,6 +115,21 @@ monocle unregister [agent] [--global]
 | Flag | Description |
 |------|-------------|
 | `--global` | Remove configuration from the user-level config directory instead of the current project directory. |
+
+---
+
+## `monocle hooks`
+
+Handlers for agent lifecycle events. These subcommands are invoked by the agent's hook runner, not by humans — they read a JSON payload on stdin and emit the agent's expected decision JSON on stdout. `monocle register` wires them up automatically for Claude Code; this section documents the command surface for users who want to install them manually.
+
+| Subcommand | Agent flag | Description |
+|---|---|---|
+| `monocle hooks exit-plan --agent claude` | required | Block on the Monocle reviewer and emit a Claude Code `PermissionRequest` `allow`/`deny` decision. |
+| `monocle hooks enter-plan --agent claude` | required | Emit a Claude Code `PreToolUse` `additionalContext` string pointing the agent at Monocle's review loop. |
+
+The `--agent` flag is required on every subcommand, even though `claude` is currently the only supported value. This keeps `settings.json` entries self-describing and makes future agents additive rather than breaking.
+
+Error-handling philosophy: these hooks degrade gracefully. If stdin is malformed, the engine socket is unreachable, or any intermediate call fails, the command exits 0 with no stdout so the agent falls back to its built-in behavior — the hook never hard-blocks the agent.
 
 ---
 

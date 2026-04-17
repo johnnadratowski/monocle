@@ -35,6 +35,36 @@ type ClaudeAdapter struct {
 	// ModeMCPTools (default): MCP tools + channels, no skills.
 	// ModeSkills: channels only + skills + bash permissions.
 	Mode IntegrationMode
+
+	// SkipPlanHook, when true, omits the ExitPlanMode hook entries from
+	// .claude/settings.json during Register. Default (zero value) is false,
+	// meaning the hook is installed and every ExitPlanMode auto-flows through
+	// the Monocle reviewer. Set to true to opt out (e.g. from --no-plan-hook
+	// or by unchecking the picker sub-option).
+	SkipPlanHook bool
+}
+
+// claudePlanHooks describes the settings.json hook entries monocle installs.
+// The command suffix is matched during unregister to identify monocle's
+// entries without clobbering any user-added siblings.
+var claudePlanHooks = []struct {
+	event         string
+	matcher       string
+	subcommand    string // matched against the end of command strings during unregister
+	timeoutSecs   int
+}{
+	{
+		event:       "PermissionRequest",
+		matcher:     "ExitPlanMode",
+		subcommand:  "hooks exit-plan",
+		timeoutSecs: 345600,
+	},
+	{
+		event:       "PreToolUse",
+		matcher:     "ExitPlanMode",
+		subcommand:  "hooks enter-plan",
+		timeoutSecs: 5,
+	},
 }
 
 func (a *ClaudeAdapter) Name() string          { return "claude" }
@@ -44,11 +74,16 @@ func (a *ClaudeAdapter) SetMode(m IntegrationMode) { a.Mode = m }
 // ConfigPaths returns the files written by Register.
 func (a *ClaudeAdapter) ConfigPaths(global bool) []string {
 	paths := []string{mcpJSONPath(global)}
+	settingsPath := claudeSettingsPath(global)
 	if a.effectiveMode() == ModeSkills {
-		paths = append(paths, claudeSettingsPath(global))
+		paths = append(paths, settingsPath)
 		paths = append(paths, SkillPaths(claudeSkillsDir(global))...)
 	} else {
 		paths = append(paths, CommandPaths(claudeCommandsDir(global), ".md")...)
+		if !a.SkipPlanHook {
+			// MCP-tools mode also touches settings.json when the plan hook is installed.
+			paths = append(paths, settingsPath)
+		}
 	}
 	return paths
 }
@@ -100,6 +135,12 @@ func (a *ClaudeAdapter) Register(global bool) error {
 			return fmt.Errorf("install commands: %w", err)
 		}
 	}
+
+	if !a.SkipPlanHook {
+		if err := configureClaudeHooks(claudeSettingsPath(global), ResolveCommand(global)); err != nil {
+			return fmt.Errorf("configure hooks: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -107,6 +148,11 @@ func (a *ClaudeAdapter) Register(global bool) error {
 func (a *ClaudeAdapter) Unregister(global bool) error {
 	if err := a.unconfigureMCP(global); err != nil {
 		return fmt.Errorf("unconfigure mcp: %w", err)
+	}
+	// Hooks must be removed before settings cleanup so the file can be dropped
+	// when both sections end up empty.
+	if err := unconfigureClaudeHooks(claudeSettingsPath(global)); err != nil {
+		return fmt.Errorf("unconfigure hooks: %w", err)
 	}
 	if err := unconfigureClaudeSettings(claudeSettingsPath(global)); err != nil {
 		return fmt.Errorf("unconfigure settings: %w", err)
@@ -332,6 +378,150 @@ func configureClaudeSettings(path string) error {
 
 	perms["allow"] = allowRaw
 	return WriteJSONFile(path, data)
+}
+
+// configureClaudeHooks installs monocle's ExitPlanMode hook entries into
+// .claude/settings.json. Idempotent: re-running updates stale command paths
+// rather than duplicating entries, and preserves any sibling hooks users
+// added themselves.
+func configureClaudeHooks(path, command string) error {
+	data, err := ReadJSONFile(path)
+	if err != nil {
+		return err
+	}
+
+	hooks, ok := data["hooks"].(map[string]any)
+	if !ok {
+		hooks = map[string]any{}
+		data["hooks"] = hooks
+	}
+
+	for _, h := range claudePlanHooks {
+		fullCmd := fmt.Sprintf("%s %s --agent claude", command, h.subcommand)
+		ours := map[string]any{
+			"type":    "command",
+			"command": fullCmd,
+			"timeout": h.timeoutSecs,
+		}
+		hooks[h.event] = upsertMatcherHook(asSlice(hooks[h.event]), h.matcher, h.subcommand, ours)
+	}
+
+	return WriteJSONFile(path, data)
+}
+
+// unconfigureClaudeHooks removes monocle's ExitPlanMode hook entries from
+// .claude/settings.json, leaving any unrelated user-added hooks in place.
+func unconfigureClaudeHooks(path string) error {
+	data, err := ReadJSONFile(path)
+	if err != nil {
+		return err
+	}
+
+	hooks, ok := data["hooks"].(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	for _, h := range claudePlanHooks {
+		entries, ok := hooks[h.event].([]any)
+		if !ok {
+			continue
+		}
+		cleaned := removeMonocleHook(entries, h.matcher, h.subcommand)
+		if len(cleaned) == 0 {
+			delete(hooks, h.event)
+		} else {
+			hooks[h.event] = cleaned
+		}
+	}
+
+	if len(hooks) == 0 {
+		delete(data, "hooks")
+	}
+	if len(data) == 0 {
+		return RemoveFileIfExists(path)
+	}
+	return WriteJSONFile(path, data)
+}
+
+// upsertMatcherHook inserts or replaces monocle's inner hook object inside
+// the matcher entry of `entries` whose "matcher" key equals `matcher`. User
+// hooks on the same matcher are preserved. Creates a new matcher entry if
+// none exists.
+func upsertMatcherHook(entries []any, matcher, subcommand string, ours map[string]any) []any {
+	for i, e := range entries {
+		m, ok := e.(map[string]any)
+		if !ok {
+			continue
+		}
+		if s, _ := m["matcher"].(string); s != matcher {
+			continue
+		}
+		inner := asSlice(m["hooks"])
+		replaced := false
+		for j, h := range inner {
+			if isMonocleInnerHook(h, subcommand) {
+				inner[j] = ours
+				replaced = true
+				break
+			}
+		}
+		if !replaced {
+			inner = append(inner, ours)
+		}
+		m["hooks"] = inner
+		entries[i] = m
+		return entries
+	}
+	return append(entries, map[string]any{
+		"matcher": matcher,
+		"hooks":   []any{ours},
+	})
+}
+
+// removeMonocleHook strips monocle's inner hook from every matcher entry in
+// `entries`, dropping matcher entries that become empty as a result.
+func removeMonocleHook(entries []any, matcher, subcommand string) []any {
+	kept := entries[:0:0]
+	for _, e := range entries {
+		m, ok := e.(map[string]any)
+		if !ok {
+			kept = append(kept, e)
+			continue
+		}
+		if s, _ := m["matcher"].(string); s != matcher {
+			kept = append(kept, e)
+			continue
+		}
+		inner := asSlice(m["hooks"])
+		cleaned := inner[:0:0]
+		for _, h := range inner {
+			if isMonocleInnerHook(h, subcommand) {
+				continue
+			}
+			cleaned = append(cleaned, h)
+		}
+		if len(cleaned) == 0 {
+			continue
+		}
+		m["hooks"] = cleaned
+		kept = append(kept, m)
+	}
+	return kept
+}
+
+func isMonocleInnerHook(h any, subcommand string) bool {
+	hm, ok := h.(map[string]any)
+	if !ok {
+		return false
+	}
+	cmd, _ := hm["command"].(string)
+	return strings.Contains(cmd, subcommand)
+}
+
+func asSlice(v any) []any {
+	s, _ := v.([]any)
+	return s
 }
 
 // unconfigureClaudeSettings removes monocle permissions from .claude/settings.json.

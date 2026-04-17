@@ -20,7 +20,7 @@ func TestClaudeRegister_MCPToolsMode(t *testing.T) {
 	os.Chdir(projDir)
 	defer os.Chdir(origDir)
 
-	adapter := &ClaudeAdapter{Mode: ModeMCPTools}
+	adapter := &ClaudeAdapter{Mode: ModeMCPTools, SkipPlanHook: true}
 
 	if !adapter.NeedsRegister() {
 		t.Fatal("should need register initially")
@@ -45,9 +45,9 @@ func TestClaudeRegister_MCPToolsMode(t *testing.T) {
 		t.Fatalf("args should be ['serve-mcp', '--experimental-channels'], got %v", args)
 	}
 
-	// Should NOT have skills or settings (MCP tools mode)
+	// With the plan hook opted-out, MCP tools mode should not touch settings.json.
 	if _, err := os.Stat(filepath.Join(projDir, ".claude", "settings.json")); !os.IsNotExist(err) {
-		t.Fatal("MCP tools mode should not create settings.json")
+		t.Fatal("MCP tools mode with SkipPlanHook should not create settings.json")
 	}
 
 	// Should have command files
@@ -545,6 +545,261 @@ func TestClaudeUnregister_PreservesOtherPermissions(t *testing.T) {
 	}
 	if allow[0] != "Bash(ls:*)" {
 		t.Errorf("expected Bash(ls:*) to remain, got %v", allow[0])
+	}
+}
+
+func TestConfigureClaudeHooks_NewFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.json")
+
+	if err := configureClaudeHooks(path, "/usr/bin/monocle"); err != nil {
+		t.Fatalf("configure: %v", err)
+	}
+
+	data, err := ReadJSONFile(path)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	hooks := data["hooks"].(map[string]any)
+
+	permReq := hooks["PermissionRequest"].([]any)
+	if len(permReq) != 1 {
+		t.Fatalf("PermissionRequest should have 1 entry, got %d", len(permReq))
+	}
+	entry := permReq[0].(map[string]any)
+	if entry["matcher"] != "ExitPlanMode" {
+		t.Errorf("matcher should be ExitPlanMode, got %v", entry["matcher"])
+	}
+	inner := entry["hooks"].([]any)
+	innerHook := inner[0].(map[string]any)
+	if innerHook["command"] != "/usr/bin/monocle hooks exit-plan --agent claude" {
+		t.Errorf("unexpected command: %v", innerHook["command"])
+	}
+	if innerHook["timeout"].(float64) != 345600 {
+		t.Errorf("timeout should be 345600, got %v", innerHook["timeout"])
+	}
+
+	preTool := hooks["PreToolUse"].([]any)
+	preEntry := preTool[0].(map[string]any)
+	preInner := preEntry["hooks"].([]any)[0].(map[string]any)
+	if preInner["command"] != "/usr/bin/monocle hooks enter-plan --agent claude" {
+		t.Errorf("unexpected pre-tool command: %v", preInner["command"])
+	}
+	if preInner["timeout"].(float64) != 5 {
+		t.Errorf("pre-tool timeout should be 5, got %v", preInner["timeout"])
+	}
+}
+
+func TestConfigureClaudeHooks_Idempotent(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.json")
+
+	if err := configureClaudeHooks(path, "monocle"); err != nil {
+		t.Fatal(err)
+	}
+	if err := configureClaudeHooks(path, "monocle"); err != nil {
+		t.Fatal(err)
+	}
+
+	data, _ := ReadJSONFile(path)
+	permReq := data["hooks"].(map[string]any)["PermissionRequest"].([]any)
+	if len(permReq) != 1 {
+		t.Fatalf("expected 1 PermissionRequest matcher entry after double-configure, got %d", len(permReq))
+	}
+	entry := permReq[0].(map[string]any)
+	inner := entry["hooks"].([]any)
+	if len(inner) != 1 {
+		t.Fatalf("expected 1 inner hook, got %d", len(inner))
+	}
+}
+
+func TestConfigureClaudeHooks_UpdatesStaleCommand(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.json")
+
+	if err := configureClaudeHooks(path, "/old/path/monocle"); err != nil {
+		t.Fatal(err)
+	}
+	if err := configureClaudeHooks(path, "/new/path/monocle"); err != nil {
+		t.Fatal(err)
+	}
+
+	data, _ := ReadJSONFile(path)
+	permReq := data["hooks"].(map[string]any)["PermissionRequest"].([]any)
+	entry := permReq[0].(map[string]any)
+	inner := entry["hooks"].([]any)
+	if len(inner) != 1 {
+		t.Fatalf("expected 1 inner hook, got %d", len(inner))
+	}
+	cmd := inner[0].(map[string]any)["command"].(string)
+	if cmd != "/new/path/monocle hooks exit-plan --agent claude" {
+		t.Errorf("command should be updated to new path, got %q", cmd)
+	}
+}
+
+func TestConfigureClaudeHooks_PreservesSiblingHooks(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.json")
+
+	// Seed with an unrelated user hook on the same matcher.
+	userHook := map[string]any{
+		"hooks": map[string]any{
+			"PermissionRequest": []any{
+				map[string]any{
+					"matcher": "ExitPlanMode",
+					"hooks": []any{
+						map[string]any{"type": "command", "command": "user-tool --approve"},
+					},
+				},
+				map[string]any{
+					"matcher": "Bash",
+					"hooks": []any{
+						map[string]any{"type": "command", "command": "user-bash-checker"},
+					},
+				},
+			},
+		},
+	}
+	if err := WriteJSONFile(path, userHook); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := configureClaudeHooks(path, "monocle"); err != nil {
+		t.Fatal(err)
+	}
+
+	data, _ := ReadJSONFile(path)
+	permReq := data["hooks"].(map[string]any)["PermissionRequest"].([]any)
+	if len(permReq) != 2 {
+		t.Fatalf("expected 2 matcher entries (ExitPlanMode + Bash), got %d", len(permReq))
+	}
+
+	// Find the ExitPlanMode matcher and verify both user + monocle hooks are present.
+	var exitPlanEntry map[string]any
+	for _, e := range permReq {
+		m := e.(map[string]any)
+		if m["matcher"] == "ExitPlanMode" {
+			exitPlanEntry = m
+			break
+		}
+	}
+	if exitPlanEntry == nil {
+		t.Fatal("ExitPlanMode matcher missing")
+	}
+	inner := exitPlanEntry["hooks"].([]any)
+	if len(inner) != 2 {
+		t.Fatalf("expected 2 inner hooks (user + monocle), got %d", len(inner))
+	}
+}
+
+func TestUnconfigureClaudeHooks_RemovesOnlyMonocleEntries(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.json")
+
+	// Seed with a user-owned hook alongside a monocle hook on the same matcher.
+	if err := configureClaudeHooks(path, "monocle"); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := ReadJSONFile(path)
+	permReq := data["hooks"].(map[string]any)["PermissionRequest"].([]any)
+	entry := permReq[0].(map[string]any)
+	inner := entry["hooks"].([]any)
+	inner = append(inner, map[string]any{"type": "command", "command": "user-tool"})
+	entry["hooks"] = inner
+	if err := WriteJSONFile(path, data); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := unconfigureClaudeHooks(path); err != nil {
+		t.Fatal(err)
+	}
+
+	data, _ = ReadJSONFile(path)
+	hooks := data["hooks"].(map[string]any)
+	// PreToolUse had only monocle's entry so it should be removed.
+	if _, present := hooks["PreToolUse"]; present {
+		t.Error("PreToolUse should be removed when only monocle's entry existed")
+	}
+	// PermissionRequest still has the user tool.
+	permReq = hooks["PermissionRequest"].([]any)
+	inner = permReq[0].(map[string]any)["hooks"].([]any)
+	if len(inner) != 1 {
+		t.Fatalf("expected 1 remaining inner hook (user-tool), got %d", len(inner))
+	}
+	if inner[0].(map[string]any)["command"] != "user-tool" {
+		t.Errorf("user tool should survive, got %v", inner[0])
+	}
+}
+
+func TestUnconfigureClaudeHooks_RemovesEmptyFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.json")
+
+	if err := configureClaudeHooks(path, "monocle"); err != nil {
+		t.Fatal(err)
+	}
+	if err := unconfigureClaudeHooks(path); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatal("settings.json should be removed when it only contained monocle hooks")
+	}
+}
+
+func TestClaudeRegister_InstallsPlanHookByDefault(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", filepath.Join(dir, "home"))
+
+	origDir, _ := os.Getwd()
+	projDir := filepath.Join(dir, "project")
+	os.MkdirAll(projDir, 0755)
+	os.Chdir(projDir)
+	defer os.Chdir(origDir)
+
+	adapter := &ClaudeAdapter{Mode: ModeMCPTools}
+	if err := adapter.Register(false); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	data, err := ReadJSONFile(filepath.Join(projDir, ".claude", "settings.json"))
+	if err != nil {
+		t.Fatalf("read settings: %v", err)
+	}
+	hooks, ok := data["hooks"].(map[string]any)
+	if !ok {
+		t.Fatal("hooks should be installed by default")
+	}
+	if _, ok := hooks["PermissionRequest"]; !ok {
+		t.Error("PermissionRequest hook missing")
+	}
+	if _, ok := hooks["PreToolUse"]; !ok {
+		t.Error("PreToolUse hook missing")
+	}
+}
+
+func TestClaudeUnregister_RemovesPlanHook(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", filepath.Join(dir, "home"))
+
+	origDir, _ := os.Getwd()
+	projDir := filepath.Join(dir, "project")
+	os.MkdirAll(projDir, 0755)
+	os.Chdir(projDir)
+	defer os.Chdir(origDir)
+
+	adapter := &ClaudeAdapter{Mode: ModeMCPTools}
+	if err := adapter.Register(false); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	if err := adapter.Unregister(false); err != nil {
+		t.Fatalf("unregister: %v", err)
+	}
+
+	// MCP-tools mode without extra permissions should have no settings.json after
+	// unregister clears the hooks.
+	if _, err := os.Stat(filepath.Join(projDir, ".claude", "settings.json")); !os.IsNotExist(err) {
+		t.Fatal("settings.json should be removed after unregister")
 	}
 }
 
