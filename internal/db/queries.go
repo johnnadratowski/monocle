@@ -60,6 +60,15 @@ func (d *DB) DeleteContentItems(sessionID string) error {
 	return err
 }
 
+// DeleteContentItem removes a single content item and its versions.
+func (d *DB) DeleteContentItem(sessionID, id string) error {
+	if _, err := d.Exec(`DELETE FROM content_versions WHERE session_id = ? AND content_item_id = ?`, sessionID, id); err != nil {
+		return err
+	}
+	_, err := d.Exec(`DELETE FROM content_items WHERE session_id = ? AND id = ?`, sessionID, id)
+	return err
+}
+
 // ListSessions returns session summaries, optionally filtered by repo root.
 func (d *DB) ListSessions(repoRoot string, limit int) ([]types.SessionSummary, error) {
 	query := `SELECT s.id, s.agent, s.repo_root, s.review_round, s.created_at, s.updated_at,
@@ -278,6 +287,15 @@ func (d *DB) UpdateComment(c *types.ReviewComment) error {
 // DeleteComment removes a comment by ID.
 func (d *DB) DeleteComment(id string) error {
 	_, err := d.Exec(`DELETE FROM comments WHERE id = ?`, id)
+	return err
+}
+
+// DeleteCommentsByTarget removes all comments attached to the given target in a session.
+func (d *DB) DeleteCommentsByTarget(sessionID string, targetType types.TargetType, targetRef string) error {
+	_, err := d.Exec(
+		`DELETE FROM comments WHERE session_id = ? AND target_type = ? AND target_ref = ?`,
+		sessionID, string(targetType), targetRef,
+	)
 	return err
 }
 

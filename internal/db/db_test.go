@@ -279,6 +279,53 @@ func TestContentItems(t *testing.T) {
 	}
 }
 
+func TestDeleteContentItem(t *testing.T) {
+	d := testDB(t)
+	now := time.Now()
+	d.CreateSession(&types.ReviewSession{ID: "sess-1", Agent: "claude", RepoRoot: "/tmp", BaseRef: "abc", ReviewRound: 1, CreatedAt: now, UpdatedAt: now})
+
+	a1 := &types.ContentItem{ID: "a", Title: "A v1", Content: "a1", ContentType: "markdown", CreatedAt: now, UpdatedAt: now}
+	a2 := &types.ContentItem{ID: "a", Title: "A v2", Content: "a2", ContentType: "markdown", CreatedAt: now, UpdatedAt: now}
+	b := &types.ContentItem{ID: "b", Title: "B", Content: "b1", ContentType: "markdown", CreatedAt: now, UpdatedAt: now}
+	if err := d.UpsertContentItem("sess-1", a1); err != nil {
+		t.Fatalf("upsert a v1: %v", err)
+	}
+	if err := d.UpsertContentItem("sess-1", a2); err != nil {
+		t.Fatalf("upsert a v2: %v", err)
+	}
+	if err := d.UpsertContentItem("sess-1", b); err != nil {
+		t.Fatalf("upsert b: %v", err)
+	}
+
+	if err := d.DeleteContentItem("sess-1", "a"); err != nil {
+		t.Fatalf("delete content item: %v", err)
+	}
+
+	items, err := d.GetContentItems("sess-1")
+	if err != nil {
+		t.Fatalf("get items: %v", err)
+	}
+	if len(items) != 1 || items[0].ID != "b" {
+		t.Fatalf("expected only b to remain, got %+v", items)
+	}
+
+	aVersions, err := d.GetContentVersions("sess-1", "a")
+	if err != nil {
+		t.Fatalf("get versions a: %v", err)
+	}
+	if len(aVersions) != 0 {
+		t.Errorf("expected 0 versions for deleted item a, got %d", len(aVersions))
+	}
+
+	bVersions, err := d.GetContentVersions("sess-1", "b")
+	if err != nil {
+		t.Fatalf("get versions b: %v", err)
+	}
+	if len(bVersions) != 1 {
+		t.Errorf("expected b's version to remain, got %d", len(bVersions))
+	}
+}
+
 func TestContentItems_CrossSession(t *testing.T) {
 	d := testDB(t)
 	now := time.Now()
