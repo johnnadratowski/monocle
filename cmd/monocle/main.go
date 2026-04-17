@@ -18,6 +18,7 @@ import (
 	monocleMCP "github.com/josephschmitt/monocle/internal/mcp"
 	"github.com/josephschmitt/monocle/internal/protocol"
 	"github.com/josephschmitt/monocle/internal/tui"
+	"github.com/josephschmitt/monocle/internal/tui/register"
 )
 
 var version = "dev"
@@ -94,11 +95,15 @@ type RegisterCmd struct {
 	IntegrationMode string `help:"Override the default integration mode (auto, mcp, or skills)" enum:"auto,mcp,skills" default:"auto"`
 	NoPlanHook      bool   `help:"Skip installing the Claude Code ExitPlanMode hook" name:"no-plan-hook" default:"false"`
 	NoReviewGate    bool   `help:"Skip installing the Claude Code turn-end review-gate hooks (PostToolUse mark-activity + Stop on-stop)" name:"no-review-gate" default:"false"`
+	NoTUI           bool   `help:"Skip the interactive wizard and run headlessly" name:"no-tui" default:"false"`
 }
 
 type UnregisterCmd struct {
-	Agent  string `arg:"" optional:"" help:"Agent to unregister (claude, opencode, codex, gemini, all)"`
-	Global bool   `help:"Remove from user-level config instead of project" default:"false"`
+	Agent          string `arg:"" optional:"" help:"Agent to unregister (claude, opencode, codex, gemini, all)"`
+	Global         bool   `help:"Remove from user-level config instead of project" default:"false"`
+	KeepPlanHook   bool   `help:"Leave the Claude Code ExitPlanMode hook entries in settings.json" name:"keep-plan-hook" default:"false"`
+	KeepReviewGate bool   `help:"Leave the Claude Code turn-end review-gate hooks in settings.json" name:"keep-review-gate" default:"false"`
+	NoTUI          bool   `help:"Skip the interactive wizard and run headlessly" name:"no-tui" default:"false"`
 }
 
 type ServeMCPCmd struct {
@@ -140,9 +145,47 @@ func (cmd *RunCmd) Run() error {
 }
 
 func (cmd *RegisterCmd) Run() error {
-	// Set integration mode on all adapters BEFORE the picker runs,
-	// so ConfigPaths() reflects the correct mode in the preview.
 	allAdapters := adapters.AllAdapters()
+
+	// Interactive wizard path: no positional agent and --no-tui wasn't set.
+	if cmd.Agent == "" && !cmd.NoTUI {
+		return cmd.runWizard(allAdapters)
+	}
+
+	return cmd.runHeadless(allAdapters)
+}
+
+// runWizard launches the register TUI, letting the user pick agents and
+// options, then runs the registrations from within the wizard.
+func (cmd *RegisterCmd) runWizard(allAdapters []adapters.AgentAdapter) error {
+	// Pre-apply modes so ConfigPaths() previews correctly in the wizard.
+	for _, a := range allAdapters {
+		a.SetMode(cmd.resolveMode(a))
+	}
+	opts := register.Options{
+		Mode:                  register.ModeRegister,
+		Adapters:              allAdapters,
+		Global:                cmd.Global,
+		GlobalLocked:          cmd.Global, // only locked when explicitly set to true
+		IntegrationMode:       integrationChoice(cmd.IntegrationMode),
+		IntegrationModeLocked: cmd.IntegrationMode != "auto",
+		SkipPlanHook:          cmd.NoPlanHook,
+		SkipPlanHookLocked:    cmd.NoPlanHook,
+		SkipReviewGate:        cmd.NoReviewGate,
+		SkipReviewGateLocked:  cmd.NoReviewGate,
+	}
+	res, err := register.Run(opts)
+	if err != nil {
+		return err
+	}
+	if res.Cancelled {
+		return nil
+	}
+	return reportWizardResults(res)
+}
+
+// runHeadless preserves the pre-wizard behavior for scripted use.
+func (cmd *RegisterCmd) runHeadless(allAdapters []adapters.AgentAdapter) error {
 	for _, a := range allAdapters {
 		a.SetMode(cmd.resolveMode(a))
 	}
@@ -152,10 +195,9 @@ func (cmd *RegisterCmd) Run() error {
 		return err
 	}
 	if len(agents) == 0 {
-		return nil // user cancelled picker
+		return nil
 	}
 
-	// CLI flags override whatever the interactive picker decided.
 	for _, a := range agents {
 		claude, ok := a.(*adapters.ClaudeAdapter)
 		if !ok {
@@ -209,7 +251,50 @@ func (cmd *RegisterCmd) resolveMode(a adapters.AgentAdapter) adapters.Integratio
 }
 
 func (cmd *UnregisterCmd) Run() error {
-	agents, err := resolveAgents(cmd.Agent, "Select agents to unregister")
+	allAdapters := adapters.AllAdapters()
+
+	if cmd.Agent == "" && !cmd.NoTUI {
+		return cmd.runWizard(allAdapters)
+	}
+
+	return cmd.runHeadless(allAdapters)
+}
+
+func (cmd *UnregisterCmd) runWizard(allAdapters []adapters.AgentAdapter) error {
+	// Offer only adapters that actually have config at the requested scope —
+	// the wizard's "nothing to remove" state is the empty-list rendering.
+	var registered []adapters.AgentAdapter
+	for _, a := range allAdapters {
+		if a.HasConfig(cmd.Global) {
+			registered = append(registered, a)
+		}
+	}
+	if len(registered) == 0 {
+		fmt.Println("Nothing to unregister at this scope.")
+		return nil
+	}
+	opts := register.Options{
+		Mode:                 register.ModeUnregister,
+		Adapters:             registered,
+		Global:               cmd.Global,
+		GlobalLocked:         cmd.Global,
+		KeepPlanHook:         cmd.KeepPlanHook,
+		KeepPlanHookLocked:   cmd.KeepPlanHook,
+		KeepReviewGate:       cmd.KeepReviewGate,
+		KeepReviewGateLocked: cmd.KeepReviewGate,
+	}
+	res, err := register.Run(opts)
+	if err != nil {
+		return err
+	}
+	if res.Cancelled {
+		return nil
+	}
+	return reportWizardResults(res)
+}
+
+func (cmd *UnregisterCmd) runHeadless(allAdapters []adapters.AgentAdapter) error {
+	agents, err := resolveAgentsFrom(allAdapters, cmd.Agent, "Select agents to unregister")
 	if err != nil {
 		return err
 	}
@@ -218,6 +303,10 @@ func (cmd *UnregisterCmd) Run() error {
 	}
 
 	for _, a := range agents {
+		if claude, ok := a.(*adapters.ClaudeAdapter); ok {
+			claude.KeepPlanHook = cmd.KeepPlanHook
+			claude.KeepReviewGate = cmd.KeepReviewGate
+		}
 		if !a.HasConfig(cmd.Global) {
 			fmt.Printf("  ✓ %s: nothing to remove\n", a.Name())
 			continue
@@ -230,15 +319,49 @@ func (cmd *UnregisterCmd) Run() error {
 	return nil
 }
 
-func resolveAgents(name, pickerTitle string) ([]adapters.AgentAdapter, error) {
-	return resolveAgentsFrom(adapters.AllAdapters(), name, pickerTitle)
+// integrationChoice maps the --integration-mode flag string to the wizard's
+// IntegrationChoice enum.
+func integrationChoice(flag string) register.IntegrationChoice {
+	switch flag {
+	case "mcp":
+		return register.IntegrationMCP
+	case "skills":
+		return register.IntegrationSkills
+	}
+	return register.IntegrationAuto
 }
 
-func resolveAgentsFrom(agents []adapters.AgentAdapter, name, pickerTitle string) ([]adapters.AgentAdapter, error) {
+// reportWizardResults prints a summary line for each agent the wizard ran.
+// Mirrors the headless path's output so scripts that parse stdout (loosely)
+// see the same shape regardless of which path ran.
+func reportWizardResults(res register.Result) error {
+	for _, r := range res.Results {
+		if r.Err != nil {
+			fmt.Printf("  ✗ %s: %v\n", r.Label, r.Err)
+			continue
+		}
+		switch r.Action {
+		case "nothing":
+			fmt.Printf("  ✓ %s: nothing to remove\n", r.Label)
+		case "removed":
+			fmt.Printf("  ✓ %s: removed\n", r.Label)
+		default:
+			fmt.Printf("  ✓ %s: %s\n", r.Label, r.Action)
+			for _, p := range r.Paths {
+				fmt.Printf("    → %s\n", p)
+			}
+		}
+	}
+	return nil
+}
+
+// resolveAgentsFrom picks agents by name for the headless register/unregister
+// paths. The empty-name case (interactive selection) is handled by the wizard
+// callers; reaching it here means --no-tui was passed without an agent, which
+// we treat as "all" for CI friendliness.
+func resolveAgentsFrom(agents []adapters.AgentAdapter, name, _pickerTitle string) ([]adapters.AgentAdapter, error) {
 	switch name {
-	case "":
-		return adapters.PickAgents(agents, pickerTitle)
-	case "all":
+	case "", "all":
 		return agents, nil
 	default:
 		for _, a := range agents {

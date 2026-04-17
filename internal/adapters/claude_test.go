@@ -710,7 +710,7 @@ func TestUnconfigureClaudeHooks_RemovesOnlyMonocleEntries(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := unconfigureClaudeHooks(path); err != nil {
+	if err := unconfigureClaudeHooks(path, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -738,7 +738,7 @@ func TestUnconfigureClaudeHooks_RemovesEmptyFile(t *testing.T) {
 	if err := configureClaudeHooks(path, "monocle", allHookGroups); err != nil {
 		t.Fatal(err)
 	}
-	if err := unconfigureClaudeHooks(path); err != nil {
+	if err := unconfigureClaudeHooks(path, nil); err != nil {
 		t.Fatal(err)
 	}
 

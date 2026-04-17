@@ -2741,9 +2741,9 @@ func overlayOn(base, overlay string, width, height int) string {
 	return strings.Join(result, "\n")
 }
 
-// calcModalWidth computes modal width as max(screenWidth*2/3, 65), capped by
+// CalcModalWidth computes modal width as max(screenWidth*2/3, 65), capped by
 // maxWidth (pass 0 for no cap) and screen bounds (screenWidth-10 for margin).
-func calcModalWidth(screenWidth, maxWidth int) int {
+func CalcModalWidth(screenWidth, maxWidth int) int {
 	w := screenWidth * 2 / 3
 	if w < 65 {
 		w = 65

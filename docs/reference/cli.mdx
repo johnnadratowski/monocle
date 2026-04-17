@@ -36,14 +36,14 @@ Monocle detects the Git repository root from the current working directory and o
 Register monocle with an agent. Depending on the integration mode, this either configures an MCP server with tools or installs skill files into the agent's skill directory.
 
 ```bash
-monocle register [agent] [--global] [--integration-mode MODE] [--no-plan-hook] [--no-review-gate]
+monocle register [agent] [--global] [--integration-mode MODE] [--no-plan-hook] [--no-review-gate] [--no-tui]
 ```
 
 ### Arguments
 
 | Argument | Description |
 |----------|-------------|
-| `agent` | The agent to register. One of `claude`, `opencode`, `codex`, `gemini`, or `all`. If omitted, an interactive picker lets you choose. |
+| `agent` | The agent to register. One of `claude`, `opencode`, `codex`, `gemini`, or `all`. If omitted, an interactive TUI wizard walks you through agent selection, integration mode, and (for Claude Code) the hook-group toggles. |
 
 ### Flags
 
@@ -53,6 +53,7 @@ monocle register [agent] [--global] [--integration-mode MODE] [--no-plan-hook] [
 | `--integration-mode MODE` | Override the default integration mode. One of `auto`, `mcp`, or `skills`. Defaults to `auto`. |
 | `--no-plan-hook` | Skip installation of the Claude Code plan-mode hooks (`PreToolUse` + `PermissionRequest` on `ExitPlanMode`). |
 | `--no-review-gate` | Skip installation of the Claude Code turn-end review-gate hooks (`PostToolUse` on write-tools + `Stop`). |
+| `--no-tui` | Skip the interactive wizard and run headlessly. Combined with an empty `agent` argument, registers every supported agent with defaults. |
 
 ### Plan-mode hooks (Claude Code)
 
@@ -65,7 +66,14 @@ When registering Claude Code, monocle adds up to four hook entries to `.claude/s
 | `PostToolUse` | `Edit\|Write\|NotebookEdit\|MultiEdit` | `monocle hooks mark-activity --agent claude` | 5s | Mark the session as having unreviewed changes. |
 | `Stop` | — | `monocle hooks on-stop --agent claude` | 345600s | Block turn-end on reviewer approval when the turn included file edits. |
 
-The first two form the plan-review flow; opt out with `--no-plan-hook`. The last two form the per-turn review gate; opt out with `--no-review-gate`. Each subset can be toggled independently via the interactive picker's nested sub-rows. If Monocle isn't running, every hook exits silently so Claude's default behavior kicks in — the hooks never hard-block the agent.
+The first two form the plan-review flow; opt out with `--no-plan-hook`. The last two form the per-turn review gate; opt out with `--no-review-gate`. Each subset can be toggled independently in the register wizard. If Monocle isn't running, every hook exits silently so Claude's default behavior kicks in — the hooks never hard-block the agent.
+
+### What the hooks do
+
+- **Plan-mode hooks** route `ExitPlanMode` through Monocle so any plan Claude produces needs your sign-off before it runs.
+- **Turn-end review gate** forcibly pauses Claude at the end of any turn that edited files, and waits for you to submit a review before the next turn starts.
+
+Heads up: hooks don't fire when Claude is launched with `--dangerously-load-development-channels` (the flag needed for MCP channel push notifications). If you rely on channels, the hook toggles are no-ops at runtime.
 
 ### Integration modes
 
@@ -104,20 +112,23 @@ The files written by `register` depend on the integration mode:
 Remove monocle registration from an agent. This is the inverse of `monocle register`.
 
 ```bash
-monocle unregister [agent] [--global]
+monocle unregister [agent] [--global] [--keep-plan-hook] [--keep-review-gate] [--no-tui]
 ```
 
 ### Arguments
 
 | Argument | Description |
 |----------|-------------|
-| `agent` | The agent to unregister. One of `claude`, `opencode`, `codex`, `gemini`, or `all`. If omitted, an interactive picker lets you choose. |
+| `agent` | The agent to unregister. One of `claude`, `opencode`, `codex`, `gemini`, or `all`. If omitted, an interactive TUI wizard shows only the agents that are actually registered at the chosen scope and asks whether to keep or remove each hook group. |
 
 ### Flags
 
 | Flag | Description |
 |------|-------------|
 | `--global` | Remove configuration from the user-level config directory instead of the current project directory. |
+| `--keep-plan-hook` | Leave the Claude Code `ExitPlanMode` hook entries in `settings.json` even after the MCP server entry is removed. |
+| `--keep-review-gate` | Leave the `PostToolUse` + `Stop` review-gate hook entries in `settings.json` even after the MCP server entry is removed. |
+| `--no-tui` | Skip the interactive wizard and run headlessly. |
 
 ---
 

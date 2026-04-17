@@ -86,7 +86,7 @@ func (m versionPickerModel) View() string {
 		return ""
 	}
 
-	boxW := calcModalWidth(m.width, 70)
+	boxW := CalcModalWidth(m.width, 70)
 	contentW := boxW - 6 // 2 border + 4 padding (2 each side)
 
 	var b strings.Builder

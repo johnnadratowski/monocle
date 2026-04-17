@@ -50,6 +50,14 @@ type ClaudeAdapter struct {
 	// approves or requests changes. Set to true to opt out (from
 	// --no-review-gate or by unchecking the picker sub-option).
 	SkipReviewGate bool
+
+	// KeepPlanHook, when true, leaves the ExitPlanMode hook entries in
+	// .claude/settings.json during Unregister. Default is false (remove).
+	KeepPlanHook bool
+
+	// KeepReviewGate, when true, leaves the PostToolUse + Stop hook entries
+	// in .claude/settings.json during Unregister. Default is false (remove).
+	KeepReviewGate bool
 }
 
 // claudeHookGroup identifies which opt-out flag gates a hook entry.
@@ -192,13 +200,19 @@ func (a *ClaudeAdapter) Register(global bool) error {
 }
 
 // Unregister removes monocle from .mcp.json, removes permissions, skills, and commands.
+// KeepPlanHook and KeepReviewGate control whether the respective hook entries
+// remain in .claude/settings.json; by default both are removed.
 func (a *ClaudeAdapter) Unregister(global bool) error {
 	if err := a.unconfigureMCP(global); err != nil {
 		return fmt.Errorf("unconfigure mcp: %w", err)
 	}
 	// Hooks must be removed before settings cleanup so the file can be dropped
 	// when both sections end up empty.
-	if err := unconfigureClaudeHooks(claudeSettingsPath(global)); err != nil {
+	keep := map[claudeHookGroup]bool{
+		groupPlanHook:   a.KeepPlanHook,
+		groupReviewGate: a.KeepReviewGate,
+	}
+	if err := unconfigureClaudeHooks(claudeSettingsPath(global), keep); err != nil {
 		return fmt.Errorf("unconfigure hooks: %w", err)
 	}
 	if err := unconfigureClaudeSettings(claudeSettingsPath(global)); err != nil {
@@ -475,9 +489,11 @@ func configureClaudeHooks(path, command string, enabledGroups map[claudeHookGrou
 	return WriteJSONFile(path, data)
 }
 
-// unconfigureClaudeHooks removes monocle's ExitPlanMode hook entries from
+// unconfigureClaudeHooks removes monocle's hook entries from
 // .claude/settings.json, leaving any unrelated user-added hooks in place.
-func unconfigureClaudeHooks(path string) error {
+// Groups present in keepGroups with value true are skipped — their monocle
+// entries remain. Pass nil to remove every group.
+func unconfigureClaudeHooks(path string, keepGroups map[claudeHookGroup]bool) error {
 	data, err := ReadJSONFile(path)
 	if err != nil {
 		return err
@@ -489,6 +505,9 @@ func unconfigureClaudeHooks(path string) error {
 	}
 
 	for _, h := range claudeHooks {
+		if keepGroups[h.group] {
+			continue
+		}
 		entries, ok := hooks[h.event].([]any)
 		if !ok {
 			continue

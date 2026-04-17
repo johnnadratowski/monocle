@@ -358,9 +358,9 @@ func TestCalcModalWidth(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := calcModalWidth(tt.screenWidth, tt.maxWidth)
+			got := CalcModalWidth(tt.screenWidth, tt.maxWidth)
 			if got != tt.want {
-				t.Errorf("calcModalWidth(%d, %d) = %d, want %d",
+				t.Errorf("CalcModalWidth(%d, %d) = %d, want %d",
 					tt.screenWidth, tt.maxWidth, got, tt.want)
 			}
 		})

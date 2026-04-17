@@ -53,7 +53,7 @@ func (m infoBannerModel) View() string {
 		return ""
 	}
 
-	modalWidth := calcModalWidth(m.width, 0)
+	modalWidth := CalcModalWidth(m.width, 0)
 
 	var b strings.Builder
 

@@ -88,16 +88,20 @@ devbox run -- make build
 ### 1. Register Monocle with your agent
 
 ```bash
-monocle register          # interactive picker
+monocle register          # interactive wizard
 monocle register claude   # or: opencode, codex, gemini, all
 ```
 
-This configures MCP tools or skills depending on the agent. Claude Code gets an MCP server and slash commands; other agents get skill files. Use `--global` to write to the user-level config directory instead of the project. Override the default with `--integration-mode mcp` or `--integration-mode skills`.
+Without an agent argument, `monocle register` launches an interactive TUI wizard that walks you through picking agents, integration modes, and (for Claude Code) the hooks-vs-channels tradeoff. Pass `--no-tui` to skip the wizard and register every supported agent with defaults.
+
+The wizard configures MCP tools or skills depending on the agent. Claude Code gets an MCP server and slash commands; other agents get skill files. Use `--global` to write to the user-level config directory instead of the project. Override the default with `--integration-mode mcp` or `--integration-mode skills`.
 
 For Claude Code, `monocle register` also installs four hooks in `.claude/settings.json`:
 
-- `PreToolUse:ExitPlanMode` + `PermissionRequest:ExitPlanMode` — plan review. When Claude exits plan mode, the proposed plan is automatically sent to Monocle; the agent blocks until you approve, and "request changes" feedback is delivered straight back as the rejection reason. Opt out with `--no-plan-hook` or the picker sub-row.
-- `PostToolUse:Edit|Write|NotebookEdit|MultiEdit` + `Stop` — turn-end review gate. After any turn that touches files, Claude blocks at turn-end until you approve or request changes. Pure-chat turns (no write-tools) are not interrupted. Opt out with `--no-review-gate` or the picker sub-row.
+- `PreToolUse:ExitPlanMode` + `PermissionRequest:ExitPlanMode` — plan review. When Claude exits plan mode, the proposed plan is automatically sent to Monocle; the agent blocks until you approve, and "request changes" feedback is delivered straight back as the rejection reason. Opt out with `--no-plan-hook` or by unchecking the wizard row.
+- `PostToolUse:Edit|Write|NotebookEdit|MultiEdit` + `Stop` — turn-end review gate. After any turn that touches files, Claude blocks at turn-end until you approve or request changes. Pure-chat turns (no write-tools) are not interrupted. Opt out with `--no-review-gate` or by unchecking the wizard row.
+
+The hooks pause Claude at the right moments so your review lands before Claude keeps going — the plan-mode hooks route `ExitPlanMode` through the reviewer, and the turn-end review gate forcibly pauses Claude at the end of any turn that touched files. Heads up: hooks don't fire when Claude is launched with `--dangerously-load-development-channels` (the flag needed for MCP channel push notifications). If you rely on channels, the hook toggles are no-ops at runtime.
 
 #### Other agents
 
@@ -262,13 +266,19 @@ The comment editor supports standard emacs-style shortcuts:
 
 ```
 monocle [--socket PATH]              Start a review session
-monocle register [agent] [--global] [--no-plan-hook] [--no-review-gate]
+monocle register [agent] [--global] [--integration-mode auto|mcp|skills]
+                 [--no-plan-hook] [--no-review-gate] [--no-tui]
                                      Register Monocle for an agent
-monocle unregister [agent] [--global] Remove Monocle registration
+monocle unregister [agent] [--global] [--keep-plan-hook] [--keep-review-gate]
+                 [--no-tui]          Remove Monocle registration
 monocle --version                    Print version
 ```
 
-The `agent` argument is one of `claude`, `opencode`, `codex`, `gemini`, or `all`. If omitted, an interactive picker lets you select which agents to register. The `--global` flag writes to the user-level config directory instead of the project. `--no-plan-hook` skips installation of the Claude Code `ExitPlanMode` hooks; `--no-review-gate` skips the `PostToolUse`+`Stop` review-gate hooks (default: both installed).
+The `agent` argument is one of `claude`, `opencode`, `codex`, `gemini`, or `all`. If omitted, an interactive TUI wizard walks you through the options; pass `--no-tui` to skip the wizard and run headlessly. The `--global` flag writes to the user-level config directory instead of the project.
+
+Register flags: `--no-plan-hook` skips installation of the Claude Code `ExitPlanMode` hooks; `--no-review-gate` skips the `PostToolUse`+`Stop` review-gate hooks (default: both installed).
+
+Unregister flags: `--keep-plan-hook` leaves the `ExitPlanMode` hook entries behind in `settings.json`; `--keep-review-gate` leaves the `PostToolUse`+`Stop` entries behind. Everything else (MCP server entry, permissions, skills, commands) is removed.
 
 ### Agent-Facing Commands
 

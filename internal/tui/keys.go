@@ -59,6 +59,11 @@ type KeyMap struct {
 	Help         []string
 	Quit         []string
 	CommandMode  []string
+
+	// Wizard (register TUI)
+	WizardAdvance []string
+	WizardBack    []string
+	WizardToggle  []string
 }
 
 // DefaultKeyMap returns the built-in default keybindings.
@@ -113,6 +118,10 @@ func DefaultKeyMap() KeyMap {
 		Help:        []string{"?"},
 		Quit:        []string{"q"},
 		CommandMode: []string{":"},
+
+		WizardAdvance: []string{"enter"},
+		WizardBack:    []string{"shift+tab", "backspace"},
+		WizardToggle:  []string{" ", "space"},
 	}
 }
 
@@ -128,6 +137,7 @@ var actionNames = []string{
 	"comment", "file_comment", "suggest", "visual", "reviewed",
 	"submit", "pause", "clear_review", "dismiss_outdated", "toggle_focus_mode",
 	"open_in_editor", "base_ref", "artifact_versions", "cycle_layout", "refresh", "help", "quit", "command_mode",
+	"wizard_advance", "wizard_back", "wizard_toggle",
 }
 
 // ApplyOverrides merges user-configured keybinding overrides into the keymap.
@@ -221,6 +231,12 @@ func (km KeyMap) ApplyOverrides(overrides map[string]string) KeyMap {
 			km.Quit = []string{key}
 		case "command_mode":
 			km.CommandMode = []string{key}
+		case "wizard_advance":
+			km.WizardAdvance = []string{key}
+		case "wizard_back":
+			km.WizardBack = []string{key}
+		case "wizard_toggle":
+			km.WizardToggle = []string{key}
 		}
 	}
 	return km

@@ -66,7 +66,7 @@ func (m helpModel) View() string {
 		return ""
 	}
 
-	modalWidth := calcModalWidth(m.width, 0)
+	modalWidth := CalcModalWidth(m.width, 0)
 
 	// Inner content width: modalWidth minus border (2) and padding (4)
 	const keyCol = 20

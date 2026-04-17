@@ -130,7 +130,7 @@ func (m refPickerModel) View() string {
 		return ""
 	}
 
-	boxW := calcModalWidth(m.width, 80)
+	boxW := CalcModalWidth(m.width, 80)
 	contentW := boxW - 6 // 2 border + 4 padding (2 each side)
 
 	var b strings.Builder

@@ -43,7 +43,7 @@ func (m connectionInfoModel) View() string {
 		return ""
 	}
 
-	modalWidth := calcModalWidth(m.width, 60)
+	modalWidth := CalcModalWidth(m.width, 60)
 
 	var b strings.Builder
 
