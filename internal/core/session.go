@@ -96,30 +96,43 @@ func (sm *SessionManager) ResumeSession(sessionID string) (*types.ReviewSession,
 	return session, nil
 }
 
-// RefreshChangedFiles re-runs git diff and updates the session's file list, merging with existing review status.
-func (sm *SessionManager) RefreshChangedFiles(session *types.ReviewSession) ([]types.ChangedFile, error) {
+// RefreshChangedFiles re-runs git diff and updates the session's file list,
+// merging with existing review status. It also returns the reviewed-state map
+// captured from the DB *before* the transactional replace deleted rows, keyed
+// by path. Callers that re-add files which the replace pruned (e.g. reverted
+// snapshot files in filesRelativeToSnapshot) use this map to preserve the prior
+// reviewed flag, which would otherwise be lost when the row is re-inserted.
+func (sm *SessionManager) RefreshChangedFiles(session *types.ReviewSession) ([]types.ChangedFile, map[string]bool, error) {
 	files, err := sm.git.Diff(session.BaseRef)
 	if err != nil {
-		return nil, fmt.Errorf("git diff: %w", err)
+		return nil, nil, fmt.Errorf("git diff: %w", err)
 	}
 
 	// Read reviewed state from DB (source of truth) rather than in-memory
-	// session.ChangedFiles, which can be stale during concurrent submit.
+	// session.ChangedFiles, which can be stale during concurrent submit. This is
+	// captured before ReplaceChangedFiles deletes rows, so it still includes
+	// files that are about to be pruned (e.g. reverted snapshot-only files).
 	dbFiles, _ := sm.db.GetChangedFiles(session.ID)
 	existingStatus := make(map[string]bool, len(dbFiles))
 	for _, f := range dbFiles {
 		existingStatus[f.Path] = f.Reviewed
 	}
 
+	// Merge reviewed state onto the current set, then persist the whole set in a
+	// single transactional replace. This prunes rows for files that are no longer
+	// in the diff (deleted or newly gitignored untracked files) and avoids a
+	// per-file write storm under repos with many changes.
+	ptrs := make([]*types.ChangedFile, len(files))
 	for i := range files {
 		files[i].Reviewed = existingStatus[files[i].Path]
-		if err := sm.db.UpsertChangedFile(session.ID, &files[i]); err != nil {
-			return nil, fmt.Errorf("upsert file %s: %w", files[i].Path, err)
-		}
+		ptrs[i] = &files[i]
+	}
+	if err := sm.db.ReplaceChangedFiles(session.ID, ptrs); err != nil {
+		return nil, nil, fmt.Errorf("replace changed files: %w", err)
 	}
 
 	session.ChangedFiles = files
-	return files, nil
+	return files, existingStatus, nil
 }
 
 // AdvanceRound increments the review round. Files, artifacts, and base ref are
