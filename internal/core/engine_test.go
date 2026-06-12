@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/josephschmitt/monocle/internal/db"
+	"github.com/josephschmitt/monocle/internal/protocol"
 	"github.com/josephschmitt/monocle/internal/types"
 )
 
@@ -145,6 +146,231 @@ func TestRequestPauseAndCancel(t *testing.T) {
 
 	if e.feedback.IsPauseRequested() {
 		t.Error("expected pause cancelled")
+	}
+}
+
+// TestHandleAwaitReview_BoundedWaitReturnsPromptly verifies the fail-fast
+// path: a dirty session with no reviewer attached and no submission must
+// return promptly once the max-wait bound elapses, reporting activity but no
+// verdict so the Stop hook ends the turn normally instead of hanging.
+func TestHandleAwaitReview_BoundedWaitReturnsPromptly(t *testing.T) {
+	e := &Engine{
+		feedback:    NewFeedbackQueue(),
+		subscribers: make(map[EventKind]map[int]EventCallback),
+	}
+	e.current = &types.ReviewSession{}
+	e.hasUnreviewedActivity = true
+
+	start := time.Now()
+	resp := e.handleAwaitReview(&protocol.AwaitReviewMsg{
+		Type:      protocol.TypeAwaitReview,
+		Wait:      true,
+		MaxWaitMs: 50,
+	}, nil)
+	elapsed := time.Since(start)
+
+	if elapsed > 2*time.Second {
+		t.Fatalf("bounded wait did not return promptly: took %v", elapsed)
+	}
+	if !resp.HasActivity {
+		t.Error("expected HasActivity=true (session was dirty)")
+	}
+	if resp.Action != "" {
+		t.Errorf("expected no verdict on timeout, got action=%q", resp.Action)
+	}
+	// Queue must be untouched — no feedback was consumed.
+	if e.feedback.IsPauseRequested() {
+		t.Error("pause flag should not have been set")
+	}
+}
+
+// TestHandlePollFeedback_BoundedWaitReturnsPromptly verifies the fail-fast
+// path for exit-plan: a blocking poll with a max-wait bound and no reviewer
+// submission returns promptly with HasFeedback=false.
+func TestHandlePollFeedback_BoundedWaitReturnsPromptly(t *testing.T) {
+	e := &Engine{
+		feedback:    NewFeedbackQueue(),
+		subscribers: make(map[EventKind]map[int]EventCallback),
+	}
+	e.current = &types.ReviewSession{}
+
+	start := time.Now()
+	resp := e.handlePollFeedback(&protocol.PollFeedbackMsg{
+		Type:      protocol.TypePollFeedback,
+		Wait:      true,
+		MaxWaitMs: 50,
+	}, nil)
+	elapsed := time.Since(start)
+
+	if elapsed > 2*time.Second {
+		t.Fatalf("bounded wait did not return promptly: took %v", elapsed)
+	}
+	if resp.HasFeedback {
+		t.Error("expected HasFeedback=false on timeout")
+	}
+}
+
+// TestHandleAwaitReview_BoundedWaitDeliversFeedback verifies the bound does
+// not race past a real submission: if the reviewer submits within the window,
+// the verdict is delivered rather than dropped.
+func TestHandleAwaitReview_BoundedWaitDeliversFeedback(t *testing.T) {
+	database, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+
+	e := &Engine{
+		feedback:    NewFeedbackQueue(),
+		database:    database,
+		sessions:    NewSessionManager(database, &gitStub{repoRoot: "/tmp/repo", currentRef: "head123"}),
+		subscribers: make(map[EventKind]map[int]EventCallback),
+	}
+	e.current = &types.ReviewSession{ID: "sess-1", FileStatuses: make(map[string]bool)}
+	e.hasUnreviewedActivity = true
+
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		e.feedback.Submit(&FormattedReview{
+			Formatted: "please fix",
+			Action:    "request_changes",
+		}, false)
+	}()
+
+	resp := e.handleAwaitReview(&protocol.AwaitReviewMsg{
+		Type:      protocol.TypeAwaitReview,
+		Wait:      true,
+		MaxWaitMs: 5000,
+	}, nil)
+
+	if !resp.HasActivity {
+		t.Error("expected HasActivity=true")
+	}
+	if resp.Action != "request_changes" {
+		t.Errorf("expected request_changes verdict, got %q", resp.Action)
+	}
+}
+
+// TestHandleAwaitReview_PauseIgnoresBound verifies that when a pause was
+// explicitly requested, the short max-wait bound is ignored — the call keeps
+// blocking until the reviewer submits, preserving the pause flow.
+func TestHandleAwaitReview_PauseIgnoresBound(t *testing.T) {
+	database, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+
+	e := &Engine{
+		feedback:    NewFeedbackQueue(),
+		database:    database,
+		sessions:    NewSessionManager(database, &gitStub{repoRoot: "/tmp/repo", currentRef: "head123"}),
+		subscribers: make(map[EventKind]map[int]EventCallback),
+	}
+	e.current = &types.ReviewSession{ID: "sess-1", FileStatuses: make(map[string]bool)}
+	e.hasUnreviewedActivity = true
+	e.feedback.SetPauseRequested(true)
+
+	done := make(chan *protocol.AwaitReviewResponse, 1)
+	go func() {
+		done <- e.handleAwaitReview(&protocol.AwaitReviewMsg{
+			Type:      protocol.TypeAwaitReview,
+			Wait:      true,
+			MaxWaitMs: 50, // would fire quickly if the bound were honored
+		}, nil)
+	}()
+
+	// The bound is 50ms; wait well past it to prove the call is still blocking
+	// because a pause was requested.
+	select {
+	case <-done:
+		t.Fatal("call returned despite pause requested — bound should be ignored")
+	case <-time.After(300 * time.Millisecond):
+	}
+
+	// Now submit; the blocked call must release with the verdict.
+	e.feedback.Submit(&FormattedReview{
+		Formatted: "ok",
+		Action:    "approve",
+	}, false)
+
+	select {
+	case resp := <-done:
+		if !resp.HasActivity {
+			t.Error("expected HasActivity=true after submit")
+		}
+		if resp.Action != "approve" {
+			t.Errorf("expected approve verdict, got %q", resp.Action)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("blocked call did not release after submit")
+	}
+}
+
+// TestHandleAwaitReview_LatePauseHonored covers the TOCTOU race that
+// TestHandleAwaitReview_PauseIgnoresBound does not: no pause is set when the
+// bounded wait starts (so the initial snapshot is false and the timer goroutine
+// is armed), but a reviewer presses P AFTER the call begins and BEFORE the
+// bound elapses. The bound must NOT fire-and-allow; instead the call must keep
+// blocking until the reviewer submits, then return the real verdict. Without
+// the re-check at timer fire time, the call would return a no-verdict "allow"
+// once the 50ms bound elapsed, silently discarding the late pause.
+func TestHandleAwaitReview_LatePauseHonored(t *testing.T) {
+	database, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+
+	e := &Engine{
+		feedback:    NewFeedbackQueue(),
+		database:    database,
+		sessions:    NewSessionManager(database, &gitStub{repoRoot: "/tmp/repo", currentRef: "head123"}),
+		subscribers: make(map[EventKind]map[int]EventCallback),
+	}
+	e.current = &types.ReviewSession{ID: "sess-1", FileStatuses: make(map[string]bool)}
+	e.hasUnreviewedActivity = true
+	// NOTE: pause is intentionally NOT set yet — the initial snapshot inside
+	// boundedWaitCancel must observe false so the timer goroutine is armed.
+
+	done := make(chan *protocol.AwaitReviewResponse, 1)
+	go func() {
+		done <- e.handleAwaitReview(&protocol.AwaitReviewMsg{
+			Type:      protocol.TypeAwaitReview,
+			Wait:      true,
+			MaxWaitMs: 50, // would fire-and-allow quickly absent the re-check
+		}, nil)
+	}()
+
+	// Request the pause AFTER the wait has begun but BEFORE the 50ms bound
+	// elapses, reproducing the race window.
+	time.Sleep(10 * time.Millisecond)
+	e.feedback.SetPauseRequested(true)
+
+	// Wait well past the bound to prove the call is still blocking because the
+	// late pause was honored rather than the timer firing-and-allowing.
+	select {
+	case resp := <-done:
+		t.Fatalf("call returned despite late pause request — bound should be ignored (action=%q)", resp.Action)
+	case <-time.After(300 * time.Millisecond):
+	}
+
+	// Now submit; the blocked call must release with the verdict.
+	e.feedback.Submit(&FormattedReview{
+		Formatted: "please fix",
+		Action:    "request_changes",
+	}, false)
+
+	select {
+	case resp := <-done:
+		if !resp.HasActivity {
+			t.Error("expected HasActivity=true after submit")
+		}
+		if resp.Action != "request_changes" {
+			t.Errorf("expected request_changes verdict, got %q", resp.Action)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("blocked call did not release after submit")
 	}
 }
 
