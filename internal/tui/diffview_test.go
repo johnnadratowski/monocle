@@ -665,3 +665,26 @@ func TestHalfPageScrollMovesCursor(t *testing.T) {
 		t.Error("cursor should remain visible near the bottom")
 	}
 }
+
+func TestScreenLinesForCollapsedComment(t *testing.T) {
+	c := &types.ReviewComment{Type: types.CommentNote, Body: "looks good"}
+	content := formatInlineComment(c) // collapsed 3-line box
+	want := strings.Count(content, "\n") + 1
+	if want != 3 {
+		t.Fatalf("sanity: collapsed comment box should be 3 lines, got %d", want)
+	}
+	m := diffViewModel{
+		lines: []diffViewLine{
+			{kind: types.DiffLineContext, newLineNum: 1, content: "code"},
+			{isComment: true, comment: c, content: content},
+		},
+	}
+	// screenLinesFor must report the comment's true rendered height (3), not 1,
+	// or the scroll/cursor math desyncs and content runs off the viewport.
+	if got := m.screenLinesFor(1); got != want {
+		t.Errorf("collapsed comment screenLinesFor = %d, want %d", got, want)
+	}
+	if got := m.screenLinesFor(0); got != 1 {
+		t.Errorf("plain code line screenLinesFor = %d, want 1", got)
+	}
+}

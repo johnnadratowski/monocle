@@ -1809,15 +1809,21 @@ func (m diffViewModel) screenLinesFor(idx int) int {
 		return 1
 	}
 	line := m.lines[idx]
-	// Expanded comments take multiple screen lines
-	if line.isComment && line.comment != nil && line.comment.ID == m.expandedCommentID {
-		origCode := m.originalCodeForComment(line.comment)
-		return strings.Count(formatExpandedComment(line.comment, m.width, origCode, m.wrap), "\n") + 1
+	// Comments render as a multi-line box regardless of wrap mode: a collapsed
+	// comment is a 3-line box (line.content), an expanded one spans its body.
+	// This must match what renderCommentLine/View actually draw, or the scroll
+	// and cursor math desync and the cursor/bottom run off the viewport.
+	if line.isComment {
+		if line.comment != nil && line.comment.ID == m.expandedCommentID {
+			origCode := m.originalCodeForComment(line.comment)
+			return strings.Count(formatExpandedComment(line.comment, m.width, origCode, m.wrap), "\n") + 1
+		}
+		return strings.Count(line.content, "\n") + 1
 	}
 	if !m.wrap {
 		return 1
 	}
-	if line.isHunk || line.isComment || line.isSplit {
+	if line.isHunk || line.isSplit {
 		return 1
 	}
 	cw := m.contentWidthFor(line)
