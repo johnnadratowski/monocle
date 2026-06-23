@@ -143,6 +143,7 @@ type loadDiffMsg struct {
 type requestFileContentMsg struct {
 	path            string
 	selectCommentID string
+	anchorLine      int // re-anchor cursor to this new-file line after load (0 = none)
 }
 
 type loadFileContentMsg struct {
@@ -151,6 +152,7 @@ type loadFileContentMsg struct {
 	err             error
 	comments        []types.ReviewComment
 	selectCommentID string
+	anchorLine      int // re-anchor cursor to this new-file line after load (0 = none)
 }
 
 type loadAdditionalFileMsg struct {
@@ -347,10 +349,16 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 		prevCursor := m.cursor
 		prevOffset := m.offset
 		m.buildFileViewLines(msg.content)
-		if sameFile && prevCursor < len(m.lines) {
+		switch {
+		case msg.anchorLine > 0:
+			// Re-anchor after a diff-style toggle so the file view lands on the
+			// same source line the reviewer was looking at.
+			m.reanchorTo(msg.anchorLine)
+			m.visualMode = false
+		case sameFile && prevCursor < len(m.lines):
 			m.cursor = m.nearestSelectable(prevCursor, 1)
 			m.offset = prevOffset
-		} else {
+		default:
 			m.cursor = m.nearestSelectable(0, 1)
 			m.offset = 0
 			m.visualMode = false
@@ -1463,9 +1471,14 @@ func (m diffViewModel) renderSplitLine(line diffViewLine, selected, inVisual boo
 		}
 	}
 
-	// Render each side
-	leftStyled := m.renderSplitSide(leftGutter, leftRawContent, line.kind, line.leftEmpty, leftChanges, gutterW, contentW, line)
-	rightStyled := m.renderSplitSide(rightGutter, rightRawContent, line.rightKind, line.rightEmpty, rightChanges, gutterW, contentW, line)
+	// Render each side, then clamp each to exactly gutterW+contentW columns.
+	// renderSplitSide only pads up to width; markdown styling or width-measure
+	// drift can leave a side over- or under-wide, which shifts the divider and
+	// (when over-wide) lets the terminal wrap the row. Hard-fitting both sides
+	// keeps the divider in a stable column regardless of content or wrap mode.
+	sideW := gutterW + contentW
+	leftStyled := fitToWidth(m.renderSplitSide(leftGutter, leftRawContent, line.kind, line.leftEmpty, leftChanges, gutterW, contentW, line), sideW)
+	rightStyled := fitToWidth(m.renderSplitSide(rightGutter, rightRawContent, line.rightKind, line.rightEmpty, rightChanges, gutterW, contentW, line), sideW)
 	divStyled := lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(divider)
 
 	return leftStyled + divStyled + rightStyled
@@ -1529,6 +1542,16 @@ func padToWidth(s string, width int) string {
 		return s
 	}
 	return s + strings.Repeat(" ", width-visWidth)
+}
+
+// fitToWidth forces a (possibly ANSI-styled) string to exactly the given visual
+// width: it truncates content wider than width (preserving escape sequences) and
+// pads content narrower than width. Used to keep split-diff columns aligned.
+func fitToWidth(s string, width int) string {
+	if ansi.StringWidth(s) > width {
+		s = ansi.Truncate(s, width, "")
+	}
+	return padToWidth(s, width)
 }
 
 // renderWrappedLine renders a single logical line wrapped across multiple screen lines.
@@ -1695,12 +1718,17 @@ func (m *diffViewModel) CycleDiffStyle() tea.Cmd {
 		}
 	}
 
+	// Source line under the cursor, preserved across the rebuild so the
+	// viewport re-anchors instead of keeping a now-meaningless line index.
+	srcLine := m.lineNumAt(m.cursor)
+
 	// Viewing a content diff: cycle unified → split → back to content
 	if !m.contentMode && m.contentID != "" {
 		switch m.style {
 		case diffStyleUnified:
 			m.style = diffStyleSplit
 			m.buildLines()
+			m.reanchorTo(srcLine)
 			return nil
 		default:
 			// Back to content view
@@ -1708,9 +1736,7 @@ func (m *diffViewModel) CycleDiffStyle() tea.Cmd {
 			m.style = diffStyleUnified
 			m.hunks = nil
 			m.buildContentLines(m.contentDiffContent)
-			m.cursor = m.nearestSelectable(0, 1)
-			m.offset = 0
-			m.hOffset = 0
+			m.reanchorTo(srcLine)
 			return nil
 		}
 	}
@@ -1720,14 +1746,49 @@ func (m *diffViewModel) CycleDiffStyle() tea.Cmd {
 	case diffStyleUnified:
 		m.style = diffStyleSplit
 		m.buildLines()
+		m.reanchorTo(srcLine)
 	case diffStyleSplit:
 		path := m.path
-		return func() tea.Msg { return requestFileContentMsg{path: path} }
+		return func() tea.Msg { return requestFileContentMsg{path: path, anchorLine: srcLine} }
 	case diffStyleFile:
 		m.style = diffStyleUnified
 		m.buildLines()
+		m.reanchorTo(srcLine)
 	}
 	return nil
+}
+
+// indexForNewLine returns the index of the lines[] entry whose new-file line
+// number matches n (split lines carry it in rightLineNum), or -1 if none.
+func (m diffViewModel) indexForNewLine(n int) int {
+	if n <= 0 {
+		return -1
+	}
+	for i := range m.lines {
+		if m.lines[i].rightLineNum == n || m.lines[i].newLineNum == n {
+			return i
+		}
+	}
+	return -1
+}
+
+// reanchorTo re-centers the viewport on the rebuilt line matching source line
+// lineNum after a style change. Falls back to the top when the line isn't found
+// (e.g. it was a pure-removed line absent from the new layout).
+func (m *diffViewModel) reanchorTo(lineNum int) {
+	m.hOffset = 0
+	idx := m.indexForNewLine(lineNum)
+	if idx < 0 {
+		m.cursor = m.nearestSelectable(0, 1)
+		m.offset = 0
+		return
+	}
+	m.cursor = m.nearestSelectable(idx, 1)
+	m.offset = m.cursor - m.height/2
+	if m.offset < 0 {
+		m.offset = 0
+	}
+	m.ensureVisible()
 }
 
 // contentWidthFor returns the available content width (excluding gutter) for a line.
@@ -1858,25 +1919,16 @@ func wrapContent(content string, width int) []string {
 
 // ScrollDown scrolls the diff viewport down by one line.
 func (m *diffViewModel) ScrollDown() {
-	// In wrap mode, compute max offset accounting for wrapped lines
-	if m.wrap {
-		// Check if there's content below to scroll to
-		screenLines := 0
-		for i := m.offset; i < len(m.lines); i++ {
-			screenLines += m.screenLinesFor(i)
-			if screenLines > m.height {
-				m.offset++
-				return
-			}
+	// Account for rows that occupy more than one screen line (expanded comments
+	// always, wrapped lines in wrap mode). Only scroll while content remains
+	// below the viewport.
+	screenLines := 0
+	for i := m.offset; i < len(m.lines); i++ {
+		screenLines += m.screenLinesFor(i)
+		if screenLines > m.height {
+			m.offset++
+			return
 		}
-		return
-	}
-	maxOffset := len(m.lines) - m.height
-	if maxOffset < 0 {
-		maxOffset = 0
-	}
-	if m.offset < maxOffset {
-		m.offset++
 	}
 }
 
@@ -1893,31 +1945,23 @@ func (m *diffViewModel) ScrollDownHalfPage() {
 	if jump < 1 {
 		jump = 1
 	}
-	if m.wrap {
-		for i := 0; i < jump; i++ {
-			screenLines := 0
-			canScroll := false
-			for j := m.offset; j < len(m.lines); j++ {
-				screenLines += m.screenLinesFor(j)
-				if screenLines > m.height {
-					m.offset++
-					canScroll = true
-					break
-				}
-			}
-			if !canScroll {
+	// Account for rows that occupy more than one screen line (expanded comments
+	// always, wrapped lines in wrap mode) so the cursor can't be left stranded
+	// at the bottom of a file.
+	for i := 0; i < jump; i++ {
+		screenLines := 0
+		canScroll := false
+		for j := m.offset; j < len(m.lines); j++ {
+			screenLines += m.screenLinesFor(j)
+			if screenLines > m.height {
+				m.offset++
+				canScroll = true
 				break
 			}
 		}
-		return
-	}
-	maxOffset := len(m.lines) - m.height
-	if maxOffset < 0 {
-		maxOffset = 0
-	}
-	m.offset += jump
-	if m.offset > maxOffset {
-		m.offset = maxOffset
+		if !canScroll {
+			break
+		}
 	}
 }
 
@@ -1982,13 +2026,10 @@ func (m *diffViewModel) ensureVisible() {
 	if m.cursor < m.offset {
 		m.offset = m.cursor
 	}
-	if !m.wrap {
-		if m.cursor >= m.offset+m.height {
-			m.offset = m.cursor - m.height + 1
-		}
-		return
-	}
-	// Wrap mode: count screen lines from offset to cursor
+	// Count screen lines from offset to cursor. screenLinesFor returns >1 for
+	// expanded comments (regardless of wrap) and for wrapped lines in wrap mode,
+	// so advancing offset by screen lines keeps the cursor on screen even when
+	// rows occupy multiple terminal rows.
 	screenLines := 0
 	for i := m.offset; i <= m.cursor && i < len(m.lines); i++ {
 		screenLines += m.screenLinesFor(i)

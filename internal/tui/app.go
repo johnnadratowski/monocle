@@ -858,6 +858,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		engine := m.engine
 		path := msg.path
 		selectID := msg.selectCommentID
+		anchorLine := msg.anchorLine
 		return m, func() tea.Msg {
 			content, err := engine.GetFileContent(path)
 			if err != nil {
@@ -877,6 +878,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				content:         content,
 				comments:        comments,
 				selectCommentID: selectID,
+				anchorLine:      anchorLine,
 			}
 		}
 
