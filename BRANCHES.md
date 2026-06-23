@@ -18,6 +18,7 @@ the branches for local testing.
 | `fix/remove-additional-files` | `main` | ready for PR | Remove added files (`x` in sidebar + `:clear`); `remove_files` MCP tool + `monocle review remove-files` CLI |
 | `feat/diff-search` | `main` | ready for PR; **merged into integration** | Vim-style diff search (`/` `?` `n` `N`) + keybinding reshuffle (Help→`H`, sidebar toggle→`;`, `scroll_left` drops `H`) |
 | `feat/theme` | `main` | ready for PR; **merged into integration** | UI theming via named themes + Molokai (from the user's molokai vim colorscheme), Dracula, Nord; `:theme` command |
+| `feat/yank-line` | `main` | ready for PR; **merged into integration** | `y` yanks the current line (or visual selection) to the clipboard |
 | `feat/context-clear-search` | `main` | placeholder | Empty placeholder for future "clear no-longer-needed context" work |
 | `integration/diffview-improvements` | `main` | integration only | Merge of all the above for local testing — do not PR into `main` |
 
