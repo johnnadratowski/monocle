@@ -11,6 +11,13 @@ import (
 // TextDiff computes a unified diff between two text strings and returns parsed hunks.
 // It shells out to the system `diff` command and feeds the output through parseDiff.
 func TextDiff(oldContent, newContent string) ([]types.DiffHunk, error) {
+	return TextDiffContext(oldContent, newContent, 0)
+}
+
+// TextDiffContext is like TextDiff but controls the unchanged-context lines
+// around each hunk: 0 uses diff's default (3), a negative value shows the full
+// file. Used for the full-file diff modifier in review-base (snapshot) mode.
+func TextDiffContext(oldContent, newContent string, contextLines int) ([]types.DiffHunk, error) {
 	if oldContent == newContent {
 		return nil, nil
 	}
@@ -37,7 +44,13 @@ func TextDiff(oldContent, newContent string) ([]types.DiffHunk, error) {
 	}
 	newFile.Close()
 
-	out, err := exec.Command("diff", "-u", oldFile.Name(), newFile.Name()).Output()
+	ctxArg := "-U3"
+	if contextLines < 0 {
+		ctxArg = fmt.Sprintf("-U%d", fullFileContextLines)
+	} else if contextLines > 0 {
+		ctxArg = fmt.Sprintf("-U%d", contextLines)
+	}
+	out, err := exec.Command("diff", ctxArg, oldFile.Name(), newFile.Name()).Output()
 	if err != nil {
 		// diff exits with code 1 when files differ — that's expected
 		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {

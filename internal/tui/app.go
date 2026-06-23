@@ -279,6 +279,9 @@ func NewApp(engine core.EngineAPI, opts ...AppOptions) appModel {
 			if cfg.Wrap {
 				dv.wrap = true
 			}
+			if cfg.FullFileDiff {
+				dv.fullFile = true
+			}
 			if cfg.TabSize > 0 {
 				dv.tabSize = cfg.TabSize
 			}
@@ -882,6 +885,34 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
+	// File diff re-fetch (from full-file toggle)
+	case requestFileDiffMsg:
+		engine := m.engine
+		path := msg.path
+		full := msg.full
+		anchorLine := msg.anchorLine
+		return m, func() tea.Msg {
+			result, err := fetchDiff(engine, path, full)
+			if err != nil {
+				return loadDiffMsg{path: path}
+			}
+			session := engine.GetSession()
+			var comments []types.ReviewComment
+			if session != nil {
+				for _, c := range session.Comments {
+					if c.TargetRef == path {
+						comments = append(comments, c)
+					}
+				}
+			}
+			return loadDiffMsg{
+				path:       path,
+				result:     result,
+				comments:   comments,
+				anchorLine: anchorLine,
+			}
+		}
+
 	// File content loaded
 	case loadFileContentMsg:
 		var cmd tea.Cmd
@@ -917,6 +948,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		engine := m.engine
 		id := msg.commentID
 		currentPath := m.diffView.path
+		full := m.diffView.fullFile
 		isContent := m.diffView.contentMode
 		additionalPath := m.diffView.additionalFilePath
 		return m, func() tea.Msg {
@@ -940,7 +972,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return loadAdditionalFileMsg{path: additionalPath, content: content, comments: comments}
 			}
-			result, _ := engine.GetFileDiff(currentPath)
+			result, _ := fetchDiff(engine, currentPath, full)
 			session := engine.GetSession()
 			var comments []types.ReviewComment
 			if session != nil {
@@ -993,6 +1025,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		engine := m.engine
 		id := msg.commentID
 		currentPath := m.diffView.path
+		full := m.diffView.fullFile
 		isContent := m.diffView.contentMode
 		additionalPath := m.diffView.additionalFilePath
 		return m, func() tea.Msg {
@@ -1017,7 +1050,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return loadAdditionalFileMsg{path: additionalPath, content: content, comments: comments}
 			}
 			// Reload diff to update comment display
-			result, _ := engine.GetFileDiff(currentPath)
+			result, _ := fetchDiff(engine, currentPath, full)
 			session := engine.GetSession()
 			var comments []types.ReviewComment
 			if session != nil {
@@ -1724,6 +1757,13 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		cmd := m.diffView.CycleDiffStyle()
 		return m, cmd
 
+	case Matches(key, km.ToggleFullDiff):
+		if m.nonGitMode {
+			return m, nil // always file view in directory mode
+		}
+		cmd := m.diffView.ToggleFullFile()
+		return m, cmd
+
 	case Matches(key, km.HalfDown):
 		m.diffView.ScrollDownHalfPage()
 		return m, nil
@@ -2224,6 +2264,15 @@ func (m *appModel) autoToggleSidebar() bool {
 }
 
 // handleSidebarSelect loads the diff for the selected file or content item.
+// fetchDiff fetches a file diff honoring the full-file display modifier so the
+// preference persists as the reviewer switches files and reloads comments.
+func fetchDiff(engine core.EngineAPI, path string, full bool) (*types.DiffResult, error) {
+	if full {
+		return engine.GetFileDiffFull(path)
+	}
+	return engine.GetFileDiff(path)
+}
+
 func (m appModel) handleSidebarSelect(msg sidebarSelectMsg) tea.Cmd {
 	if msg.isContent {
 		return func() tea.Msg {
@@ -2273,8 +2322,9 @@ func (m appModel) handleSidebarSelect(msg sidebarSelectMsg) tea.Cmd {
 			}
 		}
 	}
+	full := m.diffView.fullFile
 	return func() tea.Msg {
-		result, err := m.engine.GetFileDiff(msg.path)
+		result, err := fetchDiff(m.engine, msg.path, full)
 		if err != nil {
 			return loadDiffMsg{path: msg.path}
 		}
@@ -2297,6 +2347,7 @@ func (m appModel) handleSidebarSelect(msg sidebarSelectMsg) tea.Cmd {
 
 // handleSaveComment persists a new or edited comment then reloads the diff.
 func (m appModel) handleSaveComment(msg saveCommentMsg) tea.Cmd {
+	full := m.diffView.fullFile
 	return func() tea.Msg {
 		target := core.CommentTarget{
 			TargetType: msg.targetType,
@@ -2366,7 +2417,7 @@ func (m appModel) handleSaveComment(msg saveCommentMsg) tea.Cmd {
 		}
 
 		// Reload diff for the file
-		result, err := m.engine.GetFileDiff(msg.path)
+		result, err := fetchDiff(m.engine, msg.path, full)
 		if err != nil {
 			return loadDiffMsg{path: msg.path}
 		}
@@ -2483,6 +2534,7 @@ func (m appModel) contentItemForReview() *types.ContentItem {
 func (m appModel) refreshFiles() tea.Cmd {
 	engine := m.engine
 	currentPath := m.diffView.path
+	full := m.diffView.fullFile
 	isContentItem := m.diffView.isViewingContentItem()
 	contentID := m.diffView.contentID
 	inAdditionalFileMode := m.diffView.additionalFilePath != ""
@@ -2519,7 +2571,7 @@ func (m appModel) refreshFiles() tea.Cmd {
 		var result *types.DiffResult
 		var comments []types.ReviewComment
 		if currentPath != "" && !inAdditionalFileMode {
-			result, _ = engine.GetFileDiff(currentPath)
+			result, _ = fetchDiff(engine, currentPath, full)
 			if session != nil {
 				for _, c := range session.Comments {
 					if c.TargetRef == currentPath {

@@ -64,9 +64,10 @@ type diffViewModel struct {
 	hl        *highlighter
 	isBinary  bool // true when hunk content contains binary control characters
 
-	hOffset int  // horizontal scroll offset (runes)
-	wrap    bool // soft-wrap long lines
-	tabSize int  // spaces per tab character
+	hOffset  int  // horizontal scroll offset (runes)
+	wrap     bool // soft-wrap long lines
+	fullFile bool // show whole file with diff coloring instead of compact hunks
+	tabSize  int  // spaces per tab character
 
 	// Visual mode
 	visualMode  bool
@@ -138,6 +139,15 @@ type loadDiffMsg struct {
 	result          *types.DiffResult
 	comments        []types.ReviewComment
 	selectCommentID string // if set, auto-select and expand this comment after loading
+	anchorLine      int    // if set, re-anchor cursor to this new-file line after loading
+}
+
+// requestFileDiffMsg asks the app to re-fetch a file diff honoring the full-file
+// modifier, then re-anchor the viewport. Used by the full-file toggle.
+type requestFileDiffMsg struct {
+	path       string
+	full       bool
+	anchorLine int
 }
 
 type requestFileContentMsg struct {
@@ -252,10 +262,16 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 		} else {
 			m.buildLines()
 		}
-		if sameFile && prevCursor < len(m.lines) {
+		switch {
+		case msg.anchorLine > 0:
+			// Re-anchor after a full-file toggle: the line list changed shape,
+			// so re-find the same source line and center on it.
+			m.reanchorTo(msg.anchorLine)
+			m.visualMode = false
+		case sameFile && prevCursor < len(m.lines):
 			m.cursor = prevCursor
 			m.offset = prevOffset
-		} else {
+		default:
 			m.cursor = m.nearestSelectable(0, 1)
 			m.offset = 0
 			m.hOffset = 0
@@ -1696,6 +1712,23 @@ func (m *diffViewModel) ToggleWrap() {
 		m.hOffset = 0
 	}
 	m.ensureVisible()
+}
+
+// ToggleFullFile flips the full-file diff modifier and re-fetches the diff with
+// the new amount of context. It applies to regular file diffs shown in unified
+// or split style; it is a no-op for content items, raw file view (already the
+// whole file), and additional files.
+func (m *diffViewModel) ToggleFullFile() tea.Cmd {
+	if m.additionalFilePath != "" || m.contentID != "" || m.style == diffStyleFile {
+		return nil
+	}
+	m.fullFile = !m.fullFile
+	path := m.path
+	full := m.fullFile
+	anchor := m.lineNumAt(m.cursor)
+	return func() tea.Msg {
+		return requestFileDiffMsg{path: path, full: full, anchorLine: anchor}
+	}
 }
 
 // CycleDiffStyle cycles through display styles.

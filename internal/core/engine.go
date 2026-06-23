@@ -70,6 +70,7 @@ type EngineAPI interface {
 	GetChangedFiles() []types.ChangedFile
 	GetContentItems() []types.ContentItem
 	GetFileDiff(path string) (*types.DiffResult, error)
+	GetFileDiffFull(path string) (*types.DiffResult, error)
 	GetFileContent(path string) (string, error)
 	GetContentItem(id string) (*types.ContentItem, error)
 	GetContentDiff(id string) (*types.DiffResult, error)

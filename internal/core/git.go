@@ -96,14 +96,22 @@ func (g *GitClient) Diff(baseRef string) ([]types.ChangedFile, error) {
 	return files, nil
 }
 
+// fullFileContextLines is the -U value used for full-file diffs: large enough to
+// envelope any real file (well under INT_MAX) so the whole file renders as a
+// single hunk with diff coloring. git clamps it to the actual file size.
+const fullFileContextLines = 1 << 30
+
 // FileDiff returns the parsed diff for a single file.
 // contextLines controls the number of unchanged lines around each hunk (-U flag).
-// A value of 0 or less uses git's default (3).
+// A value of 0 uses git's default (3); a negative value shows the full file.
 // For untracked files (where git diff returns nothing), a synthetic diff is
 // generated showing the entire file as added.
 func (g *GitClient) FileDiff(baseRef, path string, contextLines int) (*types.DiffResult, error) {
 	args := []string{"diff"}
-	if contextLines > 0 {
+	switch {
+	case contextLines < 0:
+		args = append(args, fmt.Sprintf("-U%d", fullFileContextLines))
+	case contextLines > 0:
 		args = append(args, fmt.Sprintf("-U%d", contextLines))
 	}
 	args = append(args, baseRef, "--", path)

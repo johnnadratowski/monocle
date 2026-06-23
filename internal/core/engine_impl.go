@@ -274,6 +274,16 @@ func (e *Engine) GetContentItems() []types.ContentItem {
 }
 
 func (e *Engine) GetFileDiff(path string) (*types.DiffResult, error) {
+	return e.getFileDiff(path, false)
+}
+
+// GetFileDiffFull returns the diff for a file with full-file context (the whole
+// file shown with diff coloring) rather than only the lines around each change.
+func (e *Engine) GetFileDiffFull(path string) (*types.DiffResult, error) {
+	return e.getFileDiff(path, true)
+}
+
+func (e *Engine) getFileDiff(path string, full bool) (*types.DiffResult, error) {
 	e.mu.RLock()
 	session := e.current
 	snapshot := e.reviewBase
@@ -284,12 +294,15 @@ func (e *Engine) GetFileDiff(path string) (*types.DiffResult, error) {
 
 	// Review base mode: diff stored content against current working tree
 	if snapshot != nil {
-		return e.snapshotFileDiff(snapshot, path)
+		return e.snapshotFileDiff(snapshot, path, full)
 	}
 
 	ctxLines := 0
 	if cfg := e.cfg.Load(); cfg != nil {
 		ctxLines = cfg.ContextLines
+	}
+	if full {
+		ctxLines = -1
 	}
 	return e.git.FileDiff(session.BaseRef, path, ctxLines)
 }
@@ -1505,7 +1518,7 @@ func (e *Engine) autoUnmarkChangedFiles(session *types.ReviewSession, files []ty
 }
 
 // snapshotFileDiff computes a diff between the snapshot's stored content and the current working tree.
-func (e *Engine) snapshotFileDiff(snapshot *types.ReviewSnapshot, path string) (*types.DiffResult, error) {
+func (e *Engine) snapshotFileDiff(snapshot *types.ReviewSnapshot, path string, full bool) (*types.DiffResult, error) {
 	// Find the file in the snapshot
 	var snapshotFile *types.SnapshotFile
 	if snapshot.FilesByPath != nil {
@@ -1547,7 +1560,11 @@ func (e *Engine) snapshotFileDiff(snapshot *types.ReviewSnapshot, path string) (
 		return &types.DiffResult{Path: path}, nil // no changes
 	}
 
-	hunks, err := TextDiff(oldContent, currentContent)
+	ctxLines := 0
+	if full {
+		ctxLines = -1
+	}
+	hunks, err := TextDiffContext(oldContent, currentContent, ctxLines)
 	if err != nil {
 		return nil, fmt.Errorf("compute snapshot diff for %s: %w", path, err)
 	}
