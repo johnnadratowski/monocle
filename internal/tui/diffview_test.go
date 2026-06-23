@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"charm.land/lipgloss/v2"
+
 	"github.com/josephschmitt/monocle/internal/types"
 )
 
@@ -551,5 +553,71 @@ func TestIsSelectableSplitInPlaceChange(t *testing.T) {
 	// lands on the next line that has a right-side number.
 	if got := m.nextSelectable(0, 1); got != 2 {
 		t.Errorf("nextSelectable(0, 1) = %d, want 2 (skipping pure removed line)", got)
+	}
+}
+
+// TestIndexForNewLine verifies the line lookup used to re-anchor the viewport
+// after a diff-style toggle, including the split-mode rightLineNum path.
+func TestIndexForNewLine(t *testing.T) {
+	m := diffViewModel{
+		lines: []diffViewLine{
+			{newLineNum: 10},
+			{rightLineNum: 11}, // split-mode new-file number
+			{newLineNum: 12},
+		},
+	}
+	if got := m.indexForNewLine(11); got != 1 {
+		t.Errorf("indexForNewLine(11) = %d, want 1 (rightLineNum match)", got)
+	}
+	if got := m.indexForNewLine(12); got != 2 {
+		t.Errorf("indexForNewLine(12) = %d, want 2", got)
+	}
+	if got := m.indexForNewLine(999); got != -1 {
+		t.Errorf("indexForNewLine(999) = %d, want -1", got)
+	}
+	if got := m.indexForNewLine(0); got != -1 {
+		t.Errorf("indexForNewLine(0) = %d, want -1", got)
+	}
+}
+
+// TestReanchorTo verifies that re-anchoring after a style toggle centers the
+// cursor on the matching source line and falls back to the top when absent.
+func TestReanchorTo(t *testing.T) {
+	lines := make([]diffViewLine, 40)
+	for i := range lines {
+		lines[i] = diffViewLine{newLineNum: i + 1, content: "x"}
+	}
+	m := diffViewModel{lines: lines, height: 10}
+
+	m.reanchorTo(20) // line 20 -> index 19
+	if m.cursor != 19 {
+		t.Fatalf("cursor = %d, want 19", m.cursor)
+	}
+	// Centered: offset ~ cursor - height/2, and cursor stays on screen.
+	if m.offset != 19-5 {
+		t.Errorf("offset = %d, want %d (centered)", m.offset, 19-5)
+	}
+	if m.isCursorOffScreen() {
+		t.Error("cursor should be visible after reanchor")
+	}
+
+	// Missing line falls back to the top.
+	m.reanchorTo(9999)
+	if m.cursor != 0 || m.offset != 0 {
+		t.Errorf("fallback: cursor=%d offset=%d, want 0/0", m.cursor, m.offset)
+	}
+}
+
+// TestFitToWidth verifies the split-diff column normalizer truncates over-wide
+// content and pads under-wide content to an exact visual width.
+func TestFitToWidth(t *testing.T) {
+	if got := fitToWidth("abc", 5); lipgloss.Width(got) != 5 {
+		t.Errorf("pad: width = %d, want 5 (%q)", lipgloss.Width(got), got)
+	}
+	if got := fitToWidth("abcdefgh", 4); lipgloss.Width(got) != 4 {
+		t.Errorf("truncate: width = %d, want 4 (%q)", lipgloss.Width(got), got)
+	}
+	if got := fitToWidth("abcd", 4); got != "abcd" {
+		t.Errorf("exact: got %q, want unchanged", got)
 	}
 }

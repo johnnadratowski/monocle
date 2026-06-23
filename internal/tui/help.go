@@ -167,6 +167,7 @@ func (m helpModel) View() string {
 		{"General", []struct{ key, desc string }{
 			{Label(km.OpenInEditor), "Open file in editor at cursor"},
 			{Label(km.ToggleDiff), "Cycle diff style (unified/split/file) (any pane)"},
+			{Label(km.ToggleFullDiff), "Toggle full-file diff (whole file vs. changed lines)"},
 			{Label(km.CycleLayout), "Cycle layout (auto/side-by-side/stacked)"},
 			{Label(km.Refresh), "Force reload files"},
 			{"I", "Connection info"},

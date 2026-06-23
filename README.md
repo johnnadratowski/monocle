@@ -223,6 +223,7 @@ Monocle exposes review operations via **MCP tools** (default for Claude Code, an
 | `r`                    | Toggle file reviewed (auto-advances to next unreviewed)   |
 | `/`                    | Cycle sidebar filter (all -> unreviewed -> reviewed)      |
 | `t`                    | Cycle diff style (unified/split/file) (any pane)          |
+| `a`                    | Toggle full-file diff (whole file vs. changed lines)      |
 | `T`                    | Cycle layout (auto/side-by-side/stacked)                  |
 | `R`                    | Force reload files                                        |
 | `S` / `:submit`        | Submit review                                             |
@@ -325,6 +326,7 @@ Monocle loads settings from JSON config files:
   "wrap": false,
   "tab_size": 4,
   "context_lines": 3,
+  "full_file_diff": false,
   "ignore_patterns": [],
   "keybindings": {},
   "mouse": true,
@@ -352,6 +354,7 @@ Monocle loads settings from JSON config files:
 | `wrap`                               | `true`, `false`                            | `false`      | Word-wrap long lines in diffs                                            |
 | `tab_size`                           | integer                                    | `4`          | Spaces per tab character                                                 |
 | `context_lines`                      | integer                                    | `3`          | Unchanged lines shown around diff hunks                                  |
+| `full_file_diff`                     | `true`, `false`                            | `false`      | Show the whole file with diff coloring instead of compact hunks (toggle with `a`) |
 | `ignore_patterns`                    | string array                               | `[]`         | Glob patterns for files to exclude                                       |
 | `min_diff_width`                     | integer                                    | `80`         | Minimum character width for the diff viewer in side-by-side layout       |
 | `mouse`                              | `true`, `false`                            | `true`       | Enable mouse interactions (click, scroll, drag)                          |
@@ -366,7 +369,7 @@ Monocle loads settings from JSON config files:
 | `review_format.max_snippet_lines`    | integer                                    | `10`         | Truncate snippets longer than this                                       |
 | `review_format.include_summary`      | `true`, `false`                            | `true`       | Include comment count summary in formatted reviews                       |
 
-Toggle keybindings (`T`, `t`, `w`, `f`) change settings for the current session only. Edit the config file to persist your preferences.
+Toggle keybindings (`T`, `t`, `a`, `w`, `f`) change settings for the current session only. Edit the config file to persist your preferences.
 
 ### Custom Keybindings
 
@@ -382,7 +385,7 @@ Override any action key by mapping the action name to a new key string:
 }
 ```
 
-Available action names: `up`, `down`, `top`, `bottom`, `half_up`, `half_down`, `prev_file`, `next_file`, `select`, `focus_swap`, `toggle_sidebar`, `scroll_down`, `scroll_up`, `scroll_left`, `scroll_right`, `scroll_home`, `scroll_first_char`, `scroll_end`, `wrap`, `toggle_diff`, `tree_mode`, `collapse_all`, `expand_all`, `prev_section`, `next_section`, `comment`, `file_comment`, `suggest`, `visual`, `reviewed`, `submit`, `pause`, `dismiss_outdated`, `base_ref`, `cycle_layout`, `refresh`, `help`, `quit`, `command_mode`.
+Available action names: `up`, `down`, `top`, `bottom`, `half_up`, `half_down`, `prev_file`, `next_file`, `select`, `focus_swap`, `toggle_sidebar`, `scroll_down`, `scroll_up`, `scroll_left`, `scroll_right`, `scroll_home`, `scroll_first_char`, `scroll_end`, `wrap`, `toggle_diff`, `toggle_full_diff`, `tree_mode`, `collapse_all`, `expand_all`, `prev_section`, `next_section`, `comment`, `file_comment`, `suggest`, `visual`, `reviewed`, `submit`, `pause`, `dismiss_outdated`, `base_ref`, `cycle_layout`, `refresh`, `help`, `quit`, `command_mode`.
 
 The help overlay (`?`) dynamically reflects your custom bindings. Modal keys (Enter, Esc, Tab in overlays) are not configurable.
 

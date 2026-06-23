@@ -240,6 +240,7 @@ type GetChangedFilesResponse struct {
 type GetFileDiffMsg struct {
 	Type string `json:"type"`
 	Path string `json:"path"`
+	Full bool   `json:"full,omitempty"` // full-file context instead of compact hunks
 }
 
 type GetFileDiffResponse struct {

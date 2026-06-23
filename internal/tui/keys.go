@@ -28,8 +28,9 @@ type KeyMap struct {
 	ScrollHome      []string
 	ScrollFirstChar []string
 	ScrollEnd       []string
-	Wrap        []string
-	ToggleDiff  []string
+	Wrap          []string
+	ToggleDiff    []string
+	ToggleFullDiff []string
 
 	// Sidebar
 	TreeMode       []string
@@ -91,8 +92,9 @@ func DefaultKeyMap() KeyMap {
 		ScrollHome:      []string{"0"},
 		ScrollFirstChar: []string{"^"},
 		ScrollEnd:       []string{"$"},
-		Wrap:        []string{"w"},
-		ToggleDiff:  []string{"t"},
+		Wrap:           []string{"w"},
+		ToggleDiff:     []string{"t"},
+		ToggleFullDiff: []string{"a"},
 
 		TreeMode:       []string{"f"},
 		CollapseAll:    []string{"z"},
@@ -134,7 +136,7 @@ var actionNames = []string{
 	"prev_file", "next_file", "select",
 	"focus_swap", "toggle_sidebar",
 	"scroll_down", "scroll_up", "scroll_left", "scroll_right", "scroll_home", "scroll_first_char", "scroll_end",
-	"wrap", "toggle_diff",
+	"wrap", "toggle_diff", "toggle_full_diff",
 	"tree_mode", "collapse_all", "expand_all", "prev_section", "next_section", "filter_reviewed",
 	"comment", "file_comment", "suggest", "visual", "reviewed",
 	"submit", "pause", "clear_review", "dismiss_artifact", "dismiss_outdated", "toggle_focus_mode",
@@ -187,6 +189,8 @@ func (km KeyMap) ApplyOverrides(overrides map[string]string) KeyMap {
 			km.Wrap = []string{key}
 		case "toggle_diff":
 			km.ToggleDiff = []string{key}
+		case "toggle_full_diff":
+			km.ToggleFullDiff = []string{key}
 		case "tree_mode":
 			km.TreeMode = []string{key}
 		case "collapse_all":

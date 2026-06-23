@@ -118,6 +118,102 @@ func TestGitFileDiff(t *testing.T) {
 	}
 }
 
+func TestGitFileDiffFullContext(t *testing.T) {
+	dir := t.TempDir()
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=Test", "GIT_AUTHOR_EMAIL=test@test.com",
+			"GIT_COMMITTER_NAME=Test", "GIT_COMMITTER_EMAIL=test@test.com",
+			"GIT_DIR="+filepath.Join(dir, ".git"), "GIT_WORK_TREE="+dir,
+		)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	run("init", "-b", "main")
+
+	// A file with 20 lines; change only line 15 so the early lines fall well
+	// outside the default 3-line context window.
+	var lines []string
+	for i := 1; i <= 20; i++ {
+		lines = append(lines, "line"+itoa(i))
+	}
+	write := func(content []string) {
+		os.WriteFile(filepath.Join(dir, "big.txt"), []byte(joinLines(content)), 0o644)
+	}
+	write(lines)
+	run("add", "big.txt")
+	run("commit", "-m", "initial")
+
+	changed := append([]string(nil), lines...)
+	changed[14] = "line15-changed"
+	write(changed)
+
+	g := NewGitClient(dir)
+
+	// Compact diff (default context) must NOT include the first line.
+	compact, err := g.FileDiff("HEAD", "big.txt", 0)
+	if err != nil {
+		t.Fatalf("compact FileDiff: %v", err)
+	}
+	if diffHasContextLine(compact, "line1") {
+		t.Fatal("compact diff unexpectedly included line1")
+	}
+
+	// Full-file diff (negative context) must include the whole file as context.
+	full, err := g.FileDiff("HEAD", "big.txt", -1)
+	if err != nil {
+		t.Fatalf("full FileDiff: %v", err)
+	}
+	if !diffHasContextLine(full, "line1") {
+		t.Fatal("full diff should include line1 as context")
+	}
+	if !diffHasContextLine(full, "line20") {
+		t.Fatal("full diff should include line20 as context")
+	}
+}
+
+func diffHasContextLine(r *types.DiffResult, content string) bool {
+	for _, h := range r.Hunks {
+		for _, l := range h.Lines {
+			if l.Kind == types.DiffLineContext && l.Content == content {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	neg := n < 0
+	if neg {
+		n = -n
+	}
+	var b []byte
+	for n > 0 {
+		b = append([]byte{byte('0' + n%10)}, b...)
+		n /= 10
+	}
+	if neg {
+		b = append([]byte{'-'}, b...)
+	}
+	return string(b)
+}
+
+func joinLines(lines []string) string {
+	var s string
+	for _, l := range lines {
+		s += l + "\n"
+	}
+	return s
+}
+
 func TestGitFileDiffUntracked(t *testing.T) {
 	dir, baseRef := setupTestRepo(t)
 	g := NewGitClient(dir)

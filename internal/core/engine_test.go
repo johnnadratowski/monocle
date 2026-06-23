@@ -2101,7 +2101,7 @@ func TestSnapshotFileDiff_ModifiedFile(t *testing.T) {
 		},
 	}
 
-	result, err := e.snapshotFileDiff(snapshot, "main.go")
+	result, err := e.snapshotFileDiff(snapshot, "main.go", false)
 	if err != nil {
 		t.Fatalf("snapshotFileDiff: %v", err)
 	}
@@ -2125,7 +2125,7 @@ func TestSnapshotFileDiff_NewFile(t *testing.T) {
 		FilesByPath: map[string]*types.SnapshotFile{},
 	}
 
-	result, err := e.snapshotFileDiff(snapshot, "new.go")
+	result, err := e.snapshotFileDiff(snapshot, "new.go", false)
 	if err != nil {
 		t.Fatalf("snapshotFileDiff: %v", err)
 	}
@@ -2152,7 +2152,7 @@ func TestSnapshotFileDiff_DeletedFile(t *testing.T) {
 		},
 	}
 
-	result, err := e.snapshotFileDiff(snapshot, "gone.go")
+	result, err := e.snapshotFileDiff(snapshot, "gone.go", false)
 	if err != nil {
 		t.Fatalf("snapshotFileDiff: %v", err)
 	}
@@ -2182,7 +2182,7 @@ func TestSnapshotFileDiff_NoChange(t *testing.T) {
 		},
 	}
 
-	result, err := e.snapshotFileDiff(snapshot, "main.go")
+	result, err := e.snapshotFileDiff(snapshot, "main.go", false)
 	if err != nil {
 		t.Fatalf("snapshotFileDiff: %v", err)
 	}

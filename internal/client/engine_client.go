@@ -646,7 +646,16 @@ func (c *EngineClient) GetChangedFiles() []types.ChangedFile {
 }
 
 func (c *EngineClient) GetFileDiff(path string) (*types.DiffResult, error) {
-	resp, err := c.request(&protocol.GetFileDiffMsg{Type: protocol.TypeGetFileDiff, Path: path})
+	return c.getFileDiff(path, false)
+}
+
+// GetFileDiffFull satisfies core.EngineAPI; requests full-file context.
+func (c *EngineClient) GetFileDiffFull(path string) (*types.DiffResult, error) {
+	return c.getFileDiff(path, true)
+}
+
+func (c *EngineClient) getFileDiff(path string, full bool) (*types.DiffResult, error) {
+	resp, err := c.request(&protocol.GetFileDiffMsg{Type: protocol.TypeGetFileDiff, Path: path, Full: full})
 	if err != nil {
 		return nil, err
 	}

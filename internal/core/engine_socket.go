@@ -79,7 +79,7 @@ func (e *Engine) handleGetChangedFiles(_ *protocol.GetChangedFilesMsg) *protocol
 }
 
 func (e *Engine) handleGetFileDiff(msg *protocol.GetFileDiffMsg) *protocol.GetFileDiffResponse {
-	diff, err := e.GetFileDiff(msg.Path)
+	diff, err := e.getFileDiff(msg.Path, msg.Full)
 	return &protocol.GetFileDiffResponse{
 		Type:  protocol.TypeGetFileDiffResponse,
 		Diff:  diff,
