@@ -656,6 +656,13 @@ func TestClearReview(t *testing.T) {
 	}
 	e.current.ContentItems = []types.ContentItem{*item}
 
+	// Add an additional (added) file
+	af := types.AdditionalFile{Path: "/tmp/ref.go", Name: "ref.go"}
+	if err := database.UpsertAdditionalFile("sess-1", &af); err != nil {
+		t.Fatalf("UpsertAdditionalFile: %v", err)
+	}
+	e.current.AdditionalFiles = []types.AdditionalFile{af}
+
 	// Mark file as reviewed in DB
 	if err := database.MarkFileReviewed("sess-1", "main.go", true); err != nil {
 		t.Fatalf("MarkFileReviewed: %v", err)
@@ -682,6 +689,15 @@ func TestClearReview(t *testing.T) {
 	dbItems, _ := database.GetContentItems("sess-1")
 	if len(dbItems) != 0 {
 		t.Errorf("expected 0 content items in DB, got %d", len(dbItems))
+	}
+
+	// Verify additional files cleared (clear is a full reset)
+	if len(e.current.AdditionalFiles) != 0 {
+		t.Errorf("expected 0 additional files in memory, got %d", len(e.current.AdditionalFiles))
+	}
+	dbAdd, _ := database.GetAdditionalFiles("sess-1")
+	if len(dbAdd) != 0 {
+		t.Errorf("expected 0 additional files in DB, got %d", len(dbAdd))
 	}
 
 	// Verify reviewed states reset
@@ -2706,6 +2722,111 @@ func TestDismissArtifact(t *testing.T) {
 		if c.ID == "c-drop" {
 			t.Error("expected c-drop removed from DB")
 		}
+	}
+}
+
+func TestRemoveAdditionalFile(t *testing.T) {
+	database, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer database.Close()
+
+	now := time.Now()
+	e := &Engine{
+		feedback:    NewFeedbackQueue(),
+		database:    database,
+		subscribers: make(map[EventKind]map[int]EventCallback),
+	}
+	e.current = &types.ReviewSession{
+		ID: "sess-1", Agent: "claude", RepoRoot: "/tmp/repo",
+		BaseRef: "base", ReviewRound: 1,
+		FileStatuses: make(map[string]bool),
+		CreatedAt:    now, UpdatedAt: now,
+	}
+	database.CreateSession(e.current)
+
+	keep := types.AdditionalFile{Path: "/tmp/keep.go", Name: "keep.go"}
+	drop := types.AdditionalFile{Path: "/tmp/drop.go", Name: "drop.go"}
+	database.UpsertAdditionalFile("sess-1", &keep)
+	database.UpsertAdditionalFile("sess-1", &drop)
+	e.current.AdditionalFiles = []types.AdditionalFile{keep, drop}
+
+	// Comments anchored on each added file, plus an unrelated file comment.
+	dropComment := &types.ReviewComment{ID: "c-drop", TargetType: types.TargetAdditionalFile, TargetRef: "/tmp/drop.go", Type: types.CommentNote, Body: "on drop", ReviewRound: 1, CreatedAt: now, UpdatedAt: now}
+	keepComment := &types.ReviewComment{ID: "c-keep", TargetType: types.TargetAdditionalFile, TargetRef: "/tmp/keep.go", Type: types.CommentNote, Body: "on keep", ReviewRound: 1, CreatedAt: now, UpdatedAt: now}
+	database.CreateComment("sess-1", dropComment)
+	database.CreateComment("sess-1", keepComment)
+	e.current.Comments = []types.ReviewComment{*dropComment, *keepComment}
+
+	if err := e.RemoveAdditionalFile("/tmp/drop.go"); err != nil {
+		t.Fatalf("RemoveAdditionalFile: %v", err)
+	}
+
+	if len(e.current.AdditionalFiles) != 1 || e.current.AdditionalFiles[0].Path != "/tmp/keep.go" {
+		t.Errorf("expected only keep.go remaining, got %+v", e.current.AdditionalFiles)
+	}
+	dbAdd, _ := database.GetAdditionalFiles("sess-1")
+	if len(dbAdd) != 1 || dbAdd[0].Path != "/tmp/keep.go" {
+		t.Errorf("expected drop.go removed from DB, got %+v", dbAdd)
+	}
+
+	// The removed file's comment is pruned; the other survives.
+	ids := make(map[string]bool)
+	for _, c := range e.current.Comments {
+		ids[c.ID] = true
+	}
+	if ids["c-drop"] || !ids["c-keep"] {
+		t.Errorf("expected c-drop pruned and c-keep kept, got %+v", e.current.Comments)
+	}
+	dbComments, _ := database.GetComments("sess-1")
+	for _, c := range dbComments {
+		if c.ID == "c-drop" {
+			t.Error("expected c-drop removed from DB")
+		}
+	}
+}
+
+func TestHandleRemoveAdditionalFiles_Batch(t *testing.T) {
+	database, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer database.Close()
+
+	now := time.Now()
+	e := &Engine{
+		feedback:    NewFeedbackQueue(),
+		database:    database,
+		subscribers: make(map[EventKind]map[int]EventCallback),
+	}
+	e.current = &types.ReviewSession{
+		ID: "sess-1", Agent: "claude", RepoRoot: "/tmp/repo",
+		BaseRef: "base", ReviewRound: 1,
+		FileStatuses: make(map[string]bool),
+		CreatedAt:    now, UpdatedAt: now,
+	}
+	database.CreateSession(e.current)
+
+	for _, p := range []string{"/tmp/a.go", "/tmp/b.go", "/tmp/c.go"} {
+		af := types.AdditionalFile{Path: p, Name: p}
+		database.UpsertAdditionalFile("sess-1", &af)
+		e.current.AdditionalFiles = append(e.current.AdditionalFiles, af)
+	}
+
+	// Two real paths plus one that was never added — Count reflects matches only.
+	resp := e.handleRemoveAdditionalFiles(&protocol.RemoveAdditionalFilesMsg{
+		Paths: []string{"/tmp/a.go", "/tmp/c.go", "/tmp/missing.go"},
+	})
+	if !resp.Success {
+		t.Fatalf("expected success, got %q", resp.Message)
+	}
+	if resp.Count != 2 {
+		t.Errorf("expected Count=2 (only matched files), got %d", resp.Count)
+	}
+	remaining := e.GetAdditionalFiles()
+	if len(remaining) != 1 || remaining[0].Path != "/tmp/b.go" {
+		t.Errorf("expected only /tmp/b.go remaining, got %+v", remaining)
 	}
 }
 

@@ -116,7 +116,7 @@ func (m helpModel) View() string {
 		{Label(km.FileComment), "Add file comment"},
 		{Label(km.Visual), "Visual select mode"},
 		{"x", "Toggle comment resolved (on comment)"},
-		{Label(km.DismissArtifact), "Dismiss artifact (in sidebar)"},
+		{Label(km.DismissArtifact), "Dismiss artifact / remove added file (in sidebar)"},
 		{"d", "Delete comment (on comment)"},
 	}
 	if m.reviewTracking {
@@ -127,7 +127,7 @@ func (m helpModel) View() string {
 		{"Ctrl+g", "Open external editor (comment/submit modal)"},
 		{"Ctrl+y", "Copy review to clipboard"},
 		{Label(km.Pause) + " / :pause", "Toggle pause (ask Claude Code to wait)"},
-		{Label(km.ClearReview) + " / :clear", "Clear review (comments, plans, reviewed)"},
+		{Label(km.ClearReview) + " / :clear", "Clear review (comments, plans, added files, reviewed)"},
 		{Label(km.ToggleFocusMode), "Toggle focus mode"},
 	}...)
 	if m.reviewTracking {

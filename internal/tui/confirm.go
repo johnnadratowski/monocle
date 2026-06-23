@@ -13,6 +13,7 @@ const (
 	confirmDiscard confirmAction = iota
 	confirmClear
 	confirmDismissArtifact
+	confirmDismissAdditionalFile
 )
 
 type confirmModel struct {

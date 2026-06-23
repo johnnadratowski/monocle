@@ -14,5 +14,9 @@
   {
     "name": "add_files",
     "description": "Add file paths to the current Monocle review session."
+  },
+  {
+    "name": "remove_files",
+    "description": "Remove previously-added file paths from the current Monocle review session. Pass the same paths used with add_files."
   }
 ]

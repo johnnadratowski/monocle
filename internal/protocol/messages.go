@@ -10,9 +10,10 @@ const (
 	TypeSubscribe          = "subscribe"
 	TypeConnect            = "connect"
 	TypeIdentify           = "identify"
-	TypeAddAdditionalFiles = "add_additional_files"
-	TypeMarkActivity       = "mark_activity"
-	TypeAwaitReview        = "await_review"
+	TypeAddAdditionalFiles    = "add_additional_files"
+	TypeRemoveAdditionalFiles = "remove_additional_files"
+	TypeMarkActivity          = "mark_activity"
+	TypeAwaitReview           = "await_review"
 )
 
 // Outbound message types (from engine to CLI subcommands)
@@ -23,9 +24,10 @@ const (
 	TypeSubscribeResponse          = "subscribe_response"
 	TypeConnectResponse            = "connect_response"
 	TypeEventNotification          = "event_notification"
-	TypeAddAdditionalFilesResponse = "add_additional_files_response"
-	TypeMarkActivityResponse       = "mark_activity_response"
-	TypeAwaitReviewResponse        = "await_review_response"
+	TypeAddAdditionalFilesResponse    = "add_additional_files_response"
+	TypeRemoveAdditionalFilesResponse = "remove_additional_files_response"
+	TypeMarkActivityResponse          = "mark_activity_response"
+	TypeAwaitReviewResponse           = "await_review_response"
 )
 
 // GetReviewStatusMsg requests the current review state from the engine.
@@ -175,6 +177,22 @@ type AddAdditionalFilesResponse struct {
 	Count        int                    `json:"count"`
 	Added        []types.AdditionalFile `json:"added,omitempty"`
 	AddedPresent bool                   `json:"added_present,omitempty"`
+}
+
+// RemoveAdditionalFilesMsg removes previously-added files by path. Paths are
+// resolved to absolute by the engine before matching, mirroring add.
+type RemoveAdditionalFilesMsg struct {
+	Type  string   `json:"type"`
+	Paths []string `json:"paths"`
+}
+
+// RemoveAdditionalFilesResponse acknowledges removal of additional files.
+// Count is the number of files that actually matched and were removed.
+type RemoveAdditionalFilesResponse struct {
+	Type    string `json:"type"`
+	Success bool   `json:"success"`
+	Message string `json:"message,omitempty"`
+	Count   int    `json:"count"`
 }
 
 // MarkActivityMsg notifies the engine that a write-tool just fired in the

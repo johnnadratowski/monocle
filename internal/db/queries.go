@@ -492,6 +492,12 @@ func (d *DB) DeleteAdditionalFiles(sessionID string) error {
 	return err
 }
 
+// DeleteAdditionalFile removes a single additional file record by path.
+func (d *DB) DeleteAdditionalFile(sessionID, path string) error {
+	_, err := d.Exec(`DELETE FROM additional_files WHERE session_id = ? AND path = ?`, sessionID, path)
+	return err
+}
+
 // MarkAllReviewed sets the reviewed flag on all files, content items, and additional files for a session.
 func (d *DB) MarkAllReviewed(sessionID string) error {
 	for _, query := range []string{

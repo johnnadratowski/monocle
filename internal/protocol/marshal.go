@@ -39,6 +39,8 @@ func Decode(data []byte) (any, error) {
 		msg = &IdentifyMsg{}
 	case TypeAddAdditionalFiles:
 		msg = &AddAdditionalFilesMsg{}
+	case TypeRemoveAdditionalFiles:
+		msg = &RemoveAdditionalFilesMsg{}
 	case TypeMarkActivity:
 		msg = &MarkActivityMsg{}
 	case TypeAwaitReview:
@@ -57,6 +59,8 @@ func Decode(data []byte) (any, error) {
 		msg = &EventNotification{}
 	case TypeAddAdditionalFilesResponse:
 		msg = &AddAdditionalFilesResponse{}
+	case TypeRemoveAdditionalFilesResponse:
+		msg = &RemoveAdditionalFilesResponse{}
 	case TypeMarkActivityResponse:
 		msg = &MarkActivityResponse{}
 	case TypeAwaitReviewResponse:
