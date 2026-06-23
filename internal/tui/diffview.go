@@ -2418,6 +2418,41 @@ func (m diffViewModel) EditorTargetLine() int {
 	return 1
 }
 
+// lineText returns the source text of a line for yanking: the code content,
+// the right side for split-mode added lines, or a comment's body.
+func lineText(line diffViewLine) string {
+	if line.isComment {
+		if line.comment != nil {
+			return line.comment.Body
+		}
+		return ""
+	}
+	if line.isSplit && line.leftEmpty {
+		return line.rightContent
+	}
+	return line.content
+}
+
+// YankText returns the text to copy to the clipboard: the selected lines
+// (joined by newlines) when visual mode is active, otherwise the cursor line.
+func (m diffViewModel) YankText() string {
+	if m.cursor < 0 || m.cursor >= len(m.lines) {
+		return ""
+	}
+	if m.visualMode {
+		start, end := m.visualStart, m.cursor
+		if start > end {
+			start, end = end, start
+		}
+		var parts []string
+		for i := start; i <= end && i < len(m.lines); i++ {
+			parts = append(parts, lineText(m.lines[i]))
+		}
+		return strings.Join(parts, "\n")
+	}
+	return lineText(m.lines[m.cursor])
+}
+
 // screenLineToIndex maps a screen-relative Y coordinate to a logical lines[] index.
 // Walks from offset counting the actual display lines each logical line occupies,
 // including multi-line comment rendering (3 lines per comment).

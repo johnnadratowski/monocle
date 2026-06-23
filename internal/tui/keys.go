@@ -28,9 +28,10 @@ type KeyMap struct {
 	ScrollHome      []string
 	ScrollFirstChar []string
 	ScrollEnd       []string
-	Wrap          []string
-	ToggleDiff    []string
+	Wrap           []string
+	ToggleDiff     []string
 	ToggleFullDiff []string
+	YankLine       []string
 
 	// Diff search
 	SearchBackward []string // forward search uses FilterReviewed's `/` when the diff is focused
@@ -100,6 +101,7 @@ func DefaultKeyMap() KeyMap {
 		Wrap:           []string{"w"},
 		ToggleDiff:     []string{"t"},
 		ToggleFullDiff: []string{"a"},
+		YankLine:       []string{"y"},
 
 		TreeMode:       []string{"f"},
 		CollapseAll:    []string{"z"},
@@ -145,7 +147,7 @@ var actionNames = []string{
 	"prev_file", "next_file", "select",
 	"focus_swap", "toggle_sidebar",
 	"scroll_down", "scroll_up", "scroll_left", "scroll_right", "scroll_home", "scroll_first_char", "scroll_end",
-	"wrap", "toggle_diff", "toggle_full_diff",
+	"wrap", "toggle_diff", "toggle_full_diff", "yank_line",
 	"search_backward", "search_next", "search_prev",
 	"tree_mode", "collapse_all", "expand_all", "prev_section", "next_section", "filter_reviewed",
 	"comment", "file_comment", "suggest", "visual", "reviewed",
@@ -201,6 +203,8 @@ func (km KeyMap) ApplyOverrides(overrides map[string]string) KeyMap {
 			km.ToggleDiff = []string{key}
 		case "toggle_full_diff":
 			km.ToggleFullDiff = []string{key}
+		case "yank_line":
+			km.YankLine = []string{key}
 		case "search_backward":
 			km.SearchBackward = []string{key}
 		case "search_next":

@@ -1883,6 +1883,23 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		cmd := m.diffView.ToggleFullFile()
 		return m, cmd
 
+	case Matches(key, km.YankLine):
+		// Yank the current line (or the visual selection) to the clipboard.
+		if m.focus != focusMain {
+			return m, nil
+		}
+		text := m.diffView.YankText()
+		if text == "" {
+			return m, nil
+		}
+		m.diffView.visualMode = false
+		return m, func() tea.Msg {
+			if err := clipboard.Copy(text); err != nil {
+				return yankFailMsg{err: err.Error()}
+			}
+			return yankSuccessMsg{}
+		}
+
 	case Matches(key, km.HalfDown):
 		m.diffView.ScrollDownHalfPage()
 		return m, nil

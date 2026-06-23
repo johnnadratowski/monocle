@@ -117,6 +117,7 @@ func (m helpModel) View() string {
 		{Label(km.Suggest), "Suggest edit at cursor"},
 		{Label(km.FileComment), "Add file comment"},
 		{Label(km.Visual), "Visual select mode"},
+		{Label(km.YankLine), "Yank line / selection to clipboard"},
 		{"x", "Toggle comment resolved (on comment)"},
 		{Label(km.DismissArtifact), "Dismiss artifact / remove added file (in sidebar)"},
 		{"d", "Delete comment (on comment)"},
