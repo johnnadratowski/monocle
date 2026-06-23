@@ -327,6 +327,7 @@ Monocle loads settings from JSON config files:
   "tab_size": 4,
   "context_lines": 3,
   "full_file_diff": false,
+  "editor": "",
   "ignore_patterns": [],
   "keybindings": {},
   "mouse": true,
@@ -355,6 +356,7 @@ Monocle loads settings from JSON config files:
 | `tab_size`                           | integer                                    | `4`          | Spaces per tab character                                                 |
 | `context_lines`                      | integer                                    | `3`          | Unchanged lines shown around diff hunks                                  |
 | `full_file_diff`                     | `true`, `false`                            | `false`      | Show the whole file with diff coloring instead of compact hunks (toggle with `a`) |
+| `editor`                             | string                                     | `""`         | External editor command (overrides `$VISUAL`/`$EDITOR`); may include flags, e.g. `"code --wait"` |
 | `ignore_patterns`                    | string array                               | `[]`         | Glob patterns for files to exclude                                       |
 | `min_diff_width`                     | integer                                    | `80`         | Minimum character width for the diff viewer in side-by-side layout       |
 | `mouse`                              | `true`, `false`                            | `true`       | Enable mouse interactions (click, scroll, drag)                          |

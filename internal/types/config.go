@@ -16,6 +16,7 @@ type Config struct {
 	TabSize        int               `json:"tab_size"`
 	ContextLines   int               `json:"context_lines"`
 	FullFileDiff   bool              `json:"full_file_diff"` // show whole file (with diff coloring) instead of compact hunks
+	Editor         string            `json:"editor"`         // external editor command; overrides $VISUAL/$EDITOR when set
 	ReviewFormat      ReviewFormatConfig `json:"review_format"`
 	AutoFocusMode     bool               `json:"auto_focus_mode"`
 	Mouse              *bool `json:"mouse"`
