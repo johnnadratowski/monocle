@@ -1991,9 +1991,9 @@ func (m *diffViewModel) ScrollDownHalfPage() {
 	if jump < 1 {
 		jump = 1
 	}
-	// Account for rows that occupy more than one screen line (expanded comments
-	// always, wrapped lines in wrap mode) so the cursor can't be left stranded
-	// at the bottom of a file.
+	// Scroll the viewport down. Account for rows that occupy more than one
+	// screen line (expanded comments always, wrapped lines in wrap mode) so the
+	// cursor can't be left stranded at the bottom of a file.
 	for i := 0; i < jump; i++ {
 		screenLines := 0
 		canScroll := false
@@ -2009,6 +2009,15 @@ func (m *diffViewModel) ScrollDownHalfPage() {
 			break
 		}
 	}
+	// Move the cursor down with the viewport so it keeps roughly the same
+	// relative screen position (vim Ctrl-D). Near the bottom, where the viewport
+	// can no longer scroll, the cursor still advances toward the last line.
+	target := m.cursor + jump
+	if target >= len(m.lines) {
+		target = len(m.lines) - 1
+	}
+	m.cursor = m.nearestSelectable(target, 1)
+	m.ensureVisible()
 }
 
 // ScrollUpHalfPage scrolls the diff viewport up by half a page.
@@ -2021,6 +2030,14 @@ func (m *diffViewModel) ScrollUpHalfPage() {
 	if m.offset < 0 {
 		m.offset = 0
 	}
+	// Move the cursor up with the viewport (vim Ctrl-U), keeping its relative
+	// screen position; near the top it advances toward the first line.
+	target := m.cursor - jump
+	if target < 0 {
+		target = 0
+	}
+	m.cursor = m.nearestSelectable(target, -1)
+	m.ensureVisible()
 }
 
 // isCursorOffScreen returns true if the cursor is outside the visible viewport.
