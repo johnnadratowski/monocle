@@ -18,9 +18,19 @@ type highlighter struct {
 }
 
 func newHighlighter() *highlighter {
+	return newHighlighterWithStyle("monokai")
+}
+
+// newHighlighterWithStyle builds a highlighter using the named chroma style.
+// chroma's styles.Get returns a usable fallback for unknown names, so an empty
+// or unrecognized name degrades gracefully to monokai.
+func newHighlighterWithStyle(name string) *highlighter {
+	if name == "" {
+		name = "monokai"
+	}
 	return &highlighter{
 		lexerCache: make(map[string]chroma.Lexer),
-		style:      styles.Get("monokai"),
+		style:      styles.Get(name),
 	}
 }
 

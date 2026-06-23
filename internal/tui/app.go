@@ -209,8 +209,9 @@ type appModel struct {
 	width  int
 	height int
 
-	theme Theme
-	keys  KeyMap
+	theme     Theme
+	themeName string
+	keys      KeyMap
 
 	mcpRegisterFn    func(global bool) error
 	registerPrompt   registerPromptModel
@@ -239,10 +240,14 @@ func NewApp(engine core.EngineAPI, opts ...AppOptions) appModel {
 	}
 
 	theme := DefaultTheme()
+	themeName := "dark"
 	keys := DefaultKeyMap()
 	if engine != nil {
-		if cfg := engine.GetConfig(); cfg != nil && cfg.Theme == "light" {
-			theme = LightTheme()
+		if cfg := engine.GetConfig(); cfg != nil {
+			theme = ThemeByName(cfg.Theme)
+			if validThemeName(cfg.Theme) {
+				themeName = cfg.Theme
+			}
 		}
 	}
 	sidebar := newSidebarModel(&keys)
@@ -322,6 +327,7 @@ func NewApp(engine core.EngineAPI, opts ...AppOptions) appModel {
 		overlay:       overlayNone,
 		layoutConfig:  layoutCfg,
 		theme:         theme,
+		themeName:     themeName,
 		keys:          keys,
 		mcpRegisterFn:     o.MCPRegisterFn,
 		mouseEnabled:      mouseEnabled,
@@ -1228,6 +1234,18 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case setThemeMsg:
+		name := msg.name
+		if name == "" {
+			name = NextThemeName(m.themeName)
+		} else if !validThemeName(name) {
+			m.statusBar.feedbackStatus = "unknown theme: " + name + " (try: " + strings.Join(ThemeNames(), ", ") + ")"
+			return m, nil
+		}
+		m = m.applyTheme(name)
+		m.statusBar.feedbackStatus = "theme: " + name
+		return m, nil
+
 	case openConfirmMsg:
 		m.confirm.open(msg.title, msg.message, msg.action)
 		m.overlay = overlayConfirm
@@ -1814,10 +1832,55 @@ type openReviewMsg struct {
 	agentConnected bool
 }
 
+// setThemeMsg requests a live theme change. An empty name cycles to the next.
+type setThemeMsg struct {
+	name string
+}
+
+// applyTheme re-themes the running UI with the named theme and best-effort
+// persists the choice to config (works for local in-process sessions). It
+// rebuilds the diff view's markdown styler and syntax highlighter so code and
+// markdown also follow the new theme.
+func (m appModel) applyTheme(name string) appModel {
+	t := ThemeByName(name)
+	m.theme = t
+	m.themeName = name
+	if m.diffView.theme != nil {
+		*m.diffView.theme = t
+	}
+	m.diffView.mdStyler = newMarkdownStyler(t)
+	m.diffView.hl = newHighlighterWithStyle(t.SyntaxStyle)
+	m.statusBar.theme = t
+	m.commentEditor.theme = t
+	m.reviewSummary.theme = t
+	m.help.theme = t
+	m.refPicker.theme = t
+	m.confirm.theme = t
+	m.connectionInfo.theme = t
+	m.history.theme = t
+	m.sessionPicker.theme = t
+	m.versionPicker.theme = t
+	m.registerPrompt.theme = t
+	m.infoBanner.theme = t
+	if m.engine != nil {
+		if cfg := m.engine.GetConfig(); cfg != nil {
+			cfg.Theme = name
+			_ = m.engine.SaveConfig()
+		}
+	}
+	return m
+}
+
 // executeCommand runs a named command entered in command mode.
 func (m appModel) executeCommand(cmd string) tea.Cmd {
 	engine := m.engine
-	switch strings.TrimSpace(cmd) {
+	trimmed := strings.TrimSpace(cmd)
+	// `:theme [name]` — switch theme live (no arg cycles to the next theme).
+	if trimmed == "theme" || strings.HasPrefix(trimmed, "theme ") {
+		name := strings.TrimSpace(strings.TrimPrefix(trimmed, "theme"))
+		return func() tea.Msg { return setThemeMsg{name: name} }
+	}
+	switch trimmed {
 	case "submit":
 		agentConnected := m.statusBar.subscriberCount > 0 || m.statusBar.connectionMode == "queue"
 		return func() tea.Msg {
@@ -1985,7 +2048,6 @@ func (m appModel) executeCommand(cmd string) tea.Cmd {
 	}
 
 	// Handle :ref commands
-	trimmed := strings.TrimSpace(cmd)
 	if strings.HasPrefix(trimmed, "ref ") {
 		arg := strings.TrimSpace(trimmed[4:])
 		if arg == "auto" {

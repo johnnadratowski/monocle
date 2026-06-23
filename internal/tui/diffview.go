@@ -126,7 +126,7 @@ func (m *diffViewModel) clearFileState() {
 func newDiffViewModel(theme *Theme, keys *KeyMap) diffViewModel {
 	return diffViewModel{
 		theme:              theme,
-		hl:                 newHighlighter(),
+		hl:                 newHighlighterWithStyle(theme.SyntaxStyle),
 		mdStyler:           newMarkdownStyler(*theme),
 		keys:               keys,
 		commentExpandDelay: 2 * time.Second,
