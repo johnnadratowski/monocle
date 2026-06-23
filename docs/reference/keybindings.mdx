@@ -4,7 +4,7 @@ description: "Complete keyboard shortcut reference for monocle."
 ---
 
 <Tip>
-  Press `?` inside monocle to see the current effective keybindings, including any custom overrides you have configured.
+  Press `H` inside monocle to see the current effective keybindings, including any custom overrides you have configured.
 </Tip>
 
 ## Navigation
@@ -16,12 +16,14 @@ description: "Complete keyboard shortcut reference for monocle."
 | `Ctrl+d` / `Ctrl+u` | Scroll diff half page (any pane) |
 | `g` / `G` | Jump to top / bottom |
 | `h` / `l` | Scroll diff left / right |
-| `H` / `L` | Scroll diff left / right (any pane) |
+| `L` | Scroll diff right (any pane) |
 | `0` | Scroll to column 0 (any pane) |
 | `^` | Scroll to first non-space character (any pane) |
 | `$` | Scroll to end of line (any pane) |
 | `[` / `]` | Previous / next file (any pane) |
 | `{` / `}` | Previous / next sidebar section (any pane) |
+| `/` / `?` | Search the diff forward / backward (when the diff pane is focused) |
+| `n` / `N` | Jump to next / previous search match |
 
 ## View and layout
 
@@ -29,7 +31,7 @@ description: "Complete keyboard shortcut reference for monocle."
 |-----|--------|
 | `Enter` | Focus the diff pane / toggle directory open |
 | `Tab` | Switch pane focus |
-| `\` | Toggle sidebar visibility |
+| `;` | Toggle sidebar visibility |
 | `1` / `2` | Jump directly to pane 1 or 2 |
 | `w` | Toggle line wrapping (any pane) |
 | `f` | Toggle flat / tree view |
@@ -58,7 +60,7 @@ description: "Complete keyboard shortcut reference for monocle."
 | `b` | Change the base ref |
 | `B` | Browse artifact version history and diff against a previous version |
 | `r` | Toggle the current file as reviewed (auto-advances to the next unreviewed file) |
-| `/` | Cycle the sidebar filter: all → unreviewed → reviewed |
+| `/` | Sidebar: cycle the filter (all → unreviewed → reviewed). Diff pane: start a forward search |
 | `S` / `:submit` | Submit your review |
 | `Ctrl+g` | Open the current text in your `$VISUAL` / `$EDITOR` (comment or submit modal) |
 | `Ctrl+y` | Copy the formatted review to the clipboard without submitting |
@@ -77,7 +79,7 @@ description: "Complete keyboard shortcut reference for monocle."
 | `:base-artifact-version` | Browse artifact version history (same as `B`) |
 | `:base-ref` | Change the base ref (same as `b`) |
 | `I` | Show connection info: socket path and subscriber count |
-| `?` | Show all keybindings |
+| `H` | Show all keybindings |
 
 ## Register wizard
 

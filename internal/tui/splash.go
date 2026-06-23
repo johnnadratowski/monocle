@@ -67,7 +67,7 @@ func splashSmall() []string {
 	dim := lipgloss.NewStyle().Faint(true)
 	return []string{
 		logo.Render("o_(◉) monocle"),
-		dim.Render("Press ? for help"),
+		dim.Render("Press H for help"),
 	}
 }
 

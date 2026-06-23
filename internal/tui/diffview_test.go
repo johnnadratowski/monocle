@@ -553,3 +553,78 @@ func TestIsSelectableSplitInPlaceChange(t *testing.T) {
 		t.Errorf("nextSelectable(0, 1) = %d, want 2 (skipping pure removed line)", got)
 	}
 }
+
+func TestMatchRanges(t *testing.T) {
+	// Smartcase: an all-lowercase query matches case-insensitively.
+	if got := matchRanges("Foo foo FOO", "foo"); len(got) != 3 {
+		t.Fatalf("case-insensitive: want 3 matches, got %d: %+v", len(got), got)
+	}
+	// A query with an uppercase letter is case-sensitive.
+	got := matchRanges("Foo foo", "Foo")
+	if len(got) != 1 || got[0].start != 0 || got[0].end != 3 {
+		t.Errorf("case-sensitive: want one match [0,3), got %+v", got)
+	}
+	if matchRanges("abc", "") != nil {
+		t.Error("empty query should yield no ranges")
+	}
+	if matchRanges("abc", "zzz") != nil {
+		t.Error("no occurrence should yield no ranges")
+	}
+}
+
+func TestDiffSearchNavigation(t *testing.T) {
+	lines := []diffViewLine{
+		{kind: types.DiffLineContext, newLineNum: 1, content: "alpha"},
+		{kind: types.DiffLineContext, newLineNum: 2, content: "beta needle"},
+		{kind: types.DiffLineContext, newLineNum: 3, content: "gamma"},
+		{kind: types.DiffLineContext, newLineNum: 4, content: "delta needle"},
+	}
+	m := diffViewModel{lines: lines, height: 10}
+
+	if n := m.RunSearch("needle", false, 0); n != 2 {
+		t.Fatalf("want 2 matches, got %d", n)
+	}
+	if m.cursor != 1 {
+		t.Errorf("forward search from top should land on first match (index 1), got %d", m.cursor)
+	}
+	if cur, total := m.SearchStatus(); cur != 1 || total != 2 {
+		t.Errorf("status: want 1/2, got %d/%d", cur, total)
+	}
+
+	// Next wraps 1 -> 3 -> 1.
+	m.StepMatch(false)
+	if m.cursor != 3 {
+		t.Errorf("next match should be index 3, got %d", m.cursor)
+	}
+	m.StepMatch(false)
+	if m.cursor != 1 {
+		t.Errorf("next match should wrap to index 1, got %d", m.cursor)
+	}
+	// Previous wraps 1 -> 3.
+	m.StepMatch(true)
+	if m.cursor != 3 {
+		t.Errorf("prev match should wrap to index 3, got %d", m.cursor)
+	}
+
+	// No matches: cursor returns to the origin and search is inactive.
+	if n := m.RunSearch("zzz", false, 2); n != 0 {
+		t.Errorf("want 0 matches, got %d", n)
+	}
+	if m.SearchActive() {
+		t.Error("search should be inactive with no matches")
+	}
+	if m.cursor != 2 {
+		t.Errorf("no-match search should restore origin cursor 2, got %d", m.cursor)
+	}
+
+	// Backward search picks the nearest match before the origin.
+	m.RunSearch("needle", true, 3)
+	if m.cursor != 1 {
+		t.Errorf("backward search from index 3 should land on match index 1, got %d", m.cursor)
+	}
+
+	m.ClearSearch()
+	if m.SearchActive() || m.searchQuery != "" {
+		t.Error("ClearSearch should reset search state")
+	}
+}
