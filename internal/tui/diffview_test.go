@@ -763,3 +763,25 @@ func TestScreenLinesForCollapsedComment(t *testing.T) {
 		t.Errorf("plain code line screenLinesFor = %d, want 1", got)
 	}
 }
+
+func TestEditorTargetLine(t *testing.T) {
+	lines := make([]diffViewLine, 100)
+	for i := range lines {
+		lines[i] = diffViewLine{kind: types.DiffLineContext, newLineNum: i + 1, content: "x"}
+	}
+	m := diffViewModel{lines: lines, height: 20}
+
+	// Cursor visible -> use the cursor's line.
+	m.offset = 0
+	m.cursor = 5
+	if got := m.EditorTargetLine(); got != 6 {
+		t.Errorf("visible cursor: EditorTargetLine = %d, want 6 (cursor line)", got)
+	}
+
+	// Cursor scrolled off-screen -> use the top-of-window line.
+	m.offset = 50
+	m.cursor = 5
+	if got := m.EditorTargetLine(); got != 51 {
+		t.Errorf("off-screen cursor: EditorTargetLine = %d, want 51 (top of window)", got)
+	}
+}
