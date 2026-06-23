@@ -1924,6 +1924,9 @@ func (m appModel) executeCommand(cmd string) tea.Cmd {
 			}
 			hasComments := len(session.Comments) > 0
 			hasContent := len(session.ContentItems) > 0
+			// Clear also removes added files, so their presence alone is enough
+			// to warrant the confirm dialog.
+			hasAdditionalFiles := len(session.AdditionalFiles) > 0
 			hasReviewed := false
 			for _, f := range session.ChangedFiles {
 				if f.Reviewed {
@@ -1939,12 +1942,12 @@ func (m appModel) executeCommand(cmd string) tea.Cmd {
 					}
 				}
 			}
-			if !hasComments && !hasContent && !hasReviewed {
+			if !hasComments && !hasContent && !hasAdditionalFiles && !hasReviewed {
 				return nil
 			}
 			return openConfirmMsg{
 				title:   "Clear Review",
-				message: "Clear all comments, plans, and reviewed states? This cannot be undone.",
+				message: "Clear all comments, plans, added files, and reviewed states? This cannot be undone.",
 				action:  confirmClear,
 			}
 		}
