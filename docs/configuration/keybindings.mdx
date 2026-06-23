@@ -22,7 +22,7 @@ Add entries to the `keybindings` object in your config file:
 Each key in the object is an action name; the value is the key string to bind. Only include the actions you want to override — unspecified actions keep their defaults.
 
 <Tip>
-  Press `?` in monocle to see the current effective keybindings, including any overrides you've applied.
+  Press `H` in monocle to see the current effective keybindings, including any overrides you've applied.
 </Tip>
 
 ## Available actions
@@ -39,10 +39,10 @@ Each key in the object is an action name; the value is the key string to bind. O
 | `next_file` | `]` | Go to next file |
 | `select` | `enter` | Focus diff pane / toggle directory |
 | `focus_swap` | `tab` | Switch pane focus |
-| `toggle_sidebar` | `\` | Toggle sidebar visibility |
+| `toggle_sidebar` | `;` | Toggle sidebar visibility |
 | `scroll_down` | `J` | Scroll diff down |
 | `scroll_up` | `K` | Scroll diff up |
-| `scroll_left` | `H` | Scroll diff left |
+| `scroll_left` | — | Scroll diff left (any pane; lowercase `h` always scrolls the focused diff) |
 | `scroll_right` | `L` | Scroll diff right |
 | `scroll_home` | `0` | Scroll to column 0 |
 | `scroll_first_char` | `^` | Scroll to first non-space character |
@@ -50,12 +50,15 @@ Each key in the object is an action name; the value is the key string to bind. O
 | `wrap` | `w` | Toggle line wrapping |
 | `toggle_diff` | `t` | Cycle diff style (unified / split / file) |
 | `toggle_full_diff` | `a` | Toggle full-file diff (whole file vs. changed lines) |
+| `search_backward` | `?` | Search the diff backward (when the diff pane is focused) |
+| `search_next` | `n` | Jump to the next search match |
+| `search_prev` | `N` | Jump to the previous search match |
 | `tree_mode` | `f` | Toggle flat / tree view |
 | `collapse_all` | `z` | Collapse all tree nodes |
 | `expand_all` | `e` | Expand all tree nodes |
 | `prev_section` | `{` | Go to previous sidebar section |
 | `next_section` | `}` | Go to next sidebar section |
-| `filter_reviewed` | `/` | Cycle sidebar filter (all → unreviewed → reviewed) |
+| `filter_reviewed` | `/` | Sidebar: cycle filter (all → unreviewed → reviewed). Diff pane: start a forward search |
 | `comment` | `c` | Add comment at cursor |
 | `file_comment` | `C` | Add file-level comment |
 | `suggest` | `s` | Suggest edit at cursor |
@@ -72,7 +75,7 @@ Each key in the object is an action name; the value is the key string to bind. O
 | `artifact_versions` | `B` | Browse artifact version history and diff against a previous version |
 | `cycle_layout` | `T` | Cycle layout (auto / side-by-side / stacked) |
 | `refresh` | `R` | Force reload files |
-| `help` | `?` | Show keybindings overlay |
+| `help` | `H` | Show keybindings overlay |
 | `quit` | `q` | Quit monocle |
 | `command_mode` | `:` | Enter command mode |
 | `wizard_advance` | `enter` | Advance to the next step in the register wizard |

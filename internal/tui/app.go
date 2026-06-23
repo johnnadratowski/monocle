@@ -211,6 +211,13 @@ type appModel struct {
 	commandMode   bool
 	commandBuffer string
 
+	// Diff search input state
+	searchMode         bool
+	searchBuffer       string
+	searchBackward     bool
+	searchOriginCursor int
+	searchOriginOffset int
+
 	width  int
 	height int
 
@@ -1515,8 +1522,17 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleCommandModeKey(msg)
 	}
 
+	// Diff search input.
+	if m.searchMode {
+		return m.handleSearchModeKey(msg)
+	}
+
 	key := msg.String()
 	km := m.keys
+
+	// The "match i/N" indicator is transient: it shows right after a search or
+	// n/N navigation (those cases re-set it) and clears on the next keystroke.
+	m.statusBar.searchInfo = ""
 
 	// Check for pane-number shortcuts (1, 2, etc.)
 	if pane, ok := km.FocusPaneN[key]; ok {
@@ -1606,7 +1622,37 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.handleMarkReviewed()
 
+	case Matches(key, km.SearchBackward):
+		if m.focus == focusMain && m.diffSearchable() {
+			return m.openSearch(true), nil
+		}
+		return m, nil
+
+	case Matches(key, km.SearchNext):
+		if m.focus == focusMain && m.diffView.SearchActive() {
+			m.diffView.StepMatch(m.diffView.searchBackward)
+			m.statusBar.searchInfo = m.searchStatusText()
+			return m, nil
+		}
+		// Not a search context — let the focused pane handle `n` if it wants.
+		var cmd tea.Cmd
+		m.diffView, cmd = m.diffView.Update(msg)
+		return m, cmd
+
+	case Matches(key, km.SearchPrev):
+		if m.focus == focusMain && m.diffView.SearchActive() {
+			m.diffView.StepMatch(!m.diffView.searchBackward)
+			m.statusBar.searchInfo = m.searchStatusText()
+			return m, nil
+		}
+		return m, nil
+
 	case Matches(key, km.FilterReviewed):
+		// When the diff/content pane is focused, `/` starts a forward search.
+		// In the sidebar it keeps cycling the reviewed filter.
+		if m.focus == focusMain && m.diffSearchable() {
+			return m.openSearch(false), nil
+		}
 		if !m.sidebar.reviewTracking {
 			return m, nil
 		}
@@ -1903,6 +1949,95 @@ func (m appModel) handleCommandModeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd)
 		}
 		return m, nil
 	}
+}
+
+// diffSearchable reports whether the diff/content pane has searchable content.
+func (m appModel) diffSearchable() bool {
+	return len(m.diffView.lines) > 0
+}
+
+// searchStatusText returns a short "match i/N" indicator (or "no matches").
+func (m appModel) searchStatusText() string {
+	cur, total := m.diffView.SearchStatus()
+	if total == 0 {
+		if m.diffView.searchQuery != "" {
+			return "no matches"
+		}
+		return ""
+	}
+	return fmt.Sprintf("match %d/%d", cur, total)
+}
+
+// openSearch enters diff-search input mode in the given direction, remembering
+// the pre-search position so Esc can restore it.
+func (m appModel) openSearch(backward bool) appModel {
+	m.searchMode = true
+	m.searchBackward = backward
+	m.searchBuffer = ""
+	m.searchOriginCursor = m.diffView.cursor
+	m.searchOriginOffset = m.diffView.offset
+	m.diffView.ClearSearch()
+	m.statusBar.searchMode = true
+	m.statusBar.searchBackward = backward
+	m.statusBar.searchBuffer = ""
+	m.statusBar.searchInfo = ""
+	return m
+}
+
+// handleSearchModeKey processes keystrokes while typing a diff search query.
+func (m appModel) handleSearchModeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	key := msg.String()
+	switch key {
+	case "esc":
+		// Cancel: drop the query and restore the pre-search position.
+		m.diffView.ClearSearch()
+		m.diffView.cursor = m.searchOriginCursor
+		m.diffView.offset = m.searchOriginOffset
+		m.exitSearchMode()
+		return m, nil
+
+	case "enter":
+		// Commit: keep the query and highlights at the current match. With no
+		// matches, clear so nothing stays highlighted and restore position.
+		if !m.diffView.SearchActive() {
+			m.diffView.ClearSearch()
+			m.diffView.cursor = m.searchOriginCursor
+			m.diffView.offset = m.searchOriginOffset
+		}
+		info := m.searchStatusText()
+		m.exitSearchMode()
+		m.statusBar.searchInfo = info
+		return m, nil
+
+	case "backspace":
+		if len(m.searchBuffer) > 0 {
+			m.searchBuffer = m.searchBuffer[:len(m.searchBuffer)-1]
+		}
+		m.applyIncrementalSearch()
+		return m, nil
+
+	default:
+		if len(key) == 1 || key == " " {
+			m.searchBuffer += key
+			m.applyIncrementalSearch()
+		}
+		return m, nil
+	}
+}
+
+// applyIncrementalSearch re-runs the search from the origin as the query changes.
+func (m *appModel) applyIncrementalSearch() {
+	m.diffView.RunSearch(m.searchBuffer, m.searchBackward, m.searchOriginCursor)
+	m.statusBar.searchBuffer = m.searchBuffer
+	m.statusBar.searchInfo = m.searchStatusText()
+}
+
+// exitSearchMode leaves search input mode, keeping any committed query/matches.
+func (m *appModel) exitSearchMode() {
+	m.searchMode = false
+	m.searchBuffer = ""
+	m.statusBar.searchMode = false
+	m.statusBar.searchBuffer = ""
 }
 
 // openReviewMsg carries the data needed to open the review summary overlay.
@@ -2801,7 +2936,7 @@ func (m appModel) View() tea.View {
 	}
 	m.statusBar.width = m.width
 	if m.focus == focusMain && m.diffView.CursorComment() != nil {
-		m.statusBar.contextHints = "c:edit  d:delete  x:resolve  ?:help"
+		m.statusBar.contextHints = "c:edit  d:delete  x:resolve  H:help"
 	} else {
 		m.statusBar.contextHints = ""
 	}

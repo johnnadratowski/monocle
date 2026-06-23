@@ -73,6 +73,12 @@ type diffViewModel struct {
 	visualMode  bool
 	visualStart int
 
+	// Search
+	searchQuery    string // active query; matched substrings are highlighted while set
+	searchMatches  []int  // indices into m.lines that contain the query
+	searchIndex    int    // position within searchMatches of the current match
+	searchBackward bool   // direction of the committed search (affects n/N)
+
 	// Mouse drag state
 	mouseDragActive bool
 
@@ -661,6 +667,7 @@ func isBinaryContent(hunks []types.DiffHunk) bool {
 
 func (m *diffViewModel) buildLines() {
 	m.lines = nil
+	m.ClearSearch()
 
 	if m.style == diffStyleSplit {
 		m.buildSplitLines()
@@ -746,6 +753,7 @@ func (m *diffViewModel) buildLines() {
 // buildContentLines builds lines for a content item (plan/doc) displayed as a document.
 func (m *diffViewModel) buildContentLines(content string) {
 	m.lines = nil
+	m.ClearSearch()
 
 	// File-level comments (LineStart == 0) rendered before content
 	for i := range m.comments {
@@ -812,6 +820,7 @@ func (m *diffViewModel) buildContentLines(content string) {
 // Uses m.path for comment matching (unlike buildContentLines which uses m.contentID).
 func (m *diffViewModel) buildFileViewLines(content string) {
 	m.lines = nil
+	m.ClearSearch()
 
 	// File-level comments (LineStart == 0)
 	for i := range m.comments {
@@ -1309,7 +1318,8 @@ func (m diffViewModel) renderContentLine(line diffViewLine, _, contentWidth int,
 		renderedContent = m.mdStyler.StyleLine(content)
 		renderedContent = padToWidth(renderedContent, contentWidth)
 	} else {
-		renderedContent = m.hl.highlightLine(m.path, content, nil, nil, nil, contentWidth)
+		sc, sbg := m.applySearchHighlight(content, nil, nil)
+		renderedContent = m.hl.highlightLine(m.path, content, nil, sbg, sc, contentWidth)
 	}
 
 	return renderedGutter + renderedContent
@@ -1403,7 +1413,8 @@ func (m diffViewModel) renderDiffLine(line diffViewLine, _, contentWidth int, se
 			}
 			changes = clipChangeRanges(changes, contentWidth)
 		}
-		renderedContent = m.hl.highlightLine(m.path, content, lineBg, changeBg, changes, contentWidth)
+		sc, sbg := m.applySearchHighlight(content, changes, changeBg)
+		renderedContent = m.hl.highlightLine(m.path, content, lineBg, sbg, sc, contentWidth)
 	}
 
 	return renderedGutter + renderedContent
@@ -1544,7 +1555,8 @@ func (m diffViewModel) renderSplitSide(gutter, content string, kind types.DiffLi
 		styled := m.mdStyler.StyleLine(content)
 		renderedContent = applyBgAndPad(styled, lineBg, contentW)
 	} else {
-		renderedContent = m.hl.highlightLine(m.path, content, lineBg, changeBg, changes, contentW)
+		sc, sbg := m.applySearchHighlight(content, changes, changeBg)
+		renderedContent = m.hl.highlightLine(m.path, content, lineBg, sbg, sc, contentW)
 	}
 
 	return renderedGutter + renderedContent
@@ -1619,7 +1631,8 @@ func (m diffViewModel) renderWrappedLine(gutter, content string, gutterWidth, co
 			styled := m.mdStyler.StyleLine(chunk)
 			renderedContent = applyBgAndPad(styled, lineBg, contentWidth)
 		} else {
-			renderedContent = m.hl.highlightLine(m.path, chunk, lineBg, changeBg, nil, contentWidth)
+			sc, sbg := m.applySearchHighlight(chunk, nil, changeBg)
+			renderedContent = m.hl.highlightLine(m.path, chunk, lineBg, sbg, sc, contentWidth)
 		}
 
 		parts = append(parts, renderedGutter+renderedContent)
@@ -2071,6 +2084,188 @@ func (m *diffViewModel) ensureVisible() {
 		screenLines -= m.screenLinesFor(m.offset)
 		m.offset++
 	}
+}
+
+// --- Diff search ---
+
+// searchTextFor returns the searchable text for a line: the content, plus the
+// right side for split lines.
+func searchTextFor(line diffViewLine) string {
+	if line.isSplit && line.rightContent != "" {
+		return line.content + "\n" + line.rightContent
+	}
+	return line.content
+}
+
+// queryCaseInsensitive applies smartcase: a query with no uppercase letters is
+// matched case-insensitively.
+func queryCaseInsensitive(query string) bool {
+	return query == strings.ToLower(query)
+}
+
+// lineMatchesQuery reports whether a line contains the query (smartcase).
+func lineMatchesQuery(line diffViewLine, query string) bool {
+	if query == "" {
+		return false
+	}
+	text := searchTextFor(line)
+	if queryCaseInsensitive(query) {
+		return strings.Contains(strings.ToLower(text), strings.ToLower(query))
+	}
+	return strings.Contains(text, query)
+}
+
+// RunSearch recomputes matches for query and jumps to the nearest match from
+// originCursor in the given direction. An empty query clears the matches but
+// leaves originCursor in place. Returns the number of matches found.
+func (m *diffViewModel) RunSearch(query string, backward bool, originCursor int) int {
+	m.searchQuery = query
+	m.searchMatches = nil
+	m.searchIndex = 0
+	m.searchBackward = backward
+	if query == "" {
+		m.cursor = originCursor
+		m.ensureVisible()
+		return 0
+	}
+	for i := range m.lines {
+		if lineMatchesQuery(m.lines[i], query) {
+			m.searchMatches = append(m.searchMatches, i)
+		}
+	}
+	if len(m.searchMatches) == 0 {
+		// Keep the query (so the prompt shows it) but don't move.
+		m.cursor = originCursor
+		m.ensureVisible()
+		return 0
+	}
+	m.searchIndex = m.nearestMatchFrom(originCursor, backward)
+	m.jumpToMatch()
+	return len(m.searchMatches)
+}
+
+// nearestMatchFrom returns the position within searchMatches of the nearest
+// match from origin in the given direction, wrapping around the ends. Assumes
+// searchMatches is non-empty and sorted ascending.
+func (m diffViewModel) nearestMatchFrom(origin int, backward bool) int {
+	if backward {
+		// Last match strictly before origin, else wrap to the last match.
+		for i := len(m.searchMatches) - 1; i >= 0; i-- {
+			if m.searchMatches[i] < origin {
+				return i
+			}
+		}
+		return len(m.searchMatches) - 1
+	}
+	// First match at or after origin, else wrap to the first match.
+	for i := 0; i < len(m.searchMatches); i++ {
+		if m.searchMatches[i] >= origin {
+			return i
+		}
+	}
+	return 0
+}
+
+// jumpToMatch moves the cursor to the current match and centers the viewport.
+func (m *diffViewModel) jumpToMatch() {
+	if len(m.searchMatches) == 0 {
+		return
+	}
+	if m.searchIndex < 0 {
+		m.searchIndex = 0
+	}
+	if m.searchIndex >= len(m.searchMatches) {
+		m.searchIndex = len(m.searchMatches) - 1
+	}
+	m.cursor = m.nearestSelectable(m.searchMatches[m.searchIndex], 1)
+	m.hOffset = 0
+	m.offset = m.cursor - m.height/2
+	if m.offset < 0 {
+		m.offset = 0
+	}
+	m.ensureVisible()
+}
+
+// StepMatch advances to the next match (backward=false) or previous match
+// (backward=true), wrapping around. No-op when there are no matches.
+func (m *diffViewModel) StepMatch(backward bool) {
+	if len(m.searchMatches) == 0 {
+		return
+	}
+	if backward {
+		m.searchIndex--
+		if m.searchIndex < 0 {
+			m.searchIndex = len(m.searchMatches) - 1
+		}
+	} else {
+		m.searchIndex++
+		if m.searchIndex >= len(m.searchMatches) {
+			m.searchIndex = 0
+		}
+	}
+	m.jumpToMatch()
+}
+
+// ClearSearch removes the active search query and matches.
+func (m *diffViewModel) ClearSearch() {
+	m.searchQuery = ""
+	m.searchMatches = nil
+	m.searchIndex = 0
+}
+
+// SearchActive reports whether a search with matches is in effect.
+func (m diffViewModel) SearchActive() bool {
+	return m.searchQuery != "" && len(m.searchMatches) > 0
+}
+
+// SearchStatus returns the 1-based current match position and total count.
+func (m diffViewModel) SearchStatus() (int, int) {
+	if len(m.searchMatches) == 0 {
+		return 0, 0
+	}
+	return m.searchIndex + 1, len(m.searchMatches)
+}
+
+// searchMatchBg is the background applied to highlighted search matches.
+var searchMatchBg = lipgloss.Color("3")
+
+// matchRanges returns the byte ranges in content where query occurs (smartcase:
+// case-insensitive unless the query has an uppercase letter).
+func matchRanges(content, query string) []changeRange {
+	if query == "" {
+		return nil
+	}
+	hay, needle := content, query
+	if queryCaseInsensitive(query) {
+		hay = strings.ToLower(content)
+		needle = strings.ToLower(query)
+	}
+	var ranges []changeRange
+	from := 0
+	for from <= len(hay) {
+		i := strings.Index(hay[from:], needle)
+		if i < 0 {
+			break
+		}
+		start := from + i
+		end := start + len(needle)
+		ranges = append(ranges, changeRange{start: start, end: end})
+		from = end
+	}
+	return ranges
+}
+
+// applySearchHighlight overrides the change ranges/background to highlight
+// search matches in content. When no search is active (or the line has no
+// match) it returns the passed-through diff-change values unchanged.
+func (m diffViewModel) applySearchHighlight(content string, changes []changeRange, changeBg color.Color) ([]changeRange, color.Color) {
+	if m.searchQuery == "" {
+		return changes, changeBg
+	}
+	if sr := matchRanges(content, m.searchQuery); len(sr) > 0 {
+		return sr, searchMatchBg
+	}
+	return changes, changeBg
 }
 
 // CursorComment returns the comment under the cursor, or nil if the cursor is not on a comment line.

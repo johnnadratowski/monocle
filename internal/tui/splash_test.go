@@ -25,7 +25,7 @@ func TestRenderSplashSmallTier(t *testing.T) {
 	if !strings.Contains(result, "o_(◉)") {
 		t.Error("small splash should contain o_(◉) text")
 	}
-	if !strings.Contains(result, "Press ? for help") {
+	if !strings.Contains(result, "Press H for help") {
 		t.Error("small splash should contain help hint")
 	}
 }

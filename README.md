@@ -131,7 +131,7 @@ Claude Code supports [MCP channels](https://code.claude.com/docs/en/channels-ref
 
 ### The review loop
 
-Navigate with `j`/`k`, add comments with `c`, and use `v` for visual (multi-line) selections. Press `?` to see all keybindings, or see the full [Keybindings](#keybindings) reference.
+Navigate with `j`/`k`, add comments with `c`, and use `v` for visual (multi-line) selections. Press `H` to see all keybindings, or see the full [Keybindings](#keybindings) reference.
 
 **Submit** (`S`): Your review is formatted and queued for delivery. With Claude Code channels, a push notification prompts the agent to retrieve it immediately. With other agents, the review waits in the queue until the agent runs `/get-feedback` or calls `monocle review get-feedback`. Multiple reviews can accumulate in the queue — the agent receives them all combined when it pulls. If there are no comments, the review is treated as an approval. Toggle the "Copy to clipboard" checkbox with `Shift+Tab` in the submit modal to also copy the formatted review when submitting.
 
@@ -165,6 +165,7 @@ This means you can review the agent's *thinking* before it writes code — not j
 - **Visual selection** — Select line ranges for comments with vim-style visual mode
 - **Markdown rendering** — Plans and changed `.md` files render with styled headings, bold, italic, lists, and code blocks
 - **Horizontal scrolling & line wrapping** — Navigate wide diffs with `h`/`l` or toggle wrapping with `w`
+- **Diff search** — Search within a diff with `/` (forward) or `?` (backward) when the diff pane is focused; jump between matches with `n`/`N` (matches are highlighted)
 - **Responsive layout** — Automatically stacks panes vertically in narrow terminals
 - **Ref picker** — Change the base ref on the fly to compare against any branch or commit
 - **Version history** — Browse all versions of a plan or artifact and diff any version against the latest
@@ -200,7 +201,7 @@ Monocle exposes review operations via **MCP tools** (default for Claude Code, an
 | `Ctrl+d`/`u`           | Scroll diff half page (any pane)                          |
 | `g`/`G`                | Top/bottom                                                |
 | `h`/`l`                | Scroll diff left/right                                    |
-| `H`/`L`                | Scroll diff left/right (any pane)                         |
+| `L`                    | Scroll diff right (any pane)                              |
 | `0`                    | Scroll to column 0 (any pane)                             |
 | `^`                    | Scroll to first non-space (any pane)                      |
 | `$`                    | Scroll to line end (any pane)                             |
@@ -208,7 +209,7 @@ Monocle exposes review operations via **MCP tools** (default for Claude Code, an
 | `{`/`}`                | Previous/next sidebar section (any pane)                  |
 | `Enter`                | Focus diff pane / toggle dir                              |
 | `Tab`                  | Switch pane focus                                         |
-| `\`                    | Toggle sidebar visibility                                 |
+| `;`                    | Toggle sidebar visibility                                 |
 | `1`/`2`                | Jump to pane                                              |
 | `w`                    | Toggle line wrapping (any pane)                           |
 | `f`                    | Toggle flat/tree view                                     |
@@ -222,7 +223,9 @@ Monocle exposes review operations via **MCP tools** (default for Claude Code, an
 | `x`                    | Toggle comment resolved (on a comment line)               |
 | `d`                    | Delete comment (on a comment line)                        |
 | `r`                    | Toggle file reviewed (auto-advances to next unreviewed)   |
-| `/`                    | Cycle sidebar filter (all -> unreviewed -> reviewed)      |
+| `/`                    | Sidebar: cycle filter / Diff: search forward              |
+| `?`                    | Diff: search backward (when diff pane focused)            |
+| `n`/`N`                | Next/previous search match                                |
 | `t`                    | Cycle diff style (unified/split/file) (any pane)          |
 | `a`                    | Toggle full-file diff (whole file vs. changed lines)      |
 | `T`                    | Cycle layout (auto/side-by-side/stacked)                  |
@@ -241,7 +244,7 @@ Monocle exposes review operations via **MCP tools** (default for Claude Code, an
 | `:base-artifact-version` | Base artifact version to diff against                           |
 | `:base-ref`              | Base ref to diff against (same as `b`)                  |
 | `I`                    | Connection info (socket path, subscriber count)           |
-| `?`                    | Show all keybindings                                      |
+| `H`                    | Show all keybindings                                      |
 
 ### Comment editor
 
@@ -388,9 +391,9 @@ Override any action key by mapping the action name to a new key string:
 }
 ```
 
-Available action names: `up`, `down`, `top`, `bottom`, `half_up`, `half_down`, `prev_file`, `next_file`, `select`, `focus_swap`, `toggle_sidebar`, `scroll_down`, `scroll_up`, `scroll_left`, `scroll_right`, `scroll_home`, `scroll_first_char`, `scroll_end`, `wrap`, `toggle_diff`, `toggle_full_diff`, `tree_mode`, `collapse_all`, `expand_all`, `prev_section`, `next_section`, `comment`, `file_comment`, `suggest`, `visual`, `reviewed`, `submit`, `pause`, `dismiss_outdated`, `base_ref`, `cycle_layout`, `refresh`, `help`, `quit`, `command_mode`.
+Available action names: `up`, `down`, `top`, `bottom`, `half_up`, `half_down`, `prev_file`, `next_file`, `select`, `focus_swap`, `toggle_sidebar`, `scroll_down`, `scroll_up`, `scroll_left`, `scroll_right`, `scroll_home`, `scroll_first_char`, `scroll_end`, `wrap`, `toggle_diff`, `toggle_full_diff`, `search_backward`, `search_next`, `search_prev`, `tree_mode`, `collapse_all`, `expand_all`, `prev_section`, `next_section`, `comment`, `file_comment`, `suggest`, `visual`, `reviewed`, `submit`, `pause`, `dismiss_outdated`, `base_ref`, `cycle_layout`, `refresh`, `help`, `quit`, `command_mode`.
 
-The help overlay (`?`) dynamically reflects your custom bindings. Modal keys (Enter, Esc, Tab in overlays) are not configurable.
+The help overlay (`H`) dynamically reflects your custom bindings. Modal keys (Enter, Esc, Tab in overlays) are not configurable.
 
 ## Automatic content review
 

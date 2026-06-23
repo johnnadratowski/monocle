@@ -32,6 +32,11 @@ type KeyMap struct {
 	ToggleDiff    []string
 	ToggleFullDiff []string
 
+	// Diff search
+	SearchBackward []string // forward search uses FilterReviewed's `/` when the diff is focused
+	SearchNext     []string
+	SearchPrev     []string
+
 	// Sidebar
 	TreeMode       []string
 	CollapseAll    []string
@@ -83,11 +88,11 @@ func DefaultKeyMap() KeyMap {
 
 		FocusSwap:     []string{"tab"},
 		FocusPaneN:    map[string]int{"1": 1, "2": 2},
-		ToggleSidebar: []string{"\\"},
+		ToggleSidebar: []string{";"},
 
 		ScrollDown:  []string{"J"},
 		ScrollUp:    []string{"K"},
-		ScrollLeft:  []string{"H"},
+		ScrollLeft:  nil, // lowercase `h` still scrolls the focused diff; `H` is now Help
 		ScrollRight: []string{"L"},
 		ScrollHome:      []string{"0"},
 		ScrollFirstChar: []string{"^"},
@@ -99,6 +104,10 @@ func DefaultKeyMap() KeyMap {
 		TreeMode:       []string{"f"},
 		CollapseAll:    []string{"z"},
 		ExpandAll:      []string{"e"},
+		SearchBackward: []string{"?"},
+		SearchNext:     []string{"n"},
+		SearchPrev:     []string{"N"},
+
 		PrevSection:    []string{"{"},
 		NextSection:    []string{"}"},
 		FilterReviewed: []string{"/"},
@@ -119,7 +128,7 @@ func DefaultKeyMap() KeyMap {
 		ArtifactVersions: []string{"B"},
 		CycleLayout:      []string{"T"},
 		Refresh:     []string{"R"},
-		Help:        []string{"?"},
+		Help:        []string{"H"},
 		Quit:        []string{"q"},
 		CommandMode: []string{":"},
 
@@ -137,6 +146,7 @@ var actionNames = []string{
 	"focus_swap", "toggle_sidebar",
 	"scroll_down", "scroll_up", "scroll_left", "scroll_right", "scroll_home", "scroll_first_char", "scroll_end",
 	"wrap", "toggle_diff", "toggle_full_diff",
+	"search_backward", "search_next", "search_prev",
 	"tree_mode", "collapse_all", "expand_all", "prev_section", "next_section", "filter_reviewed",
 	"comment", "file_comment", "suggest", "visual", "reviewed",
 	"submit", "pause", "clear_review", "dismiss_artifact", "dismiss_outdated", "toggle_focus_mode",
@@ -191,6 +201,12 @@ func (km KeyMap) ApplyOverrides(overrides map[string]string) KeyMap {
 			km.ToggleDiff = []string{key}
 		case "toggle_full_diff":
 			km.ToggleFullDiff = []string{key}
+		case "search_backward":
+			km.SearchBackward = []string{key}
+		case "search_next":
+			km.SearchNext = []string{key}
+		case "search_prev":
+			km.SearchPrev = []string{key}
 		case "tree_mode":
 			km.TreeMode = []string{key}
 		case "collapse_all":

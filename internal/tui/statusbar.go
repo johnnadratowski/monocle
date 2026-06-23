@@ -18,6 +18,10 @@ type statusBarModel struct {
 	socketStarted   bool
 	commandMode     bool
 	commandBuffer   string
+	searchMode      bool
+	searchBuffer    string
+	searchBackward  bool
+	searchInfo      string // transient "match i/N" indicator after a search
 	contextHints    string // override hints when set (e.g. comment-specific keybinds)
 	diffStyle        diffStyle
 	contentMode      bool   // true when viewing content (plan/doc) in raw mode
@@ -43,6 +47,15 @@ func (m statusBarModel) View() string {
 	if m.commandMode {
 		cmdLine := fmt.Sprintf(":%s█", m.commandBuffer)
 		return m.theme.StatusBar.Width(m.width).Render(cmdLine)
+	}
+
+	if m.searchMode {
+		prefix := "/"
+		if m.searchBackward {
+			prefix = "?"
+		}
+		searchLine := fmt.Sprintf("%s%s█", prefix, m.searchBuffer)
+		return m.theme.StatusBar.Width(m.width).Render(searchLine)
 	}
 
 	// Connection status with agent name
@@ -95,19 +108,24 @@ func (m statusBarModel) View() string {
 	parts = append(parts, fmt.Sprintf("%d files", m.fileCount))
 	parts = append(parts, fmt.Sprintf("%d comments", m.commentCount))
 
+	if m.searchInfo != "" {
+		searchStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("4"))
+		parts = append(parts, searchStyle.Render(m.searchInfo))
+	}
+
 	if m.feedbackStatus != "" && m.feedbackStatus != "none" {
 		fbStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
 		parts = append(parts, fbStyle.Render(m.feedbackStatus))
 	}
 
-	// Key hints (right-aligned, collapse to ?:help when narrow)
+	// Key hints (right-aligned, collapse to H:help when narrow)
 	var fullHints string
 	if m.contextHints != "" {
 		fullHints = m.contextHints
 	} else {
-		fullHints = "c:comment  S:submit  P:pause  D:dismiss  q:quit"
+		fullHints = "c:comment  /:search  S:submit  D:dismiss  H:help"
 	}
-	shortHints := "?:help"
+	shortHints := "H:help"
 	left := strings.Join(parts, "  ")
 
 	leftW := lipgloss.Width(left)
