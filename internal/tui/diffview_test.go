@@ -621,3 +621,47 @@ func TestFitToWidth(t *testing.T) {
 		t.Errorf("exact: got %q, want unchanged", got)
 	}
 }
+
+func TestHalfPageScrollMovesCursor(t *testing.T) {
+	// 100 selectable context lines, viewport height 20 (half page = 10).
+	lines := make([]diffViewLine, 100)
+	for i := range lines {
+		lines[i] = diffViewLine{kind: types.DiffLineContext, newLineNum: i + 1, content: "x"}
+	}
+	m := diffViewModel{lines: lines, height: 20, cursor: 0, offset: 0}
+
+	// Down: cursor and viewport both advance ~half a page, cursor stays visible.
+	m.ScrollDownHalfPage()
+	if m.cursor != 10 {
+		t.Errorf("after half-page down, cursor = %d, want 10", m.cursor)
+	}
+	if m.isCursorOffScreen() {
+		t.Error("cursor should remain visible after half-page down")
+	}
+
+	m.ScrollDownHalfPage()
+	if m.cursor != 20 {
+		t.Errorf("after second half-page down, cursor = %d, want 20", m.cursor)
+	}
+
+	// Up: cursor follows back.
+	m.ScrollUpHalfPage()
+	if m.cursor != 10 {
+		t.Errorf("after half-page up, cursor = %d, want 10", m.cursor)
+	}
+	if m.isCursorOffScreen() {
+		t.Error("cursor should remain visible after half-page up")
+	}
+
+	// At the bottom the cursor still advances to the last line even though the
+	// viewport can't scroll further.
+	m.cursor = 95
+	m.offset = 80
+	m.ScrollDownHalfPage()
+	if m.cursor != len(m.lines)-1 {
+		t.Errorf("near bottom, cursor = %d, want %d", m.cursor, len(m.lines)-1)
+	}
+	if m.isCursorOffScreen() {
+		t.Error("cursor should remain visible near the bottom")
+	}
+}
