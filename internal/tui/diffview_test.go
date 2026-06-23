@@ -553,3 +553,32 @@ func TestIsSelectableSplitInPlaceChange(t *testing.T) {
 		t.Errorf("nextSelectable(0, 1) = %d, want 2 (skipping pure removed line)", got)
 	}
 }
+
+func TestYankText(t *testing.T) {
+	m := diffViewModel{
+		lines: []diffViewLine{
+			{kind: types.DiffLineContext, newLineNum: 1, content: "line one"},
+			{kind: types.DiffLineAdded, newLineNum: 2, content: "line two"},
+			{kind: types.DiffLineAdded, newLineNum: 3, content: "line three"},
+		},
+	}
+	// Single line under the cursor.
+	m.cursor = 1
+	if got := m.YankText(); got != "line two" {
+		t.Errorf("single-line yank = %q, want %q", got, "line two")
+	}
+	// Visual selection yanks the range joined by newlines.
+	m.visualMode = true
+	m.visualStart = 0
+	m.cursor = 2
+	if got := m.YankText(); got != "line one\nline two\nline three" {
+		t.Errorf("visual yank = %q, want the three lines joined", got)
+	}
+	// Split-mode added line yanks the right side.
+	sm := diffViewModel{lines: []diffViewLine{
+		{isSplit: true, leftEmpty: true, rightContent: "added right"},
+	}}
+	if got := sm.YankText(); got != "added right" {
+		t.Errorf("split added yank = %q, want %q", got, "added right")
+	}
+}

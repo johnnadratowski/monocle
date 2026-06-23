@@ -218,6 +218,7 @@ Monocle exposes review operations via **MCP tools** (default for Claude Code, an
 | `s`                    | Suggest edit at cursor (pre-fills suggestion block)       |
 | `C`                    | Add file-level comment                                    |
 | `v`                    | Visual select (multi-line comments)                       |
+| `y`                    | Yank current line (or visual selection) to clipboard      |
 | `x`                    | Toggle comment resolved (on a comment line)               |
 | `d`                    | Delete comment (on a comment line)                        |
 | `r`                    | Toggle file reviewed (auto-advances to next unreviewed)   |
@@ -382,7 +383,7 @@ Override any action key by mapping the action name to a new key string:
 }
 ```
 
-Available action names: `up`, `down`, `top`, `bottom`, `half_up`, `half_down`, `prev_file`, `next_file`, `select`, `focus_swap`, `toggle_sidebar`, `scroll_down`, `scroll_up`, `scroll_left`, `scroll_right`, `scroll_home`, `scroll_first_char`, `scroll_end`, `wrap`, `toggle_diff`, `tree_mode`, `collapse_all`, `expand_all`, `prev_section`, `next_section`, `comment`, `file_comment`, `suggest`, `visual`, `reviewed`, `submit`, `pause`, `dismiss_outdated`, `base_ref`, `cycle_layout`, `refresh`, `help`, `quit`, `command_mode`.
+Available action names: `up`, `down`, `top`, `bottom`, `half_up`, `half_down`, `prev_file`, `next_file`, `select`, `focus_swap`, `toggle_sidebar`, `scroll_down`, `scroll_up`, `scroll_left`, `scroll_right`, `scroll_home`, `scroll_first_char`, `scroll_end`, `wrap`, `toggle_diff`, `yank_line`, `tree_mode`, `collapse_all`, `expand_all`, `prev_section`, `next_section`, `comment`, `file_comment`, `suggest`, `visual`, `reviewed`, `submit`, `pause`, `dismiss_outdated`, `base_ref`, `cycle_layout`, `refresh`, `help`, `quit`, `command_mode`.
 
 The help overlay (`?`) dynamically reflects your custom bindings. Modal keys (Enter, Esc, Tab in overlays) are not configurable.
 
