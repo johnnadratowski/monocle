@@ -171,6 +171,7 @@ This means you can review the agent's *thinking* before it writes code — not j
 - **Version history** — Browse all versions of a plan or artifact and diff any version against the latest
 - **Comment resolution** — Mark individual comments as resolved (`x`); resolved comments are excluded from submitted reviews
 - **Submission history** — View past review submissions with `:history`
+- **Themes** — Choose a color scheme (`dark`, `light`, `molokai`, `dracula`, `nord`) via the `theme` config option, or switch live with `:theme <name>` / cycle with `:theme`
 - **Mouse support** — Click to focus panes, scroll with the wheel, click files to select, drag to make visual selections, and interact with modal controls
 - **External editor** — Open comment or submit text in `$VISUAL`/`$EDITOR` with `Ctrl+g` for full editing power
 - **Configurable keybindings** — Override any navigation or action key via config
@@ -241,6 +242,7 @@ Monocle exposes review operations via **MCP tools** (default for Claude Code, an
 | `:mark-all-unreviewed` | Mark all files as unreviewed                              |
 | `:discard`             | Discard all pending comments                              |
 | `:history`             | View past review submissions                              |
+| `:theme [name]`        | Switch theme live (dark/light/molokai/dracula/nord; no arg cycles) |
 | `:base-artifact-version` | Base artifact version to diff against                           |
 | `:base-ref`              | Base ref to diff against (same as `b`)                  |
 | `I`                    | Connection info (socket path, subscriber count)           |
@@ -355,7 +357,7 @@ Monocle loads settings from JSON config files:
 | `layout`                             | `"auto"`, `"side-by-side"`, `"stacked"`    | `"auto"`     | Pane arrangement (`auto` switches based on terminal width)               |
 | `diff_style`                         | `"unified"`, `"split"`, `"file"`           | `"unified"`  | Diff display mode (`file` shows raw content)                             |
 | `sidebar_style`                      | `"flat"`, `"tree"`                         | `"flat"`     | File list display mode                                                   |
-| `theme`                              | `"dark"`, `"light"`                        | `"dark"`     | Color scheme for the TUI (use `"light"` for terminals with a light bg)   |
+| `theme`                              | `"dark"`, `"light"`, `"molokai"`, `"dracula"`, `"nord"` | `"dark"` | Color scheme for the TUI. Switch live with `:theme <name>` (or `:theme` to cycle). |
 | `wrap`                               | `true`, `false`                            | `false`      | Word-wrap long lines in diffs                                            |
 | `tab_size`                           | integer                                    | `4`          | Spaces per tab character                                                 |
 | `context_lines`                      | integer                                    | `3`          | Unchanged lines shown around diff hunks                                  |
