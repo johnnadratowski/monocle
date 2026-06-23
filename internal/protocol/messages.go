@@ -11,7 +11,7 @@ const (
 	TypeConnect            = "connect"
 	TypeIdentify           = "identify"
 	TypeAddAdditionalFiles    = "add_additional_files"
-	TypeRemoveAdditionalFile  = "remove_additional_file"
+	TypeRemoveAdditionalFiles = "remove_additional_files"
 	TypeMarkActivity          = "mark_activity"
 	TypeAwaitReview           = "await_review"
 )
@@ -24,10 +24,10 @@ const (
 	TypeSubscribeResponse          = "subscribe_response"
 	TypeConnectResponse            = "connect_response"
 	TypeEventNotification          = "event_notification"
-	TypeAddAdditionalFilesResponse   = "add_additional_files_response"
-	TypeRemoveAdditionalFileResponse = "remove_additional_file_response"
-	TypeMarkActivityResponse         = "mark_activity_response"
-	TypeAwaitReviewResponse          = "await_review_response"
+	TypeAddAdditionalFilesResponse    = "add_additional_files_response"
+	TypeRemoveAdditionalFilesResponse = "remove_additional_files_response"
+	TypeMarkActivityResponse          = "mark_activity_response"
+	TypeAwaitReviewResponse           = "await_review_response"
 )
 
 // GetReviewStatusMsg requests the current review state from the engine.
@@ -179,16 +179,20 @@ type AddAdditionalFilesResponse struct {
 	AddedPresent bool                   `json:"added_present,omitempty"`
 }
 
-// RemoveAdditionalFileMsg removes a single previously-added file by path.
-type RemoveAdditionalFileMsg struct {
-	Type string `json:"type"`
-	Path string `json:"path"`
+// RemoveAdditionalFilesMsg removes previously-added files by path. Paths are
+// resolved to absolute by the engine before matching, mirroring add.
+type RemoveAdditionalFilesMsg struct {
+	Type  string   `json:"type"`
+	Paths []string `json:"paths"`
 }
 
-// RemoveAdditionalFileResponse acknowledges removal of an additional file.
-type RemoveAdditionalFileResponse struct {
-	Type  string `json:"type"`
-	Error string `json:"error,omitempty"`
+// RemoveAdditionalFilesResponse acknowledges removal of additional files.
+// Count is the number of files that actually matched and were removed.
+type RemoveAdditionalFilesResponse struct {
+	Type    string `json:"type"`
+	Success bool   `json:"success"`
+	Message string `json:"message,omitempty"`
+	Count   int    `json:"count"`
 }
 
 // MarkActivityMsg notifies the engine that a write-tool just fired in the

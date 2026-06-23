@@ -816,19 +816,22 @@ func (c *EngineClient) AddAdditionalPaths(paths []string) ([]types.AdditionalFil
 }
 
 func (c *EngineClient) RemoveAdditionalFile(path string) error {
-	resp, err := c.request(&protocol.RemoveAdditionalFileMsg{
-		Type: protocol.TypeRemoveAdditionalFile,
-		Path: path,
+	resp, err := c.request(&protocol.RemoveAdditionalFilesMsg{
+		Type:  protocol.TypeRemoveAdditionalFiles,
+		Paths: []string{path},
 	})
 	if err != nil {
 		return err
 	}
-	r, ok := resp.(*protocol.RemoveAdditionalFileResponse)
+	r, ok := resp.(*protocol.RemoveAdditionalFilesResponse)
 	if !ok {
 		return fmt.Errorf("unexpected response %T", resp)
 	}
-	if r.Error != "" {
-		return errors.New(r.Error)
+	if !r.Success {
+		if r.Message != "" {
+			return errors.New(r.Message)
+		}
+		return errors.New("remove additional file failed")
 	}
 	return nil
 }

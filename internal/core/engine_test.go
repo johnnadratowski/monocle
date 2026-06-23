@@ -2787,6 +2787,49 @@ func TestRemoveAdditionalFile(t *testing.T) {
 	}
 }
 
+func TestHandleRemoveAdditionalFiles_Batch(t *testing.T) {
+	database, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer database.Close()
+
+	now := time.Now()
+	e := &Engine{
+		feedback:    NewFeedbackQueue(),
+		database:    database,
+		subscribers: make(map[EventKind]map[int]EventCallback),
+	}
+	e.current = &types.ReviewSession{
+		ID: "sess-1", Agent: "claude", RepoRoot: "/tmp/repo",
+		BaseRef: "base", ReviewRound: 1,
+		FileStatuses: make(map[string]bool),
+		CreatedAt:    now, UpdatedAt: now,
+	}
+	database.CreateSession(e.current)
+
+	for _, p := range []string{"/tmp/a.go", "/tmp/b.go", "/tmp/c.go"} {
+		af := types.AdditionalFile{Path: p, Name: p}
+		database.UpsertAdditionalFile("sess-1", &af)
+		e.current.AdditionalFiles = append(e.current.AdditionalFiles, af)
+	}
+
+	// Two real paths plus one that was never added — Count reflects matches only.
+	resp := e.handleRemoveAdditionalFiles(&protocol.RemoveAdditionalFilesMsg{
+		Paths: []string{"/tmp/a.go", "/tmp/c.go", "/tmp/missing.go"},
+	})
+	if !resp.Success {
+		t.Fatalf("expected success, got %q", resp.Message)
+	}
+	if resp.Count != 2 {
+		t.Errorf("expected Count=2 (only matched files), got %d", resp.Count)
+	}
+	remaining := e.GetAdditionalFiles()
+	if len(remaining) != 1 || remaining[0].Path != "/tmp/b.go" {
+		t.Errorf("expected only /tmp/b.go remaining, got %+v", remaining)
+	}
+}
+
 func TestMarkReviewedOnSubmit_CommentedMode_MarksArtifacts(t *testing.T) {
 	database, err := db.Open(":memory:")
 	if err != nil {

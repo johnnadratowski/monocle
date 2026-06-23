@@ -144,7 +144,8 @@ var Version string
 const toolInstructions = `Use the review_status tool to check if feedback is pending.
 Use the get_feedback tool to retrieve review feedback.
 Use the send_artifact tool to send content for review.
-Use the add_files tool to add files to the review.`
+Use the add_files tool to add files to the review.
+Use the remove_files tool to remove previously-added files from the review.`
 
 // channelToolInstructions tells agents to use MCP tools when receiving channel events.
 const channelToolInstructions = `When you receive a feedback_submitted event, use the get_feedback tool to retrieve the review.

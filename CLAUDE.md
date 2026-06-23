@@ -17,7 +17,7 @@ devbox run -- make lint               # Vet + build check
 
 Single binary with CLI subcommands:
 - **`monocle`** — TUI (Kong). Manages sessions, renders diffs/plans, collects comments, delivers reviews.
-- **`monocle review`** — Agent-facing CLI commands: `status`, `get-feedback`, `send-artifact`, `add-files`.
+- **`monocle review`** — Agent-facing CLI commands: `status`, `get-feedback`, `send-artifact`, `add-files`, `remove-files`.
 - **`monocle register`** — Register Monocle for an agent. Claude defaults to MCP tools mode; Pi uses MCP tools when `pi-mcp-adapter` is already configured and otherwise falls back to skills; other agents default to skills. Override with `--integration-mode mcp` or `--integration-mode skills`.
 - **`monocle unregister`** — Remove Monocle registration.
 - **`monocle serve-mcp`** — (hidden) Run the MCP server. Supports `--experimental-channels` (tools + push notifications) and `--experimental-channels-only` (push notifications only, for skills mode).
@@ -26,8 +26,8 @@ Single binary with CLI subcommands:
 
 Agents interact with Monocle via **MCP tools** (recommended for Claude Code, and for Pi users who already use `pi-mcp-adapter`) or **CLI commands** (for skills-mode agents), with optional **MCP channel notifications** for Claude push-based events.
 
-- **MCP tools** (Claude Code and Pi MCP tools mode) — `review_status`, `get_feedback`, `send_artifact`, `add_files`. The MCP server connects to the engine's Unix socket and handles all operations. Pi reaches this path through `pi-mcp-adapter`.
-- **CLI commands** — `monocle review status`, `get-feedback`, `send-artifact`, `add-files` connect to the engine's Unix socket, send a request, print the response, and exit. Used by agents in skills mode.
+- **MCP tools** (Claude Code and Pi MCP tools mode) — `review_status`, `get_feedback`, `send_artifact`, `add_files`, `remove_files`. The MCP server connects to the engine's Unix socket and handles all operations. Pi reaches this path through `pi-mcp-adapter`.
+- **CLI commands** — `monocle review status`, `get-feedback`, `send-artifact`, `add-files`, `remove-files` connect to the engine's Unix socket, send a request, print the response, and exit. Used by agents in skills mode.
 - **MCP channels** (Claude Code only, experimental) — push notifications (`feedback_submitted`, `pause_requested`) forwarded as MCP channel events.
 - **Skills** — standardized `SKILL.md` files (agentskills.io format) embedded in the binary. Skills instruct agents to run CLI commands. Used in skills mode.
 

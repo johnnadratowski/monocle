@@ -41,7 +41,7 @@ See the [CLI reference](/reference/cli#monocle-register) for a full list of flag
     monocle register claude
     ```
 
-    By default, this configures an MCP server in `.mcp.json` that exposes monocle's review tools directly, and installs slash commands in `.claude/commands/`. Claude Code calls the MCP tools (`review_status`, `get_feedback`, `send_artifact`, `add_files`) instead of running CLI commands.
+    By default, this configures an MCP server in `.mcp.json` that exposes monocle's review tools directly, and installs slash commands in `.claude/commands/`. Claude Code calls the MCP tools (`review_status`, `get_feedback`, `send_artifact`, `add_files`, `remove_files`) instead of running CLI commands.
 
     To use skills mode instead (the previous default), pass `--integration-mode skills`:
 
@@ -138,7 +138,7 @@ See the [CLI reference](/reference/cli#monocle-register) for a full list of flag
     monocle serve-mcp
     ```
 
-    This exposes the `review_status`, `get_feedback`, `send_artifact`, and `add_files` tools over stdio. Add this as an MCP server in your agent's config, the same way you would any other stdio-based MCP server.
+    This exposes the `review_status`, `get_feedback`, `send_artifact`, `add_files`, and `remove_files` tools over stdio. Add this as an MCP server in your agent's config, the same way you would any other stdio-based MCP server.
 
     ### Skills
 

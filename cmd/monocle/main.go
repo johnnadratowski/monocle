@@ -43,6 +43,7 @@ type ReviewCmd struct {
 	GetFeedback  ReviewGetFeedbackCmd  `cmd:"get-feedback" help:"Retrieve review feedback"`
 	SendArtifact ReviewSendArtifactCmd `cmd:"send-artifact" help:"Send content to the reviewer"`
 	AddFiles     ReviewAddFilesCmd     `cmd:"add-files" help:"Add files to the review session"`
+	RemoveFiles  ReviewRemoveFilesCmd  `cmd:"remove-files" help:"Remove previously-added files from the review session"`
 }
 
 // WorkDirFlag is embedded by commands that support --workdir.
@@ -78,6 +79,13 @@ type ReviewAddFilesCmd struct {
 	WorkDirFlag
 	Socket string   `help:"Override socket path" env:"MONOCLE_SOCKET" default:""`
 	Paths  []string `arg:"" required:"" help:"File or directory paths to add for review"`
+	JSON   bool     `help:"Output as JSON" default:"false"`
+}
+
+type ReviewRemoveFilesCmd struct {
+	WorkDirFlag
+	Socket string   `help:"Override socket path" env:"MONOCLE_SOCKET" default:""`
+	Paths  []string `arg:"" required:"" help:"Previously-added file paths to remove from review"`
 	JSON   bool     `help:"Output as JSON" default:"false"`
 }
 
@@ -628,6 +636,53 @@ func (cmd *ReviewAddFilesCmd) Run() error {
 		return printJSON(add)
 	}
 	fmt.Println(add.Message)
+	return nil
+}
+
+func (cmd *ReviewRemoveFilesCmd) Run() error {
+	// Resolve paths to absolute, mirroring add-files so the same arguments match.
+	absPaths := make([]string, len(cmd.Paths))
+	for i, p := range cmd.Paths {
+		abs, err := filepath.Abs(p)
+		if err != nil {
+			return fmt.Errorf("resolve path %q: %w", p, err)
+		}
+		absPaths[i] = abs
+	}
+
+	socketPath, err := resolveSocketForWorkDir(cmd.Socket, cmd.WorkDir)
+	if err != nil {
+		return err
+	}
+	c, err := client.Connect(socketPath)
+	if err != nil {
+		if errors.Is(err, client.ErrNotRunning) {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return err
+	}
+	defer c.Close()
+
+	resp, err := c.Request(
+		&protocol.RemoveAdditionalFilesMsg{
+			Type:  protocol.TypeRemoveAdditionalFiles,
+			Paths: absPaths,
+		},
+		client.DefaultTimeout,
+	)
+	if err != nil {
+		return fmt.Errorf("remove files: %w", err)
+	}
+
+	rem := resp.(*protocol.RemoveAdditionalFilesResponse)
+	if cmd.JSON {
+		return printJSON(rem)
+	}
+	if !rem.Success {
+		return fmt.Errorf("%s", rem.Message)
+	}
+	fmt.Println(rem.Message)
 	return nil
 }
 

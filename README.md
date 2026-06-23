@@ -110,7 +110,7 @@ This configures MCP tools or skills depending on the agent. Claude Code gets an 
 
 If your agent isn't natively supported, you can set up Monocle manually:
 
-- **MCP tools**: If your agent supports MCP servers via stdio, point it at `monocle serve-mcp`. This exposes review tools (`review_status`, `get_feedback`, `send_artifact`, `add_files`) over stdio.
+- **MCP tools**: If your agent supports MCP servers via stdio, point it at `monocle serve-mcp`. This exposes review tools (`review_status`, `get_feedback`, `send_artifact`, `add_files`, `remove_files`) over stdio.
 - **Skills**: Download `skills.tar.gz` from the [latest release](https://github.com/josephschmitt/monocle/releases/latest) and extract the skill files into wherever your agent expects its skills.
 
 ### 2. Start reviewing
@@ -189,6 +189,7 @@ Monocle exposes review operations via **MCP tools** (default for Claude Code, an
 | Send artifact (blocking) | `send_artifact`, then `get_feedback` with `wait: true` | `/review-plan-wait` | Submit content and iterate on feedback until approved |
 | Check status | `review_status` | — | Check if feedback is pending or a pause was requested |
 | Add files | `add_files` | — | Add files to the current review session |
+| Remove files | `remove_files` | — | Remove previously-added files from the review session |
 
 ## Keybindings
 

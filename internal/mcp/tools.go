@@ -64,6 +64,11 @@ func registerTools(s *sdkmcp.Server) {
 		Name:        "add_files",
 		Description: desc["add_files"],
 	}, handleAddFiles)
+
+	sdkmcp.AddTool(s, &sdkmcp.Tool{
+		Name:        "remove_files",
+		Description: desc["remove_files"],
+	}, handleRemoveFiles)
 }
 
 // -- Tool parameter types --
@@ -83,6 +88,10 @@ type sendArtifactParams struct {
 }
 
 type addFilesParams struct {
+	Paths []string `json:"paths"`
+}
+
+type removeFilesParams struct {
 	Paths []string `json:"paths"`
 }
 
@@ -206,6 +215,31 @@ func handleAddFiles(ctx context.Context, req *sdkmcp.CallToolRequest, params add
 
 	add := resp.(*protocol.AddAdditionalFilesResponse)
 	return textResult(add.Message), nil, nil
+}
+
+func handleRemoveFiles(ctx context.Context, req *sdkmcp.CallToolRequest, params removeFilesParams) (*sdkmcp.CallToolResult, any, error) {
+	c, err := client.ConnectDefault()
+	if err != nil {
+		return errResult("connect: %v", err), nil, nil
+	}
+	defer c.Close()
+
+	resp, err := c.Request(
+		&protocol.RemoveAdditionalFilesMsg{
+			Type:  protocol.TypeRemoveAdditionalFiles,
+			Paths: params.Paths,
+		},
+		client.DefaultTimeout,
+	)
+	if err != nil {
+		return errResult("request: %v", err), nil, nil
+	}
+
+	rem := resp.(*protocol.RemoveAdditionalFilesResponse)
+	if !rem.Success {
+		return errResult("%s", rem.Message), nil, nil
+	}
+	return textResult(rem.Message), nil, nil
 }
 
 // -- Helpers --

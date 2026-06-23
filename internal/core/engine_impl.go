@@ -516,19 +516,40 @@ func (e *Engine) handleAddAdditionalFiles(msg *protocol.AddAdditionalFilesMsg) *
 	}
 }
 
-func (e *Engine) handleRemoveAdditionalFile(msg *protocol.RemoveAdditionalFileMsg) *protocol.RemoveAdditionalFileResponse {
-	err := e.RemoveAdditionalFile(msg.Path)
-	resp := &protocol.RemoveAdditionalFileResponse{Type: protocol.TypeRemoveAdditionalFileResponse}
-	if err != nil {
-		resp.Error = err.Error()
+func (e *Engine) handleRemoveAdditionalFiles(msg *protocol.RemoveAdditionalFilesMsg) *protocol.RemoveAdditionalFilesResponse {
+	before := len(e.GetAdditionalFiles())
+	var firstErr error
+	for _, p := range msg.Paths {
+		if err := e.RemoveAdditionalFile(p); err != nil && firstErr == nil {
+			firstErr = err
+		}
 	}
-	return resp
+	if firstErr != nil {
+		return &protocol.RemoveAdditionalFilesResponse{
+			Type:    protocol.TypeRemoveAdditionalFilesResponse,
+			Success: false,
+			Message: firstErr.Error(),
+		}
+	}
+	removed := before - len(e.GetAdditionalFiles())
+	return &protocol.RemoveAdditionalFilesResponse{
+		Type:    protocol.TypeRemoveAdditionalFilesResponse,
+		Success: true,
+		Message: fmt.Sprintf("Removed %d file(s) from review", removed),
+		Count:   removed,
+	}
 }
 
 // RemoveAdditionalFile removes a single additional (added) file from the review
 // by its path, deleting it and any comments left on it. It is the per-file
-// counterpart to add_files; the reviewer triggers it with the dismiss key.
+// counterpart to add_files; the reviewer triggers it with the dismiss key and
+// the remove_files agent tool removes them in batches. The path is resolved to
+// absolute (like add) so callers may pass relative paths.
 func (e *Engine) RemoveAdditionalFile(path string) error {
+	if abs, err := filepath.Abs(path); err == nil {
+		path = abs
+	}
+
 	e.mu.Lock()
 
 	if e.current == nil {

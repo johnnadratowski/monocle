@@ -5,7 +5,7 @@ description: "CLI commands for agents to interact with a running monocle session
 
 These commands are used by agents — via installed skills, MCP tools, or directly from the command line — to communicate with a running monocle session.
 
-When registered in **MCP tools mode**, agents call these operations as MCP tools (`review_status`, `get_feedback`, `send_artifact`, `add_files`) instead of CLI commands. The behavior is identical — the MCP server connects to the same Unix socket internally.
+When registered in **MCP tools mode**, agents call these operations as MCP tools (`review_status`, `get_feedback`, `send_artifact`, `add_files`, `remove_files`) instead of CLI commands. The behavior is identical — the MCP server connects to the same Unix socket internally.
 
 When registered in **skills mode**, agents invoke the corresponding CLI commands below.
 
@@ -157,4 +157,40 @@ In MCP tools mode, call the `add_files` tool:
 
 ```bash
 monocle review add-files src/feature.go tests/
+```
+
+## `monocle review remove-files`
+
+Remove one or more previously-added files from the current review session. Pass the same paths you used with `add-files`.
+
+```bash
+monocle review remove-files <paths...> [--json] [--workdir PATH] [--socket PATH]
+```
+
+### Arguments
+
+| Argument | Description |
+|----------|-------------|
+| `paths` | **(Required)** One or more previously-added file paths to remove. Paths are resolved to absolute paths before being matched. |
+
+### Flags
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--json` | | Output the result as structured JSON. |
+| `--workdir PATH` | `-C` | Override the working directory. Also reads from `MONOCLE_WORKDIR`. |
+| `--socket PATH` | | Override the Unix socket path. Also reads from `MONOCLE_SOCKET`. |
+
+### MCP tool equivalent
+
+In MCP tools mode, call the `remove_files` tool:
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `paths` | string array | Yes | Previously-added file paths to remove from the session. |
+
+### Example
+
+```bash
+monocle review remove-files src/feature.go
 ```
