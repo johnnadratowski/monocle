@@ -27,7 +27,7 @@ type externalEditorResultMsg struct {
 // $VISUAL/$EDITOR, and returns a tea.Cmd that suspends the TUI via
 // tea.ExecProcess. When the editor exits, it reads back the file and returns
 // an externalEditorResultMsg.
-func openExternalEditor(body string, origin overlayKind) tea.Cmd {
+func openExternalEditor(body string, origin overlayKind, configured string) tea.Cmd {
 	tmpFile, err := os.CreateTemp("", "monocle-*.md")
 	if err != nil {
 		return func() tea.Msg {
@@ -44,7 +44,7 @@ func openExternalEditor(body string, origin overlayKind) tea.Cmd {
 	}
 	tmpFile.Close()
 
-	name, args := resolveEditor()
+	name, args := resolveEditor(configured)
 	args = append(args, tmpFile.Name())
 	cmd := exec.Command(name, args...)
 
@@ -70,11 +70,11 @@ type openFileInEditorDoneMsg struct {
 	err error
 }
 
-// openFileInEditor opens the given file in the user's $VISUAL/$EDITOR at the
-// specified line number. Unlike openExternalEditor, this opens the actual file
-// on disk rather than a temp file copy.
-func openFileInEditor(filePath string, line int) tea.Cmd {
-	name, args := resolveEditor()
+// openFileInEditor opens the given file in the configured editor (or
+// $VISUAL/$EDITOR) at the specified line number. Unlike openExternalEditor, this
+// opens the actual file on disk rather than a temp file copy.
+func openFileInEditor(filePath string, line int, configured string) tea.Cmd {
+	name, args := resolveEditor(configured)
 	if line > 0 {
 		args = append(args, fmt.Sprintf("+%d", line))
 	}
@@ -86,10 +86,12 @@ func openFileInEditor(filePath string, line int) tea.Cmd {
 }
 
 // resolveEditor returns the editor binary name and any extra arguments.
-// It checks $VISUAL, then $EDITOR, falling back to "vi".
-func resolveEditor() (string, []string) {
-	for _, env := range []string{"VISUAL", "EDITOR"} {
-		if val := os.Getenv(env); val != "" {
+// Precedence: the configured editor (config "editor" field), then $VISUAL, then
+// $EDITOR, falling back to "vi". The value may include flags (e.g. "code --wait").
+func resolveEditor(configured string) (string, []string) {
+	candidates := []string{configured, os.Getenv("VISUAL"), os.Getenv("EDITOR")}
+	for _, val := range candidates {
+		if val != "" {
 			parts := strings.Fields(val)
 			return parts[0], parts[1:]
 		}

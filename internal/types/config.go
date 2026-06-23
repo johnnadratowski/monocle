@@ -15,6 +15,7 @@ type Config struct {
 	Wrap           bool              `json:"wrap"`
 	TabSize        int               `json:"tab_size"`
 	ContextLines   int               `json:"context_lines"`
+	Editor         string            `json:"editor"` // external editor command; overrides $VISUAL/$EDITOR when set
 	ReviewFormat      ReviewFormatConfig `json:"review_format"`
 	AutoFocusMode     bool               `json:"auto_focus_mode"`
 	Mouse              *bool `json:"mouse"`

@@ -961,7 +961,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case externalEditorRequestMsg:
-		return m, openExternalEditor(msg.body, msg.origin)
+		return m, openExternalEditor(msg.body, msg.origin, m.editorCommand())
 
 	case externalEditorResultMsg:
 		if msg.err != nil {
@@ -1628,7 +1628,7 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if filePath == "" {
 			break
 		}
-		return m, openFileInEditor(filePath, line)
+		return m, openFileInEditor(filePath, line, m.editorCommand())
 
 	case Matches(key, km.Refresh):
 		return m, m.refreshFiles()
@@ -2222,6 +2222,18 @@ func (m *appModel) autoToggleSidebar() bool {
 }
 
 // handleSidebarSelect loads the diff for the selected file or content item.
+// editorCommand returns the configured external editor command ("editor" config
+// field), or "" to fall back to $VISUAL/$EDITOR.
+func (m appModel) editorCommand() string {
+	if m.engine == nil {
+		return ""
+	}
+	if cfg := m.engine.GetConfig(); cfg != nil {
+		return cfg.Editor
+	}
+	return ""
+}
+
 func (m appModel) handleSidebarSelect(msg sidebarSelectMsg) tea.Cmd {
 	if msg.isContent {
 		return func() tea.Msg {

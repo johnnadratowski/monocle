@@ -9,12 +9,27 @@ import (
 
 func TestResolveEditor(t *testing.T) {
 	tests := []struct {
-		name     string
-		visual   string
-		editor   string
-		wantName string
-		wantArgs []string
+		name      string
+		configured string
+		visual    string
+		editor    string
+		wantName  string
+		wantArgs  []string
 	}{
+		{
+			name:       "configured editor takes precedence over env",
+			configured: "nvim",
+			visual:     "vim",
+			editor:     "nano",
+			wantName:   "nvim",
+			wantArgs:   nil,
+		},
+		{
+			name:       "configured editor with flags",
+			configured: "code --wait",
+			wantName:   "code",
+			wantArgs:   []string{"--wait"},
+		},
 		{
 			name:     "VISUAL takes precedence",
 			visual:   "nvim",
@@ -57,7 +72,7 @@ func TestResolveEditor(t *testing.T) {
 			t.Setenv("VISUAL", tt.visual)
 			t.Setenv("EDITOR", tt.editor)
 
-			name, args := resolveEditor()
+			name, args := resolveEditor(tt.configured)
 			if name != tt.wantName {
 				t.Errorf("name = %q, want %q", name, tt.wantName)
 			}
