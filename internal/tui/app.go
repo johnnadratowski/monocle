@@ -1620,7 +1620,7 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			} else if m.diffView.path != "" {
 				filePath = filepath.Join(m.repoRoot, m.diffView.path)
 			}
-			line = m.diffView.currentDiffLine()
+			line = m.diffView.EditorTargetLine()
 			if line < 1 {
 				line = 1
 			}

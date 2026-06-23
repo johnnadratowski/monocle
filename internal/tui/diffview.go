@@ -2107,6 +2107,25 @@ func (m diffViewModel) currentDiffLine() int {
 	return m.lineNumAt(m.cursor)
 }
 
+// EditorTargetLine returns the new-file line number an external editor should
+// open at: the cursor's line when the cursor is visible in the viewport,
+// otherwise the line at the top of the viewport — so the editor lands where the
+// reviewer is actually looking after scrolling away from the cursor. Lines with
+// no file number (hunk headers, comments) are skipped by scanning downward.
+func (m diffViewModel) EditorTargetLine() int {
+	if !m.isCursorOffScreen() {
+		if ln := m.lineNumAt(m.cursor); ln > 0 {
+			return ln
+		}
+	}
+	for i := m.offset; i < len(m.lines); i++ {
+		if ln := m.lineNumAt(i); ln > 0 {
+			return ln
+		}
+	}
+	return 1
+}
+
 // screenLineToIndex maps a screen-relative Y coordinate to a logical lines[] index.
 // Walks from offset counting the actual display lines each logical line occupies,
 // including multi-line comment rendering (3 lines per comment).
