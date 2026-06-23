@@ -1818,7 +1818,11 @@ func (m appModel) handleCommandModeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd)
 		return m, nil
 
 	default:
-		if len(key) == 1 || key == " " {
+		// Bubble Tea v2 reports the space key as "space", not " ".
+		if key == "space" {
+			key = " "
+		}
+		if len(key) == 1 {
 			m.commandBuffer += key
 			m.statusBar.commandBuffer = m.commandBuffer
 		}
