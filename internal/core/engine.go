@@ -80,6 +80,7 @@ type EngineAPI interface {
 	// Additional files
 	GetAdditionalFiles() []types.AdditionalFile
 	AddAdditionalPaths(paths []string) ([]types.AdditionalFile, error)
+	RemoveAdditionalFile(path string) error
 	GetAdditionalFileContent(absPath string) (string, error)
 
 	// Commenting

@@ -141,6 +141,11 @@ type artifactDismissedMsg struct {
 	err error
 }
 
+type additionalFileRemovedMsg struct {
+	path string
+	err  error
+}
+
 type resolveCommentMsg struct {
 	commentID string
 }
@@ -216,6 +221,8 @@ type appModel struct {
 	registerPrompt   registerPromptModel
 
 	pendingDismissArtifactID string // set while the dismiss-artifact confirm modal is open
+
+	pendingDismissAdditionalFilePath string // set while the remove-added-file confirm modal is open
 
 	focusModeActive       bool // currently in focus mode
 	focusModeSavedSidebar bool // sidebar visibility before entering focus mode
@@ -1186,6 +1193,16 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				err := engine.DismissArtifact(id)
 				return artifactDismissedMsg{id: id, err: err}
 			}
+		case confirmDismissAdditionalFile:
+			path := m.pendingDismissAdditionalFilePath
+			m.pendingDismissAdditionalFilePath = ""
+			if path == "" {
+				return m, nil
+			}
+			return m, func() tea.Msg {
+				err := engine.RemoveAdditionalFile(path)
+				return additionalFileRemovedMsg{path: path, err: err}
+			}
 		}
 		return m, nil
 
@@ -1236,6 +1253,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case cancelConfirmMsg:
 		m.overlay = overlayNone
 		m.pendingDismissArtifactID = ""
+		m.pendingDismissAdditionalFilePath = ""
 		return m, nil
 
 	case openHistoryMsg:
@@ -1276,6 +1294,8 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// After full review clear (:clear), refresh everything
 	case reviewClearedMsg:
 		m.sidebar.contentItems = nil
+		// Clear also removes added files, so refresh the sidebar's copy.
+		m.sidebar.additionalFiles = m.engine.GetAdditionalFiles()
 		m.sidebar.files = m.engine.GetChangedFiles()
 		m.sidebar.applyReviewedFilter()
 		m.sidebar.rebuildTree()
@@ -1287,10 +1307,12 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusBar.baseRef = m.displayBaseRef(session)
 			m.statusBar.commentCount = len(session.Comments)
 		}
-		// If viewing a content item, it no longer exists — clear the view
-		if msg.isContent {
+		// If viewing a content item or an added file, it no longer exists —
+		// clear the view rather than trying to reload a deleted target.
+		if msg.isContent || msg.isAdditionalFile {
 			m.diffView.contentMode = false
 			m.diffView.contentID = ""
+			m.diffView.additionalFilePath = ""
 			m.diffView.path = ""
 			m.diffView.hunks = nil
 			m.diffView.lines = nil
@@ -1298,9 +1320,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		// Reload current file view to remove inline comment markers
-		if msg.reloadPath != "" && msg.isAdditionalFile {
-			return m, m.handleSidebarSelect(sidebarSelectMsg{path: msg.reloadPath, isAdditionalFile: true})
-		} else if msg.reloadPath != "" {
+		if msg.reloadPath != "" {
 			return m, m.handleSidebarSelect(sidebarSelectMsg{path: msg.reloadPath})
 		}
 		return m, nil
@@ -1322,6 +1342,30 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.diffView.contentMode && m.diffView.contentID == msg.id {
 			m.diffView.contentMode = false
 			m.diffView.contentID = ""
+			m.diffView.path = ""
+			m.diffView.hunks = nil
+			m.diffView.lines = nil
+			m.diffView.comments = nil
+		}
+		return m, nil
+
+	case additionalFileRemovedMsg:
+		if msg.err != nil {
+			m.statusBar.feedbackStatus = fmt.Sprintf("remove added file failed: %v", msg.err)
+			return m, nil
+		}
+		m.sidebar.additionalFiles = m.engine.GetAdditionalFiles()
+		m.sidebar.applyReviewedFilter()
+		m.sidebar.rebuildTree()
+		m.sidebar.clampOffset()
+		recalcStackedLayout(&m)
+		session := m.engine.GetSession()
+		if session != nil {
+			m.statusBar.commentCount = len(session.Comments)
+		}
+		// If the removed file was being viewed, clear the diff pane.
+		if m.diffView.additionalFilePath == msg.path {
+			m.diffView.additionalFilePath = ""
 			m.diffView.path = ""
 			m.diffView.hunks = nil
 			m.diffView.lines = nil
@@ -1558,6 +1602,17 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			"Dismiss artifact?",
 			fmt.Sprintf("Remove %q from the sidebar. Version history and comments will be deleted. This can't be undone.", item.Title),
 			confirmDismissArtifact,
+		)
+		m.overlay = overlayConfirm
+		return m, nil
+
+	case Matches(key, km.DismissArtifact) && m.focus == focusSidebar && m.sidebar.selectedAdditionalFile() != nil:
+		af := m.sidebar.selectedAdditionalFile()
+		m.pendingDismissAdditionalFilePath = af.Path
+		m.confirm.open(
+			"Remove added file?",
+			fmt.Sprintf("Remove %q from the review. Any comments on it will be deleted. This can't be undone.", af.Name),
+			confirmDismissAdditionalFile,
 		)
 		m.overlay = overlayConfirm
 		return m, nil

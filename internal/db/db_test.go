@@ -614,7 +614,19 @@ func TestAdditionalFiles(t *testing.T) {
 		t.Error("expected not reviewed")
 	}
 
-	// Delete
+	// Per-file delete: add a second file, delete only the first.
+	if err := d.UpsertAdditionalFile("sess-1", &types.AdditionalFile{Path: "/tmp/other.go", Name: "other.go"}); err != nil {
+		t.Fatalf("upsert second: %v", err)
+	}
+	if err := d.DeleteAdditionalFile("sess-1", "/tmp/extra.go"); err != nil {
+		t.Fatalf("delete one: %v", err)
+	}
+	files, _ = d.GetAdditionalFiles("sess-1")
+	if len(files) != 1 || files[0].Path != "/tmp/other.go" {
+		t.Errorf("expected only /tmp/other.go after per-file delete, got %+v", files)
+	}
+
+	// Delete all
 	if err := d.DeleteAdditionalFiles("sess-1"); err != nil {
 		t.Fatalf("delete: %v", err)
 	}

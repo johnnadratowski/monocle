@@ -815,6 +815,24 @@ func (c *EngineClient) AddAdditionalPaths(paths []string) ([]types.AdditionalFil
 	return c.GetAdditionalFiles(), nil
 }
 
+func (c *EngineClient) RemoveAdditionalFile(path string) error {
+	resp, err := c.request(&protocol.RemoveAdditionalFileMsg{
+		Type: protocol.TypeRemoveAdditionalFile,
+		Path: path,
+	})
+	if err != nil {
+		return err
+	}
+	r, ok := resp.(*protocol.RemoveAdditionalFileResponse)
+	if !ok {
+		return fmt.Errorf("unexpected response %T", resp)
+	}
+	if r.Error != "" {
+		return errors.New(r.Error)
+	}
+	return nil
+}
+
 func (c *EngineClient) GetAdditionalFileContent(absPath string) (string, error) {
 	resp, err := c.request(&protocol.GetAdditionalFileContentMsg{Type: protocol.TypeGetAdditionalFileContent, AbsPath: absPath})
 	if err != nil {

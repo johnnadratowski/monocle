@@ -229,8 +229,8 @@ Monocle exposes review operations via **MCP tools** (default for Claude Code, an
 | `Ctrl+g`               | Open external editor (comment/submit modal)               |
 | `Ctrl+y`               | Copy review to clipboard                                  |
 | `P` / `:pause`         | Pause the agent (wait for your review)                    |
-| `D` / `:clear`         | Clear review (all comments, plans, reviewed states)       |
-| `x`                    | Dismiss focused artifact (sidebar, confirm required)      |
+| `D` / `:clear`         | Clear review (comments, plans, added files, reviewed)     |
+| `x`                    | Dismiss artifact / remove added file (sidebar, confirm)   |
 | `F`                    | Toggle focus mode (hide sidebar, enable wrap)             |
 | `:mark-all-reviewed`   | Mark all files as reviewed                                |
 | `:mark-all-unreviewed` | Mark all files as unreviewed                              |

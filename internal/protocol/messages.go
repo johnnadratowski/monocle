@@ -10,9 +10,10 @@ const (
 	TypeSubscribe          = "subscribe"
 	TypeConnect            = "connect"
 	TypeIdentify           = "identify"
-	TypeAddAdditionalFiles = "add_additional_files"
-	TypeMarkActivity       = "mark_activity"
-	TypeAwaitReview        = "await_review"
+	TypeAddAdditionalFiles    = "add_additional_files"
+	TypeRemoveAdditionalFile  = "remove_additional_file"
+	TypeMarkActivity          = "mark_activity"
+	TypeAwaitReview           = "await_review"
 )
 
 // Outbound message types (from engine to CLI subcommands)
@@ -23,9 +24,10 @@ const (
 	TypeSubscribeResponse          = "subscribe_response"
 	TypeConnectResponse            = "connect_response"
 	TypeEventNotification          = "event_notification"
-	TypeAddAdditionalFilesResponse = "add_additional_files_response"
-	TypeMarkActivityResponse       = "mark_activity_response"
-	TypeAwaitReviewResponse        = "await_review_response"
+	TypeAddAdditionalFilesResponse   = "add_additional_files_response"
+	TypeRemoveAdditionalFileResponse = "remove_additional_file_response"
+	TypeMarkActivityResponse         = "mark_activity_response"
+	TypeAwaitReviewResponse          = "await_review_response"
 )
 
 // GetReviewStatusMsg requests the current review state from the engine.
@@ -175,6 +177,18 @@ type AddAdditionalFilesResponse struct {
 	Count        int                    `json:"count"`
 	Added        []types.AdditionalFile `json:"added,omitempty"`
 	AddedPresent bool                   `json:"added_present,omitempty"`
+}
+
+// RemoveAdditionalFileMsg removes a single previously-added file by path.
+type RemoveAdditionalFileMsg struct {
+	Type string `json:"type"`
+	Path string `json:"path"`
+}
+
+// RemoveAdditionalFileResponse acknowledges removal of an additional file.
+type RemoveAdditionalFileResponse struct {
+	Type  string `json:"type"`
+	Error string `json:"error,omitempty"`
 }
 
 // MarkActivityMsg notifies the engine that a write-tool just fired in the

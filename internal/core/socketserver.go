@@ -616,6 +616,8 @@ func (s *SocketServer) handleMessage(msg any) any {
 		return s.engine.handleSubmitContent(m)
 	case *protocol.AddAdditionalFilesMsg:
 		return s.engine.handleAddAdditionalFiles(m)
+	case *protocol.RemoveAdditionalFileMsg:
+		return s.engine.handleRemoveAdditionalFile(m)
 	case *protocol.MarkActivityMsg:
 		return s.engine.handleMarkActivity(m)
 	case *protocol.AwaitReviewMsg:

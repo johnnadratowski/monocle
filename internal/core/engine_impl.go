@@ -516,6 +516,60 @@ func (e *Engine) handleAddAdditionalFiles(msg *protocol.AddAdditionalFilesMsg) *
 	}
 }
 
+func (e *Engine) handleRemoveAdditionalFile(msg *protocol.RemoveAdditionalFileMsg) *protocol.RemoveAdditionalFileResponse {
+	err := e.RemoveAdditionalFile(msg.Path)
+	resp := &protocol.RemoveAdditionalFileResponse{Type: protocol.TypeRemoveAdditionalFileResponse}
+	if err != nil {
+		resp.Error = err.Error()
+	}
+	return resp
+}
+
+// RemoveAdditionalFile removes a single additional (added) file from the review
+// by its path, deleting it and any comments left on it. It is the per-file
+// counterpart to add_files; the reviewer triggers it with the dismiss key.
+func (e *Engine) RemoveAdditionalFile(path string) error {
+	e.mu.Lock()
+
+	if e.current == nil {
+		e.mu.Unlock()
+		return fmt.Errorf("no active session")
+	}
+
+	sessionID := e.current.ID
+	if err := e.database.DeleteAdditionalFile(sessionID, path); err != nil {
+		e.mu.Unlock()
+		return fmt.Errorf("delete additional file: %w", err)
+	}
+	if err := e.database.DeleteCommentsByTarget(sessionID, types.TargetAdditionalFile, path); err != nil {
+		e.mu.Unlock()
+		return fmt.Errorf("delete additional file comments: %w", err)
+	}
+
+	files := e.current.AdditionalFiles[:0]
+	for _, f := range e.current.AdditionalFiles {
+		if f.Path != path {
+			files = append(files, f)
+		}
+	}
+	e.current.AdditionalFiles = files
+
+	comments := e.current.Comments[:0]
+	for _, c := range e.current.Comments {
+		if c.TargetType == types.TargetAdditionalFile && c.TargetRef == path {
+			continue
+		}
+		comments = append(comments, c)
+	}
+	e.current.Comments = comments
+
+	e.mu.Unlock()
+
+	// emit must be called without the lock held (see emit doc comment).
+	e.emit(EventFileChanged, EventPayload{Kind: EventFileChanged})
+	return nil
+}
+
 // -- Commenting --
 
 func (e *Engine) AddComment(target CommentTarget, commentType types.CommentType, body string) (*types.ReviewComment, error) {
@@ -674,14 +728,18 @@ func (e *Engine) ClearReview() error {
 	}
 	e.current.ContentItems = nil
 
+	// Added files are part of the review view, so a full clear removes them too
+	// (their comments are already gone via ClearComments above).
+	if err := e.database.DeleteAdditionalFiles(sessionID); err != nil {
+		return fmt.Errorf("clear additional files: %w", err)
+	}
+	e.current.AdditionalFiles = nil
+
 	if err := e.database.ResetAllReviewed(sessionID); err != nil {
 		return fmt.Errorf("reset reviewed: %w", err)
 	}
 	for i := range e.current.ChangedFiles {
 		e.current.ChangedFiles[i].Reviewed = false
-	}
-	for i := range e.current.AdditionalFiles {
-		e.current.AdditionalFiles[i].Reviewed = false
 	}
 	for k := range e.current.FileStatuses {
 		e.current.FileStatuses[k] = false
