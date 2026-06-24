@@ -750,3 +750,35 @@ func TestFormatExpandedCommentKeepsInteriorBlankLines(t *testing.T) {
 		t.Errorf("expected a blank separator line between paragraphs:\n%s", out)
 	}
 }
+
+// TestOffScreenAccountsForCommentRows verifies isCursorOffScreen and
+// lastVisibleLine count comment rows (3 for a collapsed comment) in non-wrap
+// mode. Previously they assumed one screen row per logical line, so the cursor
+// could be reported on-screen while it had actually scrolled off the bottom past
+// a comment — letting content run out of the viewport.
+func TestOffScreenAccountsForCommentRows(t *testing.T) {
+	lines := make([]diffViewLine, 10)
+	for i := range lines {
+		lines[i] = diffViewLine{kind: types.DiffLineContext, newLineNum: i + 1, content: "x"}
+	}
+	// Index 5 is a collapsed 3-row comment box.
+	lines[5] = diffViewLine{isComment: true, content: "a\nb\nc"}
+
+	m := diffViewModel{lines: lines, height: 10, offset: 0, wrap: false}
+
+	// Screen rows 0..8 sum to 11 (the comment adds 2 extra), so index 8 sits below
+	// a height-10 viewport.
+	m.cursor = 8
+	if !m.isCursorOffScreen() {
+		t.Errorf("cursor=8 should be off-screen (comment pushes it past the viewport)")
+	}
+	// Index 6 is the first line after the comment, still on screen (rows 0..6 = 9).
+	m.cursor = 6
+	if m.isCursorOffScreen() {
+		t.Errorf("cursor=6 should be on-screen")
+	}
+	// Only indices 0..7 fit in 10 rows once the comment's extra rows are counted.
+	if got := m.lastVisibleLine(); got != 7 {
+		t.Errorf("lastVisibleLine = %d, want 7", got)
+	}
+}
