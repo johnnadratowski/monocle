@@ -12,7 +12,7 @@ the branches for local testing.
 
 | Branch | Base | Status | Summary |
 |--------|------|--------|---------|
-| `fix/diffview-scroll` | `main` | ready for PR | Inline-comment scroll fix, `t`-toggle re-anchor, split-divider-on-wrap fix |
+| `fix/diffview-scroll` | `main` | ready for PR | Inline-comment scroll fix, `t`-toggle re-anchor, split-divider-on-wrap fix, expanded-comment trailing blank-line fix |
 | `feat/full-file-diff` | `fix/diffview-scroll` (stacked) | ready for PR | Full-file diff modifier (`a`) + `full_file_diff` config; reuses the re-anchor helpers from the scroll branch |
 | `fix/editor-config` | `main` | ready for PR | `editor` config field overriding `$VISUAL`/`$EDITOR` |
 | `fix/remove-additional-files` | `main` | ready for PR | Remove added files (`x` in sidebar + `:clear`); `remove_files` MCP tool + `monocle review remove-files` CLI |
