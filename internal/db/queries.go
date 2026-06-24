@@ -105,10 +105,13 @@ func (d *DB) ListSessions(repoRoot string, limit int) ([]types.SessionSummary, e
 // UpsertChangedFile inserts or updates a changed file record.
 func (d *DB) UpsertChangedFile(sessionID string, f *types.ChangedFile) error {
 	_, err := d.Exec(
-		`INSERT INTO changed_files (session_id, path, status, reviewed)
-		 VALUES (?, ?, ?, ?)
-		 ON CONFLICT(session_id, path) DO UPDATE SET status = excluded.status`,
-		sessionID, f.Path, string(f.Status), boolToInt(f.Reviewed),
+		`INSERT INTO changed_files (session_id, path, status, reviewed, additions, deletions)
+		 VALUES (?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(session_id, path) DO UPDATE SET
+		     status = excluded.status,
+		     additions = excluded.additions,
+		     deletions = excluded.deletions`,
+		sessionID, f.Path, string(f.Status), boolToInt(f.Reviewed), f.Additions, f.Deletions,
 	)
 	return err
 }
@@ -133,9 +136,9 @@ func (d *DB) ReplaceChangedFiles(sessionID string, files []*types.ChangedFile) e
 
 	for _, f := range files {
 		if _, err := tx.Exec(
-			`INSERT INTO changed_files (session_id, path, status, reviewed)
-			 VALUES (?, ?, ?, ?)`,
-			sessionID, f.Path, string(f.Status), boolToInt(f.Reviewed),
+			`INSERT INTO changed_files (session_id, path, status, reviewed, additions, deletions)
+			 VALUES (?, ?, ?, ?, ?, ?)`,
+			sessionID, f.Path, string(f.Status), boolToInt(f.Reviewed), f.Additions, f.Deletions,
 		); err != nil {
 			return fmt.Errorf("insert changed file %s: %w", f.Path, err)
 		}
@@ -147,10 +150,19 @@ func (d *DB) ReplaceChangedFiles(sessionID string, files []*types.ChangedFile) e
 	return nil
 }
 
-// GetChangedFiles returns all changed files for a session.
+// GetChangedFiles returns all changed files for a session, joined with any
+// agent-supplied grouping metadata (left join — files without metadata get the
+// zero values).
 func (d *DB) GetChangedFiles(sessionID string) ([]types.ChangedFile, error) {
 	rows, err := d.Query(
-		`SELECT path, status, reviewed FROM changed_files WHERE session_id = ? ORDER BY path`, sessionID,
+		`SELECT cf.path, cf.status, cf.reviewed, cf.additions, cf.deletions,
+		        COALESCE(fm.category, ''), COALESCE(fm.group_label, ''),
+		        COALESCE(fm.group_order, 0), COALESCE(fm.sort_index, 0),
+		        COALESCE(fm.criticality, 0)
+		 FROM changed_files cf
+		 LEFT JOIN file_metadata fm
+		   ON fm.session_id = cf.session_id AND fm.path = cf.path
+		 WHERE cf.session_id = ? ORDER BY cf.path`, sessionID,
 	)
 	if err != nil {
 		return nil, err
@@ -162,7 +174,8 @@ func (d *DB) GetChangedFiles(sessionID string) ([]types.ChangedFile, error) {
 		var f types.ChangedFile
 		var status string
 		var reviewed int
-		if err := rows.Scan(&f.Path, &status, &reviewed); err != nil {
+		if err := rows.Scan(&f.Path, &status, &reviewed, &f.Additions, &f.Deletions,
+			&f.Category, &f.GroupLabel, &f.GroupOrder, &f.SortIndex, &f.Criticality); err != nil {
 			return nil, err
 		}
 		f.Status = types.FileChangeStatus(status)
@@ -170,6 +183,69 @@ func (d *DB) GetChangedFiles(sessionID string) ([]types.ChangedFile, error) {
 		files = append(files, f)
 	}
 	return files, rows.Err()
+}
+
+// SetFileMetadata upserts agent-supplied grouping metadata for a set of files in
+// one transaction. Passing replace=true first clears all existing metadata for
+// the session so a fresh manifest fully replaces the prior one.
+func (d *DB) SetFileMetadata(sessionID string, metas []types.ChangedFile, replace bool) error {
+	tx, err := d.Begin()
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if replace {
+		if _, err := tx.Exec(`DELETE FROM file_metadata WHERE session_id = ?`, sessionID); err != nil {
+			return fmt.Errorf("clear file metadata: %w", err)
+		}
+	}
+	for _, m := range metas {
+		if _, err := tx.Exec(
+			`INSERT INTO file_metadata
+			   (session_id, path, category, group_label, group_order, sort_index, criticality)
+			 VALUES (?, ?, ?, ?, ?, ?, ?)
+			 ON CONFLICT(session_id, path) DO UPDATE SET
+			     category = excluded.category,
+			     group_label = excluded.group_label,
+			     group_order = excluded.group_order,
+			     sort_index = excluded.sort_index,
+			     criticality = excluded.criticality`,
+			sessionID, m.Path, m.Category, m.GroupLabel, m.GroupOrder, m.SortIndex, m.Criticality,
+		); err != nil {
+			return fmt.Errorf("upsert file metadata %s: %w", m.Path, err)
+		}
+	}
+	return tx.Commit()
+}
+
+// ClearFileMetadata removes all grouping metadata for a session.
+func (d *DB) ClearFileMetadata(sessionID string) error {
+	_, err := d.Exec(`DELETE FROM file_metadata WHERE session_id = ?`, sessionID)
+	return err
+}
+
+// GetFileMetadata returns the agent-supplied grouping metadata for a session,
+// keyed by path. Each value carries only the metadata fields (Path + grouping).
+func (d *DB) GetFileMetadata(sessionID string) (map[string]types.ChangedFile, error) {
+	rows, err := d.Query(
+		`SELECT path, category, group_label, group_order, sort_index, criticality
+		 FROM file_metadata WHERE session_id = ?`, sessionID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make(map[string]types.ChangedFile)
+	for rows.Next() {
+		var f types.ChangedFile
+		if err := rows.Scan(&f.Path, &f.Category, &f.GroupLabel, &f.GroupOrder, &f.SortIndex, &f.Criticality); err != nil {
+			return nil, err
+		}
+		out[f.Path] = f
+	}
+	return out, rows.Err()
 }
 
 // MarkFileReviewed sets the reviewed flag for a file.
@@ -658,4 +734,3 @@ func boolToInt(b bool) int {
 	}
 	return 0
 }
-

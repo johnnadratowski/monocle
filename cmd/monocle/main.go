@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -44,6 +45,7 @@ type ReviewCmd struct {
 	SendArtifact ReviewSendArtifactCmd `cmd:"send-artifact" help:"Send content to the reviewer"`
 	AddFiles     ReviewAddFilesCmd     `cmd:"add-files" help:"Add files to the review session"`
 	RemoveFiles  ReviewRemoveFilesCmd  `cmd:"remove-files" help:"Remove previously-added files from the review session"`
+	GroupFiles   ReviewGroupFilesCmd   `cmd:"group-files" help:"Assign category/group/order metadata to changed files for the grouped sidebar view"`
 }
 
 // WorkDirFlag is embedded by commands that support --workdir.
@@ -87,6 +89,14 @@ type ReviewRemoveFilesCmd struct {
 	Socket string   `help:"Override socket path" env:"MONOCLE_SOCKET" default:""`
 	Paths  []string `arg:"" required:"" help:"Previously-added file paths to remove from review"`
 	JSON   bool     `help:"Output as JSON" default:"false"`
+}
+
+type ReviewGroupFilesCmd struct {
+	WorkDirFlag
+	Socket  string `help:"Override socket path" env:"MONOCLE_SOCKET" default:""`
+	File    string `help:"Path to a JSON manifest of grouping entries ('-' for stdin)" type:"path" default:"-"`
+	Replace bool   `help:"Replace all existing grouping metadata instead of merging" default:"false"`
+	JSON    bool   `help:"Output as JSON" default:"false"`
 }
 
 type RunCmd struct {
@@ -684,6 +694,89 @@ func (cmd *ReviewRemoveFilesCmd) Run() error {
 	}
 	fmt.Println(rem.Message)
 	return nil
+}
+
+func (cmd *ReviewGroupFilesCmd) Run() error {
+	// Read the manifest: a JSON array of grouping entries, or an object with an
+	// "entries" array. Paths must match the changed-file paths shown by
+	// `monocle review status` (repo-relative).
+	var raw []byte
+	var err error
+	if cmd.File == "" || cmd.File == "-" {
+		raw, err = io.ReadAll(os.Stdin)
+	} else {
+		raw, err = os.ReadFile(cmd.File)
+	}
+	if err != nil {
+		return fmt.Errorf("read manifest: %w", err)
+	}
+
+	entries, err := parseGroupEntries(raw)
+	if err != nil {
+		return err
+	}
+	if len(entries) == 0 {
+		return fmt.Errorf("manifest contained no entries")
+	}
+
+	socketPath, err := resolveSocketForWorkDir(cmd.Socket, cmd.WorkDir)
+	if err != nil {
+		return err
+	}
+	c, err := client.Connect(socketPath)
+	if err != nil {
+		if errors.Is(err, client.ErrNotRunning) {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return err
+	}
+	defer c.Close()
+
+	resp, err := c.Request(
+		&protocol.SetFileGroupsMsg{
+			Type:    protocol.TypeSetFileGroups,
+			Entries: entries,
+			Replace: cmd.Replace,
+		},
+		client.DefaultTimeout,
+	)
+	if err != nil {
+		return fmt.Errorf("group files: %w", err)
+	}
+
+	r := resp.(*protocol.SetFileGroupsResponse)
+	if cmd.JSON {
+		return printJSON(r)
+	}
+	if !r.Success {
+		return fmt.Errorf("%s", r.Message)
+	}
+	fmt.Println(r.Message)
+	return nil
+}
+
+// parseGroupEntries accepts either a top-level JSON array of entries or an object
+// of the form {"entries": [...]}.
+func parseGroupEntries(raw []byte) ([]protocol.FileGroupEntry, error) {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 {
+		return nil, fmt.Errorf("empty manifest")
+	}
+	if trimmed[0] == '[' {
+		var entries []protocol.FileGroupEntry
+		if err := json.Unmarshal(trimmed, &entries); err != nil {
+			return nil, fmt.Errorf("parse manifest array: %w", err)
+		}
+		return entries, nil
+	}
+	var wrapper struct {
+		Entries []protocol.FileGroupEntry `json:"entries"`
+	}
+	if err := json.Unmarshal(trimmed, &wrapper); err != nil {
+		return nil, fmt.Errorf("parse manifest object: %w", err)
+	}
+	return wrapper.Entries, nil
 }
 
 func printJSON(v any) error {

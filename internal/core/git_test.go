@@ -88,6 +88,30 @@ func TestGitDiff(t *testing.T) {
 	}
 }
 
+func TestGitDiffChurn(t *testing.T) {
+	dir, baseRef := setupTestRepo(t)
+	g := NewGitClient(dir)
+
+	files, err := g.Diff(baseRef)
+	if err != nil {
+		t.Fatalf("Diff: %v", err)
+	}
+	churn := map[string][2]int{}
+	for _, f := range files {
+		churn[f.Path] = [2]int{f.Additions, f.Deletions}
+	}
+
+	// hello.go: the single-line `func hello() {}` becomes a 3-line body — git
+	// numstat reports 3 additions, 1 deletion for that edit.
+	if c := churn["hello.go"]; c[0] != 3 || c[1] != 1 {
+		t.Errorf("hello.go churn = +%d -%d, want +3 -1", c[0], c[1])
+	}
+	// world.go is a newly added tracked file (3 lines added, 0 deleted).
+	if c := churn["world.go"]; c[0] != 3 || c[1] != 0 {
+		t.Errorf("world.go churn = +%d -%d, want +3 -0", c[0], c[1])
+	}
+}
+
 func TestGitFileDiff(t *testing.T) {
 	dir, baseRef := setupTestRepo(t)
 	g := NewGitClient(dir)

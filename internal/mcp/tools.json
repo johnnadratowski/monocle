@@ -18,5 +18,9 @@
   {
     "name": "remove_files",
     "description": "Remove previously-added file paths from the current Monocle review session. Pass the same paths used with add_files."
+  },
+  {
+    "name": "set_file_groups",
+    "description": "Organize the changed files in Monocle's grouped sidebar view for the reviewer. Provide entries, each with a path (matching a changed file from review_status) and optional grouping metadata: group (free-form label like \"UI\", \"Backend\", \"Database\" to tell the change as a top-down story), group_order (integer; lower groups shown first), sort_index (order within a group; lower first), category (one of code/test/config/docs/build to override the path heuristic), and criticality (integer; higher = more important). Order groups from entry-point to dependency (e.g. UI → API → database) so the reviewer reads the change in flow order. Set replace=true to replace all prior grouping. The reviewer presses 'f' to cycle to the grouped view."
   }
 ]

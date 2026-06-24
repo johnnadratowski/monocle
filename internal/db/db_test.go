@@ -789,3 +789,75 @@ func TestSnapshotMultipleRounds(t *testing.T) {
 		t.Errorf("expected round 1 second, got %d", snapshots[1].ReviewRound)
 	}
 }
+
+func TestChurnAndFileMetadataRoundtrip(t *testing.T) {
+	d := testDB(t)
+	now := time.Now()
+	s := &types.ReviewSession{ID: "s1", Agent: "claude", RepoRoot: "/r", BaseRef: "b", ReviewRound: 1, CreatedAt: now, UpdatedAt: now}
+	if err := d.CreateSession(s); err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+
+	files := []*types.ChangedFile{
+		{Path: "api/handler.go", Status: types.FileModified, Additions: 40, Deletions: 5},
+		{Path: "ui/App.tsx", Status: types.FileAdded, Additions: 12, Deletions: 0},
+	}
+	if err := d.ReplaceChangedFiles("s1", files); err != nil {
+		t.Fatalf("replace: %v", err)
+	}
+
+	// Apply agent grouping for one file only.
+	metas := []types.ChangedFile{
+		{Path: "ui/App.tsx", Category: "code", GroupLabel: "UI", GroupOrder: 0, SortIndex: 2, Criticality: 5},
+	}
+	if err := d.SetFileMetadata("s1", metas, true); err != nil {
+		t.Fatalf("set metadata: %v", err)
+	}
+
+	got, err := d.GetChangedFiles("s1")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	byPath := map[string]types.ChangedFile{}
+	for _, f := range got {
+		byPath[f.Path] = f
+	}
+
+	h := byPath["api/handler.go"]
+	if h.Additions != 40 || h.Deletions != 5 {
+		t.Errorf("handler churn = +%d -%d, want +40 -5", h.Additions, h.Deletions)
+	}
+	if h.GroupLabel != "" {
+		t.Errorf("handler should have no group, got %q", h.GroupLabel)
+	}
+
+	u := byPath["ui/App.tsx"]
+	if u.GroupLabel != "UI" || u.GroupOrder != 0 || u.SortIndex != 2 || u.Criticality != 5 || u.Category != "code" {
+		t.Errorf("ui metadata not joined correctly: %+v", u)
+	}
+	if u.Additions != 12 {
+		t.Errorf("ui churn = +%d, want +12", u.Additions)
+	}
+
+	// Metadata survives a changed-files replace (refresh).
+	if err := d.ReplaceChangedFiles("s1", files); err != nil {
+		t.Fatalf("replace 2: %v", err)
+	}
+	got2, _ := d.GetChangedFiles("s1")
+	for _, f := range got2 {
+		if f.Path == "ui/App.tsx" && f.GroupLabel != "UI" {
+			t.Errorf("metadata lost after refresh: %+v", f)
+		}
+	}
+
+	// ClearFileMetadata removes it.
+	if err := d.ClearFileMetadata("s1"); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	got3, _ := d.GetChangedFiles("s1")
+	for _, f := range got3 {
+		if f.GroupLabel != "" {
+			t.Errorf("metadata not cleared: %+v", f)
+		}
+	}
+}

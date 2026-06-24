@@ -23,8 +23,8 @@ type toolDef struct {
 }
 
 var (
-	toolsOnce    sync.Once
-	toolDescMap  map[string]string
+	toolsOnce   sync.Once
+	toolDescMap map[string]string
 )
 
 // toolDescriptions returns a map of tool name → description loaded from tools.json.
@@ -69,6 +69,11 @@ func registerTools(s *sdkmcp.Server) {
 		Name:        "remove_files",
 		Description: desc["remove_files"],
 	}, handleRemoveFiles)
+
+	sdkmcp.AddTool(s, &sdkmcp.Tool{
+		Name:        "set_file_groups",
+		Description: desc["set_file_groups"],
+	}, handleSetFileGroups)
 }
 
 // -- Tool parameter types --
@@ -93,6 +98,20 @@ type addFilesParams struct {
 
 type removeFilesParams struct {
 	Paths []string `json:"paths"`
+}
+
+type fileGroupEntryParam struct {
+	Path        string `json:"path"`
+	Category    string `json:"category,omitempty"`
+	Group       string `json:"group,omitempty"`
+	GroupOrder  int    `json:"group_order,omitempty"`
+	SortIndex   int    `json:"sort_index,omitempty"`
+	Criticality int    `json:"criticality,omitempty"`
+}
+
+type setFileGroupsParams struct {
+	Entries []fileGroupEntryParam `json:"entries"`
+	Replace bool                  `json:"replace,omitempty"`
 }
 
 // -- Tool handlers --
@@ -240,6 +259,44 @@ func handleRemoveFiles(ctx context.Context, req *sdkmcp.CallToolRequest, params 
 		return errResult("%s", rem.Message), nil, nil
 	}
 	return textResult(rem.Message), nil, nil
+}
+
+func handleSetFileGroups(ctx context.Context, req *sdkmcp.CallToolRequest, params setFileGroupsParams) (*sdkmcp.CallToolResult, any, error) {
+	c, err := client.ConnectDefault()
+	if err != nil {
+		return errResult("connect: %v", err), nil, nil
+	}
+	defer c.Close()
+
+	entries := make([]protocol.FileGroupEntry, 0, len(params.Entries))
+	for _, e := range params.Entries {
+		entries = append(entries, protocol.FileGroupEntry{
+			Path:        e.Path,
+			Category:    e.Category,
+			Group:       e.Group,
+			GroupOrder:  e.GroupOrder,
+			SortIndex:   e.SortIndex,
+			Criticality: e.Criticality,
+		})
+	}
+
+	resp, err := c.Request(
+		&protocol.SetFileGroupsMsg{
+			Type:    protocol.TypeSetFileGroups,
+			Entries: entries,
+			Replace: params.Replace,
+		},
+		client.DefaultTimeout,
+	)
+	if err != nil {
+		return errResult("request: %v", err), nil, nil
+	}
+
+	r := resp.(*protocol.SetFileGroupsResponse)
+	if !r.Success {
+		return errResult("%s", r.Message), nil, nil
+	}
+	return textResult(r.Message), nil, nil
 }
 
 // -- Helpers --

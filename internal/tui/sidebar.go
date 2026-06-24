@@ -690,7 +690,7 @@ func (m *sidebarModel) rebuildGroups() {
 	if !m.groupMode {
 		return
 	}
-	m.groupedFiles, m.groupHeaderAt = groupFilesByCategory(m.files)
+	m.groupedFiles, m.groupHeaderAt = groupFiles(m.files)
 }
 
 func (m sidebarModel) selectCurrent() tea.Cmd {
