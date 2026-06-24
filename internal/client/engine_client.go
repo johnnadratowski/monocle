@@ -845,6 +845,31 @@ func (c *EngineClient) RemoveAdditionalFile(path string) error {
 	return nil
 }
 
+// SetFileGroups sends agent-supplied grouping metadata to the engine. When
+// replace is true the entries fully replace prior metadata for the session.
+// Returns the number of entries applied.
+func (c *EngineClient) SetFileGroups(entries []protocol.FileGroupEntry, replace bool) (int, error) {
+	resp, err := c.request(&protocol.SetFileGroupsMsg{
+		Type:    protocol.TypeSetFileGroups,
+		Entries: entries,
+		Replace: replace,
+	})
+	if err != nil {
+		return 0, err
+	}
+	r, ok := resp.(*protocol.SetFileGroupsResponse)
+	if !ok {
+		return 0, fmt.Errorf("unexpected response %T", resp)
+	}
+	if !r.Success {
+		if r.Message != "" {
+			return 0, errors.New(r.Message)
+		}
+		return 0, errors.New("set file groups failed")
+	}
+	return r.Count, nil
+}
+
 func (c *EngineClient) GetAdditionalFileContent(absPath string) (string, error) {
 	resp, err := c.request(&protocol.GetAdditionalFileContentMsg{Type: protocol.TypeGetAdditionalFileContent, AbsPath: absPath})
 	if err != nil {

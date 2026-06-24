@@ -57,6 +57,8 @@ func TestEngineMessagesRoundTrip(t *testing.T) {
 		{"GetAdditionalFileContentResponse", &GetAdditionalFileContentResponse{Type: TypeGetAdditionalFileContentResponse, Content: "x"}},
 		{"RemoveAdditionalFiles", &RemoveAdditionalFilesMsg{Type: TypeRemoveAdditionalFiles, Paths: []string{"/tmp/x"}}},
 		{"RemoveAdditionalFilesResponse", &RemoveAdditionalFilesResponse{Type: TypeRemoveAdditionalFilesResponse, Success: true, Count: 1}},
+		{"SetFileGroups", &SetFileGroupsMsg{Type: TypeSetFileGroups, Replace: true, Entries: []FileGroupEntry{{Path: "a.go", Group: "UI", GroupOrder: 1, SortIndex: 2, Category: "code", Criticality: 3}}}},
+		{"SetFileGroupsResponse", &SetFileGroupsResponse{Type: TypeSetFileGroupsResponse, Success: true, Count: 1}},
 
 		// Comments
 		{"AddComment", &AddCommentMsg{Type: TypeAddComment, TargetType: types.TargetFile, TargetRef: "a.go", LineStart: 1, LineEnd: 2, CommentType: types.CommentNote, Body: "b"}},

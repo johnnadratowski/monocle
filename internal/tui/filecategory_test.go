@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/josephschmitt/monocle/internal/types"
@@ -45,7 +46,7 @@ func TestGroupFilesByCategoryOrderAndHeaders(t *testing.T) {
 		{Path: "internal/api/handler.go"},      // code
 		{Path: "config.yaml"},                  // config
 	}
-	ordered, headers := groupFilesByCategory(files)
+	ordered, headers := groupFiles(files)
 
 	// Order must follow categoryOrder: code, test, config, docs, build.
 	wantPaths := []string{
@@ -128,5 +129,55 @@ func TestGroupedSelectedFileMatchesDisplayOrder(t *testing.T) {
 	s.cursor = 2
 	if f := s.selectedFile(); f == nil || f.Path != "a_test.go" {
 		t.Errorf("cursor 2 selectedFile = %v, want a_test.go", f)
+	}
+}
+
+func TestGroupFilesWithAgentMetadata(t *testing.T) {
+	// Agent groups: Database (order 2), UI (order 0), Backend (order 1).
+	files := []types.ChangedFile{
+		{Path: "db/schema.sql", GroupLabel: "Database", GroupOrder: 2, SortIndex: 0},
+		{Path: "ui/App.tsx", GroupLabel: "UI", GroupOrder: 0, SortIndex: 1},
+		{Path: "ui/index.tsx", GroupLabel: "UI", GroupOrder: 0, SortIndex: 0},
+		{Path: "api/handler.go", GroupLabel: "Backend", GroupOrder: 1, SortIndex: 0},
+		{Path: "README.md"}, // no agent group -> category group (docs), after agent groups
+	}
+	ordered, headers := groupFiles(files)
+
+	wantPaths := []string{
+		"ui/index.tsx",   // UI (order 0), sort 0
+		"ui/App.tsx",     // UI (order 0), sort 1
+		"api/handler.go", // Backend (order 1)
+		"db/schema.sql",  // Database (order 2)
+		"README.md",      // Docs category group, after all agent groups
+	}
+	for i, p := range wantPaths {
+		if ordered[i].Path != p {
+			t.Errorf("ordered[%d] = %q, want %q", i, ordered[i].Path, p)
+		}
+	}
+	// Headers at the start of each group: indices 0 (UI), 2 (Backend), 3 (Database), 4 (Docs).
+	for _, idx := range []int{0, 2, 3, 4} {
+		if _, ok := headers[idx]; !ok {
+			t.Errorf("expected header at index %d", idx)
+		}
+	}
+	if got := headers[0]; !strings.Contains(got, "UI") {
+		t.Errorf("first header = %q, want it to mention UI", got)
+	}
+}
+
+func TestGroupFilesChurnSortFallback(t *testing.T) {
+	// Same category, no agent sort index -> churn descending.
+	files := []types.ChangedFile{
+		{Path: "a.go", Additions: 1, Deletions: 0},
+		{Path: "b.go", Additions: 50, Deletions: 10},
+		{Path: "c.go", Additions: 5, Deletions: 5},
+	}
+	ordered, _ := groupFiles(files)
+	want := []string{"b.go", "c.go", "a.go"} // 60, 10, 1
+	for i, p := range want {
+		if ordered[i].Path != p {
+			t.Errorf("ordered[%d] = %q, want %q (churn sort)", i, ordered[i].Path, p)
+		}
 	}
 }

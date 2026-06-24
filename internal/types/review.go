@@ -56,6 +56,19 @@ type ChangedFile struct {
 	Path     string
 	Status   FileChangeStatus
 	Reviewed bool
+
+	// Churn, computed from git diff --numstat. Both are 0 for untracked or
+	// binary files where git reports no line counts.
+	Additions int
+	Deletions int
+
+	// Agent-supplied grouping metadata (see SetFileGroups). Empty/zero when the
+	// agent has not categorized the file; the TUI falls back to a path heuristic.
+	Category    string // overrides the heuristic category when set
+	GroupLabel  string // free-form group, e.g. "UI", "Backend", "Database"
+	GroupOrder  int    // display order of the group (lower first)
+	SortIndex   int    // order within the group (lower first)
+	Criticality int    // optional agent-assigned importance (higher = more critical)
 }
 
 type AdditionalFile struct {
@@ -124,7 +137,7 @@ type DiffLineKind string
 
 const (
 	DiffLineContext DiffLineKind = "context"
-	DiffLineAdded  DiffLineKind = "added"
+	DiffLineAdded   DiffLineKind = "added"
 	DiffLineRemoved DiffLineKind = "removed"
 )
 

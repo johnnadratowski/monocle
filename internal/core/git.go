@@ -21,8 +21,8 @@ type GitAPI interface {
 	FileContent(ref, path string) (string, error)
 	RecentCommits(n int) ([]LogEntry, error)
 	ResolveRef(ref string) (string, error)
-	HashObject(path string) (string, error)                // writes blob to object store
-	HashObjectDry(path string) (string, error)             // computes SHA without writing
+	HashObject(path string) (string, error)                   // writes blob to object store
+	HashObjectDry(path string) (string, error)                // computes SHA without writing
 	HashObjectsDry(paths []string) (map[string]string, error) // batched HashObjectDry
 	CatFile(sha string) (string, error)
 }
@@ -93,7 +93,52 @@ func (g *GitClient) Diff(baseRef string) ([]types.ChangedFile, error) {
 		})
 	}
 
+	// Fill in per-file churn from numstat (binary files report "-" and stay 0).
+	churn := g.numstat(baseRef)
+	for i := range files {
+		if c, ok := churn[files[i].Path]; ok {
+			files[i].Additions = c.add
+			files[i].Deletions = c.del
+		}
+	}
+
 	return files, nil
+}
+
+type fileChurn struct{ add, del int }
+
+// numstat returns added/deleted line counts per path from `git diff --numstat`.
+// Binary files (reported as "-\t-") and any parse failures are omitted, leaving
+// the file's churn at zero.
+func (g *GitClient) numstat(baseRef string) map[string]fileChurn {
+	out, err := g.run("diff", "--numstat", baseRef)
+	if err != nil {
+		return nil
+	}
+	result := make(map[string]fileChurn)
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.Split(line, "\t")
+		if len(parts) < 3 {
+			continue
+		}
+		add, errA := strconv.Atoi(parts[0])
+		del, errD := strconv.Atoi(parts[1])
+		if errA != nil || errD != nil {
+			continue // binary file ("-")
+		}
+		path := parts[2]
+		// Renames render as "old => new"; numstat may use the arrow form. Prefer
+		// the post-arrow path so it matches the name-status entry.
+		if idx := strings.Index(path, " => "); idx >= 0 {
+			path = path[idx+len(" => "):]
+			path = strings.TrimSuffix(path, "}")
+		}
+		result[path] = fileChurn{add: add, del: del}
+	}
+	return result
 }
 
 // fullFileContextLines is the -U value used for full-file diffs: large enough to

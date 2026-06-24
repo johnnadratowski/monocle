@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-const schemaVersion = 8
+const schemaVersion = 9
 
 const dropSQL = `
 DROP TABLE IF EXISTS review_snapshot_files;
@@ -15,6 +15,7 @@ DROP TABLE IF EXISTS comments;
 DROP TABLE IF EXISTS content_versions;
 DROP TABLE IF EXISTS content_items;
 DROP TABLE IF EXISTS additional_files;
+DROP TABLE IF EXISTS file_metadata;
 DROP TABLE IF EXISTS changed_files;
 DROP TABLE IF EXISTS sessions;
 DROP TABLE IF EXISTS schema_version;
@@ -42,7 +43,22 @@ CREATE TABLE IF NOT EXISTS changed_files (
 	path TEXT NOT NULL,
 	status TEXT NOT NULL,
 	reviewed INTEGER NOT NULL DEFAULT 0,
+	additions INTEGER NOT NULL DEFAULT 0,
+	deletions INTEGER NOT NULL DEFAULT 0,
 	UNIQUE(session_id, path)
+);
+
+-- Agent-supplied per-file grouping metadata. Kept in a separate table so it
+-- survives changed_files being replaced on refresh; joined back in on read.
+CREATE TABLE IF NOT EXISTS file_metadata (
+	session_id TEXT NOT NULL REFERENCES sessions(id),
+	path TEXT NOT NULL,
+	category TEXT NOT NULL DEFAULT '',
+	group_label TEXT NOT NULL DEFAULT '',
+	group_order INTEGER NOT NULL DEFAULT 0,
+	sort_index INTEGER NOT NULL DEFAULT 0,
+	criticality INTEGER NOT NULL DEFAULT 0,
+	PRIMARY KEY(session_id, path)
 );
 
 CREATE TABLE IF NOT EXISTS content_items (

@@ -4,28 +4,30 @@ import "github.com/josephschmitt/monocle/internal/types"
 
 // Inbound message types (from CLI subcommands to engine via socket)
 const (
-	TypeGetReviewStatus    = "get_review_status"
-	TypePollFeedback       = "poll_feedback"
-	TypeSubmitContent      = "submit_content"
-	TypeSubscribe          = "subscribe"
-	TypeConnect            = "connect"
-	TypeIdentify           = "identify"
+	TypeGetReviewStatus       = "get_review_status"
+	TypePollFeedback          = "poll_feedback"
+	TypeSubmitContent         = "submit_content"
+	TypeSubscribe             = "subscribe"
+	TypeConnect               = "connect"
+	TypeIdentify              = "identify"
 	TypeAddAdditionalFiles    = "add_additional_files"
 	TypeRemoveAdditionalFiles = "remove_additional_files"
+	TypeSetFileGroups         = "set_file_groups"
 	TypeMarkActivity          = "mark_activity"
 	TypeAwaitReview           = "await_review"
 )
 
 // Outbound message types (from engine to CLI subcommands)
 const (
-	TypeGetReviewStatusResponse    = "get_review_status_response"
-	TypePollFeedbackResponse       = "poll_feedback_response"
-	TypeSubmitContentResponse      = "submit_content_response"
-	TypeSubscribeResponse          = "subscribe_response"
-	TypeConnectResponse            = "connect_response"
-	TypeEventNotification          = "event_notification"
+	TypeGetReviewStatusResponse       = "get_review_status_response"
+	TypePollFeedbackResponse          = "poll_feedback_response"
+	TypeSubmitContentResponse         = "submit_content_response"
+	TypeSubscribeResponse             = "subscribe_response"
+	TypeConnectResponse               = "connect_response"
+	TypeEventNotification             = "event_notification"
 	TypeAddAdditionalFilesResponse    = "add_additional_files_response"
 	TypeRemoveAdditionalFilesResponse = "remove_additional_files_response"
+	TypeSetFileGroupsResponse         = "set_file_groups_response"
 	TypeMarkActivityResponse          = "mark_activity_response"
 	TypeAwaitReviewResponse           = "await_review_response"
 )
@@ -189,6 +191,34 @@ type RemoveAdditionalFilesMsg struct {
 // RemoveAdditionalFilesResponse acknowledges removal of additional files.
 // Count is the number of files that actually matched and were removed.
 type RemoveAdditionalFilesResponse struct {
+	Type    string `json:"type"`
+	Success bool   `json:"success"`
+	Message string `json:"message,omitempty"`
+	Count   int    `json:"count"`
+}
+
+// FileGroupEntry is one file's agent-supplied grouping metadata.
+type FileGroupEntry struct {
+	Path        string `json:"path"`
+	Category    string `json:"category,omitempty"`
+	Group       string `json:"group,omitempty"`
+	GroupOrder  int    `json:"group_order,omitempty"`
+	SortIndex   int    `json:"sort_index,omitempty"`
+	Criticality int    `json:"criticality,omitempty"`
+}
+
+// SetFileGroupsMsg assigns grouping metadata to changed files. When Replace is
+// true the supplied entries fully replace any prior metadata for the session;
+// otherwise they are merged in (upsert per path).
+type SetFileGroupsMsg struct {
+	Type    string           `json:"type"`
+	Entries []FileGroupEntry `json:"entries"`
+	Replace bool             `json:"replace,omitempty"`
+}
+
+// SetFileGroupsResponse acknowledges a grouping update. Count is the number of
+// entries applied.
+type SetFileGroupsResponse struct {
 	Type    string `json:"type"`
 	Success bool   `json:"success"`
 	Message string `json:"message,omitempty"`

@@ -41,6 +41,8 @@ func Decode(data []byte) (any, error) {
 		msg = &AddAdditionalFilesMsg{}
 	case TypeRemoveAdditionalFiles:
 		msg = &RemoveAdditionalFilesMsg{}
+	case TypeSetFileGroups:
+		msg = &SetFileGroupsMsg{}
 	case TypeMarkActivity:
 		msg = &MarkActivityMsg{}
 	case TypeAwaitReview:
@@ -61,6 +63,8 @@ func Decode(data []byte) (any, error) {
 		msg = &AddAdditionalFilesResponse{}
 	case TypeRemoveAdditionalFilesResponse:
 		msg = &RemoveAdditionalFilesResponse{}
+	case TypeSetFileGroupsResponse:
+		msg = &SetFileGroupsResponse{}
 	case TypeMarkActivityResponse:
 		msg = &MarkActivityResponse{}
 	case TypeAwaitReviewResponse:

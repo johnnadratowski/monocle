@@ -10,10 +10,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/josephschmitt/monocle/internal/db"
 	"github.com/josephschmitt/monocle/internal/protocol"
 	"github.com/josephschmitt/monocle/internal/types"
-	"github.com/google/uuid"
 )
 
 // Engine implements EngineAPI and coordinates all Monocle subsystems.
@@ -248,11 +248,80 @@ func (e *Engine) RefreshChangedFiles() ([]types.ChangedFile, error) {
 				files = e.filesRelativeToSnapshot(session, files, e.reviewBase, priorReviewed)
 			}
 		}
+		e.applyFileMetadata(session.ID, files)
 		e.current.ChangedFiles = files
 	}
 	e.mu.Unlock()
 
 	return files, nil
+}
+
+// applyFileMetadata merges agent-supplied grouping metadata (stored separately
+// from changed_files so it survives refreshes) into the given files in place.
+// Must be called with e.mu held.
+func (e *Engine) applyFileMetadata(sessionID string, files []types.ChangedFile) {
+	meta, err := e.database.GetFileMetadata(sessionID)
+	if err != nil || len(meta) == 0 {
+		return
+	}
+	for i := range files {
+		if m, ok := meta[files[i].Path]; ok {
+			files[i].Category = m.Category
+			files[i].GroupLabel = m.GroupLabel
+			files[i].GroupOrder = m.GroupOrder
+			files[i].SortIndex = m.SortIndex
+			files[i].Criticality = m.Criticality
+		}
+	}
+}
+
+// handleSetFileGroups persists agent-supplied grouping metadata, refreshes the
+// changed-file list so the new grouping is reflected, and notifies the TUI.
+func (e *Engine) handleSetFileGroups(msg *protocol.SetFileGroupsMsg) *protocol.SetFileGroupsResponse {
+	e.mu.RLock()
+	session := e.current
+	e.mu.RUnlock()
+	if session == nil {
+		return &protocol.SetFileGroupsResponse{
+			Type:    protocol.TypeSetFileGroupsResponse,
+			Success: false,
+			Message: "no active session",
+		}
+	}
+
+	metas := make([]types.ChangedFile, 0, len(msg.Entries))
+	for _, en := range msg.Entries {
+		metas = append(metas, types.ChangedFile{
+			Path:        en.Path,
+			Category:    en.Category,
+			GroupLabel:  en.Group,
+			GroupOrder:  en.GroupOrder,
+			SortIndex:   en.SortIndex,
+			Criticality: en.Criticality,
+		})
+	}
+	if err := e.database.SetFileMetadata(session.ID, metas, msg.Replace); err != nil {
+		return &protocol.SetFileGroupsResponse{
+			Type:    protocol.TypeSetFileGroupsResponse,
+			Success: false,
+			Message: err.Error(),
+		}
+	}
+
+	// Merge the new metadata into the in-memory view and notify the TUI.
+	e.mu.Lock()
+	if e.current != nil && e.current.ID == session.ID {
+		e.applyFileMetadata(session.ID, e.current.ChangedFiles)
+	}
+	e.mu.Unlock()
+	e.emit(EventFileChanged, EventPayload{Kind: EventFileChanged})
+
+	return &protocol.SetFileGroupsResponse{
+		Type:    protocol.TypeSetFileGroupsResponse,
+		Success: true,
+		Message: fmt.Sprintf("Grouped %d file(s)", len(metas)),
+		Count:   len(metas),
+	}
 }
 
 func (e *Engine) GetChangedFiles() []types.ChangedFile {
