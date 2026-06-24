@@ -253,7 +253,10 @@ func handleSendArtifact(ctx context.Context, req *sdkmcp.CallToolRequest, params
 	if submit.ID != "" {
 		body = fmt.Sprintf("%s\nid: %s", submit.Message, submit.ID)
 	}
-	return textResult(body), nil, nil
+	// Sending an artifact is the natural "here's the review" moment, so remind
+	// the agent to group the changed files if it hasn't (self-silences when there
+	// are no changed files yet, e.g. an up-front plan).
+	return textResult(body + groupingNudge(c)), nil, nil
 }
 
 func handleAddFiles(ctx context.Context, req *sdkmcp.CallToolRequest, params addFilesParams) (*sdkmcp.CallToolResult, any, error) {
