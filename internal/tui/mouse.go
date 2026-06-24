@@ -191,7 +191,13 @@ func (m appModel) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleMouseWheel routes scroll wheel events to the pane under the cursor (hover-based).
+// handleMouseWheel routes scroll wheel events. The sidebar scrolls only when the
+// cursor is clearly hovering over a visible sidebar; every other wheel event —
+// over the diff, over the title/borders, or outside the computed regions entirely
+// — scrolls the diff. This makes wheel scrolling work anywhere in the window
+// regardless of which pane is focused, and is robust to the empirical mouse-origin
+// offset and to layout modes (e.g. a hidden sidebar) where the computed regions
+// don't perfectly match the rendered content.
 func (m appModel) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 	// If overlay is active, route wheel to scrollable overlay
 	if m.overlay != overlayNone {
@@ -200,7 +206,7 @@ func (m appModel) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 
 	layout := computePaneLayout(&m)
 
-	if layout.sidebar.contains(msg.X, msg.Y) {
+	if !m.sidebarHidden && layout.sidebar.contains(msg.X, msg.Y) {
 		maxOffset := m.sidebar.totalItems() - m.sidebar.viewportHeight()
 		if maxOffset < 0 {
 			maxOffset = 0
@@ -219,17 +225,14 @@ func (m appModel) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if layout.diff.contains(msg.X, msg.Y) {
-		for i := 0; i < mouseScrollLines; i++ {
-			if msg.Button == tea.MouseWheelDown {
-				m.diffView.ScrollDown()
-			} else if msg.Button == tea.MouseWheelUp {
-				m.diffView.ScrollUp()
-			}
+	// Default: any wheel event not clearly over the sidebar scrolls the diff.
+	for i := 0; i < mouseScrollLines; i++ {
+		if msg.Button == tea.MouseWheelDown {
+			m.diffView.ScrollDown()
+		} else if msg.Button == tea.MouseWheelUp {
+			m.diffView.ScrollUp()
 		}
-		return m, nil
 	}
-
 	return m, nil
 }
 
