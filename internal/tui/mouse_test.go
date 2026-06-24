@@ -528,3 +528,86 @@ func TestConfirmClickAlwaysReturnsFalse(t *testing.T) {
 		t.Error("handleClick should always return false")
 	}
 }
+
+// TestMouseWheelScrollDiffWhenSidebarFocused verifies the diff scrolls on a wheel
+// event over the diff area regardless of which pane holds focus.
+func TestMouseWheelScrollDiffWhenSidebarFocused(t *testing.T) {
+	m := NewApp(nil)
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	app := updated.(appModel)
+
+	// Focus the sidebar, not the diff.
+	app.focus = focusSidebar
+	app.sidebar.focused = true
+	app.diffView.focused = false
+
+	app.diffView.lines = make([]diffViewLine, 100)
+	for i := range app.diffView.lines {
+		app.diffView.lines[i] = diffViewLine{content: "test line", newLineNum: i + 1}
+	}
+	app.diffView.offset = 0
+
+	layout := computePaneLayout(&app)
+	result, _ := app.Update(tea.MouseWheelMsg{X: layout.diff.x + 5, Y: layout.diff.y + 5, Button: tea.MouseWheelDown})
+	resultApp := result.(appModel)
+
+	if resultApp.diffView.offset != mouseScrollLines {
+		t.Errorf("after wheel down over diff (sidebar focused): offset = %d, want %d", resultApp.diffView.offset, mouseScrollLines)
+	}
+}
+
+// TestMouseWheelOutsideRegionsScrollsDiff verifies a wheel event that lands
+// outside both computed regions (e.g. over the title bar or border) still scrolls
+// the diff instead of being dropped.
+func TestMouseWheelOutsideRegionsScrollsDiff(t *testing.T) {
+	m := NewApp(nil)
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	app := updated.(appModel)
+
+	app.diffView.lines = make([]diffViewLine, 100)
+	for i := range app.diffView.lines {
+		app.diffView.lines[i] = diffViewLine{content: "test line", newLineNum: i + 1}
+	}
+	app.diffView.offset = 0
+
+	// Y=0 is the title bar — above any pane content region.
+	result, _ := app.Update(tea.MouseWheelMsg{X: 5, Y: 0, Button: tea.MouseWheelDown})
+	resultApp := result.(appModel)
+
+	if resultApp.diffView.offset != mouseScrollLines {
+		t.Errorf("after wheel down over title bar: offset = %d, want %d", resultApp.diffView.offset, mouseScrollLines)
+	}
+}
+
+// TestMouseWheelHiddenSidebarScrollsDiff verifies that when the sidebar is hidden,
+// a wheel event over the (stale) sidebar region scrolls the diff rather than the
+// hidden sidebar.
+func TestMouseWheelHiddenSidebarScrollsDiff(t *testing.T) {
+	m := NewApp(nil)
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	app := updated.(appModel)
+	app.sidebarHidden = true
+
+	app.diffView.lines = make([]diffViewLine, 100)
+	for i := range app.diffView.lines {
+		app.diffView.lines[i] = diffViewLine{content: "test line", newLineNum: i + 1}
+	}
+	app.diffView.offset = 0
+
+	app.sidebar.files = make([]types.ChangedFile, 50)
+	for i := range app.sidebar.files {
+		app.sidebar.files[i] = types.ChangedFile{Path: "file.go", Status: types.FileModified}
+	}
+	app.sidebar.offset = 0
+
+	layout := computePaneLayout(&app)
+	result, _ := app.Update(tea.MouseWheelMsg{X: layout.sidebar.x + 2, Y: layout.sidebar.y + 2, Button: tea.MouseWheelDown})
+	resultApp := result.(appModel)
+
+	if resultApp.sidebar.offset != 0 {
+		t.Errorf("hidden sidebar offset moved to %d, want 0", resultApp.sidebar.offset)
+	}
+	if resultApp.diffView.offset != mouseScrollLines {
+		t.Errorf("diff offset = %d, want %d", resultApp.diffView.offset, mouseScrollLines)
+	}
+}
