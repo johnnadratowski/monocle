@@ -2564,6 +2564,14 @@ func formatExpandedComment(c *types.ReviewComment, width int, originalCode strin
 		}
 	}
 
+	// Drop trailing empty body lines (a bare prefix with no content) so a comment
+	// body that ends in a newline or blank paragraph doesn't render a stray blank
+	// line between the last line of text and the box footer.
+	emptyBody := fmt.Sprintf("  %s", prefix)
+	for len(lines) > 1 && strings.TrimRight(lines[len(lines)-1], " ") == emptyBody {
+		lines = lines[:len(lines)-1]
+	}
+
 	lines = append(lines, fmt.Sprintf("  ╚═══%s", strings.Repeat("═", footerDashes)))
 	return strings.Join(lines, "\n")
 }

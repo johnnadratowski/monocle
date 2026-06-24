@@ -688,3 +688,65 @@ func TestScreenLinesForCollapsedComment(t *testing.T) {
 		t.Errorf("plain code line screenLinesFor = %d, want 1", got)
 	}
 }
+
+// TestFormatExpandedCommentNoTrailingBlankLine verifies a comment body that ends
+// in a newline (or trailing blank paragraph) does not render a stray empty box
+// line between the last line of text and the footer.
+func TestFormatExpandedCommentNoTrailingBlankLine(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"trailing newline", "a note\n"},
+		{"trailing blank paragraph", "a note\n\n"},
+		{"multiple trailing blanks", "a note\n\n\n"},
+		{"no trailing newline", "a note"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := &types.ReviewComment{Type: types.CommentNote, Body: tc.body}
+			out := formatExpandedComment(c, 80, "", false)
+			lines := strings.Split(out, "\n")
+			if len(lines) < 2 {
+				t.Fatalf("expected at least header+footer, got %d lines: %q", len(lines), out)
+			}
+			footer := lines[len(lines)-1]
+			if !strings.Contains(footer, "╚") {
+				t.Errorf("last line is not the footer: %q", footer)
+			}
+			// The line just above the footer must contain body text, not be an
+			// empty box line (bare prefix).
+			beforeFooter := strings.TrimRight(lines[len(lines)-2], " ")
+			if beforeFooter == "  ║" {
+				t.Errorf("stray blank box line before footer:\n%s", out)
+			}
+			if !strings.Contains(beforeFooter, "a note") {
+				t.Errorf("line before footer should hold body text, got %q (full:\n%s)", beforeFooter, out)
+			}
+		})
+	}
+}
+
+// TestFormatExpandedCommentKeepsInteriorBlankLines verifies the trailing-blank
+// trim does not strip blank lines that separate paragraphs in the middle.
+func TestFormatExpandedCommentKeepsInteriorBlankLines(t *testing.T) {
+	c := &types.ReviewComment{Type: types.CommentNote, Body: "first paragraph\n\nsecond paragraph"}
+	out := formatExpandedComment(c, 80, "", false)
+	if !strings.Contains(out, "first paragraph") || !strings.Contains(out, "second paragraph") {
+		t.Fatalf("missing paragraphs:\n%s", out)
+	}
+	// There should be an interior empty box line between the two paragraphs.
+	lines := strings.Split(out, "\n")
+	var firstIdx, secondIdx int
+	for i, l := range lines {
+		if strings.Contains(l, "first paragraph") {
+			firstIdx = i
+		}
+		if strings.Contains(l, "second paragraph") {
+			secondIdx = i
+		}
+	}
+	if secondIdx-firstIdx < 2 {
+		t.Errorf("expected a blank separator line between paragraphs:\n%s", out)
+	}
+}
