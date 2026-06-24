@@ -145,7 +145,8 @@ const toolInstructions = `Use the review_status tool to check if feedback is pen
 Use the get_feedback tool to retrieve review feedback.
 Use the send_artifact tool to send content for review.
 Use the add_files tool to add files to the review.
-Use the remove_files tool to remove previously-added files from the review.`
+Use the remove_files tool to remove previously-added files from the review.
+Once the set of files for review is ready, use the set_file_groups tool to organize them into a top-down reading order (e.g. UI -> backend -> database) so the reviewer can follow the change as a story. Group the files by stack layer or feature area, ordered from entry point to dependency.`
 
 // channelToolInstructions tells agents to use MCP tools when receiving channel events.
 const channelToolInstructions = `When you receive a feedback_submitted event, use the get_feedback tool to retrieve the review.
