@@ -19,6 +19,7 @@ the branches for local testing.
 | `feat/diff-search` | `main` | ready for PR; **merged into integration** | Vim-style diff search (`/` `?` `n` `N`) + keybinding reshuffle (Help→`H`, sidebar toggle→`;`, `scroll_left` drops `H`) |
 | `feat/theme` | `main` | ready for PR; **merged into integration** | UI theming via named themes + Molokai (from the user's molokai vim colorscheme), Dracula, Nord; `:theme` command |
 | `feat/yank-line` | `main` | ready for PR; **merged into integration** | `y` yanks the current line (or visual selection) to the clipboard |
+| `feat/mouse-scroll` | `main` | ready for PR; **merged into integration** | Wheel scrolling scrolls the diff for any event not clearly over a visible sidebar — focus- and layout-independent (robust to the empirical mouse-origin offset and a hidden sidebar) |
 | `feat/context-clear-search` | `main` | placeholder | Empty placeholder for future "clear no-longer-needed context" work |
 | `integration/diffview-improvements` | `main` | integration only | Merge of all the above for local testing — do not PR into `main` |
 
