@@ -22,6 +22,7 @@ the branches for local testing.
 | `feat/mouse-scroll` | `main` | ready for PR; **merged into integration** | Wheel scrolling scrolls the diff for any event not clearly over a visible sidebar — focus- and layout-independent (robust to the empirical mouse-origin offset and a hidden sidebar) |
 | `feat/help-panel` | `integration` | **merged into integration** | Clamp help-overlay scrolling (no more overshoot past the bottom) + `g`/`G`; in-help `/` search with match highlighting and `n`/`N` |
 | `feat/search-history` | `integration` | **merged into integration** | Shared, de-duplicated search history across the diff and help panels; `n`/`N` reuses the last query in any panel; `↑`/`↓` recall earlier searches while typing |
+| `feat/file-grouping` | `integration` | **stage 1 merged into integration** | Grouped sidebar view: `f` cycles flat→tree→grouped; heuristic file categories (code/test/config/docs/build) with group headers; `sidebar_style: "grouped"` default. Stage 2 (agent-supplied group labels/order + churn-based sort) still to come |
 | `feat/context-clear-search` | `main` | placeholder | Empty placeholder for future "clear no-longer-needed context" work |
 | `integration/diffview-improvements` | `main` | integration only | Merge of all the above for local testing — do not PR into `main` |
 
