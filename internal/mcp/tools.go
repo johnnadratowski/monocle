@@ -11,6 +11,7 @@ import (
 
 	"github.com/josephschmitt/monocle/internal/client"
 	"github.com/josephschmitt/monocle/internal/protocol"
+	"github.com/josephschmitt/monocle/internal/types"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -136,7 +137,48 @@ func handleReviewStatus(ctx context.Context, req *sdkmcp.CallToolRequest, _ revi
 	if status.Summary != "" {
 		text = status.Summary
 	}
-	return textResult(text), nil, nil
+	return textResult(text + groupingNudge(c)), nil, nil
+}
+
+// groupingNudge returns a reminder to call set_file_groups while changed files
+// still lack agent grouping (no group label and no category override). It returns
+// "" once every file is grouped, or when there are no changed files, so the
+// reminder appears only while there is grouping work to do.
+func groupingNudge(c *client.Client) string {
+	resp, err := c.Request(
+		&protocol.GetChangedFilesMsg{Type: protocol.TypeGetChangedFiles},
+		client.DefaultTimeout,
+	)
+	if err != nil {
+		return ""
+	}
+	r, ok := resp.(*protocol.GetChangedFilesResponse)
+	if !ok {
+		return ""
+	}
+	return groupingNudgeText(r.Files)
+}
+
+// groupingNudgeText builds the grouping reminder for a set of changed files, or
+// "" when there are no files or every file already has agent grouping (a group
+// label or category override).
+func groupingNudgeText(files []types.ChangedFile) string {
+	if len(files) == 0 {
+		return ""
+	}
+	ungrouped := 0
+	for _, f := range files {
+		if f.GroupLabel == "" && f.Category == "" {
+			ungrouped++
+		}
+	}
+	if ungrouped == 0 {
+		return ""
+	}
+	return fmt.Sprintf(
+		"\n\n%d of %d changed file(s) are not yet grouped for the reviewer. Call set_file_groups to organize them by stack layer or feature area, ordered entry point -> dependency (e.g. UI -> backend -> database), so the review reads as a top-down story.",
+		ungrouped, len(files),
+	)
 }
 
 func handleGetFeedback(ctx context.Context, req *sdkmcp.CallToolRequest, params getFeedbackParams) (*sdkmcp.CallToolResult, any, error) {
@@ -233,7 +275,7 @@ func handleAddFiles(ctx context.Context, req *sdkmcp.CallToolRequest, params add
 	}
 
 	add := resp.(*protocol.AddAdditionalFilesResponse)
-	return textResult(add.Message), nil, nil
+	return textResult(add.Message + groupingNudge(c)), nil, nil
 }
 
 func handleRemoveFiles(ctx context.Context, req *sdkmcp.CallToolRequest, params removeFilesParams) (*sdkmcp.CallToolResult, any, error) {
