@@ -187,12 +187,12 @@ type AppOptions struct {
 type appModel struct {
 	engine core.EngineAPI
 
-	sidebar       sidebarModel
-	diffView      diffViewModel
-	statusBar     statusBarModel
-	commentEditor commentEditorModel
-	reviewSummary reviewSummaryModel
-	help          helpModel
+	sidebar        sidebarModel
+	diffView       diffViewModel
+	statusBar      statusBarModel
+	commentEditor  commentEditorModel
+	reviewSummary  reviewSummaryModel
+	help           helpModel
 	refPicker      refPickerModel
 	confirm        confirmModel
 	connectionInfo connectionInfoModel
@@ -200,10 +200,10 @@ type appModel struct {
 	sessionPicker  sessionPickerModel
 	versionPicker  versionPickerModel
 
-	focus         focusTarget
-	overlay       overlayKind
-	layout        layoutMode
-	layoutConfig  string
+	focus             focusTarget
+	overlay           overlayKind
+	layout            layoutMode
+	layoutConfig      string
 	sidebarHidden     bool
 	sidebarAutoHidden bool // true when sidebar was hidden due to empty state (not user action)
 	sidebarUserShown  bool // true when user explicitly showed the sidebar (prevents auto-hide)
@@ -218,6 +218,12 @@ type appModel struct {
 	searchOriginCursor int
 	searchOriginOffset int
 
+	// Shared search history across panels (most-recent first). Pressing n/N in a
+	// panel with no active query reuses the latest entry, and the search prompt
+	// recalls earlier queries. Shared by the diff search and the help search.
+	searchHistory    []string
+	searchHistoryIdx int // -1 when not recalling; otherwise index into searchHistory
+
 	width  int
 	height int
 
@@ -225,8 +231,8 @@ type appModel struct {
 	themeName string
 	keys      KeyMap
 
-	mcpRegisterFn    func(global bool) error
-	registerPrompt   registerPromptModel
+	mcpRegisterFn  func(global bool) error
+	registerPrompt registerPromptModel
 
 	pendingDismissArtifactID string // set while the dismiss-artifact confirm modal is open
 
@@ -242,8 +248,8 @@ type appModel struct {
 	showSessionPicker bool   // open session picker on startup
 	repoRoot          string // repo root for session listing
 
-	nonGitMode bool             // directory mode (no git)
-	infoBanner infoBannerModel  // info modal for non-git startup
+	nonGitMode bool            // directory mode (no git)
+	infoBanner infoBannerModel // info modal for non-git startup
 }
 
 // NewApp creates the root appModel and wires up all subsystems.
@@ -325,27 +331,27 @@ func NewApp(engine core.EngineAPI, opts ...AppOptions) appModel {
 	}
 
 	return appModel{
-		engine:        engine,
-		sidebar:       sidebar,
-		diffView:      dv,
-		statusBar:     newStatusBarModel(theme),
-		commentEditor: newCommentEditorModel(theme),
-		reviewSummary: newReviewSummaryModel(theme),
-		help:          help,
-		refPicker:     newRefPickerModel(theme),
-		confirm:        newConfirmModel(theme),
-		connectionInfo: newConnectionInfoModel(theme),
-		history:        newHistoryModel(theme),
-		sessionPicker:  newSessionPickerModel(theme),
-		versionPicker:  newVersionPickerModel(theme),
-		registerPrompt: newRegisterPromptModel(theme),
-		infoBanner:     newInfoBannerModel(theme),
-		focus:         focusSidebar,
-		overlay:       overlayNone,
-		layoutConfig:  layoutCfg,
-		theme:         theme,
-		themeName:     themeName,
-		keys:          keys,
+		engine:            engine,
+		sidebar:           sidebar,
+		diffView:          dv,
+		statusBar:         newStatusBarModel(theme),
+		commentEditor:     newCommentEditorModel(theme),
+		reviewSummary:     newReviewSummaryModel(theme),
+		help:              help,
+		refPicker:         newRefPickerModel(theme),
+		confirm:           newConfirmModel(theme),
+		connectionInfo:    newConnectionInfoModel(theme),
+		history:           newHistoryModel(theme),
+		sessionPicker:     newSessionPickerModel(theme),
+		versionPicker:     newVersionPickerModel(theme),
+		registerPrompt:    newRegisterPromptModel(theme),
+		infoBanner:        newInfoBannerModel(theme),
+		focus:             focusSidebar,
+		overlay:           overlayNone,
+		layoutConfig:      layoutCfg,
+		theme:             theme,
+		themeName:         themeName,
+		keys:              keys,
 		mcpRegisterFn:     o.MCPRegisterFn,
 		mouseEnabled:      mouseEnabled,
 		minDiffWidth:      minDiffW,
@@ -525,11 +531,11 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// flicker from the content→auto-switch→diff cycle on every refresh tick.
 			if contentItemChanged(msg.contentItem, msg.contentComments, &m.diffView) {
 				m.diffView, diffCmd = m.diffView.Update(loadContentMsg{
-					id:                 msg.contentItem.ID,
-					title:              msg.contentItem.Title,
-					content:            msg.contentItem.Content,
-					contentType:        msg.contentItem.ContentType,
-					comments:           msg.contentComments,
+					id:             msg.contentItem.ID,
+					title:          msg.contentItem.Title,
+					content:        msg.contentItem.Content,
+					contentType:    msg.contentItem.ContentType,
+					comments:       msg.contentComments,
 					versionCount:   msg.contentItem.VersionCount,
 					autoSwitchDiff: msg.contentItem.VersionCount > 1 && m.diffView.contentMode,
 				})
@@ -1477,7 +1483,12 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.overlay == overlayHelp {
 		var cmd tea.Cmd
+		m.help.history = m.searchHistory // share the cross-panel search history
 		m.help, cmd = m.help.Update(msg)
+		if m.help.justCommitted {
+			m.recordSearch(m.help.searchQuery)
+			m.help.justCommitted = false
+		}
 		return m, cmd
 	}
 	if m.overlay == overlayRefPicker {
@@ -1611,7 +1622,7 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	case Matches(key, km.ToggleSidebar):
 		m.sidebarHidden = !m.sidebarHidden
-		m.sidebarAutoHidden = false          // user explicitly toggled
+		m.sidebarAutoHidden = false           // user explicitly toggled
 		m.sidebarUserShown = !m.sidebarHidden // track if user forced it visible
 		if m.sidebarHidden {
 			m.focus = focusMain
@@ -1647,21 +1658,33 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case Matches(key, km.SearchNext):
-		if m.focus == focusMain && m.diffView.SearchActive() {
-			m.diffView.StepMatch(m.diffView.searchBackward)
-			m.statusBar.searchInfo = m.searchStatusText()
-			return m, nil
+		if m.focus == focusMain && m.diffSearchable() {
+			if m.diffView.SearchActive() {
+				m.diffView.StepMatch(m.diffView.searchBackward)
+				m.statusBar.searchInfo = m.searchStatusText()
+				return m, nil
+			}
+			if m.seedSearchFromHistory() {
+				m.statusBar.searchInfo = m.searchStatusText()
+				return m, nil
+			}
 		}
-		// Not a search context — let the focused pane handle `n` if it wants.
+		// Not a search context (or nothing to reuse) — let the pane handle `n`.
 		var cmd tea.Cmd
 		m.diffView, cmd = m.diffView.Update(msg)
 		return m, cmd
 
 	case Matches(key, km.SearchPrev):
-		if m.focus == focusMain && m.diffView.SearchActive() {
-			m.diffView.StepMatch(!m.diffView.searchBackward)
-			m.statusBar.searchInfo = m.searchStatusText()
-			return m, nil
+		if m.focus == focusMain && m.diffSearchable() {
+			if m.diffView.SearchActive() {
+				m.diffView.StepMatch(!m.diffView.searchBackward)
+				m.statusBar.searchInfo = m.searchStatusText()
+				return m, nil
+			}
+			if m.seedSearchFromHistory() {
+				m.statusBar.searchInfo = m.searchStatusText()
+				return m, nil
+			}
 		}
 		return m, nil
 
@@ -2015,6 +2038,7 @@ func (m appModel) openSearch(backward bool) appModel {
 	m.searchBuffer = ""
 	m.searchOriginCursor = m.diffView.cursor
 	m.searchOriginOffset = m.diffView.offset
+	m.searchHistoryIdx = -1
 	m.diffView.ClearSearch()
 	m.statusBar.searchMode = true
 	m.statusBar.searchBackward = backward
@@ -2042,10 +2066,25 @@ func (m appModel) handleSearchModeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 			m.diffView.ClearSearch()
 			m.diffView.cursor = m.searchOriginCursor
 			m.diffView.offset = m.searchOriginOffset
+		} else {
+			m.recordSearch(m.searchBuffer)
 		}
 		info := m.searchStatusText()
 		m.exitSearchMode()
 		m.statusBar.searchInfo = info
+		return m, nil
+
+	case "up":
+		if q := m.recallSearch(1); q != "" {
+			m.searchBuffer = q
+			m.applyIncrementalSearch()
+		}
+		return m, nil
+
+	case "down":
+		q := m.recallSearch(-1)
+		m.searchBuffer = q
+		m.applyIncrementalSearch()
 		return m, nil
 
 	case "backspace":
@@ -2081,6 +2120,72 @@ func (m *appModel) exitSearchMode() {
 	m.searchBuffer = ""
 	m.statusBar.searchMode = false
 	m.statusBar.searchBuffer = ""
+}
+
+const searchHistoryMax = 50
+
+// recordSearch prepends a query to the shared search history, de-duplicating so
+// a repeated search moves back to the front rather than piling up.
+func (m *appModel) recordSearch(query string) {
+	if query == "" {
+		return
+	}
+	out := make([]string, 0, len(m.searchHistory)+1)
+	out = append(out, query)
+	for _, q := range m.searchHistory {
+		if q != query {
+			out = append(out, q)
+		}
+	}
+	if len(out) > searchHistoryMax {
+		out = out[:searchHistoryMax]
+	}
+	m.searchHistory = out
+	m.searchHistoryIdx = -1
+}
+
+// seedSearchFromHistory runs the most recent query against the diff from the
+// current cursor, making the diff search active so n/N can step through matches
+// even though the user never opened the search prompt in this pane. Returns false
+// if there is no history to reuse or it produced no matches.
+func (m *appModel) seedSearchFromHistory() bool {
+	q := m.lastSearch()
+	if q == "" {
+		return false
+	}
+	m.searchBackward = false
+	m.diffView.RunSearch(q, false, m.diffView.cursor)
+	m.statusBar.searchBuffer = q
+	return m.diffView.SearchActive()
+}
+
+// lastSearch returns the most recent query, or "" if the history is empty.
+func (m appModel) lastSearch() string {
+	if len(m.searchHistory) == 0 {
+		return ""
+	}
+	return m.searchHistory[0]
+}
+
+// recallSearch steps through the shared history while typing a query. dir +1
+// recalls older entries, -1 newer; the recalled query is returned (or "" past
+// the newest entry).
+func (m *appModel) recallSearch(dir int) string {
+	if len(m.searchHistory) == 0 {
+		return ""
+	}
+	idx := m.searchHistoryIdx + dir
+	if idx < 0 {
+		idx = -1
+	}
+	if idx >= len(m.searchHistory) {
+		idx = len(m.searchHistory) - 1
+	}
+	m.searchHistoryIdx = idx
+	if idx < 0 {
+		return ""
+	}
+	return m.searchHistory[idx]
 }
 
 // openReviewMsg carries the data needed to open the review summary overlay.
@@ -2851,8 +2956,8 @@ func (m appModel) refreshFiles() tea.Cmd {
 			}
 			if itemErr == nil && item != nil {
 				return refreshResultMsg{
-					files:       files,
-					contentItem: item,
+					files:           files,
+					contentItem:     item,
 					contentComments: contentComments,
 				}
 			}
