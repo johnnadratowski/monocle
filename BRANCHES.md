@@ -24,6 +24,7 @@ the branches for local testing.
 | `feat/search-history` | `integration` | **merged into integration** | Shared, de-duplicated search history across the diff and help panels; `n`/`N` reuses the last query in any panel; `↑`/`↓` recall earlier searches while typing |
 | `feat/file-grouping` | `integration` | **stage 1 merged into integration** | Grouped sidebar view: `f` cycles flat→tree→grouped; heuristic file categories (code/test/config/docs/build) with group headers; `sidebar_style: "grouped"` default |
 | `feat/file-grouping-agent` | `integration` | **stage 2 merged into integration** | Agent grouping pipeline: per-file churn (git numstat), `set_file_groups` MCP tool + `monocle review group-files` CLI, `file_metadata` table (schema 9), grouped view orders by agent group label/order then churn |
+| `feat/group-files-nudge` | `integration` | **merged into integration** | Adds set_file_groups to the MCP server instructions so agents are told to group files when preparing a review |
 | `feat/context-clear-search` | `main` | placeholder | Empty placeholder for future "clear no-longer-needed context" work |
 | `integration/diffview-improvements` | `main` | integration only | Merge of all the above for local testing — do not PR into `main` |
 
