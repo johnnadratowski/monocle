@@ -23,6 +23,13 @@ type helpModel struct {
 	searchQuery   string
 	searchMatches []int // content-line indices that match the query
 	searchIndex   int   // position within searchMatches
+
+	// Shared search history (synced from the app before each Update). history[0]
+	// is the most recent query. justCommitted signals the app to record the
+	// current query into the shared history after this Update.
+	history       []string
+	historyIdx    int // -1 when not recalling
+	justCommitted bool
 }
 
 func newHelpModel(theme Theme, keys *KeyMap) helpModel {
@@ -58,9 +65,16 @@ func (m helpModel) Update(msg tea.Msg) (helpModel, tea.Cmd) {
 			m.searchQuery = ""
 			m.searchMatches = nil
 			m.searchIndex = 0
+			m.historyIdx = -1
 		case "n":
+			if len(m.searchMatches) == 0 {
+				m.seedFromHistory()
+			}
 			m.stepMatch(1)
 		case "N":
+			if len(m.searchMatches) == 0 {
+				m.seedFromHistory()
+			}
 			m.stepMatch(-1)
 		case "g":
 			m.scrollOffset = 0
@@ -93,8 +107,20 @@ func (m helpModel) handleSearchKey(key string) helpModel {
 		m.searchMode = false
 		m.clearSearch()
 	case "enter":
-		// Confirm: leave the matches highlighted, exit typing mode.
+		// Confirm: leave the matches highlighted, exit typing mode, and ask the
+		// app to record the query in the shared history.
 		m.searchMode = false
+		if m.searchQuery != "" {
+			m.justCommitted = true
+		}
+	case "up":
+		if q := m.recallHistory(1); q != "" {
+			m.searchQuery = q
+			m.recomputeMatches()
+		}
+	case "down":
+		m.searchQuery = m.recallHistory(-1)
+		m.recomputeMatches()
 	case "backspace":
 		if len(m.searchQuery) > 0 {
 			m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
@@ -110,6 +136,36 @@ func (m helpModel) handleSearchKey(key string) helpModel {
 		}
 	}
 	return m
+}
+
+// seedFromHistory loads the most recent shared query so n/N can search the help
+// text even though the user never opened the help search prompt.
+func (m *helpModel) seedFromHistory() {
+	if m.searchQuery != "" || len(m.history) == 0 {
+		return
+	}
+	m.searchQuery = m.history[0]
+	m.recomputeMatches()
+}
+
+// recallHistory steps through the shared history while typing. dir +1 recalls
+// older entries, -1 newer; returns "" past the newest entry.
+func (m *helpModel) recallHistory(dir int) string {
+	if len(m.history) == 0 {
+		return ""
+	}
+	idx := m.historyIdx + dir
+	if idx < 0 {
+		idx = -1
+	}
+	if idx >= len(m.history) {
+		idx = len(m.history) - 1
+	}
+	m.historyIdx = idx
+	if idx < 0 {
+		return ""
+	}
+	return m.history[idx]
 }
 
 // clearSearch resets all search state.
@@ -435,7 +491,7 @@ func (m helpModel) renderSearchBar(width int) string {
 			count = fmt.Sprintf("  %d/%d", m.searchIndex+1, len(m.searchMatches))
 		}
 	}
-	hint := "  (enter: keep · n/N: next/prev · esc: clear)"
+	hint := "  (enter: keep · ↑/↓: history · n/N: next/prev · esc: clear)"
 	style := lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Width(width)
 	return style.Render(label + count + hint)
 }
