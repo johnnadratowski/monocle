@@ -100,7 +100,12 @@ func (h *highlighter) highlightLine(path, content string, bg, changeBg color.Col
 				}
 			}
 
-			segText := tok.Value[segStart-pos : segEnd-pos]
+			// Strip newlines from the rendered text. Each diff line is a single
+			// visual row, but some chroma lexers (e.g. TypeScript) include a
+			// trailing newline in the final token via EnsureNL, which would make
+			// lipgloss render an extra blank styled line and desync the row count
+			// from screenLinesFor (one blank line under the row, content runs off).
+			segText := strings.ReplaceAll(tok.Value[segStart-pos:segEnd-pos], "\n", "")
 			style := lipgloss.NewStyle()
 
 			// Apply syntax foreground
