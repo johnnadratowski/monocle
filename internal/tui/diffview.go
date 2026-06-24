@@ -2047,14 +2047,14 @@ func (m *diffViewModel) ScrollUpHalfPage() {
 }
 
 // isCursorOffScreen returns true if the cursor is outside the visible viewport.
+// Screen lines are counted (not logical lines) so multi-row rows — expanded and
+// collapsed comments always, wrapped lines in wrap mode — are measured correctly;
+// otherwise the cursor can be reported on-screen while it has actually scrolled
+// off the bottom past a tall comment.
 func (m diffViewModel) isCursorOffScreen() bool {
 	if m.cursor < m.offset {
 		return true
 	}
-	if !m.wrap {
-		return m.cursor >= m.offset+m.height
-	}
-	// Wrap mode: count screen lines from offset to cursor
 	screenLines := 0
 	for i := m.offset; i <= m.cursor && i < len(m.lines); i++ {
 		screenLines += m.screenLinesFor(i)
@@ -2066,20 +2066,15 @@ func (m diffViewModel) isCursorOffScreen() bool {
 }
 
 // lastVisibleLine returns the index of the last line visible in the viewport.
+// It walks from the offset summing screen lines so comments (which occupy
+// multiple rows even in non-wrap mode) and wrapped lines don't make it overshoot
+// past the bottom of the viewport.
 func (m diffViewModel) lastVisibleLine() int {
-	if !m.wrap {
-		last := m.offset + m.height - 1
-		if last >= len(m.lines) {
-			last = len(m.lines) - 1
-		}
-		return last
-	}
-	// Wrap mode: walk from offset, summing screen lines
 	screenLines := 0
 	last := m.offset
 	for i := m.offset; i < len(m.lines); i++ {
 		sl := m.screenLinesFor(i)
-		if screenLines+sl > m.height {
+		if screenLines+sl > m.height && i > m.offset {
 			break
 		}
 		screenLines += sl
