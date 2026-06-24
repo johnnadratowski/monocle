@@ -1,10 +1,12 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 type helpModel struct {
@@ -15,6 +17,12 @@ type helpModel struct {
 	theme          Theme
 	keys           *KeyMap
 	reviewTracking bool
+
+	// Search within the help text.
+	searchMode    bool // currently typing a query
+	searchQuery   string
+	searchMatches []int // content-line indices that match the query
+	searchIndex   int   // position within searchMatches
 }
 
 func newHelpModel(theme Theme, keys *KeyMap) helpModel {
@@ -29,18 +37,45 @@ func (m helpModel) Update(msg tea.Msg) (helpModel, tea.Cmd) {
 	}
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
-		switch msg.String() {
-		case "esc", "?", "q":
+		key := msg.String()
+		if m.searchMode {
+			return m.handleSearchKey(key), nil
+		}
+		switch key {
+		case "esc":
+			// First esc clears an active search; a second closes help.
+			if m.searchQuery != "" {
+				m.clearSearch()
+				return m, nil
+			}
 			m.active = false
 			return m, func() tea.Msg { return closeHelpMsg{} }
+		case "?", "q":
+			m.active = false
+			return m, func() tea.Msg { return closeHelpMsg{} }
+		case "/":
+			m.searchMode = true
+			m.searchQuery = ""
+			m.searchMatches = nil
+			m.searchIndex = 0
+		case "n":
+			m.stepMatch(1)
+		case "N":
+			m.stepMatch(-1)
+		case "g":
+			m.scrollOffset = 0
+		case "G":
+			m.scrollOffset = m.maxScroll()
 		case "j", "down":
 			m.scrollOffset++
+			m.clampScroll()
 		case "k", "up":
 			if m.scrollOffset > 0 {
 				m.scrollOffset--
 			}
 		case "ctrl+d":
 			m.scrollOffset += m.viewportHeight() / 2
+			m.clampScroll()
 		case "ctrl+u":
 			m.scrollOffset -= m.viewportHeight() / 2
 			if m.scrollOffset < 0 {
@@ -49,6 +84,104 @@ func (m helpModel) Update(msg tea.Msg) (helpModel, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// handleSearchKey processes keys while typing a search query.
+func (m helpModel) handleSearchKey(key string) helpModel {
+	switch key {
+	case "esc":
+		m.searchMode = false
+		m.clearSearch()
+	case "enter":
+		// Confirm: leave the matches highlighted, exit typing mode.
+		m.searchMode = false
+	case "backspace":
+		if len(m.searchQuery) > 0 {
+			m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
+			m.recomputeMatches()
+		}
+	case "space":
+		m.searchQuery += " "
+		m.recomputeMatches()
+	default:
+		if len(key) == 1 { // a single printable rune
+			m.searchQuery += key
+			m.recomputeMatches()
+		}
+	}
+	return m
+}
+
+// clearSearch resets all search state.
+func (m *helpModel) clearSearch() {
+	m.searchQuery = ""
+	m.searchMatches = nil
+	m.searchIndex = 0
+}
+
+// clampScroll keeps scrollOffset within [0, maxScroll].
+func (m *helpModel) clampScroll() {
+	if max := m.maxScroll(); m.scrollOffset > max {
+		m.scrollOffset = max
+	}
+	if m.scrollOffset < 0 {
+		m.scrollOffset = 0
+	}
+}
+
+// maxScroll is the largest valid scroll offset for the current content.
+func (m helpModel) maxScroll() int {
+	n := len(m.contentLines()) - m.viewportHeight()
+	if n < 0 {
+		n = 0
+	}
+	return n
+}
+
+// contentLines returns the rendered help content split into lines.
+func (m helpModel) contentLines() []string {
+	return strings.Split(m.buildContent(), "\n")
+}
+
+// recomputeMatches rebuilds the match list for the current query and jumps to
+// the first match.
+func (m *helpModel) recomputeMatches() {
+	m.searchMatches = nil
+	m.searchIndex = 0
+	if m.searchQuery == "" {
+		return
+	}
+	q := strings.ToLower(m.searchQuery)
+	for i, line := range m.contentLines() {
+		if strings.Contains(strings.ToLower(ansi.Strip(line)), q) {
+			m.searchMatches = append(m.searchMatches, i)
+		}
+	}
+	m.scrollToMatch()
+}
+
+// stepMatch advances to the next/previous match (wrapping).
+func (m *helpModel) stepMatch(dir int) {
+	if len(m.searchMatches) == 0 {
+		return
+	}
+	n := len(m.searchMatches)
+	m.searchIndex = (m.searchIndex + dir + n) % n
+	m.scrollToMatch()
+}
+
+// scrollToMatch scrolls so the current match is visible (a couple of lines down
+// from the top of the viewport for context).
+func (m *helpModel) scrollToMatch() {
+	if len(m.searchMatches) == 0 {
+		return
+	}
+	target := m.searchMatches[m.searchIndex]
+	m.scrollOffset = target - 2
+	m.clampScroll()
+	if target < m.scrollOffset {
+		m.scrollOffset = target
+	}
 }
 
 // viewportHeight returns how many content lines fit inside the modal.
@@ -62,7 +195,8 @@ func (m helpModel) viewportHeight() int {
 	return h
 }
 
-func (m helpModel) View() string {
+// buildContent renders the full (unscrolled) help text.
+func (m helpModel) buildContent() string {
 	if !m.active {
 		return ""
 	}
@@ -201,38 +335,107 @@ func (m helpModel) View() string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(lipgloss.NewStyle().Faint(true).Render("Press ? or Esc to close"))
+	b.WriteString(lipgloss.NewStyle().Faint(true).Render("Press / to search, ? or Esc to close"))
 
-	content := b.String()
+	return b.String()
+}
 
-	// Apply scrolling if content is taller than viewport
+func (m helpModel) View() string {
+	if !m.active {
+		return ""
+	}
+
+	modalWidth := CalcModalWidth(m.width, 0)
+	innerW := modalWidth - 6 // 2 border + 4 padding
+	if innerW < 1 {
+		innerW = 1
+	}
+
+	lines := strings.Split(m.buildContent(), "\n")
+
+	// Reserve a row for the search bar when searching.
 	vpH := m.viewportHeight()
-	lines := strings.Split(content, "\n")
-	if len(lines) > vpH {
-		// Clamp scroll offset
-		maxOffset := len(lines) - vpH
-		if m.scrollOffset > maxOffset {
-			m.scrollOffset = maxOffset
+	searching := m.searchMode || m.searchQuery != ""
+	if searching {
+		vpH--
+		if vpH < 1 {
+			vpH = 1
 		}
+	}
 
-		end := m.scrollOffset + vpH
+	// Highlight matched lines in place.
+	if len(m.searchMatches) > 0 {
+		current := -1
+		if m.searchIndex < len(m.searchMatches) {
+			current = m.searchMatches[m.searchIndex]
+		}
+		matchStyle := lipgloss.NewStyle().Background(lipgloss.Color("8")).Width(innerW)
+		currentStyle := lipgloss.NewStyle().Background(lipgloss.Color("3")).Foreground(lipgloss.Color("0")).Width(innerW)
+		for _, idx := range m.searchMatches {
+			if idx < 0 || idx >= len(lines) {
+				continue
+			}
+			plain := ansi.Strip(lines[idx])
+			if idx == current {
+				lines[idx] = currentStyle.Render(plain)
+			} else {
+				lines[idx] = matchStyle.Render(plain)
+			}
+		}
+	}
+
+	// Scroll.
+	offset := m.scrollOffset
+	if max := len(lines) - vpH; offset > max {
+		offset = max
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	var content string
+	if len(lines) > vpH {
+		end := offset + vpH
 		if end > len(lines) {
 			end = len(lines)
 		}
-		visible := lines[m.scrollOffset:end]
-
-		// Add scroll indicators
-		if m.scrollOffset > 0 {
-			indicator := lipgloss.NewStyle().Faint(true).Render("▲ scroll up")
-			visible[0] = indicator
+		visible := make([]string, end-offset)
+		copy(visible, lines[offset:end])
+		if offset > 0 {
+			visible[0] = lipgloss.NewStyle().Faint(true).Render("▲ scroll up")
 		}
 		if end < len(lines) {
-			indicator := lipgloss.NewStyle().Faint(true).Render("▼ scroll down")
-			visible[len(visible)-1] = indicator
+			visible[len(visible)-1] = lipgloss.NewStyle().Faint(true).Render("▼ scroll down")
 		}
-
 		content = strings.Join(visible, "\n")
+	} else {
+		content = strings.Join(lines, "\n")
+	}
+
+	if searching {
+		content += "\n" + m.renderSearchBar(innerW)
 	}
 
 	return m.theme.ModalBorder.Width(modalWidth).Render(content)
+}
+
+// renderSearchBar renders the search prompt / match count shown at the bottom of
+// the help modal while searching.
+func (m helpModel) renderSearchBar(width int) string {
+	var label string
+	if m.searchMode {
+		label = "/" + m.searchQuery + "▏"
+	} else {
+		label = "/" + m.searchQuery
+	}
+	count := ""
+	if m.searchQuery != "" {
+		if len(m.searchMatches) == 0 {
+			count = "  no matches"
+		} else {
+			count = fmt.Sprintf("  %d/%d", m.searchIndex+1, len(m.searchMatches))
+		}
+	}
+	hint := "  (enter: keep · n/N: next/prev · esc: clear)"
+	style := lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Width(width)
+	return style.Render(label + count + hint)
 }
