@@ -295,7 +295,7 @@ func (m helpModel) buildContent() string {
 		{Label(km.ToggleSidebar), "Toggle sidebar"},
 		{"1/2", "Jump to pane"},
 		{Label(km.BaseRef), "Change base ref"},
-		{Label(km.TreeMode), "Toggle flat/tree view"},
+		{Label(km.TreeMode), "Cycle flat/tree/grouped view"},
 		{Label(km.CollapseAll) + "/" + Label(km.ExpandAll), "Collapse/expand all (tree)"},
 	}
 	if m.reviewTracking {

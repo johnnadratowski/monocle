@@ -28,6 +28,14 @@ type sidebarModel struct {
 	collapsed    map[string]bool
 	visibleItems []visibleItem
 
+	// Grouped mode state. When groupMode is on, files are displayed in
+	// category groups (groupedFiles) with a header drawn before the first file of
+	// each group (groupHeaderAt: display index -> header label). The item-index
+	// model is unchanged from flat mode — headers are decorations, not items.
+	groupMode     bool
+	groupedFiles  []types.ChangedFile
+	groupHeaderAt map[int]string
+
 	// Filter state: "" = show all, "unreviewed" = hide reviewed, "reviewed" = hide unreviewed
 	reviewFilter string
 
@@ -113,9 +121,17 @@ func (m sidebarModel) Update(msg tea.Msg) (sidebarModel, tea.Cmd) {
 			if f := m.selectedFile(); f != nil {
 				currentPath = f.Path
 			}
-			m.treeMode = !m.treeMode
-			if m.treeMode {
+			// Cycle flat -> tree -> grouped -> flat.
+			switch {
+			case !m.treeMode && !m.groupMode:
+				m.treeMode = true
 				m.rebuildTree()
+			case m.treeMode:
+				m.treeMode = false
+				m.groupMode = true
+				m.rebuildGroups()
+			default:
+				m.groupMode = false
 			}
 			if currentPath != "" {
 				m.selectPath(currentPath)
@@ -153,6 +169,7 @@ func (m sidebarModel) View() string {
 	var b strings.Builder
 
 	sectionStyle := lipgloss.NewStyle().Bold(true).Width(m.width)
+	groupHeaderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("4")).Bold(true).Width(m.width)
 
 	// Render only items within the viewport [offset, offset+viewportHeight)
 	contentItemCt := len(m.contentItems)
@@ -205,6 +222,8 @@ func (m sidebarModel) View() string {
 			modeIndicator := ""
 			if m.treeMode {
 				modeIndicator = " "
+			} else if m.groupMode {
+				modeIndicator = " 󰓫"
 			}
 			var header string
 			if m.reviewTracking {
@@ -258,6 +277,18 @@ func (m sidebarModel) View() string {
 			}
 		}
 
+		// Grouped mode: draw the category header before the first file of its group.
+		if m.groupMode && idx >= contentItemCt && idx < additionalStart {
+			if hdr, ok := m.groupHeaderAt[idx-contentItemCt]; ok {
+				if linesUsed+1 > availableLines {
+					break
+				}
+				b.WriteString(groupHeaderStyle.Render(hdr))
+				b.WriteString("\n")
+				linesUsed++
+			}
+		}
+
 		var line string
 		if idx < contentItemCt {
 			line = m.renderContentItem(m.contentItems[idx], idx == m.cursor)
@@ -271,7 +302,7 @@ func (m sidebarModel) View() string {
 					line = m.renderTreeFileItem(item, idx == m.cursor)
 				}
 			} else {
-				line = m.renderFileItem(m.files[fileIdx], idx == m.cursor)
+				line = m.renderFileItem(m.displayFiles()[fileIdx], idx == m.cursor)
 			}
 		} else {
 			additionalIdx := idx - additionalStart
@@ -634,12 +665,32 @@ func (m sidebarModel) totalItems() int {
 }
 
 // fileItemCount returns the number of file-related items (files in flat mode,
-// visible items in tree mode).
+// visible items in tree mode). Grouped mode has the same count as flat mode —
+// group headers are decorations, not items.
 func (m sidebarModel) fileItemCount() int {
 	if m.treeMode {
 		return len(m.visibleItems)
 	}
 	return len(m.files)
+}
+
+// displayFiles returns the files in their current display order: grouped order
+// in grouped mode, otherwise the natural order. Used everywhere a flat file index
+// is resolved so grouped mode stays consistent with what is rendered.
+func (m sidebarModel) displayFiles() []types.ChangedFile {
+	if m.groupMode {
+		return m.groupedFiles
+	}
+	return m.files
+}
+
+// rebuildGroups recomputes the grouped display order and header positions from
+// the current files. Safe to call when groupMode is false (no-op).
+func (m *sidebarModel) rebuildGroups() {
+	if !m.groupMode {
+		return
+	}
+	m.groupedFiles, m.groupHeaderAt = groupFilesByCategory(m.files)
 }
 
 func (m sidebarModel) selectCurrent() tea.Cmd {
@@ -666,7 +717,7 @@ func (m sidebarModel) selectCurrent() tea.Cmd {
 				return sidebarSelectMsg{path: path}
 			}
 		}
-		path := m.files[fileIdx].Path
+		path := m.displayFiles()[fileIdx].Path
 		return func() tea.Msg {
 			return sidebarSelectMsg{path: path}
 		}
@@ -711,7 +762,8 @@ func (m sidebarModel) selectedFile() *types.ChangedFile {
 		}
 		return item.node.File
 	}
-	return &m.files[fileIdx]
+	df := m.displayFiles()
+	return &df[fileIdx]
 }
 
 // selectedAdditionalFile returns the AdditionalFile at the current cursor position,
@@ -794,7 +846,7 @@ func (m *sidebarModel) nextUnreviewed() tea.Cmd {
 					return m.selectCurrent()
 				}
 			} else {
-				if !m.files[fileIdx].Reviewed {
+				if !m.displayFiles()[fileIdx].Reviewed {
 					m.cursor = next
 					m.ensureVisible()
 					return m.selectCurrent()
@@ -897,7 +949,7 @@ func (m *sidebarModel) selectPath(path string) {
 			}
 		}
 	} else {
-		for i, f := range m.files {
+		for i, f := range m.displayFiles() {
 			if f.Path == path {
 				m.cursor = i + contentCount
 				return
@@ -928,7 +980,7 @@ func (m sidebarModel) currentItemKey() (kind, id string) {
 			}
 			return "", ""
 		}
-		return "file", m.files[fileIdx].Path
+		return "file", m.displayFiles()[fileIdx].Path
 	}
 	if af := m.selectedAdditionalFile(); af != nil {
 		return "additional", af.Path
@@ -970,7 +1022,7 @@ func (m *sidebarModel) selectByKey(kind, id string) bool {
 				}
 			}
 		} else {
-			for i, f := range m.files {
+			for i, f := range m.displayFiles() {
 				if f.Path == id {
 					m.cursor = i + contentCount
 					return true
@@ -1145,8 +1197,10 @@ func (m *sidebarModel) clampOffset() {
 // Call after setting files/contentItems/additionalFiles.
 func (m *sidebarModel) applyReviewedFilter() {
 	if m.reviewFilter == "" {
+		m.rebuildGroups() // keep grouped order in sync when files change
 		return
 	}
+	defer m.rebuildGroups()
 	keepReviewed := m.reviewFilter == "reviewed"
 
 	var files []types.ChangedFile

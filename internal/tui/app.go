@@ -283,8 +283,11 @@ func NewApp(engine core.EngineAPI, opts ...AppOptions) appModel {
 			if cfg.Keybindings != nil {
 				keys = keys.ApplyOverrides(cfg.Keybindings)
 			}
-			if cfg.SidebarStyle == "tree" {
+			switch cfg.SidebarStyle {
+			case "tree":
 				sidebar.treeMode = true
+			case "grouped":
+				sidebar.groupMode = true
 			}
 			switch cfg.DiffStyle {
 			case "split":
@@ -477,6 +480,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.sidebar.additionalFiles = msg.additionalFiles
 		m.sidebar.applyReviewedFilter()
 		m.sidebar.rebuildTree()
+		m.sidebar.rebuildGroups()
 		m.sidebar.clampOffset()
 		recalcStackedLayout(&m)
 		// Sync status bar file count
@@ -517,6 +521,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.sidebar.files = msg.files
 		m.sidebar.applyReviewedFilter()
 		m.sidebar.rebuildTree()
+		m.sidebar.rebuildGroups()
 
 		m.sidebar.selectByKey(prevKind, prevID)
 		m.sidebar.clampOffset()
@@ -563,6 +568,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.sidebar.files = m.engine.GetChangedFiles()
 		m.sidebar.applyReviewedFilter()
 		m.sidebar.rebuildTree()
+		m.sidebar.rebuildGroups()
 		m.sidebar.clampOffset()
 		recalcStackedLayout(&m)
 		m.statusBar.fileCount = len(m.sidebar.files)
@@ -623,6 +629,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.sidebar.contentItems = m.engine.GetContentItems()
 		m.sidebar.applyReviewedFilter()
 		m.sidebar.rebuildTree()
+		m.sidebar.rebuildGroups()
 		m.sidebar.clampOffset()
 		recalcStackedLayout(&m)
 		if m.autoToggleSidebar() {
@@ -1339,6 +1346,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.sidebar.contentItems = m.engine.GetContentItems()
 		m.sidebar.applyReviewedFilter()
 		m.sidebar.rebuildTree()
+		m.sidebar.rebuildGroups()
 		m.sidebar.clampOffset()
 		recalcStackedLayout(&m)
 		m.statusBar.fileCount = len(m.sidebar.files)
@@ -1365,6 +1373,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.sidebar.files = m.engine.GetChangedFiles()
 		m.sidebar.applyReviewedFilter()
 		m.sidebar.rebuildTree()
+		m.sidebar.rebuildGroups()
 		m.sidebar.clampOffset()
 		recalcStackedLayout(&m)
 		m.statusBar.fileCount = len(m.sidebar.files)
@@ -1399,6 +1408,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.sidebar.contentItems = m.engine.GetContentItems()
 		m.sidebar.applyReviewedFilter()
 		m.sidebar.rebuildTree()
+		m.sidebar.rebuildGroups()
 		m.sidebar.clampOffset()
 		recalcStackedLayout(&m)
 		session := m.engine.GetSession()
@@ -1423,6 +1433,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.sidebar.additionalFiles = m.engine.GetAdditionalFiles()
 		m.sidebar.applyReviewedFilter()
 		m.sidebar.rebuildTree()
+		m.sidebar.rebuildGroups()
 		m.sidebar.clampOffset()
 		recalcStackedLayout(&m)
 		session := m.engine.GetSession()
@@ -1703,6 +1714,7 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.sidebar.additionalFiles = m.engine.GetAdditionalFiles()
 		m.sidebar.applyReviewedFilter()
 		m.sidebar.rebuildTree()
+		m.sidebar.rebuildGroups()
 		m.sidebar.clampOffset()
 		recalcStackedLayout(&m)
 		m.statusBar.fileCount = len(m.sidebar.files)
@@ -2617,6 +2629,7 @@ func (m *appModel) syncArtifactsAfterSubmit(session *types.ReviewSession) {
 		m.sidebar.contentItems = session.ContentItems
 	}
 	m.sidebar.rebuildTree()
+	m.sidebar.rebuildGroups()
 	m.sidebar.clampOffset()
 	m.diffView.comments = nil
 }

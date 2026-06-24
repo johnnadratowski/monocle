@@ -213,7 +213,7 @@ Monocle exposes review operations via **MCP tools** (default for Claude Code, an
 | `;`                    | Toggle sidebar visibility                                 |
 | `1`/`2`                | Jump to pane                                              |
 | `w`                    | Toggle line wrapping (any pane)                           |
-| `f`                    | Toggle flat/tree view                                     |
+| `f`                    | Cycle flat/tree/grouped view                                     |
 | `z`/`e`                | Collapse/expand all (tree)                                |
 | `b`                    | Change base ref                                           |
 | `B`                    | Base artifact version to diff against                             |
@@ -357,7 +357,7 @@ Monocle loads settings from JSON config files:
 |--------------------------------------|--------------------------------------------|--------------|--------------------------------------------------------------------------|
 | `layout`                             | `"auto"`, `"side-by-side"`, `"stacked"`    | `"auto"`     | Pane arrangement (`auto` switches based on terminal width)               |
 | `diff_style`                         | `"unified"`, `"split"`, `"file"`           | `"unified"`  | Diff display mode (`file` shows raw content)                             |
-| `sidebar_style`                      | `"flat"`, `"tree"`                         | `"flat"`     | File list display mode                                                   |
+| `sidebar_style`                      | `"flat"`, `"tree"`, `"grouped"`                         | `"flat"`     | File list display mode (grouped = files grouped by category)                                                   |
 | `theme`                              | `"dark"`, `"light"`, `"molokai"`, `"dracula"`, `"nord"` | `"dark"` | Color scheme for the TUI. Switch live with `:theme <name>` (or `:theme` to cycle). |
 | `wrap`                               | `true`, `false`                            | `false`      | Word-wrap long lines in diffs                                            |
 | `tab_size`                           | integer                                    | `4`          | Spaces per tab character                                                 |
