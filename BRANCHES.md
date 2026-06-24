@@ -20,6 +20,8 @@ the branches for local testing.
 | `feat/theme` | `main` | ready for PR; **merged into integration** | UI theming via named themes + Molokai (from the user's molokai vim colorscheme), Dracula, Nord; `:theme` command |
 | `feat/yank-line` | `main` | ready for PR; **merged into integration** | `y` yanks the current line (or visual selection) to the clipboard |
 | `feat/mouse-scroll` | `main` | ready for PR; **merged into integration** | Wheel scrolling scrolls the diff for any event not clearly over a visible sidebar — focus- and layout-independent (robust to the empirical mouse-origin offset and a hidden sidebar) |
+| `feat/help-panel` | `integration` | **merged into integration** | Clamp help-overlay scrolling (no more overshoot past the bottom) + `g`/`G`; in-help `/` search with match highlighting and `n`/`N` |
+| `feat/search-history` | `integration` | **merged into integration** | Shared, de-duplicated search history across the diff and help panels; `n`/`N` reuses the last query in any panel; `↑`/`↓` recall earlier searches while typing |
 | `feat/context-clear-search` | `main` | placeholder | Empty placeholder for future "clear no-longer-needed context" work |
 | `integration/diffview-improvements` | `main` | integration only | Merge of all the above for local testing — do not PR into `main` |
 
