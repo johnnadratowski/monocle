@@ -47,7 +47,7 @@ func computePaneLayout(m *appModel) paneLayout {
 
 	if m.layout == layoutStacked {
 		// Sidebar: full width, above diff
-		sidebarContentX := 1 // 1 char border left
+		sidebarContentX := 1         // 1 char border left
 		sidebarContentY := bodyY + 1 // 1 char border top
 		sidebarContentW := m.sidebar.width
 		sidebarContentH := m.sidebar.height
@@ -419,7 +419,7 @@ func (m appModel) handleSidebarClick(relY int) (tea.Model, tea.Cmd) {
 				filePath = vi.node.File.Path
 			}
 		} else {
-			filePath = m.sidebar.files[fileIdx].Path
+			filePath = m.sidebar.displayFiles()[fileIdx].Path
 		}
 		if filePath != "" {
 			return m, func() tea.Msg {
