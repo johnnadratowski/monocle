@@ -1947,6 +1947,10 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.diffView.ToggleOverlays()
 		return m, nil
 
+	case Matches(key, km.HideComments):
+		m.diffView.ToggleHideComments()
+		return m, nil
+
 	case Matches(key, km.OpenDocRef):
 		switch m.focus {
 		case focusMain:

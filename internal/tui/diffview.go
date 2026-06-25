@@ -55,21 +55,23 @@ type diffViewLine struct {
 }
 
 type diffViewModel struct {
-	path         string
-	hunks        []types.DiffHunk
-	comments     []types.ReviewComment
-	annotations  []types.Annotation // agent-authored, for the current file
-	hideOverlays bool               // when true, comments + annotations are not inserted
-	lines        []diffViewLine
-	cursor       int
-	offset       int // scroll offset
-	width        int
-	height       int
-	focused      bool
-	style        diffStyle
-	theme        *Theme
-	hl           *highlighter
-	isBinary     bool // true when hunk content contains binary control characters
+	path             string
+	hunks            []types.DiffHunk
+	comments         []types.ReviewComment
+	annotations      []types.Annotation // agent-authored, for the current file
+	hideOverlays     bool               // when true, comments + annotations are not inserted
+	hideCodeComments bool               // when true, source-code comment-only lines are dimmed
+	commentLines     map[int]bool       // new-file line numbers that are comment-only (when hideCodeComments)
+	lines            []diffViewLine
+	cursor           int
+	offset           int // scroll offset
+	width            int
+	height           int
+	focused          bool
+	style            diffStyle
+	theme            *Theme
+	hl               *highlighter
+	isBinary         bool // true when hunk content contains binary control characters
 
 	hOffset  int  // horizontal scroll offset (runes)
 	wrap     bool // soft-wrap long lines
@@ -770,6 +772,7 @@ func (m *diffViewModel) buildLines() {
 
 	m.pairLines()
 	m.insertInlineAnnotations()
+	m.computeCommentLines()
 }
 
 // buildContentLines builds lines for a content item (plan/doc) displayed as a document.
@@ -836,6 +839,8 @@ func (m *diffViewModel) buildContentLines(content string) {
 			}
 		}
 	}
+
+	m.computeCommentLines()
 }
 
 // buildFileViewLines builds lines from raw file content for file view mode.
@@ -904,6 +909,7 @@ func (m *diffViewModel) buildFileViewLines(content string) {
 	}
 
 	m.insertInlineAnnotations()
+	m.computeCommentLines()
 }
 
 func (m *diffViewModel) buildSplitLines() {
@@ -1036,6 +1042,7 @@ func (m *diffViewModel) buildSplitLines() {
 	}
 
 	m.insertInlineAnnotations()
+	m.computeCommentLines()
 }
 
 // pairLines pairs consecutive removed/added line runs for intra-line diff highlighting.
@@ -1104,6 +1111,16 @@ func gutterWithRangeBar(gutter string, base lipgloss.Style, annotated bool, bg c
 		bar = bar.Background(bg)
 	}
 	return base.Render(gutter[:len(gutter)-1]) + bar.Render(annotationRangeBar)
+}
+
+// renderDimmedComment renders a source-code comment line faint/greyed (used by
+// the hide-comments filter), padded to width on the line's background.
+func renderDimmedComment(content string, bg color.Color, width int) string {
+	style := lipgloss.NewStyle().Faint(true).Foreground(lipgloss.Color("8"))
+	if bg != nil {
+		style = style.Background(bg)
+	}
+	return applyBgAndPad(style.Render(content), bg, width)
 }
 
 // renderAnnotationLine renders an agent annotation box. Each sub-line is tinted
@@ -1371,6 +1388,11 @@ func (m diffViewModel) renderContentLine(line diffViewLine, _, contentWidth int,
 	}
 	renderedGutter := gutterWithRangeBar(gutter, gutterStyle, line.annotated, nil)
 
+	// Hide-comments filter: dim comment-only lines.
+	if m.isDimmedComment(line) {
+		return renderedGutter + renderDimmedComment(content, nil, contentWidth)
+	}
+
 	// Render content: markdown styling or syntax highlighting
 	var renderedContent string
 	if isMd && line.mdIsFence {
@@ -1452,6 +1474,11 @@ func (m diffViewModel) renderDiffLine(line diffViewLine, _, contentWidth int, se
 	// Annotated code lines get a cyan bar in the gutter's trailing column to mark
 	// the annotation's range.
 	renderedGutter := gutterWithRangeBar(gutter, gutterStyle, line.annotated, lineBg)
+
+	// Hide-comments filter: dim comment-only lines instead of syntax-highlighting.
+	if m.isDimmedComment(line) {
+		return renderedGutter + renderDimmedComment(content, lineBg, contentWidth)
+	}
 
 	// Render content: markdown styling or syntax highlighting
 	isMd := isMarkdownFile(m.path)
@@ -1578,16 +1605,18 @@ func (m diffViewModel) renderSplitLine(line diffViewLine, selected, inVisual boo
 	// (when over-wide) lets the terminal wrap the row. Hard-fitting both sides
 	// keeps the divider in a stable column regardless of content or wrap mode.
 	sideW := gutterW + contentW
-	// Annotation ranges are new-file line numbers, so the range bar belongs on the
-	// right (new) side only.
-	leftStyled := fitToWidth(m.renderSplitSide(leftGutter, leftRawContent, line.kind, line.leftEmpty, leftChanges, gutterW, contentW, line, false), sideW)
-	rightStyled := fitToWidth(m.renderSplitSide(rightGutter, rightRawContent, line.rightKind, line.rightEmpty, rightChanges, gutterW, contentW, line, line.annotated), sideW)
+	// Annotation ranges and the comment dim are keyed on new-file lines, so they
+	// apply to the right (new) side; the left side only dims on context lines,
+	// where both sides show the same line.
+	dimmed := m.isDimmedComment(line)
+	leftStyled := fitToWidth(m.renderSplitSide(leftGutter, leftRawContent, line.kind, line.leftEmpty, leftChanges, gutterW, contentW, line, false, dimmed && line.kind == types.DiffLineContext), sideW)
+	rightStyled := fitToWidth(m.renderSplitSide(rightGutter, rightRawContent, line.rightKind, line.rightEmpty, rightChanges, gutterW, contentW, line, line.annotated, dimmed), sideW)
 	divStyled := lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(divider)
 
 	return leftStyled + divStyled + rightStyled
 }
 
-func (m diffViewModel) renderSplitSide(gutter, content string, kind types.DiffLineKind, empty bool, changes []changeRange, gutterW, contentW int, line diffViewLine, annotated bool) string {
+func (m diffViewModel) renderSplitSide(gutter, content string, kind types.DiffLineKind, empty bool, changes []changeRange, gutterW, contentW int, line diffViewLine, annotated, dimmed bool) string {
 	if empty {
 		full := strings.Repeat(" ", gutterW) + strings.Repeat(" ", contentW)
 		return lipgloss.NewStyle().Faint(true).Render(full)
@@ -1613,6 +1642,11 @@ func (m diffViewModel) renderSplitSide(gutter, content string, kind types.DiffLi
 		gutter = fmt.Sprintf("%-*s", gutterW, gutter)
 	}
 	renderedGutter := gutterWithRangeBar(gutter, gutterStyle, annotated, lineBg)
+
+	// Hide-comments filter: dim comment-only lines.
+	if dimmed {
+		return renderedGutter + renderDimmedComment(content, lineBg, contentW)
+	}
 
 	// Render content: markdown styling or syntax highlighting
 	isMd := isMarkdownFile(m.path)
@@ -1839,6 +1873,14 @@ func (m *diffViewModel) ToggleOverlays() {
 	}
 	m.cursor = m.nearestSelectable(m.cursor, 1)
 	m.ensureVisible()
+}
+
+// ToggleHideComments dims (or restores) source-code comment-only lines. It only
+// recomputes the comment-line set and re-renders — line count and scroll are
+// unchanged, so the cursor stays put.
+func (m *diffViewModel) ToggleHideComments() {
+	m.hideCodeComments = !m.hideCodeComments
+	m.computeCommentLines()
 }
 
 // CycleDiffStyle cycles through display styles.
@@ -2795,6 +2837,70 @@ func (m *diffViewModel) insertInlineAnnotations() {
 		}
 	}
 	m.lines = result
+}
+
+// computeCommentLines classifies which displayed code lines are source-code
+// comment-only and records their new-file line numbers, so the renderer can dim
+// them. It reconstructs the new-file text from the built lines (in order) and
+// tokenises it once, so block comments spanning consecutive lines classify
+// correctly. No-op (and clears the set) when the toggle is off.
+func (m *diffViewModel) computeCommentLines() {
+	m.commentLines = nil
+	if !m.hideCodeComments || m.hl == nil {
+		return
+	}
+	type codeLine struct {
+		num  int
+		text string
+	}
+	var code []codeLine
+	for _, ln := range m.lines {
+		if ln.isHunk || ln.isComment || ln.isAnnotation {
+			continue
+		}
+		// New-file side: split lines carry it on the right.
+		num, text := ln.rightLineNum, ln.rightContent
+		if num == 0 {
+			num, text = ln.newLineNum, ln.content
+		}
+		if num <= 0 {
+			continue
+		}
+		code = append(code, codeLine{num, text})
+	}
+	if len(code) == 0 {
+		return
+	}
+	var sb strings.Builder
+	for i, c := range code {
+		if i > 0 {
+			sb.WriteByte('\n')
+		}
+		sb.WriteString(c.text)
+	}
+	set := m.hl.commentOnlyLines(m.path, sb.String())
+	if len(set) == 0 {
+		return
+	}
+	m.commentLines = make(map[int]bool, len(set))
+	for i, c := range code {
+		if set[i+1] {
+			m.commentLines[c.num] = true
+		}
+	}
+}
+
+// isDimmedComment reports whether a code line should be dimmed because the
+// hide-comments filter is on and the line is comment-only.
+func (m diffViewModel) isDimmedComment(line diffViewLine) bool {
+	if !m.hideCodeComments || len(m.commentLines) == 0 {
+		return false
+	}
+	num := line.rightLineNum
+	if num == 0 {
+		num = line.newLineNum
+	}
+	return num > 0 && m.commentLines[num]
 }
 
 // CursorAnnotation returns the annotation under the cursor: the annotation whose

@@ -112,6 +112,25 @@ func TestHighlighterTokenizes(t *testing.T) {
 	}
 }
 
+func TestCommentOnlyLines(t *testing.T) {
+	h := newHighlighter()
+	content := "// a comment\n" + // 1: comment-only
+		"x := 1 // trailing\n" + // 2: code (trailing comment doesn't count)
+		"/* block\n" + // 3: comment-only (block start)
+		"   still block */\n" + // 4: comment-only (block continues)
+		"code()" // 5: code
+	got := h.commentOnlyLines("main.go", content)
+	want := map[int]bool{1: true, 3: true, 4: true}
+	if len(got) != len(want) {
+		t.Fatalf("commentOnlyLines = %v, want %v", got, want)
+	}
+	for ln := range want {
+		if !got[ln] {
+			t.Errorf("expected line %d to be comment-only; got %v", ln, got)
+		}
+	}
+}
+
 func rangesEqual(a, b []changeRange) bool {
 	if len(a) == 0 && len(b) == 0 {
 		return true

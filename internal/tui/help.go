@@ -362,6 +362,7 @@ func (m helpModel) buildContent() string {
 			{Label(km.ToggleDiff), "Cycle diff style (unified/split/file) (any pane)"},
 			{Label(km.ToggleFullDiff), "Toggle full-file diff (whole file vs. changed lines)"},
 			{Label(km.ToggleOverlays), "Hide/show inline comments + annotations"},
+			{Label(km.HideComments), "Dim/show source-code comment lines"},
 			{Label(km.CycleLayout), "Cycle layout (auto/side-by-side/stacked)"},
 			{Label(km.Refresh), "Force reload files"},
 			{"I", "Connection info"},

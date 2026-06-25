@@ -1015,3 +1015,41 @@ func TestAnnotationRenderingSplit(t *testing.T) {
 		t.Error("split view should render the cyan range bar")
 	}
 }
+
+// TestHideCommentsToggle covers the hide-comments filter: toggling on classifies
+// comment-only lines and the View still renders; toggling off clears them.
+func TestHideCommentsToggle(t *testing.T) {
+	theme := DefaultTheme()
+	m := diffViewModel{
+		theme: &theme, hl: newHighlighter(), mdStyler: newMarkdownStyler(theme),
+		path: "main.go", width: 80, height: 30, style: diffStyleUnified,
+		hunks: []types.DiffHunk{{
+			OldStart: 1, OldCount: 0, NewStart: 1, NewCount: 3, Header: "f",
+			Lines: []types.DiffLine{
+				{Kind: types.DiffLineAdded, NewLineNum: 1, Content: "// explain"},
+				{Kind: types.DiffLineAdded, NewLineNum: 2, Content: "doWork()"},
+				{Kind: types.DiffLineAdded, NewLineNum: 3, Content: "x := 1 // trailing"},
+			},
+		}},
+	}
+	m.buildLines()
+	if len(m.commentLines) != 0 {
+		t.Fatalf("comment lines should be empty before toggle, got %v", m.commentLines)
+	}
+
+	m.ToggleHideComments()
+	if !m.commentLines[1] {
+		t.Error("line 1 (// explain) should be flagged comment-only")
+	}
+	if m.commentLines[2] || m.commentLines[3] {
+		t.Errorf("only the comment-only line should be flagged, got %v", m.commentLines)
+	}
+	if m.View() == "" {
+		t.Error("view should still render with the filter on")
+	}
+
+	m.ToggleHideComments()
+	if len(m.commentLines) != 0 {
+		t.Errorf("comment lines should clear when filter off, got %v", m.commentLines)
+	}
+}
