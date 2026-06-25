@@ -198,3 +198,21 @@ func TestSidebarStyleName(t *testing.T) {
 		t.Errorf("grouped styleName = %q, want grouped", s.styleName())
 	}
 }
+
+func TestGroupAdditionalFiles(t *testing.T) {
+	afs := []types.AdditionalFile{
+		{Name: "ref/db.md", Path: "/abs/ref/db.md", GroupLabel: "Database", GroupOrder: 2},
+		{Name: "ref/ui.md", Path: "/abs/ref/ui.md", GroupLabel: "UI", GroupOrder: 0},
+		{Name: "notes.md"}, // no group -> docs category, after agent groups
+	}
+	ordered, headers := groupAdditionalFiles(afs)
+	want := []string{"ref/ui.md", "ref/db.md", "notes.md"}
+	for i, n := range want {
+		if ordered[i].Name != n {
+			t.Errorf("ordered[%d] = %q, want %q", i, ordered[i].Name, n)
+		}
+	}
+	if _, ok := headers[0]; !ok {
+		t.Error("expected a header at index 0")
+	}
+}

@@ -69,12 +69,25 @@ type ChangedFile struct {
 	GroupOrder  int    // display order of the group (lower first)
 	SortIndex   int    // order within the group (lower first)
 	Criticality int    // optional agent-assigned importance (higher = more critical)
+
+	// ImportOrder is the intra-changeset import rank computed natively by Monocle:
+	// a file imported by others sorts before its dependents (dependencies first).
+	// 0 when unknown. Used as the within-group sort when the agent gives no
+	// explicit SortIndex.
+	ImportOrder int
 }
 
 type AdditionalFile struct {
 	Path     string // absolute filesystem path
 	Name     string // display name (basename or relative path)
 	Reviewed bool
+
+	// Agent-supplied grouping metadata (see SetFileGroups), matched by Name or
+	// Path. Lets agent-attached files participate in the grouped sidebar view.
+	Category   string
+	GroupLabel string
+	GroupOrder int
+	SortIndex  int
 }
 
 type ContentItem struct {

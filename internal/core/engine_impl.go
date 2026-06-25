@@ -457,7 +457,34 @@ func (e *Engine) GetAdditionalFiles() []types.AdditionalFile {
 	if e.current == nil {
 		return nil
 	}
-	return e.current.AdditionalFiles
+	// Merge agent grouping metadata into a copy so additional files can
+	// participate in the grouped view without mutating the stored slice.
+	afs := make([]types.AdditionalFile, len(e.current.AdditionalFiles))
+	copy(afs, e.current.AdditionalFiles)
+	e.applyAdditionalFileMetadata(e.current.ID, afs)
+	return afs
+}
+
+// applyAdditionalFileMetadata merges grouping metadata onto additional files,
+// matched by display Name first then absolute Path (the agent may reference
+// either). Safe to call under e.mu held (it only reads the DB and mutates afs).
+func (e *Engine) applyAdditionalFileMetadata(sessionID string, afs []types.AdditionalFile) {
+	meta, err := e.database.GetFileMetadata(sessionID)
+	if err != nil || len(meta) == 0 {
+		return
+	}
+	for i := range afs {
+		m, ok := meta[afs[i].Name]
+		if !ok {
+			m, ok = meta[afs[i].Path]
+		}
+		if ok {
+			afs[i].Category = m.Category
+			afs[i].GroupLabel = m.GroupLabel
+			afs[i].GroupOrder = m.GroupOrder
+			afs[i].SortIndex = m.SortIndex
+		}
+	}
 }
 
 func (e *Engine) AddAdditionalPaths(paths []string) ([]types.AdditionalFile, error) {

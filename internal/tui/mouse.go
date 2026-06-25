@@ -429,7 +429,7 @@ func (m appModel) handleSidebarClick(relY int) (tea.Model, tea.Cmd) {
 	} else {
 		additionalIdx := itemIdx - additionalStart
 		if additionalIdx >= 0 && additionalIdx < len(m.sidebar.additionalFiles) {
-			af := m.sidebar.additionalFiles[additionalIdx]
+			af := m.sidebar.displayAdditionalFiles()[additionalIdx]
 			return m, func() tea.Msg {
 				return sidebarSelectMsg{path: af.Path, isAdditionalFile: true}
 			}
