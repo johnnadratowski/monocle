@@ -674,6 +674,19 @@ func (m sidebarModel) fileItemCount() int {
 	return len(m.files)
 }
 
+// styleName returns the config value ("flat"/"tree"/"grouped") for the current
+// view mode, so it can be persisted and restored across launches.
+func (m sidebarModel) styleName() string {
+	switch {
+	case m.treeMode:
+		return "tree"
+	case m.groupMode:
+		return "grouped"
+	default:
+		return "flat"
+	}
+}
+
 // displayFiles returns the files in their current display order: grouped order
 // in grouped mode, otherwise the natural order. Used everywhere a flat file index
 // is resolved so grouped mode stays consistent with what is rendered.

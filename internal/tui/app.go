@@ -1978,6 +1978,11 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.focus == focusSidebar {
 		var cmd tea.Cmd
 		m.sidebar, cmd = m.sidebar.Update(msg)
+		// Persist the view mode when the user cycles it, so it is restored next
+		// launch (e.g. reopen straight into the grouped view).
+		if Matches(key, km.TreeMode) {
+			m.persistSidebarStyle()
+		}
 		return m, cmd
 	}
 
@@ -2243,6 +2248,18 @@ func (m appModel) applyTheme(name string) appModel {
 		}
 	}
 	return m
+}
+
+// persistSidebarStyle best-effort saves the current sidebar view mode to config
+// so it is restored on the next launch.
+func (m appModel) persistSidebarStyle() {
+	if m.engine == nil {
+		return
+	}
+	if cfg := m.engine.GetConfig(); cfg != nil {
+		cfg.SidebarStyle = m.sidebar.styleName()
+		_ = m.engine.SaveConfig()
+	}
 }
 
 // executeCommand runs a named command entered in command mode.

@@ -181,3 +181,20 @@ func TestGroupFilesChurnSortFallback(t *testing.T) {
 		}
 	}
 }
+
+func TestSidebarStyleName(t *testing.T) {
+	km := DefaultKeyMap()
+	s := newSidebarModel(&km)
+	if s.styleName() != "flat" {
+		t.Errorf("default styleName = %q, want flat", s.styleName())
+	}
+	s.treeMode = true
+	if s.styleName() != "tree" {
+		t.Errorf("tree styleName = %q, want tree", s.styleName())
+	}
+	s.treeMode = false
+	s.groupMode = true
+	if s.styleName() != "grouped" {
+		t.Errorf("grouped styleName = %q, want grouped", s.styleName())
+	}
+}
