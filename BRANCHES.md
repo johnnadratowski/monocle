@@ -27,6 +27,7 @@ the branches for local testing.
 | `feat/group-files-nudge` | `integration` | **merged into integration** | Adds set_file_groups to the MCP server instructions so agents are told to group files when preparing a review |
 | `feat/group-files-status-nudge` | `integration` | **merged into integration** | Appends a set_file_groups reminder to review_status/add_files results while changed files remain ungrouped (clears once grouped) |
 | `feat/group-nudge-send-artifact` | `integration` | **merged into integration** | Also appends the grouping reminder to send_artifact results (the natural review hand-off) |
+| `feat/grouping-enhancements` | `integration` | **merged into integration** | Native import-ordering within groups (esbuild/go/parser/regex, dependencies first); remembers last view mode across launches; groups agent-attached additional files |
 | `feat/context-clear-search` | `main` | placeholder | Empty placeholder for future "clear no-longer-needed context" work |
 | `integration/diffview-improvements` | `main` | integration only | Merge of all the above for local testing — do not PR into `main` |
 

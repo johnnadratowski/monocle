@@ -220,7 +220,7 @@ The manifest is a JSON array of entries (or an object with an `entries` array), 
 | `path` | string | **(Required)** Changed-file path, as shown by `review status` (repo-relative). |
 | `group` | string | Free-form group label (e.g. `UI`, `Backend`, `Database`). Files without a group fall back to a heuristic category. |
 | `group_order` | int | Display order of the group; lower groups are shown first. |
-| `sort_index` | int | Order within the group; lower first. Defaults to lines-changed (largest first). |
+| `sort_index` | int | Order within the group; lower first. Defaults to Monocle's computed import order (dependencies first), then lines-changed. |
 | `category` | string | Override the heuristic category: `code`, `test`, `config`, `docs`, or `build` (drives the icon). |
 | `criticality` | int | Optional importance hint (higher = more critical). |
 
