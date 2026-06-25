@@ -746,7 +746,6 @@ func (m *diffViewModel) buildLines() {
 				mdInCodeBlock: inCodeBlock && isMd && !isFence,
 				mdIsFence:     isFence,
 				mdCodeLang:    codeLang,
-				annotated:     !m.hideOverlays && dl.NewLineNum > 0 && m.lineInAnnotation(dl.NewLineNum),
 			})
 
 			if !m.hideOverlays {
@@ -765,22 +764,12 @@ func (m *diffViewModel) buildLines() {
 						})
 					}
 				}
-				// Insert annotation boxes after the last line of their range
-				for i := range m.annotations {
-					a := &m.annotations[i]
-					if a.TargetRef == m.path && annotationAnchor(a) == dl.NewLineNum && dl.NewLineNum > 0 {
-						m.lines = append(m.lines, diffViewLine{
-							isAnnotation: true,
-							annotation:   a,
-							content:      formatAnnotation(a),
-						})
-					}
-				}
 			}
 		}
 	}
 
 	m.pairLines()
+	m.insertInlineAnnotations()
 }
 
 // buildContentLines builds lines for a content item (plan/doc) displayed as a document.
@@ -913,6 +902,8 @@ func (m *diffViewModel) buildFileViewLines(content string) {
 			}
 		}
 	}
+
+	m.insertInlineAnnotations()
 }
 
 func (m *diffViewModel) buildSplitLines() {
@@ -1043,6 +1034,8 @@ func (m *diffViewModel) buildSplitLines() {
 		// Insert inline comments after their target lines
 		m.insertInlineComments(hunk)
 	}
+
+	m.insertInlineAnnotations()
 }
 
 // pairLines pairs consecutive removed/added line runs for intra-line diff highlighting.
@@ -1092,6 +1085,26 @@ func (m *diffViewModel) pairLines() {
 // annotationColor is the accent used for agent annotations (boxes + the gutter
 // range bar). Distinct from comment colors so the two channels read apart.
 const annotationColor = "6" // cyan
+
+// annotationRangeBar is drawn in the trailing gutter column of every code line
+// inside an annotation's range, forming a continuous cyan rail down the block so
+// the reviewer can see exactly which lines the annotation refers to.
+const annotationRangeBar = "▌"
+
+// gutterWithRangeBar renders a (plain, ASCII line-number) gutter, replacing its
+// trailing column with the cyan annotation range bar when the line is inside an
+// annotation's range. base is the gutter's normal style; bg (may be nil) is the
+// diff line background so the bar sits on the same color band.
+func gutterWithRangeBar(gutter string, base lipgloss.Style, annotated bool, bg color.Color) string {
+	if !annotated || len(gutter) == 0 {
+		return base.Render(gutter)
+	}
+	bar := lipgloss.NewStyle().Foreground(lipgloss.Color(annotationColor)).Bold(true)
+	if bg != nil {
+		bar = bar.Background(bg)
+	}
+	return base.Render(gutter[:len(gutter)-1]) + bar.Render(annotationRangeBar)
+}
 
 // renderAnnotationLine renders an agent annotation box. Each sub-line is tinted
 // with the annotation accent and prefixed with a bar so it reads as a single
@@ -1356,7 +1369,7 @@ func (m diffViewModel) renderContentLine(line diffViewLine, _, contentWidth int,
 	if len(gutter) < gutterWidth {
 		gutter = fmt.Sprintf("%-*s", gutterWidth, gutter)
 	}
-	renderedGutter := gutterStyle.Render(gutter)
+	renderedGutter := gutterWithRangeBar(gutter, gutterStyle, line.annotated, nil)
 
 	// Render content: markdown styling or syntax highlighting
 	var renderedContent string
@@ -1436,16 +1449,9 @@ func (m diffViewModel) renderDiffLine(line diffViewLine, _, contentWidth int, se
 	if len(gutter) < gutterWidth {
 		gutter = fmt.Sprintf("%-*s", gutterWidth, gutter)
 	}
-	renderedGutter := gutterStyle.Render(gutter)
-	// Annotated code lines get a colored bar in the gutter's trailing column
-	// (a space in every line kind) to mark the annotation's range.
-	if line.annotated && len(gutter) >= 1 {
-		barStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(annotationColor))
-		if lineBg != nil {
-			barStyle = barStyle.Background(lineBg)
-		}
-		renderedGutter = gutterStyle.Render(gutter[:len(gutter)-1]) + barStyle.Render("▌")
-	}
+	// Annotated code lines get a cyan bar in the gutter's trailing column to mark
+	// the annotation's range.
+	renderedGutter := gutterWithRangeBar(gutter, gutterStyle, line.annotated, lineBg)
 
 	// Render content: markdown styling or syntax highlighting
 	isMd := isMarkdownFile(m.path)
@@ -1572,14 +1578,16 @@ func (m diffViewModel) renderSplitLine(line diffViewLine, selected, inVisual boo
 	// (when over-wide) lets the terminal wrap the row. Hard-fitting both sides
 	// keeps the divider in a stable column regardless of content or wrap mode.
 	sideW := gutterW + contentW
-	leftStyled := fitToWidth(m.renderSplitSide(leftGutter, leftRawContent, line.kind, line.leftEmpty, leftChanges, gutterW, contentW, line), sideW)
-	rightStyled := fitToWidth(m.renderSplitSide(rightGutter, rightRawContent, line.rightKind, line.rightEmpty, rightChanges, gutterW, contentW, line), sideW)
+	// Annotation ranges are new-file line numbers, so the range bar belongs on the
+	// right (new) side only.
+	leftStyled := fitToWidth(m.renderSplitSide(leftGutter, leftRawContent, line.kind, line.leftEmpty, leftChanges, gutterW, contentW, line, false), sideW)
+	rightStyled := fitToWidth(m.renderSplitSide(rightGutter, rightRawContent, line.rightKind, line.rightEmpty, rightChanges, gutterW, contentW, line, line.annotated), sideW)
 	divStyled := lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(divider)
 
 	return leftStyled + divStyled + rightStyled
 }
 
-func (m diffViewModel) renderSplitSide(gutter, content string, kind types.DiffLineKind, empty bool, changes []changeRange, gutterW, contentW int, line diffViewLine) string {
+func (m diffViewModel) renderSplitSide(gutter, content string, kind types.DiffLineKind, empty bool, changes []changeRange, gutterW, contentW int, line diffViewLine, annotated bool) string {
 	if empty {
 		full := strings.Repeat(" ", gutterW) + strings.Repeat(" ", contentW)
 		return lipgloss.NewStyle().Faint(true).Render(full)
@@ -1604,7 +1612,7 @@ func (m diffViewModel) renderSplitSide(gutter, content string, kind types.DiffLi
 	if len(gutter) < gutterW {
 		gutter = fmt.Sprintf("%-*s", gutterW, gutter)
 	}
-	renderedGutter := gutterStyle.Render(gutter)
+	renderedGutter := gutterWithRangeBar(gutter, gutterStyle, annotated, lineBg)
 
 	// Render content: markdown styling or syntax highlighting
 	isMd := isMarkdownFile(m.path)
@@ -2745,6 +2753,43 @@ func (m *diffViewModel) insertInlineComments(hunk types.DiffHunk) {
 					isComment: true,
 					comment:   c,
 					content:   formatInlineComment(c),
+				})
+			}
+		}
+	}
+	m.lines = result
+}
+
+// insertInlineAnnotations flags every code line inside an annotation's range so
+// the gutter draws the cyan range bar, and inserts each annotation's box after
+// the last line of its range. Runs as a single post-build pass so unified,
+// split, and full-file modes all render annotations identically. No-op when
+// overlays are hidden.
+func (m *diffViewModel) insertInlineAnnotations() {
+	if m.hideOverlays || len(m.annotations) == 0 {
+		return
+	}
+	var result []diffViewLine
+	for _, line := range m.lines {
+		// New-file line number: split lines carry it on the right side.
+		ln := line.rightLineNum
+		if ln == 0 {
+			ln = line.newLineNum
+		}
+		if ln > 0 && m.lineInAnnotation(ln) {
+			line.annotated = true
+		}
+		result = append(result, line)
+		if ln == 0 {
+			continue
+		}
+		for i := range m.annotations {
+			a := &m.annotations[i]
+			if a.TargetRef == m.path && annotationAnchor(a) == ln {
+				result = append(result, diffViewLine{
+					isAnnotation: true,
+					annotation:   a,
+					content:      formatAnnotation(a),
 				})
 			}
 		}

@@ -968,3 +968,50 @@ func TestAnnotationRenderingAndToggle(t *testing.T) {
 		t.Error("summary should not render when overlays hidden")
 	}
 }
+
+// TestAnnotationRenderingSplit covers the gap that split (and full-file) modes
+// previously rendered no annotations at all: the box, the annotated flags, and
+// the cyan range bar must all appear in split mode too.
+func TestAnnotationRenderingSplit(t *testing.T) {
+	theme := DefaultTheme()
+	m := diffViewModel{
+		theme: &theme, hl: newHighlighter(), mdStyler: newMarkdownStyler(theme),
+		path: "main.go", width: 100, height: 30, style: diffStyleSplit,
+		hunks: []types.DiffHunk{{
+			OldStart: 1, OldCount: 0, NewStart: 1, NewCount: 3, Header: "f",
+			Lines: []types.DiffLine{
+				{Kind: types.DiffLineAdded, NewLineNum: 1, Content: "line one"},
+				{Kind: types.DiffLineAdded, NewLineNum: 2, Content: "line two"},
+				{Kind: types.DiffLineAdded, NewLineNum: 3, Content: "line three"},
+			},
+		}},
+		annotations: []types.Annotation{
+			{TargetRef: "main.go", LineStart: 1, LineEnd: 2, Summary: "guards the deposit"},
+		},
+	}
+	m.buildLines()
+
+	annotatedCount := 0
+	hasBox := false
+	for i := range m.lines {
+		if m.lines[i].isAnnotation {
+			hasBox = true
+		}
+		if m.lines[i].annotated {
+			annotatedCount++
+		}
+	}
+	if !hasBox {
+		t.Error("split mode should insert the annotation box")
+	}
+	if annotatedCount != 2 {
+		t.Errorf("split annotated code lines = %d, want 2", annotatedCount)
+	}
+	out := m.View()
+	if !strings.Contains(out, "guards the deposit") {
+		t.Error("split view should render the annotation summary")
+	}
+	if !strings.Contains(out, annotationRangeBar) {
+		t.Error("split view should render the cyan range bar")
+	}
+}

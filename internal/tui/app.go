@@ -1948,10 +1948,14 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case Matches(key, km.OpenDocRef):
-		if m.focus == focusMain {
+		switch m.focus {
+		case focusMain:
 			if a := m.diffView.CursorAnnotation(); a != nil && len(a.Refs) > 0 {
 				return m.openOrCycleDocPane(a), nil
 			}
+		case focusDoc:
+			// Already in the pane: cycle to the next ref, closing after the last.
+			return m.cycleDocRefOrClose(), nil
 		}
 		return m, nil
 
@@ -2611,6 +2615,34 @@ func recalcPaneDimensions(m *appModel) {
 		m.diffView.width = mainOuter - borderW
 		m.diffView.height = contentHeight
 	}
+
+	reserveDocPane(m)
+}
+
+// reserveDocPane carves the bottom of the diff column out for the annotation doc
+// pane when it's open. It shrinks the diff's real height (so its scroll math
+// matches what's rendered) and records the doc pane's inner height. The sidebar
+// keeps its full height — the doc pane sits under the diff only, not the sidebar.
+func reserveDocPane(m *appModel) {
+	if !m.docPane.active {
+		return
+	}
+	const borderH = 2
+	docInner := m.diffView.height / 2
+	if docInner < 3 {
+		docInner = 3
+	}
+	if docInner > m.diffView.height-3 {
+		docInner = m.diffView.height - 3
+	}
+	if docInner < 1 {
+		docInner = 1
+	}
+	m.diffView.height -= docInner + borderH
+	if m.diffView.height < 1 {
+		m.diffView.height = 1
+	}
+	m.docPane.height = docInner
 }
 
 // recalcStackedLayout recalculates sidebar and diff view heights for stacked
@@ -2637,6 +2669,8 @@ func recalcStackedLayout(m *appModel) {
 
 	m.sidebar.height = sidebarH
 	m.diffView.height = diffH
+
+	reserveDocPane(m)
 }
 
 // diffViewShowsValidFile returns true if the diff view is showing a valid
@@ -2760,26 +2794,39 @@ func (m *appModel) setFocus(f focusTarget) {
 	m.docPane.focused = f == focusDoc
 }
 
-// openOrCycleDocPane opens the doc pane on the given annotation's first doc link,
-// or cycles to the next link if the pane is already showing that annotation.
+// openOrCycleDocPane opens the doc pane on the given annotation's first doc link.
+// If the pane is already showing that annotation, it cycles to the next link and,
+// once it would wrap past the last one, closes the pane — so repeated presses of
+// `o` walk the refs and then dismiss the pane.
 func (m appModel) openOrCycleDocPane(a *types.Annotation) appModel {
 	if len(a.Refs) == 0 {
 		return m
 	}
-	var ref types.DocRef
 	if m.docPane.active && m.docPane.annotationID == a.ID {
-		r, ok := m.docPane.nextRef()
-		if !ok {
-			return m
-		}
-		ref = r
-	} else {
-		m.docPane.annotationID = a.ID
-		m.docPane.openRefs(a.Refs)
-		ref = a.Refs[0]
+		return m.cycleDocRefOrClose()
 	}
+	m.docPane.annotationID = a.ID
+	m.docPane.openRefs(a.Refs)
+	ref := a.Refs[0]
 	title, content := m.loadDocRef(ref)
 	m.docPane.theme = &m.theme
+	m.docPane.setContent(title, content, ref)
+	recalcPaneDimensions(&m) // reserve the diff's bottom for the pane
+	m.diffView.ensureVisible()
+	return m
+}
+
+// cycleDocRefOrClose advances the open doc pane to the next ref, or closes it when
+// advancing would wrap back to the first ref (so a single-ref annotation toggles
+// closed on the second press).
+func (m appModel) cycleDocRefOrClose() appModel {
+	prev := m.docPane.activeRef
+	ref, ok := m.docPane.nextRef()
+	if !ok || m.docPane.activeRef <= prev {
+		m.closeDocPane()
+		return m
+	}
+	title, content := m.loadDocRef(ref)
 	m.docPane.setContent(title, content, ref)
 	return m
 }
@@ -2803,7 +2850,8 @@ func (m appModel) loadDocRef(ref types.DocRef) (title, content string) {
 	return ref.Doc, c
 }
 
-// closeDocPane closes the doc pane and returns focus to the diff.
+// closeDocPane closes the doc pane, gives the diff back its full height, and
+// returns focus to the diff if the pane held it.
 func (m *appModel) closeDocPane() {
 	m.docPane.close()
 	if m.focus == focusDoc {
@@ -2811,6 +2859,8 @@ func (m *appModel) closeDocPane() {
 		m.diffView.focused = true
 		m.sidebar.focused = false
 	}
+	recalcPaneDimensions(m) // restore the diff's full height
+	m.diffView.ensureVisible()
 }
 
 // annotationsForFile returns the agent annotations targeting the given file.
@@ -3257,38 +3307,17 @@ func (m appModel) View() tea.View {
 	const bw = 2 // border left + right
 	const bh = 2 // border top + bottom
 
-	// Reserve the bottom half for the annotation doc pane when open. View has a
-	// value receiver, so shrinking the pane heights here is local to this render.
-	var docPaneView string
-	if m.docPane.active {
-		docInner := m.diffView.height / 2
-		if docInner < 3 {
-			docInner = 3
-		}
-		if docInner > m.diffView.height-3 {
-			docInner = m.diffView.height - 3
-		}
-		if docInner < 1 {
-			docInner = 1
-		}
-		docOuter := docInner + bh
-		m.diffView.height -= docOuter
-		if m.diffView.height < 1 {
-			m.diffView.height = 1
-		}
-		if m.layout != layoutStacked && !m.sidebarHidden {
-			m.sidebar.height -= docOuter
-			if m.sidebar.height < 1 {
-				m.sidebar.height = 1
-			}
-		}
-		m.docPane.width = m.width - bw
-		m.docPane.height = docInner
+	// The doc pane's height was already reserved out of the diff column in
+	// recalcPaneDimensions (so the diff's scroll math matches what's rendered).
+	// Here we render it as a box stacked directly under the diff at the diff
+	// column's width, so the sidebar keeps its full height beside both.
+	docPaneBox := func(outerW int) string {
 		docStyle := m.theme.MainPane
 		if m.focus == focusDoc {
 			docStyle = m.theme.MainPaneFocused
 		}
-		docPaneView = docStyle.Width(m.width).Height(docInner + bh).Render(m.docPane.View())
+		m.docPane.width = outerW - bw
+		return docStyle.Width(outerW).Height(m.docPane.height + bh).Render(m.docPane.View())
 	}
 
 	if m.sidebarHidden {
@@ -3296,6 +3325,9 @@ func (m appModel) View() tea.View {
 			Width(m.diffView.width + bw).
 			Height(m.diffView.height + bh).
 			Render(m.diffView.View())
+		if m.docPane.active {
+			mainView = lipgloss.JoinVertical(lipgloss.Left, mainView, docPaneBox(m.diffView.width+bw))
+		}
 		body = mainView
 	} else if m.layout == layoutStacked {
 		sidebarView := sidebarStyle.
@@ -3308,7 +3340,11 @@ func (m appModel) View() tea.View {
 			Height(m.diffView.height + bh).
 			Render(m.diffView.View())
 
-		body = lipgloss.JoinVertical(lipgloss.Left, sidebarView, mainView)
+		parts := []string{sidebarView, mainView}
+		if m.docPane.active {
+			parts = append(parts, docPaneBox(m.diffView.width+bw))
+		}
+		body = lipgloss.JoinVertical(lipgloss.Left, parts...)
 	} else {
 		sidebarView := sidebarStyle.
 			Width(m.sidebar.width + bw).
@@ -3329,6 +3365,11 @@ func (m appModel) View() tea.View {
 			Height(m.diffView.height + bh).
 			Render(m.diffView.View())
 
+		// Doc pane stacks under the diff only; the sidebar stays full-height beside.
+		if m.docPane.active {
+			mainView = lipgloss.JoinVertical(lipgloss.Left, mainView, docPaneBox(diffOuterW))
+		}
+
 		body = lipgloss.JoinHorizontal(lipgloss.Top, sidebarView, mainView)
 	}
 	m.statusBar.width = m.width
@@ -3343,9 +3384,6 @@ func (m appModel) View() tea.View {
 	m.statusBar.diffBaseVersion = m.diffView.diffBaseVersion
 	m.statusBar.diffToVersion = m.diffView.diffToVersion
 	statusView := m.statusBar.View()
-	if docPaneView != "" {
-		body = lipgloss.JoinVertical(lipgloss.Left, body, docPaneView)
-	}
 	full := lipgloss.JoinVertical(lipgloss.Left, titleBar, body, statusView)
 
 	// Render overlay centered on top of the layout if active.

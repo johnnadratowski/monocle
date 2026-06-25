@@ -110,3 +110,44 @@ func TestCycleFocusIncludesDocPane(t *testing.T) {
 		t.Errorf("reverse from sidebar: focus=%d, want focusDoc", m.focus)
 	}
 }
+
+// TestDocPaneToggleClose verifies that cycling past the last ref closes the pane
+// (so pressing `o` again on a single-ref annotation dismisses it) and hands focus
+// back to the diff.
+func TestDocPaneToggleClose(t *testing.T) {
+	m := appModel{}
+	m.docPane.openRefs([]types.DocRef{{Kind: types.DocRefFile, Doc: "x"}})
+	m.focus = focusDoc
+	m.diffView.focused = false
+
+	m = m.cycleDocRefOrClose()
+	if m.docPane.active {
+		t.Error("doc pane should close after cycling past its only ref")
+	}
+	if m.focus != focusMain || !m.diffView.focused {
+		t.Errorf("focus should return to the diff; focus=%d diffFocused=%v", m.focus, m.diffView.focused)
+	}
+}
+
+// TestReserveDocPaneShrinksDiffOnly verifies the doc pane is carved out of the
+// diff column's height while the sidebar keeps its full height.
+func TestReserveDocPaneShrinksDiffOnly(t *testing.T) {
+	m := appModel{width: 120, height: 40, layoutConfig: "side-by-side", minDiffWidth: 40}
+
+	recalcPaneDimensions(&m)
+	fullDiffH := m.diffView.height
+	fullSidebarH := m.sidebar.height
+
+	m.docPane.active = true
+	recalcPaneDimensions(&m)
+
+	if m.diffView.height >= fullDiffH {
+		t.Errorf("diff height should shrink with doc pane open: %d -> %d", fullDiffH, m.diffView.height)
+	}
+	if m.docPane.height <= 0 {
+		t.Errorf("doc pane height should be reserved, got %d", m.docPane.height)
+	}
+	if m.sidebar.height != fullSidebarH {
+		t.Errorf("sidebar height should stay full: %d -> %d", fullSidebarH, m.sidebar.height)
+	}
+}
