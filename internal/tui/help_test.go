@@ -129,3 +129,66 @@ func TestHelpSearchNoMatch(t *testing.T) {
 		t.Error("expected 'no matches' in search bar")
 	}
 }
+
+func TestHelpKeyClosesHelp(t *testing.T) {
+	h := newTestHelp()
+	out, cmd := h.Update(tea.KeyPressMsg{Code: 'H'})
+	h = out
+	if h.active {
+		t.Error("expected H to close the help overlay")
+	}
+	if cmd == nil {
+		t.Error("expected a closeHelpMsg command")
+	}
+}
+
+// TestHelpColumnAlignment verifies a long command key does not push its
+// description out of alignment with short-key rows (the column is sized to the
+// widest key).
+func TestHelpColumnAlignment(t *testing.T) {
+	h := newTestHelp()
+	h.width = 120
+	lines := strings.Split(h.buildContent(), "\n")
+
+	descCol := func(descText string) int {
+		for _, ln := range lines {
+			plain := stripANSIHelp(ln)
+			if i := strings.Index(plain, descText); i >= 0 {
+				return i
+			}
+		}
+		return -1
+	}
+
+	short := descCol("Move up/down")
+	long := descCol("Base artifact version to diff against")
+	if short < 0 || long < 0 {
+		t.Fatalf("rows not found: short=%d long=%d", short, long)
+	}
+	if short != long {
+		t.Errorf("description columns misaligned: short row starts at %d, long-key row at %d", short, long)
+	}
+}
+
+func stripANSIHelp(s string) string {
+	return ansiStripForTest(s)
+}
+
+func ansiStripForTest(s string) string {
+	var b strings.Builder
+	inEsc := false
+	for _, r := range s {
+		if r == '\x1b' {
+			inEsc = true
+			continue
+		}
+		if inEsc {
+			if r == 'm' {
+				inEsc = false
+			}
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}

@@ -48,6 +48,11 @@ func (m helpModel) Update(msg tea.Msg) (helpModel, tea.Cmd) {
 		if m.searchMode {
 			return m.handleSearchKey(key), nil
 		}
+		// The Help key toggles: pressing it again closes the overlay.
+		if m.keys != nil && Matches(key, m.keys.Help) {
+			m.active = false
+			return m, func() tea.Msg { return closeHelpMsg{} }
+		}
 		switch key {
 		case "esc":
 			// First esc clears an active search; a second closes help.
@@ -259,14 +264,8 @@ func (m helpModel) buildContent() string {
 
 	modalWidth := CalcModalWidth(m.width, 0)
 
-	// Inner content width: modalWidth minus border (2) and padding (4)
-	const keyCol = 20
 	const indent = 2
 	const borderPad = 6 // 2 border + 4 padding
-	descW := modalWidth - borderPad - indent - keyCol
-	if descW < 10 {
-		descW = 10
-	}
 
 	var b strings.Builder
 
@@ -367,6 +366,27 @@ func (m helpModel) buildContent() string {
 			{Label(km.Help), "Show this help"},
 			{Label(km.Quit), "Quit"},
 		}},
+	}
+
+	// Size the key column to the widest key label (plus a gap) so long command
+	// keys like "B / :base-artifact-version" never collide with the description.
+	keyCol := 0
+	for _, section := range sections {
+		for _, k := range section.keys {
+			if w := lipgloss.Width(k.key); w > keyCol {
+				keyCol = w
+			}
+		}
+	}
+	keyCol += 2 // gap between key and description
+	// Keep at least 20 columns for the description; cap the key column so a very
+	// long key can't crowd it out on a narrow screen.
+	if maxKey := modalWidth - borderPad - indent - 20; maxKey > 0 && keyCol > maxKey {
+		keyCol = maxKey
+	}
+	descW := modalWidth - borderPad - indent - keyCol
+	if descW < 10 {
+		descW = 10
 	}
 
 	indentStyle := lipgloss.NewStyle().Width(indent)
