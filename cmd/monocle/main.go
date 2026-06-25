@@ -46,6 +46,7 @@ type ReviewCmd struct {
 	AddFiles     ReviewAddFilesCmd     `cmd:"add-files" help:"Add files to the review session"`
 	RemoveFiles  ReviewRemoveFilesCmd  `cmd:"remove-files" help:"Remove previously-added files from the review session"`
 	GroupFiles   ReviewGroupFilesCmd   `cmd:"group-files" help:"Assign category/group/order metadata to changed files for the grouped sidebar view"`
+	Annotate     ReviewAnnotateCmd     `cmd:"annotate" help:"Attach agent rationale + doc links to code ranges (shown to the reviewer, not sent back as feedback)"`
 }
 
 // WorkDirFlag is embedded by commands that support --workdir.
@@ -96,6 +97,14 @@ type ReviewGroupFilesCmd struct {
 	Socket  string `help:"Override socket path" env:"MONOCLE_SOCKET" default:""`
 	File    string `help:"Path to a JSON manifest of grouping entries ('-' for stdin)" type:"path" default:"-"`
 	Replace bool   `help:"Replace all existing grouping metadata instead of merging" default:"false"`
+	JSON    bool   `help:"Output as JSON" default:"false"`
+}
+
+type ReviewAnnotateCmd struct {
+	WorkDirFlag
+	Socket  string `help:"Override socket path" env:"MONOCLE_SOCKET" default:""`
+	File    string `help:"Path to a JSON manifest of annotation entries ('-' for stdin)" type:"path" default:"-"`
+	Replace bool   `help:"Clear all existing annotations first instead of replacing per file" default:"false"`
 	JSON    bool   `help:"Output as JSON" default:"false"`
 }
 
@@ -772,6 +781,85 @@ func parseGroupEntries(raw []byte) ([]protocol.FileGroupEntry, error) {
 	}
 	var wrapper struct {
 		Entries []protocol.FileGroupEntry `json:"entries"`
+	}
+	if err := json.Unmarshal(trimmed, &wrapper); err != nil {
+		return nil, fmt.Errorf("parse manifest object: %w", err)
+	}
+	return wrapper.Entries, nil
+}
+
+func (cmd *ReviewAnnotateCmd) Run() error {
+	var raw []byte
+	var err error
+	if cmd.File == "" || cmd.File == "-" {
+		raw, err = io.ReadAll(os.Stdin)
+	} else {
+		raw, err = os.ReadFile(cmd.File)
+	}
+	if err != nil {
+		return fmt.Errorf("read manifest: %w", err)
+	}
+
+	entries, err := parseAnnotationEntries(raw)
+	if err != nil {
+		return err
+	}
+	if len(entries) == 0 {
+		return fmt.Errorf("manifest contained no entries")
+	}
+
+	socketPath, err := resolveSocketForWorkDir(cmd.Socket, cmd.WorkDir)
+	if err != nil {
+		return err
+	}
+	c, err := client.Connect(socketPath)
+	if err != nil {
+		if errors.Is(err, client.ErrNotRunning) {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return err
+	}
+	defer c.Close()
+
+	resp, err := c.Request(
+		&protocol.AddAnnotationsMsg{
+			Type:    protocol.TypeAddAnnotations,
+			Entries: entries,
+			Replace: cmd.Replace,
+		},
+		client.DefaultTimeout,
+	)
+	if err != nil {
+		return fmt.Errorf("annotate: %w", err)
+	}
+	r := resp.(*protocol.AddAnnotationsResponse)
+	if cmd.JSON {
+		return printJSON(r)
+	}
+	if !r.Success {
+		return fmt.Errorf("%s", r.Message)
+	}
+	fmt.Println(r.Message)
+	return nil
+}
+
+// parseAnnotationEntries accepts a top-level JSON array of annotation entries or
+// an object {"entries": [...]}.
+func parseAnnotationEntries(raw []byte) ([]protocol.AnnotationEntry, error) {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 {
+		return nil, fmt.Errorf("empty manifest")
+	}
+	if trimmed[0] == '[' {
+		var entries []protocol.AnnotationEntry
+		if err := json.Unmarshal(trimmed, &entries); err != nil {
+			return nil, fmt.Errorf("parse manifest array: %w", err)
+		}
+		return entries, nil
+	}
+	var wrapper struct {
+		Entries []protocol.AnnotationEntry `json:"entries"`
 	}
 	if err := json.Unmarshal(trimmed, &wrapper); err != nil {
 		return nil, fmt.Errorf("parse manifest object: %w", err)

@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-const schemaVersion = 9
+const schemaVersion = 10
 
 const dropSQL = `
 DROP TABLE IF EXISTS review_snapshot_files;
@@ -16,6 +16,7 @@ DROP TABLE IF EXISTS content_versions;
 DROP TABLE IF EXISTS content_items;
 DROP TABLE IF EXISTS additional_files;
 DROP TABLE IF EXISTS file_metadata;
+DROP TABLE IF EXISTS annotations;
 DROP TABLE IF EXISTS changed_files;
 DROP TABLE IF EXISTS sessions;
 DROP TABLE IF EXISTS schema_version;
@@ -46,6 +47,22 @@ CREATE TABLE IF NOT EXISTS changed_files (
 	additions INTEGER NOT NULL DEFAULT 0,
 	deletions INTEGER NOT NULL DEFAULT 0,
 	UNIQUE(session_id, path)
+);
+
+-- Agent-authored code annotations (rationale + doc links). A separate channel
+-- from reviewer comments; never sent back to the agent as feedback. refs holds
+-- a JSON array of DocRef.
+CREATE TABLE IF NOT EXISTS annotations (
+	id TEXT PRIMARY KEY,
+	session_id TEXT NOT NULL REFERENCES sessions(id),
+	target_ref TEXT NOT NULL,
+	line_start INTEGER NOT NULL DEFAULT 0,
+	line_end INTEGER NOT NULL DEFAULT 0,
+	summary TEXT NOT NULL DEFAULT '',
+	refs TEXT NOT NULL DEFAULT '[]',
+	review_round INTEGER NOT NULL DEFAULT 1,
+	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Agent-supplied per-file grouping metadata. Kept in a separate table so it
@@ -144,6 +161,7 @@ CREATE TABLE IF NOT EXISTS review_snapshot_files (
 );
 
 CREATE INDEX IF NOT EXISTS idx_changed_files_session ON changed_files(session_id);
+CREATE INDEX IF NOT EXISTS idx_annotations_session ON annotations(session_id);
 CREATE INDEX IF NOT EXISTS idx_content_items_session ON content_items(session_id);
 CREATE INDEX IF NOT EXISTS idx_comments_session ON comments(session_id);
 CREATE INDEX IF NOT EXISTS idx_comments_target ON comments(target_type, target_ref);

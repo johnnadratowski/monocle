@@ -484,6 +484,68 @@ func (e *Engine) GetAdditionalFiles() []types.AdditionalFile {
 	return afs
 }
 
+// GetAnnotations returns the agent-authored annotations for the active session.
+func (e *Engine) GetAnnotations() []types.Annotation {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if e.current == nil {
+		return nil
+	}
+	return e.current.Annotations
+}
+
+// handleAddAnnotations persists agent annotations, refreshes the in-memory view,
+// and notifies the TUI. Annotations are a separate channel from reviewer
+// comments and are never returned to the agent as feedback.
+func (e *Engine) handleAddAnnotations(msg *protocol.AddAnnotationsMsg) *protocol.AddAnnotationsResponse {
+	e.mu.RLock()
+	session := e.current
+	e.mu.RUnlock()
+	if session == nil {
+		return &protocol.AddAnnotationsResponse{
+			Type:    protocol.TypeAddAnnotationsResponse,
+			Success: false,
+			Message: "no active session",
+		}
+	}
+
+	anns := make([]types.Annotation, 0, len(msg.Entries))
+	for _, en := range msg.Entries {
+		anns = append(anns, types.Annotation{
+			TargetRef:   en.File,
+			LineStart:   en.LineStart,
+			LineEnd:     en.LineEnd,
+			Summary:     en.Summary,
+			Refs:        en.Refs,
+			ReviewRound: session.ReviewRound,
+		})
+	}
+	if err := e.database.SetAnnotations(session.ID, anns, msg.Replace); err != nil {
+		return &protocol.AddAnnotationsResponse{
+			Type:    protocol.TypeAddAnnotationsResponse,
+			Success: false,
+			Message: err.Error(),
+		}
+	}
+
+	// Reload from the DB so the in-memory copy carries minted IDs, then notify.
+	if reloaded, err := e.database.GetAnnotations(session.ID); err == nil {
+		e.mu.Lock()
+		if e.current != nil && e.current.ID == session.ID {
+			e.current.Annotations = reloaded
+		}
+		e.mu.Unlock()
+	}
+	e.emit(EventFileChanged, EventPayload{Kind: EventFileChanged})
+
+	return &protocol.AddAnnotationsResponse{
+		Type:    protocol.TypeAddAnnotationsResponse,
+		Success: true,
+		Message: fmt.Sprintf("Added %d annotation(s)", len(anns)),
+		Count:   len(anns),
+	}
+}
+
 // applyAdditionalFileMetadata merges grouping metadata onto additional files,
 // matched by display Name first then absolute Path (the agent may reference
 // either). Safe to call under e.mu held (it only reads the DB and mutates afs).
@@ -883,6 +945,11 @@ func (e *Engine) ClearReview() error {
 		return fmt.Errorf("clear additional files: %w", err)
 	}
 	e.current.AdditionalFiles = nil
+
+	if err := e.database.DeleteAnnotations(sessionID); err != nil {
+		return fmt.Errorf("clear annotations: %w", err)
+	}
+	e.current.Annotations = nil
 
 	if err := e.database.ResetAllReviewed(sessionID); err != nil {
 		return fmt.Errorf("reset reviewed: %w", err)

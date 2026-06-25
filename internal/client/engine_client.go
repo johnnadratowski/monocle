@@ -845,6 +845,43 @@ func (c *EngineClient) RemoveAdditionalFile(path string) error {
 	return nil
 }
 
+// GetAnnotations returns the agent-authored annotations for the active session.
+func (c *EngineClient) GetAnnotations() []types.Annotation {
+	resp, err := c.request(&protocol.GetAnnotationsMsg{Type: protocol.TypeGetAnnotations})
+	if err != nil {
+		return nil
+	}
+	r, ok := resp.(*protocol.GetAnnotationsResponse)
+	if !ok {
+		return nil
+	}
+	return r.Annotations
+}
+
+// AddAnnotations sends agent annotations to the engine. When replace is true,
+// all annotations for the session are cleared first. Returns the number applied.
+func (c *EngineClient) AddAnnotations(entries []protocol.AnnotationEntry, replace bool) (int, error) {
+	resp, err := c.request(&protocol.AddAnnotationsMsg{
+		Type:    protocol.TypeAddAnnotations,
+		Entries: entries,
+		Replace: replace,
+	})
+	if err != nil {
+		return 0, err
+	}
+	r, ok := resp.(*protocol.AddAnnotationsResponse)
+	if !ok {
+		return 0, fmt.Errorf("unexpected response %T", resp)
+	}
+	if !r.Success {
+		if r.Message != "" {
+			return 0, errors.New(r.Message)
+		}
+		return 0, errors.New("add annotations failed")
+	}
+	return r.Count, nil
+}
+
 // SetFileGroups sends agent-supplied grouping metadata to the engine. When
 // replace is true the entries fully replace prior metadata for the session.
 // Returns the number of entries applied.

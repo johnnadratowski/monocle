@@ -861,3 +861,71 @@ func TestChurnAndFileMetadataRoundtrip(t *testing.T) {
 		}
 	}
 }
+
+func TestAnnotationsRoundtrip(t *testing.T) {
+	d := testDB(t)
+	now := time.Now()
+	s := &types.ReviewSession{ID: "sa", Agent: "claude", RepoRoot: "/r", BaseRef: "b", ReviewRound: 2, CreatedAt: now, UpdatedAt: now}
+	if err := d.CreateSession(s); err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+
+	anns := []types.Annotation{
+		{TargetRef: "api/h.go", LineStart: 10, LineEnd: 12, Summary: "guards the deposit", ReviewRound: 2,
+			Refs: []types.DocRef{{Kind: types.DocRefFile, Doc: "TODO.md", Label: "srv-008", StartLine: 40, StartCol: 0, EndLine: 52, EndCol: 0}}},
+		{TargetRef: "ui/App.tsx", LineStart: 3, LineEnd: 3, Summary: "wires the form", ReviewRound: 2},
+	}
+	if err := d.SetAnnotations("sa", anns, false); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+
+	got, err := d.GetAnnotations("sa")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d annotations, want 2", len(got))
+	}
+	// IDs are minted, refs survive the JSON round-trip.
+	var apiAnn types.Annotation
+	for _, a := range got {
+		if a.ID == "" {
+			t.Error("annotation missing minted ID")
+		}
+		if a.TargetRef == "api/h.go" {
+			apiAnn = a
+		}
+	}
+	if len(apiAnn.Refs) != 1 || apiAnn.Refs[0].Doc != "TODO.md" || apiAnn.Refs[0].StartLine != 40 || apiAnn.Refs[0].EndLine != 52 {
+		t.Errorf("refs not preserved: %+v", apiAnn.Refs)
+	}
+
+	// Per-file replace: re-annotating api/h.go must not touch ui/App.tsx.
+	if err := d.SetAnnotations("sa", []types.Annotation{{TargetRef: "api/h.go", LineStart: 99, Summary: "new", ReviewRound: 2}}, false); err != nil {
+		t.Fatalf("set 2: %v", err)
+	}
+	got2, _ := d.GetAnnotations("sa")
+	var apiCount, uiCount int
+	for _, a := range got2 {
+		switch a.TargetRef {
+		case "api/h.go":
+			apiCount++
+			if a.LineStart != 99 {
+				t.Errorf("api annotation not replaced: %+v", a)
+			}
+		case "ui/App.tsx":
+			uiCount++
+		}
+	}
+	if apiCount != 1 || uiCount != 1 {
+		t.Errorf("per-file replace wrong: api=%d ui=%d (want 1,1)", apiCount, uiCount)
+	}
+
+	// DeleteAnnotations clears all.
+	if err := d.DeleteAnnotations("sa"); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if got3, _ := d.GetAnnotations("sa"); len(got3) != 0 {
+		t.Errorf("expected 0 after delete, got %d", len(got3))
+	}
+}

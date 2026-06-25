@@ -620,6 +620,10 @@ func (s *SocketServer) handleMessage(msg any) any {
 		return s.engine.handleRemoveAdditionalFiles(m)
 	case *protocol.SetFileGroupsMsg:
 		return s.engine.handleSetFileGroups(m)
+	case *protocol.AddAnnotationsMsg:
+		return s.engine.handleAddAnnotations(m)
+	case *protocol.GetAnnotationsMsg:
+		return s.engine.handleGetAnnotations(m)
 	case *protocol.MarkActivityMsg:
 		return s.engine.handleMarkActivity(m)
 	case *protocol.AwaitReviewMsg:

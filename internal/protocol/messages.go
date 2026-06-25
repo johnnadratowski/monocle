@@ -13,6 +13,7 @@ const (
 	TypeAddAdditionalFiles    = "add_additional_files"
 	TypeRemoveAdditionalFiles = "remove_additional_files"
 	TypeSetFileGroups         = "set_file_groups"
+	TypeAddAnnotations        = "add_annotations"
 	TypeMarkActivity          = "mark_activity"
 	TypeAwaitReview           = "await_review"
 )
@@ -28,6 +29,7 @@ const (
 	TypeAddAdditionalFilesResponse    = "add_additional_files_response"
 	TypeRemoveAdditionalFilesResponse = "remove_additional_files_response"
 	TypeSetFileGroupsResponse         = "set_file_groups_response"
+	TypeAddAnnotationsResponse        = "add_annotations_response"
 	TypeMarkActivityResponse          = "mark_activity_response"
 	TypeAwaitReviewResponse           = "await_review_response"
 )
@@ -219,6 +221,32 @@ type SetFileGroupsMsg struct {
 // SetFileGroupsResponse acknowledges a grouping update. Count is the number of
 // entries applied.
 type SetFileGroupsResponse struct {
+	Type    string `json:"type"`
+	Success bool   `json:"success"`
+	Message string `json:"message,omitempty"`
+	Count   int    `json:"count"`
+}
+
+// AnnotationEntry is one agent annotation: a rationale attached to a code range
+// in a file, with structured doc links.
+type AnnotationEntry struct {
+	File      string         `json:"file"`
+	LineStart int            `json:"line_start"`
+	LineEnd   int            `json:"line_end"`
+	Summary   string         `json:"summary"`
+	Refs      []types.DocRef `json:"refs,omitempty"`
+}
+
+// AddAnnotationsMsg attaches agent annotations to code ranges. Replace=true
+// clears all annotations for the session first; otherwise it replaces per file.
+type AddAnnotationsMsg struct {
+	Type    string            `json:"type"`
+	Entries []AnnotationEntry `json:"entries"`
+	Replace bool              `json:"replace,omitempty"`
+}
+
+// AddAnnotationsResponse acknowledges an annotation update.
+type AddAnnotationsResponse struct {
 	Type    string `json:"type"`
 	Success bool   `json:"success"`
 	Message string `json:"message,omitempty"`

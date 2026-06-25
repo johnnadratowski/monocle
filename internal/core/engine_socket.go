@@ -158,6 +158,13 @@ func (e *Engine) handleGetAdditionalFiles(_ *protocol.GetAdditionalFilesMsg) *pr
 	}
 }
 
+func (e *Engine) handleGetAnnotations(_ *protocol.GetAnnotationsMsg) *protocol.GetAnnotationsResponse {
+	return &protocol.GetAnnotationsResponse{
+		Type:        protocol.TypeGetAnnotationsResponse,
+		Annotations: e.GetAnnotations(),
+	}
+}
+
 func (e *Engine) handleGetAdditionalFileContent(msg *protocol.GetAdditionalFileContentMsg) *protocol.GetAdditionalFileContentResponse {
 	content, err := e.GetAdditionalFileContent(msg.AbsPath)
 	return &protocol.GetAdditionalFileContentResponse{

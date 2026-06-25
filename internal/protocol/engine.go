@@ -31,6 +31,9 @@ const (
 	TypeGetAdditionalFiles       = "get_additional_files"
 	TypeGetAdditionalFileContent = "get_additional_file_content"
 
+	// Annotations (agent-authored; read by the TUI)
+	TypeGetAnnotations = "get_annotations"
+
 	// Comments
 	TypeAddComment     = "add_comment"
 	TypeEditComment    = "edit_comment"
@@ -54,22 +57,22 @@ const (
 	TypeGetSubmissions   = "get_submissions"
 
 	// Base ref
-	TypeSetBaseRef         = "set_base_ref"
-	TypeSetAutoAdvanceRef  = "set_auto_advance_ref"
-	TypeIsAutoAdvanceRef   = "is_auto_advance_ref"
-	TypeSelectedBaseRef    = "selected_base_ref"
-	TypeRecentCommits      = "recent_commits"
+	TypeSetBaseRef        = "set_base_ref"
+	TypeSetAutoAdvanceRef = "set_auto_advance_ref"
+	TypeIsAutoAdvanceRef  = "is_auto_advance_ref"
+	TypeSelectedBaseRef   = "selected_base_ref"
+	TypeRecentCommits     = "recent_commits"
 
 	// Snapshots
-	TypeGetSnapshots       = "get_snapshots"
-	TypeSetSnapshotBase    = "set_snapshot_base"
-	TypeClearSnapshotBase  = "clear_snapshot_base"
-	TypeGetActiveSnapshot  = "get_active_snapshot"
-	TypeHasSnapshots       = "has_snapshots"
+	TypeGetSnapshots      = "get_snapshots"
+	TypeSetSnapshotBase   = "set_snapshot_base"
+	TypeClearSnapshotBase = "clear_snapshot_base"
+	TypeGetActiveSnapshot = "get_active_snapshot"
+	TypeHasSnapshots      = "has_snapshots"
 
 	// Config
-	TypeGetConfig              = "get_config"
-	TypeSaveConfig             = "save_config"
+	TypeGetConfig               = "get_config"
+	TypeSaveConfig              = "save_config"
 	TypeIsReviewTrackingEnabled = "is_review_tracking_enabled"
 
 	// Status
@@ -108,6 +111,9 @@ const (
 	// Additional files
 	TypeGetAdditionalFilesResponse       = "get_additional_files_response"
 	TypeGetAdditionalFileContentResponse = "get_additional_file_content_response"
+
+	// Annotations
+	TypeGetAnnotationsResponse = "get_annotations_response"
 
 	// Comments
 	TypeAddCommentResponse     = "add_comment_response"
@@ -179,9 +185,9 @@ type StartSessionMsg struct {
 }
 
 type StartSessionResponse struct {
-	Type    string                `json:"type"`
-	Session *types.ReviewSession  `json:"session,omitempty"`
-	Error   string                `json:"error,omitempty"`
+	Type    string               `json:"type"`
+	Session *types.ReviewSession `json:"session,omitempty"`
+	Error   string               `json:"error,omitempty"`
 }
 
 type ResumeSessionMsg struct {
@@ -190,9 +196,9 @@ type ResumeSessionMsg struct {
 }
 
 type ResumeSessionResponse struct {
-	Type    string                `json:"type"`
-	Session *types.ReviewSession  `json:"session,omitempty"`
-	Error   string                `json:"error,omitempty"`
+	Type    string               `json:"type"`
+	Session *types.ReviewSession `json:"session,omitempty"`
+	Error   string               `json:"error,omitempty"`
 }
 
 type GetSessionMsg struct {
@@ -200,8 +206,8 @@ type GetSessionMsg struct {
 }
 
 type GetSessionResponse struct {
-	Type    string                `json:"type"`
-	Session *types.ReviewSession  `json:"session,omitempty"`
+	Type    string               `json:"type"`
+	Session *types.ReviewSession `json:"session,omitempty"`
 }
 
 type ListSessionsMsg struct {
@@ -235,6 +241,15 @@ type GetChangedFilesMsg struct {
 type GetChangedFilesResponse struct {
 	Type  string              `json:"type"`
 	Files []types.ChangedFile `json:"files,omitempty"`
+}
+
+type GetAnnotationsMsg struct {
+	Type string `json:"type"`
+}
+
+type GetAnnotationsResponse struct {
+	Type        string             `json:"type"`
+	Annotations []types.Annotation `json:"annotations,omitempty"`
 }
 
 type GetFileDiffMsg struct {

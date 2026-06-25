@@ -45,6 +45,7 @@ type ReviewSession struct {
 	ContentItems    []ContentItem
 	AdditionalFiles []AdditionalFile
 	Comments        []ReviewComment
+	Annotations     []Annotation
 	FileStatuses    map[string]bool // path -> reviewed
 	IgnorePatterns  []string
 	ReviewRound     int
@@ -124,6 +125,44 @@ type ReviewComment struct {
 	ReviewRound int
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
+}
+
+// Annotation is an agent-authored explanation attached to a specific range of
+// changed code, linking out to the docs that motivate it. Annotations are a
+// distinct channel from reviewer ReviewComments — they are authored by the agent
+// to aid the reviewer and are NEVER included in the feedback sent back to the
+// agent.
+type Annotation struct {
+	ID          string
+	TargetRef   string // file path the annotated code lives in
+	LineStart   int    // first annotated code line (new-file line number)
+	LineEnd     int    // last annotated code line
+	Summary     string // one-line rationale shown inline
+	Refs        []DocRef
+	ReviewRound int
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+// DocRefKind distinguishes a repo file from a sent artifact as a doc target.
+type DocRefKind string
+
+const (
+	DocRefFile     DocRefKind = "file"     // Doc is a repo-relative file path
+	DocRefArtifact DocRefKind = "artifact" // Doc is a content-item (artifact) ID
+)
+
+// DocRef links an annotation to a span of a document. The span is a
+// line/column range (1-based lines, 0-based columns); zero values mean
+// unspecified (start/end of line or document).
+type DocRef struct {
+	Kind      DocRefKind `json:"kind"`
+	Doc       string     `json:"doc"`   // repo-relative file path or artifact id
+	Label     string     `json:"label"` // link display text
+	StartLine int        `json:"start_line"`
+	StartCol  int        `json:"start_col"`
+	EndLine   int        `json:"end_line"`
+	EndCol    int        `json:"end_col"`
 }
 
 type ReviewSubmission struct {

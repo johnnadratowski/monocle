@@ -59,6 +59,10 @@ func TestEngineMessagesRoundTrip(t *testing.T) {
 		{"RemoveAdditionalFilesResponse", &RemoveAdditionalFilesResponse{Type: TypeRemoveAdditionalFilesResponse, Success: true, Count: 1}},
 		{"SetFileGroups", &SetFileGroupsMsg{Type: TypeSetFileGroups, Replace: true, Entries: []FileGroupEntry{{Path: "a.go", Group: "UI", GroupOrder: 1, SortIndex: 2, Category: "code", Criticality: 3}}}},
 		{"SetFileGroupsResponse", &SetFileGroupsResponse{Type: TypeSetFileGroupsResponse, Success: true, Count: 1}},
+		{"AddAnnotations", &AddAnnotationsMsg{Type: TypeAddAnnotations, Replace: true, Entries: []AnnotationEntry{{File: "a.go", LineStart: 10, LineEnd: 12, Summary: "why", Refs: []types.DocRef{{Kind: types.DocRefFile, Doc: "TODO.md", Label: "spec", StartLine: 5, EndLine: 8}}}}}},
+		{"AddAnnotationsResponse", &AddAnnotationsResponse{Type: TypeAddAnnotationsResponse, Success: true, Count: 1}},
+		{"GetAnnotations", &GetAnnotationsMsg{Type: TypeGetAnnotations}},
+		{"GetAnnotationsResponse", &GetAnnotationsResponse{Type: TypeGetAnnotationsResponse, Annotations: []types.Annotation{{ID: "a1", TargetRef: "a.go", LineStart: 10, LineEnd: 12, Summary: "why"}}}},
 
 		// Comments
 		{"AddComment", &AddCommentMsg{Type: TypeAddComment, TargetType: types.TargetFile, TargetRef: "a.go", LineStart: 1, LineEnd: 2, CommentType: types.CommentNote, Body: "b"}},
