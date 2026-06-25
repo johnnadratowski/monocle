@@ -421,7 +421,7 @@ func handleAddAnnotations(ctx context.Context, req *sdkmcp.CallToolRequest, para
 	if !r.Success {
 		return errResult("%s", r.Message), nil, nil
 	}
-	return textResult(r.Message), nil, nil
+	return textResult(r.Summary()), nil, nil
 }
 
 // -- Helpers --

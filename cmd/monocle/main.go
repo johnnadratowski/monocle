@@ -840,7 +840,7 @@ func (cmd *ReviewAnnotateCmd) Run() error {
 	if !r.Success {
 		return fmt.Errorf("%s", r.Message)
 	}
-	fmt.Println(r.Message)
+	fmt.Println(r.Summary())
 	return nil
 }
 

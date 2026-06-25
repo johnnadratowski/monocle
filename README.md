@@ -232,6 +232,8 @@ Monocle exposes review operations via **MCP tools** (default for Claude Code, an
 | `n`/`N`                | Next/previous search match                                |
 | `t`                    | Cycle diff style (unified/split/file) (any pane)          |
 | `a`                    | Toggle full-file diff (whole file vs. changed lines)      |
+| `O`                    | Hide / show inline comments + annotations                 |
+| `o`                    | Open / cycle annotation doc links (doc pane)              |
 | `T`                    | Cycle layout (auto/side-by-side/stacked)                  |
 | `R`                    | Force reload files                                        |
 | `S` / `:submit`        | Submit review                                             |

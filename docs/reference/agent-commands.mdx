@@ -292,9 +292,22 @@ The manifest is a JSON array of entries (or an object with an `entries` array), 
 | `--workdir PATH` | `-C` | Override the working directory. Also reads from `MONOCLE_WORKDIR`. |
 | `--socket PATH` | | Override the Unix socket path. Also reads from `MONOCLE_SOCKET`. |
 
+### Validation and response
+
+Each entry is validated before it is stored. The response reports how many were **accepted** and lists any **rejected** entries with a reason so you can correct and resend. An entry is rejected when:
+
+- `line_start` is less than 1,
+- `line_end` is less than `line_start`,
+- `summary` is empty, or
+- `file` is not one of the review's changed files.
+
+Doc refs that can't be resolved (a wrong repo path or unknown artifact id) don't reject the entry — they come back as **warnings**. The annotation is still stored, but the link will read "not found" to the reviewer, so fix the ref and resend.
+
+Annotations are pinned to a round's exact code ranges, so they are **cleared automatically when the reviewer submits and the round advances**. Re-annotate against the revised code each round.
+
 ### MCP tool equivalent
 
-In MCP tools mode, call the `add_annotations` tool with the same `entries` (and optional `replace`) shape.
+In MCP tools mode, call the `add_annotations` tool with the same `entries` (and optional `replace`) shape. The tool returns the same accepted / rejected / warning summary as text.
 
 ### Example
 
