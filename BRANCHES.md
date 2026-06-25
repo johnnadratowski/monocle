@@ -59,3 +59,9 @@ for b in fix/diffview-scroll feat/full-file-diff fix/editor-config \
   printf '%-34s %s\n' "$b" "$(git log --oneline -1 "$b" 2>/dev/null)"
 done
 ```
+
+## Experimental branch
+
+| Branch | Base | Status | Summary |
+|--------|------|--------|---------|
+| `experiment/code-annotations` | `integration` | **experiment — back-out-able** | Agent code annotations: a separate channel from reviewer comments (`add_annotations` MCP tool + `monocle review annotate` CLI, schema 10 `annotations` table). Agents attach a one-line rationale to a code range with structured doc links; rendered as a distinct cyan inline box with a gutter range bar; `O` toggles inline overlays. Stage C (side-by-side doc pane + ref nav + range highlight) in progress. NOT merged into integration — kept isolated so it can be dropped if the experiment doesn't pan out. |
