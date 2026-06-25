@@ -35,6 +35,10 @@ type sidebarModel struct {
 	groupMode     bool
 	groupedFiles  []types.ChangedFile
 	groupHeaderAt map[int]string
+	// Grouped order + headers for the additional-files section (agent-attached
+	// files participate in grouping too).
+	groupedAdditional  []types.AdditionalFile
+	additionalHeaderAt map[int]string
 
 	// Filter state: "" = show all, "unreviewed" = hide reviewed, "reviewed" = hide unreviewed
 	reviewFilter string
@@ -288,6 +292,17 @@ func (m sidebarModel) View() string {
 				linesUsed++
 			}
 		}
+		// Grouped mode: the same for the additional-files section.
+		if m.groupMode && idx >= additionalStart {
+			if hdr, ok := m.additionalHeaderAt[idx-additionalStart]; ok {
+				if linesUsed+1 > availableLines {
+					break
+				}
+				b.WriteString(groupHeaderStyle.Render(hdr))
+				b.WriteString("\n")
+				linesUsed++
+			}
+		}
 
 		var line string
 		if idx < contentItemCt {
@@ -306,7 +321,7 @@ func (m sidebarModel) View() string {
 			}
 		} else {
 			additionalIdx := idx - additionalStart
-			line = m.renderAdditionalFileItem(m.additionalFiles[additionalIdx], idx == m.cursor)
+			line = m.renderAdditionalFileItem(m.displayAdditionalFiles()[additionalIdx], idx == m.cursor)
 		}
 
 		b.WriteString(line)
@@ -674,6 +689,19 @@ func (m sidebarModel) fileItemCount() int {
 	return len(m.files)
 }
 
+// styleName returns the config value ("flat"/"tree"/"grouped") for the current
+// view mode, so it can be persisted and restored across launches.
+func (m sidebarModel) styleName() string {
+	switch {
+	case m.treeMode:
+		return "tree"
+	case m.groupMode:
+		return "grouped"
+	default:
+		return "flat"
+	}
+}
+
 // displayFiles returns the files in their current display order: grouped order
 // in grouped mode, otherwise the natural order. Used everywhere a flat file index
 // is resolved so grouped mode stays consistent with what is rendered.
@@ -684,6 +712,15 @@ func (m sidebarModel) displayFiles() []types.ChangedFile {
 	return m.files
 }
 
+// displayAdditionalFiles returns the additional files in their current display
+// order: grouped order in grouped mode, otherwise natural order.
+func (m sidebarModel) displayAdditionalFiles() []types.AdditionalFile {
+	if m.groupMode {
+		return m.groupedAdditional
+	}
+	return m.additionalFiles
+}
+
 // rebuildGroups recomputes the grouped display order and header positions from
 // the current files. Safe to call when groupMode is false (no-op).
 func (m *sidebarModel) rebuildGroups() {
@@ -691,6 +728,7 @@ func (m *sidebarModel) rebuildGroups() {
 		return
 	}
 	m.groupedFiles, m.groupHeaderAt = groupFiles(m.files)
+	m.groupedAdditional, m.additionalHeaderAt = groupAdditionalFiles(m.additionalFiles)
 }
 
 func (m sidebarModel) selectCurrent() tea.Cmd {
@@ -726,7 +764,7 @@ func (m sidebarModel) selectCurrent() tea.Cmd {
 	// Then additional files
 	additionalIdx := m.cursor - contentCount - m.fileItemCount()
 	if additionalIdx >= 0 && additionalIdx < len(m.additionalFiles) {
-		af := m.additionalFiles[additionalIdx]
+		af := m.displayAdditionalFiles()[additionalIdx]
 		return func() tea.Msg {
 			return sidebarSelectMsg{path: af.Path, isAdditionalFile: true}
 		}
@@ -775,7 +813,8 @@ func (m sidebarModel) selectedAdditionalFile() *types.AdditionalFile {
 	if additionalIdx < 0 || additionalIdx >= len(m.additionalFiles) {
 		return nil
 	}
-	return &m.additionalFiles[additionalIdx]
+	daf := m.displayAdditionalFiles()
+	return &daf[additionalIdx]
 }
 
 // navigateFile moves the cursor to the next (dir=+1) or previous (dir=-1)
@@ -857,7 +896,7 @@ func (m *sidebarModel) nextUnreviewed() tea.Cmd {
 		// Additional files
 		additionalIdx := next - contentCount - fileCt
 		if additionalIdx >= 0 && additionalIdx < len(m.additionalFiles) {
-			if !m.additionalFiles[additionalIdx].Reviewed {
+			if !m.displayAdditionalFiles()[additionalIdx].Reviewed {
 				m.cursor = next
 				m.ensureVisible()
 				return m.selectCurrent()
@@ -1031,7 +1070,7 @@ func (m *sidebarModel) selectByKey(kind, id string) bool {
 		}
 	case "additional":
 		fileCount := m.fileItemCount()
-		for i, af := range m.additionalFiles {
+		for i, af := range m.displayAdditionalFiles() {
 			if af.Path == id {
 				m.cursor = contentCount + fileCount + i
 				return true

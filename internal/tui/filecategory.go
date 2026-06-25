@@ -103,75 +103,78 @@ func categorizeFile(path string) fileCategory {
 	return categoryCode
 }
 
-// resolvedCategory returns the file's category: the agent-supplied override when
-// valid, otherwise the path heuristic.
-func resolvedCategory(f types.ChangedFile) fileCategory {
-	if f.Category != "" {
-		c := fileCategory(f.Category)
+// resolvedCategoryFor returns the category for a path: the agent-supplied
+// override when valid, otherwise the path heuristic.
+func resolvedCategoryFor(category, path string) fileCategory {
+	if category != "" {
+		c := fileCategory(category)
 		if _, ok := categoryMetaByID[c]; ok {
 			return c
 		}
 	}
-	return categorizeFile(f.Path)
+	return categorizeFile(path)
 }
 
-// fileChurnTotal is the file's churn used for the lines-changed fallback sort.
-func fileChurnTotal(f types.ChangedFile) int { return f.Additions + f.Deletions }
-
-// fileGroup is an ordered group of files with a header for the grouped view.
-type fileGroup struct {
-	key     string // grouping key (agent group label, or category id)
-	label   string // rendered header label
-	icon    string // header icon
-	order   int    // primary sort order among groups
-	isAgent bool   // true when formed from an agent-supplied group label
-	files   []types.ChangedFile
+// groupItem is the grouping-relevant projection of a file (changed or
+// additional), so the grouping logic can be shared across file kinds.
+type groupItem struct {
+	path       string
+	category   string // agent override ("" = heuristic)
+	groupLabel string // agent group label ("" = category group)
+	groupOrder int
+	sortIndex  int
+	importRank int // intra-changeset import order (0 if unknown); dependencies first
+	churn      int
 }
 
-// groupFiles reorders files for the grouped view and returns the flattened slice
-// plus a map from display index to the header rendered before that file.
+// groupBucket accumulates items for one group during grouping.
+type groupBucket[T any] struct {
+	label   string
+	icon    string
+	order   int
+	isAgent bool
+	items   []T
+}
+
+// groupItemsBy reorders items into groups and returns the flattened slice plus a
+// map from display index to the header shown before that item.
 //
-// Grouping key is the agent-supplied GroupLabel when present, otherwise the
-// resolved category. Agent-labeled groups sort first by their GroupOrder, then
-// category groups follow in the fixed categoryOrder. Within a group, files sort
-// by the agent SortIndex when given, else by churn (lines changed) descending,
-// then path.
-func groupFiles(files []types.ChangedFile) ([]types.ChangedFile, map[int]string) {
-	groups := map[string]*fileGroup{}
+// Grouping key is the agent group label when present, otherwise the resolved
+// category. Agent-labeled groups sort first (by group order), then category
+// groups in the fixed category order. Within a group, items sort by agent sort
+// index, then intra-changeset import order (dependencies first), then churn
+// descending, then path.
+func groupItemsBy[T any](items []T, proj func(T) groupItem) ([]T, map[int]string) {
+	groups := map[string]*groupBucket[T]{}
 	var keys []string
 
-	for _, f := range files {
+	for _, it := range items {
+		gi := proj(it)
 		var key string
-		var g *fileGroup
-		if f.GroupLabel != "" {
-			key = "label:" + f.GroupLabel
+		if gi.groupLabel != "" {
+			key = "label:" + gi.groupLabel
 			if groups[key] == nil {
-				g = &fileGroup{key: key, label: f.GroupLabel, icon: "", order: f.GroupOrder, isAgent: true}
-				groups[key] = g
+				groups[key] = &groupBucket[T]{label: gi.groupLabel, icon: "", order: gi.groupOrder, isAgent: true}
 				keys = append(keys, key)
 			}
-			g = groups[key]
-			// A group's order is the smallest GroupOrder among its files.
-			if f.GroupOrder < g.order {
-				g.order = f.GroupOrder
+			b := groups[key]
+			if gi.groupOrder < b.order { // group order = smallest among its files
+				b.order = gi.groupOrder
 			}
+			b.items = append(b.items, it)
 		} else {
-			cat := resolvedCategory(f)
+			cat := resolvedCategoryFor(gi.category, gi.path)
 			key = "cat:" + string(cat)
 			if groups[key] == nil {
 				meta := cat.meta()
-				g = &fileGroup{key: key, label: meta.label, icon: meta.icon, order: categoryIndex(cat)}
-				groups[key] = g
+				groups[key] = &groupBucket[T]{label: meta.label, icon: meta.icon, order: categoryIndex(cat)}
 				keys = append(keys, key)
 			}
-			g = groups[key]
+			groups[key].items = append(groups[key].items, it)
 		}
-		g.files = append(g.files, f)
 	}
 
-	// Order groups: agent-labeled first (by order), then category groups (by the
-	// fixed category order). Stable on label for ties.
-	ordered := make([]*fileGroup, 0, len(keys))
+	ordered := make([]*groupBucket[T], 0, len(keys))
 	for _, k := range keys {
 		ordered = append(ordered, groups[k])
 	}
@@ -186,28 +189,54 @@ func groupFiles(files []types.ChangedFile) ([]types.ChangedFile, map[int]string)
 		return a.label < b.label
 	})
 
-	flat := make([]types.ChangedFile, 0, len(files))
+	flat := make([]T, 0, len(items))
 	headers := map[int]string{}
-	for _, g := range ordered {
-		sortGroupFiles(g.files)
-		headers[len(flat)] = fmt.Sprintf("%s %s  %d", g.icon, g.label, len(g.files))
-		flat = append(flat, g.files...)
+	for _, b := range ordered {
+		sort.SliceStable(b.items, func(i, j int) bool {
+			x, y := proj(b.items[i]), proj(b.items[j])
+			if x.sortIndex != y.sortIndex {
+				return x.sortIndex < y.sortIndex
+			}
+			if x.importRank != y.importRank {
+				return x.importRank < y.importRank // dependencies (lower rank) first
+			}
+			if x.churn != y.churn {
+				return x.churn > y.churn // bigger churn first
+			}
+			return x.path < y.path
+		})
+		headers[len(flat)] = fmt.Sprintf("%s %s  %d", b.icon, b.label, len(b.items))
+		flat = append(flat, b.items...)
 	}
 	return flat, headers
 }
 
-// sortGroupFiles orders files within a group: agent SortIndex first (when any are
-// set), else churn descending, then path.
-func sortGroupFiles(files []types.ChangedFile) {
-	sort.SliceStable(files, func(i, j int) bool {
-		a, b := files[i], files[j]
-		if a.SortIndex != b.SortIndex {
-			return a.SortIndex < b.SortIndex
+// groupFiles reorders changed files for the grouped view.
+func groupFiles(files []types.ChangedFile) ([]types.ChangedFile, map[int]string) {
+	return groupItemsBy(files, func(f types.ChangedFile) groupItem {
+		return groupItem{
+			path:       f.Path,
+			category:   f.Category,
+			groupLabel: f.GroupLabel,
+			groupOrder: f.GroupOrder,
+			sortIndex:  f.SortIndex,
+			importRank: f.ImportOrder,
+			churn:      f.Additions + f.Deletions,
 		}
-		if ca, cb := fileChurnTotal(a), fileChurnTotal(b); ca != cb {
-			return ca > cb // bigger churn first
+	})
+}
+
+// groupAdditionalFiles reorders agent-attached additional files for the grouped
+// view, using the same grouping rules (additional files carry no churn).
+func groupAdditionalFiles(files []types.AdditionalFile) ([]types.AdditionalFile, map[int]string) {
+	return groupItemsBy(files, func(f types.AdditionalFile) groupItem {
+		return groupItem{
+			path:       f.Name,
+			category:   f.Category,
+			groupLabel: f.GroupLabel,
+			groupOrder: f.GroupOrder,
+			sortIndex:  f.SortIndex,
 		}
-		return a.Path < b.Path
 	})
 }
 

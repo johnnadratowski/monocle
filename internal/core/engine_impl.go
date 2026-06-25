@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/josephschmitt/monocle/internal/db"
+	"github.com/josephschmitt/monocle/internal/imports"
 	"github.com/josephschmitt/monocle/internal/protocol"
 	"github.com/josephschmitt/monocle/internal/types"
 )
@@ -249,11 +250,29 @@ func (e *Engine) RefreshChangedFiles() ([]types.ChangedFile, error) {
 			}
 		}
 		e.applyFileMetadata(session.ID, files)
+		applyImportOrder(session.RepoRoot, files)
 		e.current.ChangedFiles = files
 	}
 	e.mu.Unlock()
 
 	return files, nil
+}
+
+// applyImportOrder computes the intra-changeset import reading order over the
+// changed files and stores each file's rank on it (dependencies first). It reads
+// the working-tree file contents; failures degrade to rank 0 (no ordering).
+func applyImportOrder(repoRoot string, files []types.ChangedFile) {
+	if repoRoot == "" || len(files) == 0 {
+		return
+	}
+	paths := make([]string, len(files))
+	for i, f := range files {
+		paths[i] = f.Path
+	}
+	ranks := imports.Order(repoRoot, paths)
+	for i := range files {
+		files[i].ImportOrder = ranks[files[i].Path]
+	}
 }
 
 // applyFileMetadata merges agent-supplied grouping metadata (stored separately
@@ -457,7 +476,34 @@ func (e *Engine) GetAdditionalFiles() []types.AdditionalFile {
 	if e.current == nil {
 		return nil
 	}
-	return e.current.AdditionalFiles
+	// Merge agent grouping metadata into a copy so additional files can
+	// participate in the grouped view without mutating the stored slice.
+	afs := make([]types.AdditionalFile, len(e.current.AdditionalFiles))
+	copy(afs, e.current.AdditionalFiles)
+	e.applyAdditionalFileMetadata(e.current.ID, afs)
+	return afs
+}
+
+// applyAdditionalFileMetadata merges grouping metadata onto additional files,
+// matched by display Name first then absolute Path (the agent may reference
+// either). Safe to call under e.mu held (it only reads the DB and mutates afs).
+func (e *Engine) applyAdditionalFileMetadata(sessionID string, afs []types.AdditionalFile) {
+	meta, err := e.database.GetFileMetadata(sessionID)
+	if err != nil || len(meta) == 0 {
+		return
+	}
+	for i := range afs {
+		m, ok := meta[afs[i].Name]
+		if !ok {
+			m, ok = meta[afs[i].Path]
+		}
+		if ok {
+			afs[i].Category = m.Category
+			afs[i].GroupLabel = m.GroupLabel
+			afs[i].GroupOrder = m.GroupOrder
+			afs[i].SortIndex = m.SortIndex
+		}
+	}
 }
 
 func (e *Engine) AddAdditionalPaths(paths []string) ([]types.AdditionalFile, error) {
