@@ -110,7 +110,7 @@ This configures MCP tools or skills depending on the agent. Claude Code gets an 
 
 If your agent isn't natively supported, you can set up Monocle manually:
 
-- **MCP tools**: If your agent supports MCP servers via stdio, point it at `monocle serve-mcp`. This exposes review tools (`review_status`, `get_feedback`, `send_artifact`, `add_files`, `remove_files`, `set_file_groups`) over stdio.
+- **MCP tools**: If your agent supports MCP servers via stdio, point it at `monocle serve-mcp`. This exposes review tools (`review_status`, `get_feedback`, `send_artifact`, `add_files`, `remove_files`, `set_file_groups`, `add_annotations`) over stdio.
 - **Skills**: Download `skills.tar.gz` from the [latest release](https://github.com/josephschmitt/monocle/releases/latest) and extract the skill files into wherever your agent expects its skills.
 
 ### 2. Start reviewing
@@ -193,6 +193,7 @@ Monocle exposes review operations via **MCP tools** (default for Claude Code, an
 | Add files | `add_files` | — | Add files to the current review session |
 | Remove files | `remove_files` | — | Remove previously-added files from the review session |
 | Group files | `set_file_groups` | `monocle review group-files` | Categorize / group / order changed files for the grouped sidebar view |
+| Annotate code | `add_annotations` | `monocle review annotate` | Attach agent rationale + doc links to code ranges (shown to reviewer, not feedback) |
 
 ## Keybindings
 
@@ -302,6 +303,7 @@ monocle review send-artifact --title T [--file F] [--id ID] [--type EXT] [--wait
 monocle review add-files <paths...> [--json]             Add files to review session
 monocle review remove-files <paths...> [--json]          Remove previously-added files
 monocle review group-files [--file M] [--replace] [--json]  Group/order changed files (grouped view)
+monocle review annotate [--file M] [--replace] [--json]    Annotate code ranges with doc links
 ```
 
 - `--wait` blocks until the reviewer responds (used by `/review-plan-wait`)

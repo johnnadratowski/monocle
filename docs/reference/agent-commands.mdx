@@ -5,7 +5,7 @@ description: "CLI commands for agents to interact with a running monocle session
 
 These commands are used by agents — via installed skills, MCP tools, or directly from the command line — to communicate with a running monocle session.
 
-When registered in **MCP tools mode**, agents call these operations as MCP tools (`review_status`, `get_feedback`, `send_artifact`, `add_files`, `remove_files`, `set_file_groups`) instead of CLI commands. The behavior is identical — the MCP server connects to the same Unix socket internally.
+When registered in **MCP tools mode**, agents call these operations as MCP tools (`review_status`, `get_feedback`, `send_artifact`, `add_files`, `remove_files`, `set_file_groups`, `add_annotations`) instead of CLI commands. The behavior is identical — the MCP server connects to the same Unix socket internally.
 
 When registered in **skills mode**, agents invoke the corresponding CLI commands below.
 
@@ -247,4 +247,57 @@ In MCP tools mode, call the `set_file_groups` tool:
 
 ```bash
 monocle review group-files --file groups.json --replace
+```
+
+## `monocle review annotate`
+
+Attach short rationale notes to specific ranges of the changed code to guide the reviewer, each linking out to the docs that motivate it. **Annotations are shown to the reviewer only — they are not review feedback and are never sent back to the agent.** They render as a distinct box below the code range, with a colored bar marking the annotated lines.
+
+```bash
+monocle review annotate [--file manifest.json] [--replace] [--json] [--workdir PATH] [--socket PATH]
+```
+
+The manifest is a JSON array of entries (or an object with an `entries` array), read from `--file` or stdin:
+
+```json
+[
+  {
+    "file": "api/handler.go",
+    "line_start": 40,
+    "line_end": 52,
+    "summary": "Guards the on-chain deposit before the goal is created",
+    "refs": [
+      { "kind": "file", "doc": "docs/todo.md", "label": "srv-008", "start_line": 120, "end_line": 135 }
+    ]
+  }
+]
+```
+
+### Entry fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `file` | string | **(Required)** Changed-file path (from `review status`) the note explains. |
+| `line_start` / `line_end` | int | **(Required)** The exact code range the note covers. |
+| `summary` | string | One line: why this code exists / what it does. |
+| `refs` | array | Doc links. Each has `kind` (`file` for a repo path, `artifact` for a sent artifact id), `doc` (path or id), `label` (link text), and a `start_line`/`start_col`/`end_line`/`end_col` range into the doc (1-based lines, 0-based cols). |
+
+### Flags
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--file PATH` | | Path to the JSON manifest (`-` or omitted reads stdin). |
+| `--replace` | | Clear all existing annotations first (default replaces per file). |
+| `--json` | | Output the result as structured JSON. |
+| `--workdir PATH` | `-C` | Override the working directory. Also reads from `MONOCLE_WORKDIR`. |
+| `--socket PATH` | | Override the Unix socket path. Also reads from `MONOCLE_SOCKET`. |
+
+### MCP tool equivalent
+
+In MCP tools mode, call the `add_annotations` tool with the same `entries` (and optional `replace`) shape.
+
+### Example
+
+```bash
+monocle review annotate --file annotations.json
 ```
