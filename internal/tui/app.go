@@ -24,6 +24,7 @@ type focusTarget int
 const (
 	focusSidebar focusTarget = iota
 	focusMain
+	focusDoc // the annotation doc pane (only reachable when it's open)
 )
 
 // layoutMode determines whether panes are arranged horizontally or stacked vertically.
@@ -189,6 +190,7 @@ type appModel struct {
 
 	sidebar        sidebarModel
 	diffView       diffViewModel
+	docPane        docPaneModel // annotation doc pane (bottom split, when open)
 	statusBar      statusBarModel
 	commentEditor  commentEditorModel
 	reviewSummary  reviewSummaryModel
@@ -1580,6 +1582,26 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 	km := m.keys
 
+	// When the doc pane has focus, it captures scroll/close keys; Tab, shift+tab,
+	// and the open-ref key fall through to the shared handlers below.
+	if m.focus == focusDoc && m.docPane.active {
+		switch {
+		case key == "esc":
+			m.closeDocPane()
+			return m, nil
+		case Matches(key, km.Down) || Matches(key, km.ScrollDown):
+			m.docPane.scrollDown()
+			return m, nil
+		case Matches(key, km.Up) || Matches(key, km.ScrollUp):
+			m.docPane.scrollUp()
+			return m, nil
+		case Matches(key, km.FocusSwap), key == "shift+tab", Matches(key, km.OpenDocRef):
+			// fall through to the shared cases
+		default:
+			return m, nil
+		}
+	}
+
 	// The "match i/N" indicator is transient: it shows right after a search or
 	// n/N navigation (those cases re-set it) and clears on the next keystroke.
 	m.statusBar.searchInfo = ""
@@ -1627,18 +1649,11 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case Matches(key, km.FocusSwap):
-		if m.sidebarHidden {
-			return m, nil
-		}
-		if m.focus == focusSidebar {
-			m.focus = focusMain
-			m.sidebar.focused = false
-			m.diffView.focused = true
-		} else {
-			m.focus = focusSidebar
-			m.sidebar.focused = true
-			m.diffView.focused = false
-		}
+		m = m.cycleFocus(1)
+		return m, nil
+
+	case key == "shift+tab":
+		m = m.cycleFocus(-1)
 		return m, nil
 
 	case Matches(key, km.ToggleSidebar):
@@ -1930,6 +1945,14 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	case Matches(key, km.ToggleOverlays):
 		m.diffView.ToggleOverlays()
+		return m, nil
+
+	case Matches(key, km.OpenDocRef):
+		if m.focus == focusMain {
+			if a := m.diffView.CursorAnnotation(); a != nil && len(a.Refs) > 0 {
+				return m.openOrCycleDocPane(a), nil
+			}
+		}
 		return m, nil
 
 	case Matches(key, km.YankLine):
@@ -2705,6 +2728,91 @@ func (m appModel) editorCommand() string {
 	return ""
 }
 
+// cycleFocus moves focus across the visible panes: sidebar (when shown), the
+// diff, and the doc pane (when open). dir +1 is forward (Tab), -1 reverse.
+func (m appModel) cycleFocus(dir int) appModel {
+	var order []focusTarget
+	if !m.sidebarHidden {
+		order = append(order, focusSidebar)
+	}
+	order = append(order, focusMain)
+	if m.docPane.active {
+		order = append(order, focusDoc)
+	}
+	if len(order) < 2 {
+		return m
+	}
+	cur := 0
+	for i, f := range order {
+		if f == m.focus {
+			cur = i
+		}
+	}
+	m.setFocus(order[(cur+dir+len(order))%len(order)])
+	return m
+}
+
+// setFocus updates the focus target and the per-pane focused flags.
+func (m *appModel) setFocus(f focusTarget) {
+	m.focus = f
+	m.sidebar.focused = f == focusSidebar
+	m.diffView.focused = f == focusMain
+	m.docPane.focused = f == focusDoc
+}
+
+// openOrCycleDocPane opens the doc pane on the given annotation's first doc link,
+// or cycles to the next link if the pane is already showing that annotation.
+func (m appModel) openOrCycleDocPane(a *types.Annotation) appModel {
+	if len(a.Refs) == 0 {
+		return m
+	}
+	var ref types.DocRef
+	if m.docPane.active && m.docPane.annotationID == a.ID {
+		r, ok := m.docPane.nextRef()
+		if !ok {
+			return m
+		}
+		ref = r
+	} else {
+		m.docPane.annotationID = a.ID
+		m.docPane.openRefs(a.Refs)
+		ref = a.Refs[0]
+	}
+	title, content := m.loadDocRef(ref)
+	m.docPane.theme = &m.theme
+	m.docPane.setContent(title, content, ref)
+	return m
+}
+
+// loadDocRef resolves a doc ref's text: a repo file or a sent artifact.
+func (m appModel) loadDocRef(ref types.DocRef) (title, content string) {
+	if ref.Kind == types.DocRefArtifact {
+		if item, err := m.engine.GetContentItem(ref.Doc); err == nil && item != nil {
+			t := item.Title
+			if t == "" {
+				t = ref.Doc
+			}
+			return t, item.Content
+		}
+		return ref.Doc, "(artifact not found: " + ref.Doc + ")"
+	}
+	c, err := m.engine.GetFileContent(ref.Doc)
+	if err != nil {
+		return ref.Doc, "(could not open " + ref.Doc + ": " + err.Error() + ")"
+	}
+	return ref.Doc, c
+}
+
+// closeDocPane closes the doc pane and returns focus to the diff.
+func (m *appModel) closeDocPane() {
+	m.docPane.close()
+	if m.focus == focusDoc {
+		m.focus = focusMain
+		m.diffView.focused = true
+		m.sidebar.focused = false
+	}
+}
+
 // annotationsForFile returns the agent annotations targeting the given file.
 func annotationsForFile(session *types.ReviewSession, path string) []types.Annotation {
 	if session == nil {
@@ -3149,6 +3257,40 @@ func (m appModel) View() tea.View {
 	const bw = 2 // border left + right
 	const bh = 2 // border top + bottom
 
+	// Reserve the bottom half for the annotation doc pane when open. View has a
+	// value receiver, so shrinking the pane heights here is local to this render.
+	var docPaneView string
+	if m.docPane.active {
+		docInner := m.diffView.height / 2
+		if docInner < 3 {
+			docInner = 3
+		}
+		if docInner > m.diffView.height-3 {
+			docInner = m.diffView.height - 3
+		}
+		if docInner < 1 {
+			docInner = 1
+		}
+		docOuter := docInner + bh
+		m.diffView.height -= docOuter
+		if m.diffView.height < 1 {
+			m.diffView.height = 1
+		}
+		if m.layout != layoutStacked && !m.sidebarHidden {
+			m.sidebar.height -= docOuter
+			if m.sidebar.height < 1 {
+				m.sidebar.height = 1
+			}
+		}
+		m.docPane.width = m.width - bw
+		m.docPane.height = docInner
+		docStyle := m.theme.MainPane
+		if m.focus == focusDoc {
+			docStyle = m.theme.MainPaneFocused
+		}
+		docPaneView = docStyle.Width(m.width).Height(docInner + bh).Render(m.docPane.View())
+	}
+
 	if m.sidebarHidden {
 		mainView := mainStyle.
 			Width(m.diffView.width + bw).
@@ -3201,6 +3343,9 @@ func (m appModel) View() tea.View {
 	m.statusBar.diffBaseVersion = m.diffView.diffBaseVersion
 	m.statusBar.diffToVersion = m.diffView.diffToVersion
 	statusView := m.statusBar.View()
+	if docPaneView != "" {
+		body = lipgloss.JoinVertical(lipgloss.Left, body, docPaneView)
+	}
 	full := lipgloss.JoinVertical(lipgloss.Left, titleBar, body, statusView)
 
 	// Render overlay centered on top of the layout if active.

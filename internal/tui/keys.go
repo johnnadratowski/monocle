@@ -32,6 +32,7 @@ type KeyMap struct {
 	ToggleDiff      []string
 	ToggleFullDiff  []string
 	ToggleOverlays  []string // hide/show inline comments + annotations
+	OpenDocRef      []string // open/cycle the cursor annotation's doc links in the doc pane
 	YankLine        []string
 
 	// Diff search
@@ -103,6 +104,7 @@ func DefaultKeyMap() KeyMap {
 		ToggleDiff:      []string{"t"},
 		ToggleFullDiff:  []string{"a"},
 		ToggleOverlays:  []string{"O"},
+		OpenDocRef:      []string{"o"},
 		YankLine:        []string{"y"},
 
 		TreeMode:       []string{"f"},
@@ -149,7 +151,7 @@ var actionNames = []string{
 	"prev_file", "next_file", "select",
 	"focus_swap", "toggle_sidebar",
 	"scroll_down", "scroll_up", "scroll_left", "scroll_right", "scroll_home", "scroll_first_char", "scroll_end",
-	"wrap", "toggle_diff", "toggle_full_diff", "toggle_overlays", "yank_line",
+	"wrap", "toggle_diff", "toggle_full_diff", "toggle_overlays", "open_doc_ref", "yank_line",
 	"search_backward", "search_next", "search_prev",
 	"tree_mode", "collapse_all", "expand_all", "prev_section", "next_section", "filter_reviewed",
 	"comment", "file_comment", "suggest", "visual", "reviewed",
@@ -207,6 +209,8 @@ func (km KeyMap) ApplyOverrides(overrides map[string]string) KeyMap {
 			km.ToggleFullDiff = []string{key}
 		case "toggle_overlays":
 			km.ToggleOverlays = []string{key}
+		case "open_doc_ref":
+			km.OpenDocRef = []string{key}
 		case "yank_line":
 			km.YankLine = []string{key}
 		case "search_backward":

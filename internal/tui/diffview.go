@@ -2752,6 +2752,36 @@ func (m *diffViewModel) insertInlineComments(hunk types.DiffHunk) {
 	m.lines = result
 }
 
+// CursorAnnotation returns the annotation under the cursor: the annotation whose
+// box the cursor is on, or the one whose code range covers the cursor's line.
+func (m diffViewModel) CursorAnnotation() *types.Annotation {
+	if m.cursor < 0 || m.cursor >= len(m.lines) {
+		return nil
+	}
+	line := m.lines[m.cursor]
+	if line.isAnnotation {
+		return line.annotation
+	}
+	ln := line.newLineNum
+	if ln <= 0 {
+		return nil
+	}
+	for i := range m.annotations {
+		a := &m.annotations[i]
+		if a.TargetRef != m.path {
+			continue
+		}
+		end := a.LineEnd
+		if end == 0 {
+			end = a.LineStart
+		}
+		if ln >= a.LineStart && ln <= end {
+			return a
+		}
+	}
+	return nil
+}
+
 // annotationAnchor returns the new-file line after which an annotation's box is
 // drawn (the last line of its range).
 func annotationAnchor(a *types.Annotation) int {
