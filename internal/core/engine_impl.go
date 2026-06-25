@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/josephschmitt/monocle/internal/db"
+	"github.com/josephschmitt/monocle/internal/imports"
 	"github.com/josephschmitt/monocle/internal/protocol"
 	"github.com/josephschmitt/monocle/internal/types"
 )
@@ -249,11 +250,29 @@ func (e *Engine) RefreshChangedFiles() ([]types.ChangedFile, error) {
 			}
 		}
 		e.applyFileMetadata(session.ID, files)
+		applyImportOrder(session.RepoRoot, files)
 		e.current.ChangedFiles = files
 	}
 	e.mu.Unlock()
 
 	return files, nil
+}
+
+// applyImportOrder computes the intra-changeset import reading order over the
+// changed files and stores each file's rank on it (dependencies first). It reads
+// the working-tree file contents; failures degrade to rank 0 (no ordering).
+func applyImportOrder(repoRoot string, files []types.ChangedFile) {
+	if repoRoot == "" || len(files) == 0 {
+		return
+	}
+	paths := make([]string, len(files))
+	for i, f := range files {
+		paths[i] = f.Path
+	}
+	ranks := imports.Order(repoRoot, paths)
+	for i := range files {
+		files[i].ImportOrder = ranks[files[i].Path]
+	}
 }
 
 // applyFileMetadata merges agent-supplied grouping metadata (stored separately
