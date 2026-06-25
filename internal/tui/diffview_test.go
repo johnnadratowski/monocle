@@ -908,3 +908,63 @@ func TestOffScreenAccountsForCommentRows(t *testing.T) {
 		t.Errorf("lastVisibleLine = %d, want 7", got)
 	}
 }
+
+func TestAnnotationRenderingAndToggle(t *testing.T) {
+	theme := DefaultTheme()
+	m := diffViewModel{
+		theme: &theme, hl: newHighlighter(), mdStyler: newMarkdownStyler(theme),
+		path: "main.go", width: 80, height: 30, style: diffStyleUnified,
+		hunks: []types.DiffHunk{{
+			OldStart: 1, OldCount: 0, NewStart: 1, NewCount: 3, Header: "f",
+			Lines: []types.DiffLine{
+				{Kind: types.DiffLineAdded, NewLineNum: 1, Content: "line one"},
+				{Kind: types.DiffLineAdded, NewLineNum: 2, Content: "line two"},
+				{Kind: types.DiffLineAdded, NewLineNum: 3, Content: "line three"},
+			},
+		}},
+		annotations: []types.Annotation{
+			{TargetRef: "main.go", LineStart: 1, LineEnd: 2, Summary: "guards the deposit",
+				Refs: []types.DocRef{{Kind: types.DocRefFile, Doc: "TODO.md", Label: "srv-008", StartLine: 40, EndLine: 52}}},
+		},
+	}
+	m.buildLines()
+
+	// An annotation box line exists; lines 1-2 are flagged annotated, line 3 is not.
+	var annLine *diffViewLine
+	annotatedCount := 0
+	for i := range m.lines {
+		if m.lines[i].isAnnotation {
+			annLine = &m.lines[i]
+		}
+		if m.lines[i].annotated {
+			annotatedCount++
+		}
+	}
+	if annLine == nil {
+		t.Fatal("expected an annotation line in the built lines")
+	}
+	if annotatedCount != 2 {
+		t.Errorf("annotated code lines = %d, want 2 (lines 1-2)", annotatedCount)
+	}
+	out := m.View()
+	if !strings.Contains(out, "guards the deposit") {
+		t.Error("rendered view should contain the annotation summary")
+	}
+	if !strings.Contains(out, "srv-008") {
+		t.Error("rendered view should contain the ref label")
+	}
+
+	// Hiding overlays removes the annotation box and the range flags.
+	m.ToggleOverlays()
+	for _, ln := range m.lines {
+		if ln.isAnnotation {
+			t.Error("annotation line should be gone when overlays hidden")
+		}
+		if ln.annotated {
+			t.Error("annotated flag should be cleared when overlays hidden")
+		}
+	}
+	if strings.Contains(m.View(), "guards the deposit") {
+		t.Error("summary should not render when overlays hidden")
+	}
+}

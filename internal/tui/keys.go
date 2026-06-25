@@ -16,22 +16,23 @@ type KeyMap struct {
 	Select   []string
 
 	// Pane focus
-	FocusSwap      []string
-	FocusPaneN     map[string]int // key → pane number (1=sidebar, 2=diff)
-	ToggleSidebar  []string
+	FocusSwap     []string
+	FocusPaneN    map[string]int // key → pane number (1=sidebar, 2=diff)
+	ToggleSidebar []string
 
 	// Diff view
-	ScrollDown  []string
-	ScrollUp    []string
-	ScrollLeft  []string
-	ScrollRight []string
+	ScrollDown      []string
+	ScrollUp        []string
+	ScrollLeft      []string
+	ScrollRight     []string
 	ScrollHome      []string
 	ScrollFirstChar []string
 	ScrollEnd       []string
-	Wrap           []string
-	ToggleDiff     []string
-	ToggleFullDiff []string
-	YankLine       []string
+	Wrap            []string
+	ToggleDiff      []string
+	ToggleFullDiff  []string
+	ToggleOverlays  []string // hide/show inline comments + annotations
+	YankLine        []string
 
 	// Diff search
 	SearchBackward []string // forward search uses FilterReviewed's `/` when the diff is focused
@@ -47,14 +48,14 @@ type KeyMap struct {
 	FilterReviewed []string
 
 	// Review actions
-	Comment      []string
-	FileComment  []string
-	Suggest      []string
-	Visual       []string
-	Reviewed     []string
-	Submit       []string
-	Pause        []string
-	ClearReview  []string
+	Comment         []string
+	FileComment     []string
+	Suggest         []string
+	Visual          []string
+	Reviewed        []string
+	Submit          []string
+	Pause           []string
+	ClearReview     []string
 	DismissArtifact []string
 	ToggleFocusMode []string
 
@@ -63,10 +64,10 @@ type KeyMap struct {
 	BaseRef          []string
 	ArtifactVersions []string
 	CycleLayout      []string
-	Refresh      []string
-	Help         []string
-	Quit         []string
-	CommandMode  []string
+	Refresh          []string
+	Help             []string
+	Quit             []string
+	CommandMode      []string
 
 	// Wizard (register TUI)
 	WizardAdvance []string
@@ -91,17 +92,18 @@ func DefaultKeyMap() KeyMap {
 		FocusPaneN:    map[string]int{"1": 1, "2": 2},
 		ToggleSidebar: []string{";"},
 
-		ScrollDown:  []string{"J"},
-		ScrollUp:    []string{"K"},
-		ScrollLeft:  nil, // lowercase `h` still scrolls the focused diff; `H` is now Help
-		ScrollRight: []string{"L"},
+		ScrollDown:      []string{"J"},
+		ScrollUp:        []string{"K"},
+		ScrollLeft:      nil, // lowercase `h` still scrolls the focused diff; `H` is now Help
+		ScrollRight:     []string{"L"},
 		ScrollHome:      []string{"0"},
 		ScrollFirstChar: []string{"^"},
 		ScrollEnd:       []string{"$"},
-		Wrap:           []string{"w"},
-		ToggleDiff:     []string{"t"},
-		ToggleFullDiff: []string{"a"},
-		YankLine:       []string{"y"},
+		Wrap:            []string{"w"},
+		ToggleDiff:      []string{"t"},
+		ToggleFullDiff:  []string{"a"},
+		ToggleOverlays:  []string{"O"},
+		YankLine:        []string{"y"},
 
 		TreeMode:       []string{"f"},
 		CollapseAll:    []string{"z"},
@@ -125,14 +127,14 @@ func DefaultKeyMap() KeyMap {
 		DismissArtifact: []string{"x"},
 		ToggleFocusMode: []string{"F"},
 
-		OpenInEditor: []string{"ctrl+g"},
+		OpenInEditor:     []string{"ctrl+g"},
 		BaseRef:          []string{"b"},
 		ArtifactVersions: []string{"B"},
 		CycleLayout:      []string{"T"},
-		Refresh:     []string{"R"},
-		Help:        []string{"H"},
-		Quit:        []string{"q"},
-		CommandMode: []string{":"},
+		Refresh:          []string{"R"},
+		Help:             []string{"H"},
+		Quit:             []string{"q"},
+		CommandMode:      []string{":"},
 
 		WizardAdvance: []string{"enter"},
 		WizardBack:    []string{"shift+tab", "backspace"},
@@ -147,7 +149,7 @@ var actionNames = []string{
 	"prev_file", "next_file", "select",
 	"focus_swap", "toggle_sidebar",
 	"scroll_down", "scroll_up", "scroll_left", "scroll_right", "scroll_home", "scroll_first_char", "scroll_end",
-	"wrap", "toggle_diff", "toggle_full_diff", "yank_line",
+	"wrap", "toggle_diff", "toggle_full_diff", "toggle_overlays", "yank_line",
 	"search_backward", "search_next", "search_prev",
 	"tree_mode", "collapse_all", "expand_all", "prev_section", "next_section", "filter_reviewed",
 	"comment", "file_comment", "suggest", "visual", "reviewed",
@@ -203,6 +205,8 @@ func (km KeyMap) ApplyOverrides(overrides map[string]string) KeyMap {
 			km.ToggleDiff = []string{key}
 		case "toggle_full_diff":
 			km.ToggleFullDiff = []string{key}
+		case "toggle_overlays":
+			km.ToggleOverlays = []string{key}
 		case "yank_line":
 			km.YankLine = []string{key}
 		case "search_backward":

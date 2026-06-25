@@ -32,6 +32,11 @@ type diffViewLine struct {
 	isComment  bool
 	comment    *types.ReviewComment
 
+	// Agent annotation rendering.
+	isAnnotation bool
+	annotation   *types.Annotation
+	annotated    bool // this code line falls within an annotation's range (draws a gutter bar)
+
 	// Paired line content for intra-line diff highlighting (unified mode)
 	pairContent string
 
@@ -50,19 +55,21 @@ type diffViewLine struct {
 }
 
 type diffViewModel struct {
-	path      string
-	hunks     []types.DiffHunk
-	comments  []types.ReviewComment
-	lines     []diffViewLine
-	cursor    int
-	offset    int // scroll offset
-	width     int
-	height    int
-	focused   bool
-	style     diffStyle
-	theme     *Theme
-	hl        *highlighter
-	isBinary  bool // true when hunk content contains binary control characters
+	path         string
+	hunks        []types.DiffHunk
+	comments     []types.ReviewComment
+	annotations  []types.Annotation // agent-authored, for the current file
+	hideOverlays bool               // when true, comments + annotations are not inserted
+	lines        []diffViewLine
+	cursor       int
+	offset       int // scroll offset
+	width        int
+	height       int
+	focused      bool
+	style        diffStyle
+	theme        *Theme
+	hl           *highlighter
+	isBinary     bool // true when hunk content contains binary control characters
 
 	hOffset  int  // horizontal scroll offset (runes)
 	wrap     bool // soft-wrap long lines
@@ -83,20 +90,20 @@ type diffViewModel struct {
 	mouseDragActive bool
 
 	// Comment expansion on hover
-	expandedCommentID string        // ID of the currently expanded comment (empty = none)
-	expandSeq         int           // sequence counter; incremented on each cursor move to debounce
+	expandedCommentID  string        // ID of the currently expanded comment (empty = none)
+	expandSeq          int           // sequence counter; incremented on each cursor move to debounce
 	commentExpandDelay time.Duration // <0 = disabled, 0 = instant, >0 = delay before auto-expand
 
 	// Content view mode (for plans/docs)
-	contentMode        bool
-	contentID          string
-	contentTitle       string
-	contentHasDiff      bool // true when multiple versions exist for diffing
-	contentVersionCount int  // number of versions for this content item
-	diffBaseVersion     int  // base version being diffed from (0 = default latest-vs-previous)
-	diffToVersion       int  // target version being diffed to
-	contentDiffContent string // current content text, for toggling back from diff view
-	mdStyler           *markdownStyler
+	contentMode         bool
+	contentID           string
+	contentTitle        string
+	contentHasDiff      bool   // true when multiple versions exist for diffing
+	contentVersionCount int    // number of versions for this content item
+	diffBaseVersion     int    // base version being diffed from (0 = default latest-vs-previous)
+	diffToVersion       int    // target version being diffed to
+	contentDiffContent  string // current content text, for toggling back from diff view
+	mdStyler            *markdownStyler
 
 	// Content diff auto-switch (from config diff_style)
 	preferredContentDiffStyle diffStyle // unified or split
@@ -121,6 +128,7 @@ func (m *diffViewModel) clearFileState() {
 	m.hunks = nil
 	m.lines = nil
 	m.comments = nil
+	m.annotations = nil
 	m.isBinary = false
 	m.cursor = 0
 	m.offset = 0
@@ -144,6 +152,7 @@ type loadDiffMsg struct {
 	path            string
 	result          *types.DiffResult
 	comments        []types.ReviewComment
+	annotations     []types.Annotation
 	selectCommentID string // if set, auto-select and expand this comment after loading
 	anchorLine      int    // if set, re-anchor cursor to this new-file line after loading
 }
@@ -254,6 +263,7 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 		}
 		m.path = msg.path
 		m.comments = msg.comments
+		m.annotations = msg.annotations
 		m.isBinary = isBinaryContent(m.hunks)
 		// If in file view mode, store hunks but fetch file content instead
 		if m.style == diffStyleFile {
@@ -307,6 +317,7 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 		}
 		m.hunks = nil
 		m.comments = msg.comments
+		m.annotations = nil
 		prevCursor := m.cursor
 		prevOffset := m.offset
 		m.buildContentLines(msg.content)
@@ -339,6 +350,7 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 		m.contentMode = false
 		m.hunks = msg.result.Hunks
 		m.comments = msg.comments
+		m.annotations = nil
 		m.style = msg.preferredStyle
 		m.diffBaseVersion = msg.fromVersion
 		m.diffToVersion = msg.toVersion
@@ -355,6 +367,7 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 			m.path = msg.path
 			m.hunks = nil
 			m.comments = nil
+			m.annotations = nil
 			m.lines = []diffViewLine{{
 				kind:       types.DiffLineContext,
 				content:    msg.err.Error(),
@@ -367,6 +380,7 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 		}
 		m.style = diffStyleFile
 		m.comments = msg.comments
+		m.annotations = nil
 		sameFile := msg.path == m.path
 		prevCursor := m.cursor
 		prevOffset := m.offset
@@ -399,6 +413,7 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 		m.path = msg.path
 		m.hunks = nil
 		m.comments = msg.comments
+		m.annotations = nil
 		m.style = diffStyleFile
 		m.buildFileViewLines(msg.content)
 		m.cursor = m.nearestSelectable(0, 1)
@@ -608,6 +623,8 @@ func (m diffViewModel) View() string {
 			rendered = m.renderHunkHeader(line, selected)
 		} else if line.isComment {
 			rendered = m.renderCommentLine(line, selected)
+		} else if line.isAnnotation {
+			rendered = m.renderAnnotationLine(line, selected)
 		} else if line.isSplit {
 			rendered = m.renderSplitLine(line, selected, inVisual)
 		} else if m.style == diffStyleFile || m.contentMode {
@@ -677,14 +694,16 @@ func (m *diffViewModel) buildLines() {
 	isMd := isMarkdownFile(m.path)
 
 	// File-level comments (LineStart == 0) rendered before hunks
-	for i := range m.comments {
-		c := &m.comments[i]
-		if c.TargetRef == m.path && c.LineStart == 0 {
-			m.lines = append(m.lines, diffViewLine{
-				isComment: true,
-				comment:   c,
-				content:   formatInlineComment(c),
-			})
+	if !m.hideOverlays {
+		for i := range m.comments {
+			c := &m.comments[i]
+			if c.TargetRef == m.path && c.LineStart == 0 {
+				m.lines = append(m.lines, diffViewLine{
+					isComment: true,
+					comment:   c,
+					content:   formatInlineComment(c),
+				})
+			}
 		}
 	}
 
@@ -727,21 +746,35 @@ func (m *diffViewModel) buildLines() {
 				mdInCodeBlock: inCodeBlock && isMd && !isFence,
 				mdIsFence:     isFence,
 				mdCodeLang:    codeLang,
+				annotated:     !m.hideOverlays && dl.NewLineNum > 0 && m.lineInAnnotation(dl.NewLineNum),
 			})
 
-			// Insert comments after their last targeted line
-			for i := range m.comments {
-				c := &m.comments[i]
-				anchor := c.LineEnd
-				if anchor == 0 {
-					anchor = c.LineStart
+			if !m.hideOverlays {
+				// Insert comments after their last targeted line
+				for i := range m.comments {
+					c := &m.comments[i]
+					anchor := c.LineEnd
+					if anchor == 0 {
+						anchor = c.LineStart
+					}
+					if c.TargetRef == m.path && anchor == dl.NewLineNum && dl.NewLineNum > 0 {
+						m.lines = append(m.lines, diffViewLine{
+							isComment: true,
+							comment:   c,
+							content:   formatInlineComment(c),
+						})
+					}
 				}
-				if c.TargetRef == m.path && anchor == dl.NewLineNum && dl.NewLineNum > 0 {
-					m.lines = append(m.lines, diffViewLine{
-						isComment: true,
-						comment:   c,
-						content:   formatInlineComment(c),
-					})
+				// Insert annotation boxes after the last line of their range
+				for i := range m.annotations {
+					a := &m.annotations[i]
+					if a.TargetRef == m.path && annotationAnchor(a) == dl.NewLineNum && dl.NewLineNum > 0 {
+						m.lines = append(m.lines, diffViewLine{
+							isAnnotation: true,
+							annotation:   a,
+							content:      formatAnnotation(a),
+						})
+					}
 				}
 			}
 		}
@@ -886,14 +919,16 @@ func (m *diffViewModel) buildSplitLines() {
 	isMd := isMarkdownFile(m.path)
 
 	// File-level comments (LineStart == 0) rendered before hunks
-	for i := range m.comments {
-		c := &m.comments[i]
-		if c.TargetRef == m.path && c.LineStart == 0 {
-			m.lines = append(m.lines, diffViewLine{
-				isComment: true,
-				comment:   c,
-				content:   formatInlineComment(c),
-			})
+	if !m.hideOverlays {
+		for i := range m.comments {
+			c := &m.comments[i]
+			if c.TargetRef == m.path && c.LineStart == 0 {
+				m.lines = append(m.lines, diffViewLine{
+					isComment: true,
+					comment:   c,
+					content:   formatInlineComment(c),
+				})
+			}
 		}
 	}
 
@@ -1052,6 +1087,30 @@ func (m *diffViewModel) pairLines() {
 			i++
 		}
 	}
+}
+
+// annotationColor is the accent used for agent annotations (boxes + the gutter
+// range bar). Distinct from comment colors so the two channels read apart.
+const annotationColor = "6" // cyan
+
+// renderAnnotationLine renders an agent annotation box. Each sub-line is tinted
+// with the annotation accent and prefixed with a bar so it reads as a single
+// attached block; when selected it reverses like other inline overlays.
+func (m diffViewModel) renderAnnotationLine(line diffViewLine, selected bool) string {
+	style := lipgloss.NewStyle().Foreground(lipgloss.Color(annotationColor))
+	if selected && m.focused {
+		style = style.Reverse(true)
+	}
+	bar := lipgloss.NewStyle().Foreground(lipgloss.Color(annotationColor)).Render("▌")
+	subLines := strings.Split(line.content, "\n")
+	var b strings.Builder
+	for i, sl := range subLines {
+		if i > 0 {
+			b.WriteString("\n")
+		}
+		b.WriteString(bar + style.Render(fmt.Sprintf("%-*s", m.width-1, sl)))
+	}
+	return b.String()
 }
 
 func (m diffViewModel) renderHunkHeader(line diffViewLine, selected bool) string {
@@ -1378,6 +1437,15 @@ func (m diffViewModel) renderDiffLine(line diffViewLine, _, contentWidth int, se
 		gutter = fmt.Sprintf("%-*s", gutterWidth, gutter)
 	}
 	renderedGutter := gutterStyle.Render(gutter)
+	// Annotated code lines get a colored bar in the gutter's trailing column
+	// (a space in every line kind) to mark the annotation's range.
+	if line.annotated && len(gutter) >= 1 {
+		barStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(annotationColor))
+		if lineBg != nil {
+			barStyle = barStyle.Background(lineBg)
+		}
+		renderedGutter = gutterStyle.Render(gutter[:len(gutter)-1]) + barStyle.Render("▌")
+	}
 
 	// Render content: markdown styling or syntax highlighting
 	isMd := isMarkdownFile(m.path)
@@ -1744,6 +1812,27 @@ func (m *diffViewModel) ToggleFullFile() tea.Cmd {
 	}
 }
 
+// ToggleOverlays hides or shows inline comments and annotations, re-anchoring the
+// cursor to the same source line so the viewport doesn't jump.
+func (m *diffViewModel) ToggleOverlays() {
+	anchor := m.lineNumAt(m.cursor)
+	m.hideOverlays = !m.hideOverlays
+	m.buildLines()
+	if anchor > 0 {
+		if idx := m.indexForNewLine(anchor); idx >= 0 {
+			m.cursor = idx
+		}
+	}
+	if m.cursor >= len(m.lines) {
+		m.cursor = len(m.lines) - 1
+	}
+	if m.cursor < 0 {
+		m.cursor = 0
+	}
+	m.cursor = m.nearestSelectable(m.cursor, 1)
+	m.ensureVisible()
+}
+
 // CycleDiffStyle cycles through display styles.
 // For file diffs: unified → split → file → unified.
 // For content items with a previous version: content → unified → split → content.
@@ -1864,6 +1953,10 @@ func (m diffViewModel) screenLinesFor(idx int) int {
 			origCode := m.originalCodeForComment(line.comment)
 			return strings.Count(formatExpandedComment(line.comment, m.width, origCode, m.wrap), "\n") + 1
 		}
+		return strings.Count(line.content, "\n") + 1
+	}
+	// Annotation boxes render their content as-is (1–2 lines), regardless of wrap.
+	if line.isAnnotation {
 		return strings.Count(line.content, "\n") + 1
 	}
 	if !m.wrap {
@@ -2487,6 +2580,8 @@ func (m diffViewModel) displayLinesFor(idx int) int {
 		rendered = m.renderHunkHeader(line, false)
 	} else if line.isComment {
 		rendered = m.renderCommentLine(line, false)
+	} else if line.isAnnotation {
+		rendered = m.renderAnnotationLine(line, false)
 	} else if line.isSplit {
 		rendered = m.renderSplitLine(line, false, false)
 	} else if m.style == diffStyleFile || m.contentMode {
@@ -2546,7 +2641,7 @@ type openCommentMsg struct {
 	lineStart   int
 	lineEnd     int
 	targetType  types.TargetType
-	prefillBody string           // pre-filled body text (for suggestions)
+	prefillBody string            // pre-filled body text (for suggestions)
 	prefillType types.CommentType // pre-set comment type (zero value = default)
 }
 
@@ -2655,6 +2750,52 @@ func (m *diffViewModel) insertInlineComments(hunk types.DiffHunk) {
 		}
 	}
 	m.lines = result
+}
+
+// annotationAnchor returns the new-file line after which an annotation's box is
+// drawn (the last line of its range).
+func annotationAnchor(a *types.Annotation) int {
+	if a.LineEnd > 0 {
+		return a.LineEnd
+	}
+	return a.LineStart
+}
+
+// lineInAnnotation reports whether a new-file line number falls within any
+// annotation's range for the current file (used to draw the gutter range bar).
+func (m diffViewModel) lineInAnnotation(lineNum int) bool {
+	for i := range m.annotations {
+		a := &m.annotations[i]
+		if a.TargetRef != m.path {
+			continue
+		}
+		end := a.LineEnd
+		if end == 0 {
+			end = a.LineStart
+		}
+		if lineNum >= a.LineStart && lineNum <= end {
+			return true
+		}
+	}
+	return false
+}
+
+// formatAnnotation renders the inline annotation box: a one-line summary and,
+// when present, a line of numbered doc links.
+func formatAnnotation(a *types.Annotation) string {
+	lines := []string{fmt.Sprintf("  ⟐ %s", a.Summary)}
+	if len(a.Refs) > 0 {
+		parts := make([]string, 0, len(a.Refs))
+		for i, r := range a.Refs {
+			label := r.Label
+			if label == "" {
+				label = r.Doc
+			}
+			parts = append(parts, fmt.Sprintf("[%d] %s", i+1, label))
+		}
+		lines = append(lines, "    ↪ "+strings.Join(parts, "  "))
+	}
+	return strings.Join(lines, "\n")
 }
 
 func formatInlineComment(c *types.ReviewComment) string {
@@ -2852,4 +2993,3 @@ func formatExpandedComment(c *types.ReviewComment, width int, originalCode strin
 	lines = append(lines, fmt.Sprintf("  ╚═══%s", strings.Repeat("═", footerDashes)))
 	return strings.Join(lines, "\n")
 }
-

@@ -593,6 +593,15 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.handleSidebarSelect(sidebarSelectMsg{path: m.sidebar.files[0].Path})
 		} else if len(m.sidebar.files) == 0 && !m.diffView.isViewingContentItem() && m.diffView.path != "" {
 			m.diffView.clearFileState()
+		} else if m.diffViewShowsValidFile() && m.diffView.path != "" {
+			// Reload the current file's diff so freshly-pushed annotations (and
+			// comment changes) appear, re-anchored so the viewport doesn't jump.
+			path := m.diffView.path
+			full := m.diffView.fullFile
+			anchor := m.diffView.lineNumAt(m.diffView.cursor)
+			return m, func() tea.Msg {
+				return requestFileDiffMsg{path: path, full: full, anchorLine: anchor}
+			}
 		}
 		return m, nil
 
@@ -939,10 +948,11 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 			return loadDiffMsg{
-				path:       path,
-				result:     result,
-				comments:   comments,
-				anchorLine: anchorLine,
+				path:        path,
+				result:      result,
+				comments:    comments,
+				annotations: annotationsForFile(session, path),
+				anchorLine:  anchorLine,
 			}
 		}
 
@@ -1015,7 +1025,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 			}
-			return loadDiffMsg{path: currentPath, result: result, comments: comments}
+			return loadDiffMsg{path: currentPath, result: result, comments: comments, annotations: annotationsForFile(session, currentPath)}
 		}
 
 	case saveCommentMsg:
@@ -1093,7 +1103,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 			}
-			return loadDiffMsg{path: currentPath, result: result, comments: comments}
+			return loadDiffMsg{path: currentPath, result: result, comments: comments, annotations: annotationsForFile(session, currentPath)}
 		}
 
 	// Review summary overlay open
@@ -1918,6 +1928,10 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		cmd := m.diffView.ToggleFullFile()
 		return m, cmd
 
+	case Matches(key, km.ToggleOverlays):
+		m.diffView.ToggleOverlays()
+		return m, nil
+
 	case Matches(key, km.YankLine):
 		// Yank the current line (or the visual selection) to the clipboard.
 		if m.focus != focusMain {
@@ -2691,6 +2705,20 @@ func (m appModel) editorCommand() string {
 	return ""
 }
 
+// annotationsForFile returns the agent annotations targeting the given file.
+func annotationsForFile(session *types.ReviewSession, path string) []types.Annotation {
+	if session == nil {
+		return nil
+	}
+	var out []types.Annotation
+	for _, a := range session.Annotations {
+		if a.TargetRef == path {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
 // fetchDiff fetches a file diff honoring the full-file display modifier so the
 // preference persists as the reviewer switches files and reloads comments.
 func fetchDiff(engine core.EngineAPI, path string, full bool) (*types.DiffResult, error) {
@@ -2765,9 +2793,10 @@ func (m appModel) handleSidebarSelect(msg sidebarSelectMsg) tea.Cmd {
 			}
 		}
 		return loadDiffMsg{
-			path:     msg.path,
-			result:   result,
-			comments: comments,
+			path:        msg.path,
+			result:      result,
+			comments:    comments,
+			annotations: annotationsForFile(session, msg.path),
 		}
 	}
 }
@@ -2861,6 +2890,7 @@ func (m appModel) handleSaveComment(msg saveCommentMsg) tea.Cmd {
 			path:            msg.path,
 			result:          result,
 			comments:        comments,
+			annotations:     annotationsForFile(session, msg.path),
 			selectCommentID: commentID,
 		}
 	}
