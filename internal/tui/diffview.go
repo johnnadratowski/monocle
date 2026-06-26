@@ -2261,6 +2261,20 @@ func (m diffViewModel) lastVisibleLine() int {
 	return last
 }
 
+// JumpToMark moves the cursor to the next (dir=+1) or previous (dir=-1) review
+// mark — an inline comment box or an agent annotation box — and scrolls it into
+// view. No-op when there are no marks in that direction (no wrap-around).
+func (m *diffViewModel) JumpToMark(dir int) bool {
+	for i := m.cursor + dir; i >= 0 && i < len(m.lines); i += dir {
+		if m.lines[i].isComment || m.lines[i].isAnnotation {
+			m.cursor = i
+			m.ensureVisible()
+			return true
+		}
+	}
+	return false
+}
+
 func (m *diffViewModel) ensureVisible() {
 	if m.cursor < 0 {
 		m.cursor = 0

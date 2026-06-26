@@ -1767,6 +1767,18 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case Matches(key, km.NextMark):
+		if m.focus == focusMain {
+			m.diffView.JumpToMark(1)
+		}
+		return m, nil
+
+	case Matches(key, km.PrevMark):
+		if m.focus == focusMain {
+			m.diffView.JumpToMark(-1)
+		}
+		return m, nil
+
 	case Matches(key, km.FilterReviewed):
 		// When the diff/content pane is focused, `/` starts a forward search.
 		// In the sidebar it keeps cycling the reviewed filter.
@@ -2785,6 +2797,13 @@ func (m *appModel) syncArtifactsAfterSubmit(session *types.ReviewSession) {
 // is needed.
 func (m *appModel) autoToggleSidebar() bool {
 	hasItems := m.sidebarHasItems()
+	// A review filter (cycled with `/` in the sidebar) destructively narrows the
+	// visible lists and can legitimately empty them — e.g. "reviewed only" when
+	// nothing is reviewed. That's not a genuinely empty review, so don't auto-hide
+	// (which would yank the sidebar away and focus the diff on the next refresh).
+	if !hasItems && m.sidebar.reviewFilter != "" {
+		return false
+	}
 	// Clear user override once items arrive — auto behavior resumes
 	if hasItems {
 		m.sidebarUserShown = false

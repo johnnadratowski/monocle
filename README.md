@@ -230,6 +230,7 @@ Monocle exposes review operations via **MCP tools** (default for Claude Code, an
 | `/`                    | Sidebar: cycle filter / Diff: search forward              |
 | `?`                    | Diff: search backward (when diff pane focused)            |
 | `n`/`N`                | Next/previous search match                                |
+| `<`/`>`                | Jump to previous/next comment or annotation               |
 | `t`                    | Cycle diff style (unified/split/file) (any pane)          |
 | `a`                    | Toggle full-file diff (whole file vs. changed lines)      |
 | `O`                    | Hide / show inline comments + annotations                 |

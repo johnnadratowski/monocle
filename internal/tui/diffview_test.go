@@ -969,6 +969,46 @@ func TestAnnotationRenderingAndToggle(t *testing.T) {
 	}
 }
 
+// TestJumpToMark verifies < / > navigation lands on comment and annotation
+// boxes and stops at the ends (no wrap-around).
+func TestJumpToMark(t *testing.T) {
+	theme := DefaultTheme()
+	m := diffViewModel{
+		theme: &theme, hl: newHighlighter(), mdStyler: newMarkdownStyler(theme),
+		path: "main.go", width: 80, height: 40, style: diffStyleUnified,
+		hunks: []types.DiffHunk{{
+			OldStart: 1, OldCount: 0, NewStart: 1, NewCount: 4, Header: "f",
+			Lines: []types.DiffLine{
+				{Kind: types.DiffLineAdded, NewLineNum: 1, Content: "a"},
+				{Kind: types.DiffLineAdded, NewLineNum: 2, Content: "b"},
+				{Kind: types.DiffLineAdded, NewLineNum: 3, Content: "c"},
+				{Kind: types.DiffLineAdded, NewLineNum: 4, Content: "d"},
+			},
+		}},
+		comments: []types.ReviewComment{
+			{ID: "c1", TargetRef: "main.go", LineStart: 2, LineEnd: 2, Type: types.CommentIssue, Body: "fix"},
+		},
+		annotations: []types.Annotation{
+			{TargetRef: "main.go", LineStart: 4, LineEnd: 4, Summary: "note"},
+		},
+	}
+	m.buildLines()
+	m.cursor = 0
+
+	if !m.JumpToMark(1) || !m.lines[m.cursor].isComment {
+		t.Fatalf("first > should land on the comment box (cursor=%d)", m.cursor)
+	}
+	if !m.JumpToMark(1) || !m.lines[m.cursor].isAnnotation {
+		t.Fatalf("second > should land on the annotation box (cursor=%d)", m.cursor)
+	}
+	if m.JumpToMark(1) {
+		t.Error("> past the last mark should be a no-op")
+	}
+	if !m.JumpToMark(-1) || !m.lines[m.cursor].isComment {
+		t.Errorf("< should return to the comment box (cursor=%d)", m.cursor)
+	}
+}
+
 // TestAnnotationRenderingSplit covers the gap that split (and full-file) modes
 // previously rendered no annotations at all: the box, the annotated flags, and
 // the cyan range bar must all appear in split mode too.

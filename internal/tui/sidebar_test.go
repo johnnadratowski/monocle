@@ -7,6 +7,30 @@ import (
 	"github.com/josephschmitt/monocle/internal/types"
 )
 
+func TestAutoToggleSidebar_KeepsWhenFiltered(t *testing.T) {
+	// A review filter narrowed the lists to empty — the sidebar must stay put.
+	m := appModel{}
+	m.sidebar.reviewFilter = "reviewed"
+	if changed := m.autoToggleSidebar(); changed {
+		t.Error("autoToggleSidebar should report no change while a filter is active")
+	}
+	if m.sidebarHidden || m.focus == focusMain {
+		t.Error("sidebar should not auto-hide / lose focus while a review filter is active")
+	}
+}
+
+func TestAutoToggleSidebar_HidesWhenGenuinelyEmpty(t *testing.T) {
+	// No filter and no items at all — auto-hide is correct.
+	m := appModel{focus: focusSidebar}
+	m.sidebar.reviewFilter = ""
+	if changed := m.autoToggleSidebar(); !changed {
+		t.Error("autoToggleSidebar should hide a genuinely empty sidebar")
+	}
+	if !m.sidebarHidden {
+		t.Error("sidebar should be hidden when genuinely empty")
+	}
+}
+
 func TestSidebarSectionRulesAndWorkstreamSpacing(t *testing.T) {
 	keys := DefaultKeyMap()
 	m := newSidebarModel(&keys)

@@ -41,6 +41,10 @@ type KeyMap struct {
 	SearchNext     []string
 	SearchPrev     []string
 
+	// Jump between review marks (inline comments + agent annotations) in the diff
+	PrevMark []string
+	NextMark []string
+
 	// Sidebar
 	TreeMode       []string
 	CollapseAll    []string
@@ -116,6 +120,9 @@ func DefaultKeyMap() KeyMap {
 		SearchNext:     []string{"n"},
 		SearchPrev:     []string{"N"},
 
+		PrevMark: []string{"<"},
+		NextMark: []string{">"},
+
 		PrevSection:    []string{"{"},
 		NextSection:    []string{"}"},
 		FilterReviewed: []string{"/"},
@@ -154,7 +161,7 @@ var actionNames = []string{
 	"focus_swap", "toggle_sidebar",
 	"scroll_down", "scroll_up", "scroll_left", "scroll_right", "scroll_home", "scroll_first_char", "scroll_end",
 	"wrap", "toggle_diff", "toggle_full_diff", "toggle_overlays", "hide_comments", "open_doc_ref", "yank_line",
-	"search_backward", "search_next", "search_prev",
+	"search_backward", "search_next", "search_prev", "prev_mark", "next_mark",
 	"tree_mode", "collapse_all", "expand_all", "prev_section", "next_section", "filter_reviewed",
 	"comment", "file_comment", "suggest", "visual", "reviewed",
 	"submit", "pause", "clear_review", "dismiss_artifact", "dismiss_outdated", "toggle_focus_mode",
@@ -223,6 +230,10 @@ func (km KeyMap) ApplyOverrides(overrides map[string]string) KeyMap {
 			km.SearchNext = []string{key}
 		case "search_prev":
 			km.SearchPrev = []string{key}
+		case "prev_mark":
+			km.PrevMark = []string{key}
+		case "next_mark":
+			km.NextMark = []string{key}
 		case "tree_mode":
 			km.TreeMode = []string{key}
 		case "collapse_all":

@@ -283,6 +283,7 @@ func (m helpModel) buildContent() string {
 		{Label(km.ScrollRight), "Scroll diff right (any pane)"},
 		{"/  " + Label(km.SearchBackward), "Search diff fwd/back (diff focused)"},
 		{Label(km.SearchNext) + "/" + Label(km.SearchPrev), "Next/previous search match"},
+		{Label(km.PrevMark) + "/" + Label(km.NextMark), "Prev/next comment or annotation"},
 		{Label(km.ScrollHome), "Scroll to column 0 (any pane)"},
 		{Label(km.ScrollFirstChar), "Scroll to first non-space (any pane)"},
 		{Label(km.ScrollEnd), "Scroll to line end (any pane)"},
