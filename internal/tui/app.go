@@ -1036,12 +1036,35 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		id := msg.commentID
 		currentPath := m.diffView.path
 		full := m.diffView.fullFile
-		isContent := m.diffView.contentMode
+		contentID := m.diffView.contentID
+		isContent := m.diffView.isViewingContentItem()
 		additionalPath := m.diffView.additionalFilePath
 		return m, func() tea.Msg {
 			_ = engine.DeleteComment(id)
 			if isContent {
-				return fileChangedMsg{}
+				// Reload the content item in place so the deleted comment
+				// disappears without closing the artifact the user is viewing.
+				item, err := engine.GetContentItem(contentID)
+				if err != nil || item == nil {
+					return loadContentMsg{id: contentID}
+				}
+				session := engine.GetSession()
+				var comments []types.ReviewComment
+				if session != nil {
+					for _, c := range session.Comments {
+						if c.TargetRef == item.ID && c.TargetType == types.TargetContent {
+							comments = append(comments, c)
+						}
+					}
+				}
+				return loadContentMsg{
+					id:           item.ID,
+					title:        item.Title,
+					content:      item.Content,
+					contentType:  item.ContentType,
+					comments:     comments,
+					versionCount: item.VersionCount,
+				}
 			}
 			if additionalPath != "" {
 				content, err := engine.GetAdditionalFileContent(additionalPath)
@@ -1113,12 +1136,35 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		id := msg.commentID
 		currentPath := m.diffView.path
 		full := m.diffView.fullFile
-		isContent := m.diffView.contentMode
+		contentID := m.diffView.contentID
+		isContent := m.diffView.isViewingContentItem()
 		additionalPath := m.diffView.additionalFilePath
 		return m, func() tea.Msg {
 			_ = engine.ResolveComment(id)
 			if isContent {
-				return fileChangedMsg{}
+				// Reload the content item in place so the resolve status
+				// updates without closing the artifact the user is viewing.
+				item, err := engine.GetContentItem(contentID)
+				if err != nil || item == nil {
+					return loadContentMsg{id: contentID}
+				}
+				session := engine.GetSession()
+				var comments []types.ReviewComment
+				if session != nil {
+					for _, c := range session.Comments {
+						if c.TargetRef == item.ID && c.TargetType == types.TargetContent {
+							comments = append(comments, c)
+						}
+					}
+				}
+				return loadContentMsg{
+					id:           item.ID,
+					title:        item.Title,
+					content:      item.Content,
+					contentType:  item.ContentType,
+					comments:     comments,
+					versionCount: item.VersionCount,
+				}
 			}
 			if additionalPath != "" {
 				content, err := engine.GetAdditionalFileContent(additionalPath)
