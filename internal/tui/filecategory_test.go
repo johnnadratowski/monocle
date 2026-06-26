@@ -161,8 +161,44 @@ func TestGroupFilesWithAgentMetadata(t *testing.T) {
 			t.Errorf("expected header at index %d", idx)
 		}
 	}
-	if got := headers[0]; !strings.Contains(got, "UI") {
-		t.Errorf("first header = %q, want it to mention UI", got)
+	if got := headers[0]; len(got) == 0 || !strings.Contains(got[0].text, "UI") {
+		t.Errorf("first header = %v, want it to mention UI", got)
+	}
+}
+
+func TestGroupFilesWorkstreams(t *testing.T) {
+	// Two workstreams, each with its own groups; ordering is workstream then group.
+	files := []types.ChangedFile{
+		{Path: "wsB/api.go", Workstream: "Payments", WorkstreamOrder: 1, GroupLabel: "Backend", GroupOrder: 0},
+		{Path: "wsA/ui.tsx", Workstream: "Search", WorkstreamOrder: 0, GroupLabel: "UI", GroupOrder: 0},
+		{Path: "wsA/api.go", Workstream: "Search", WorkstreamOrder: 0, GroupLabel: "Backend", GroupOrder: 1},
+	}
+	ordered, headers := groupFiles(files)
+
+	wantPaths := []string{"wsA/ui.tsx", "wsA/api.go", "wsB/api.go"} // Search (order 0) before Payments (order 1)
+	for i, p := range wantPaths {
+		if ordered[i].Path != p {
+			t.Errorf("ordered[%d] = %q, want %q", i, ordered[i].Path, p)
+		}
+	}
+
+	// Index 0 carries both a workstream header (level 0) and the first group header
+	// (level 1) for "Search".
+	first := headers[0]
+	if len(first) != 2 {
+		t.Fatalf("index 0 should have 2 headers (workstream + group), got %d: %v", len(first), first)
+	}
+	if first[0].level != 0 || !strings.Contains(first[0].text, "Search") {
+		t.Errorf("first header should be the Search workstream (level 0), got %+v", first[0])
+	}
+	if first[1].level != 1 || !strings.Contains(first[1].text, "UI") {
+		t.Errorf("second header should be the UI group nested (level 1), got %+v", first[1])
+	}
+
+	// The Payments workstream header appears at the index where wsB/api.go starts (2).
+	second := headers[2]
+	if len(second) != 2 || second[0].level != 0 || !strings.Contains(second[0].text, "Payments") {
+		t.Errorf("index 2 should start the Payments workstream, got %+v", second)
 	}
 }
 

@@ -24,6 +24,7 @@ type focusTarget int
 const (
 	focusSidebar focusTarget = iota
 	focusMain
+	focusDoc // the annotation doc pane (only reachable when it's open)
 )
 
 // layoutMode determines whether panes are arranged horizontally or stacked vertically.
@@ -193,6 +194,7 @@ type appModel struct {
 
 	sidebar        sidebarModel
 	diffView       diffViewModel
+	docPane        docPaneModel // annotation doc pane (bottom split, when open)
 	statusBar      statusBarModel
 	commentEditor  commentEditorModel
 	reviewSummary  reviewSummaryModel
@@ -260,6 +262,13 @@ type appModel struct {
 	clientVersion string
 	serverVersion string
 	headHash      string
+
+	// annotationCount caches the session's total agent annotation count for the
+	// status bar; refreshed on load and on file-change events.
+	annotationCount int
+
+	// reviewName is the agent-supplied name for the review, shown in the top bar.
+	reviewName string
 }
 
 // NewApp creates the root appModel and wires up all subsystems.
@@ -512,6 +521,8 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if session != nil {
 			m.statusBar.baseRef = m.displayBaseRef(session)
 			m.statusBar.agentName = session.Agent
+			m.annotationCount = len(session.Annotations)
+			m.reviewName = session.ReviewName
 		}
 		m.statusBar.fileCount = len(msg.files)
 		m.statusBar.socketStarted = m.engine.GetSocketPath() != ""
@@ -603,6 +614,8 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if session != nil {
 			m.statusBar.baseRef = m.displayBaseRef(session)
 			m.statusBar.setCommentStats(session.Comments)
+			m.annotationCount = len(session.Annotations)
+			m.reviewName = session.ReviewName
 		}
 		// Auto-advance to next unreviewed item after marking reviewed
 		if msg.advance {
@@ -617,6 +630,15 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.handleSidebarSelect(sidebarSelectMsg{path: m.sidebar.files[0].Path})
 		} else if len(m.sidebar.files) == 0 && !m.diffView.isViewingContentItem() && m.diffView.path != "" {
 			m.diffView.clearFileState()
+		} else if m.diffViewShowsValidFile() && m.diffView.path != "" {
+			// Reload the current file's diff so freshly-pushed annotations (and
+			// comment changes) appear, re-anchored so the viewport doesn't jump.
+			path := m.diffView.path
+			full := m.diffView.fullFile
+			anchor := m.diffView.anchorLineForCursor()
+			return m, func() tea.Msg {
+				return requestFileDiffMsg{path: path, full: full, anchorLine: anchor}
+			}
 		}
 		return m, nil
 
@@ -943,6 +965,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				path:            path,
 				content:         content,
 				comments:        comments,
+				annotations:     annotationsForFile(session, path),
 				selectCommentID: selectID,
 				anchorLine:      anchorLine,
 			}
@@ -969,10 +992,11 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 			return loadDiffMsg{
-				path:       path,
-				result:     result,
-				comments:   comments,
-				anchorLine: anchorLine,
+				path:        path,
+				result:      result,
+				comments:    comments,
+				annotations: annotationsForFile(session, path),
+				anchorLine:  anchorLine,
 			}
 		}
 
@@ -1012,12 +1036,35 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		id := msg.commentID
 		currentPath := m.diffView.path
 		full := m.diffView.fullFile
-		isContent := m.diffView.contentMode
+		contentID := m.diffView.contentID
+		isContent := m.diffView.isViewingContentItem()
 		additionalPath := m.diffView.additionalFilePath
 		return m, func() tea.Msg {
 			_ = engine.DeleteComment(id)
 			if isContent {
-				return fileChangedMsg{}
+				// Reload the content item in place so the deleted comment
+				// disappears without closing the artifact the user is viewing.
+				item, err := engine.GetContentItem(contentID)
+				if err != nil || item == nil {
+					return loadContentMsg{id: contentID}
+				}
+				session := engine.GetSession()
+				var comments []types.ReviewComment
+				if session != nil {
+					for _, c := range session.Comments {
+						if c.TargetRef == item.ID && c.TargetType == types.TargetContent {
+							comments = append(comments, c)
+						}
+					}
+				}
+				return loadContentMsg{
+					id:           item.ID,
+					title:        item.Title,
+					content:      item.Content,
+					contentType:  item.ContentType,
+					comments:     comments,
+					versionCount: item.VersionCount,
+				}
 			}
 			if additionalPath != "" {
 				content, err := engine.GetAdditionalFileContent(additionalPath)
@@ -1045,7 +1092,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 			}
-			return loadDiffMsg{path: currentPath, result: result, comments: comments}
+			return loadDiffMsg{path: currentPath, result: result, comments: comments, annotations: annotationsForFile(session, currentPath)}
 		}
 
 	case saveCommentMsg:
@@ -1089,12 +1136,35 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		id := msg.commentID
 		currentPath := m.diffView.path
 		full := m.diffView.fullFile
-		isContent := m.diffView.contentMode
+		contentID := m.diffView.contentID
+		isContent := m.diffView.isViewingContentItem()
 		additionalPath := m.diffView.additionalFilePath
 		return m, func() tea.Msg {
 			_ = engine.ResolveComment(id)
 			if isContent {
-				return fileChangedMsg{}
+				// Reload the content item in place so the resolve status
+				// updates without closing the artifact the user is viewing.
+				item, err := engine.GetContentItem(contentID)
+				if err != nil || item == nil {
+					return loadContentMsg{id: contentID}
+				}
+				session := engine.GetSession()
+				var comments []types.ReviewComment
+				if session != nil {
+					for _, c := range session.Comments {
+						if c.TargetRef == item.ID && c.TargetType == types.TargetContent {
+							comments = append(comments, c)
+						}
+					}
+				}
+				return loadContentMsg{
+					id:           item.ID,
+					title:        item.Title,
+					content:      item.Content,
+					contentType:  item.ContentType,
+					comments:     comments,
+					versionCount: item.VersionCount,
+				}
 			}
 			if additionalPath != "" {
 				content, err := engine.GetAdditionalFileContent(additionalPath)
@@ -1123,7 +1193,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 			}
-			return loadDiffMsg{path: currentPath, result: result, comments: comments}
+			return loadDiffMsg{path: currentPath, result: result, comments: comments, annotations: annotationsForFile(session, currentPath)}
 		}
 
 	// Review summary overlay open
@@ -1602,6 +1672,26 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 	km := m.keys
 
+	// When the doc pane has focus, it captures scroll/close keys; Tab, shift+tab,
+	// and the open-ref key fall through to the shared handlers below.
+	if m.focus == focusDoc && m.docPane.active {
+		switch {
+		case key == "esc":
+			m.closeDocPane()
+			return m, nil
+		case Matches(key, km.Down) || Matches(key, km.ScrollDown):
+			m.docPane.scrollDown()
+			return m, nil
+		case Matches(key, km.Up) || Matches(key, km.ScrollUp):
+			m.docPane.scrollUp()
+			return m, nil
+		case Matches(key, km.FocusSwap), key == "shift+tab", Matches(key, km.OpenDocRef):
+			// fall through to the shared cases
+		default:
+			return m, nil
+		}
+	}
+
 	// The "match i/N" indicator is transient: it shows right after a search or
 	// n/N navigation (those cases re-set it) and clears on the next keystroke.
 	m.statusBar.searchInfo = ""
@@ -1649,18 +1739,11 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case Matches(key, km.FocusSwap):
-		if m.sidebarHidden {
-			return m, nil
-		}
-		if m.focus == focusSidebar {
-			m.focus = focusMain
-			m.sidebar.focused = false
-			m.diffView.focused = true
-		} else {
-			m.focus = focusSidebar
-			m.sidebar.focused = true
-			m.diffView.focused = false
-		}
+		m = m.cycleFocus(1)
+		return m, nil
+
+	case key == "shift+tab":
+		m = m.cycleFocus(-1)
 		return m, nil
 
 	case Matches(key, km.ToggleSidebar):
@@ -1728,6 +1811,18 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				m.statusBar.searchInfo = m.searchStatusText()
 				return m, nil
 			}
+		}
+		return m, nil
+
+	case Matches(key, km.NextMark):
+		if m.focus == focusMain {
+			m.diffView.JumpToMark(1)
+		}
+		return m, nil
+
+	case Matches(key, km.PrevMark):
+		if m.focus == focusMain {
+			m.diffView.JumpToMark(-1)
 		}
 		return m, nil
 
@@ -1949,6 +2044,37 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		cmd := m.diffView.ToggleFullFile()
 		return m, cmd
+
+	case Matches(key, km.ToggleOverlays):
+		m.diffView.ToggleOverlays()
+		return m, nil
+
+	case Matches(key, km.HideComments):
+		m.diffView.CycleCommentFilter()
+		if label := m.diffView.CommentFilterLabel(); label != "" {
+			m.statusBar.searchInfo = label
+		} else {
+			m.statusBar.searchInfo = "comments shown"
+		}
+		return m, nil
+
+	case Matches(key, km.OpenDocRef):
+		switch m.focus {
+		case focusMain:
+			if a := m.diffView.CursorAnnotation(); a != nil && len(a.Refs) > 0 {
+				return m.openOrCycleDocPane(a), nil
+			}
+			// No annotation under the cursor: if the doc pane is open, o closes it
+			// so the same key dismisses the pane from anywhere in the diff.
+			if m.docPane.active {
+				m.closeDocPane()
+				return m, nil
+			}
+		case focusDoc:
+			// Already in the pane: cycle to the next ref, closing after the last.
+			return m.cycleDocRefOrClose(), nil
+		}
+		return m, nil
 
 	case Matches(key, km.YankLine):
 		// Yank the current line (or the visual selection) to the clipboard.
@@ -2606,6 +2732,34 @@ func recalcPaneDimensions(m *appModel) {
 		m.diffView.width = mainOuter - borderW
 		m.diffView.height = contentHeight
 	}
+
+	reserveDocPane(m)
+}
+
+// reserveDocPane carves the bottom of the diff column out for the annotation doc
+// pane when it's open. It shrinks the diff's real height (so its scroll math
+// matches what's rendered) and records the doc pane's inner height. The sidebar
+// keeps its full height — the doc pane sits under the diff only, not the sidebar.
+func reserveDocPane(m *appModel) {
+	if !m.docPane.active {
+		return
+	}
+	const borderH = 2
+	docInner := m.diffView.height / 2
+	if docInner < 3 {
+		docInner = 3
+	}
+	if docInner > m.diffView.height-3 {
+		docInner = m.diffView.height - 3
+	}
+	if docInner < 1 {
+		docInner = 1
+	}
+	m.diffView.height -= docInner + borderH
+	if m.diffView.height < 1 {
+		m.diffView.height = 1
+	}
+	m.docPane.height = docInner
 }
 
 // recalcStackedLayout recalculates sidebar and diff view heights for stacked
@@ -2632,6 +2786,8 @@ func recalcStackedLayout(m *appModel) {
 
 	m.sidebar.height = sidebarH
 	m.diffView.height = diffH
+
+	reserveDocPane(m)
 }
 
 // diffViewShowsValidFile returns true if the diff view is showing a valid
@@ -2688,6 +2844,13 @@ func (m *appModel) syncArtifactsAfterSubmit(session *types.ReviewSession) {
 // is needed.
 func (m *appModel) autoToggleSidebar() bool {
 	hasItems := m.sidebarHasItems()
+	// A review filter (cycled with `/` in the sidebar) destructively narrows the
+	// visible lists and can legitimately empty them — e.g. "reviewed only" when
+	// nothing is reviewed. That's not a genuinely empty review, so don't auto-hide
+	// (which would yank the sidebar away and focus the diff on the next refresh).
+	if !hasItems && m.sidebar.reviewFilter != "" {
+		return false
+	}
 	// Clear user override once items arrive — auto behavior resumes
 	if hasItems {
 		m.sidebarUserShown = false
@@ -2721,6 +2884,121 @@ func (m appModel) editorCommand() string {
 		return cfg.Editor
 	}
 	return ""
+}
+
+// cycleFocus moves focus across the visible panes: sidebar (when shown), the
+// diff, and the doc pane (when open). dir +1 is forward (Tab), -1 reverse.
+func (m appModel) cycleFocus(dir int) appModel {
+	var order []focusTarget
+	if !m.sidebarHidden {
+		order = append(order, focusSidebar)
+	}
+	order = append(order, focusMain)
+	if m.docPane.active {
+		order = append(order, focusDoc)
+	}
+	if len(order) < 2 {
+		return m
+	}
+	cur := 0
+	for i, f := range order {
+		if f == m.focus {
+			cur = i
+		}
+	}
+	m.setFocus(order[(cur+dir+len(order))%len(order)])
+	return m
+}
+
+// setFocus updates the focus target and the per-pane focused flags.
+func (m *appModel) setFocus(f focusTarget) {
+	m.focus = f
+	m.sidebar.focused = f == focusSidebar
+	m.diffView.focused = f == focusMain
+	m.docPane.focused = f == focusDoc
+}
+
+// openOrCycleDocPane opens the doc pane on the given annotation's first doc link.
+// If the pane is already showing that annotation, it cycles to the next link and,
+// once it would wrap past the last one, closes the pane — so repeated presses of
+// `o` walk the refs and then dismiss the pane.
+func (m appModel) openOrCycleDocPane(a *types.Annotation) appModel {
+	if len(a.Refs) == 0 {
+		return m
+	}
+	if m.docPane.active && m.docPane.annotationID == a.ID {
+		return m.cycleDocRefOrClose()
+	}
+	m.docPane.annotationID = a.ID
+	m.docPane.openRefs(a.Refs)
+	ref := a.Refs[0]
+	title, content := m.loadDocRef(ref)
+	m.docPane.theme = &m.theme
+	m.docPane.setContent(title, content, ref)
+	recalcPaneDimensions(&m) // reserve the diff's bottom for the pane
+	m.diffView.ensureVisible()
+	return m
+}
+
+// cycleDocRefOrClose advances the open doc pane to the next ref, or closes it when
+// advancing would wrap back to the first ref (so a single-ref annotation toggles
+// closed on the second press).
+func (m appModel) cycleDocRefOrClose() appModel {
+	prev := m.docPane.activeRef
+	ref, ok := m.docPane.nextRef()
+	if !ok || m.docPane.activeRef <= prev {
+		m.closeDocPane()
+		return m
+	}
+	title, content := m.loadDocRef(ref)
+	m.docPane.setContent(title, content, ref)
+	return m
+}
+
+// loadDocRef resolves a doc ref's text: a repo file or a sent artifact.
+func (m appModel) loadDocRef(ref types.DocRef) (title, content string) {
+	if ref.Kind == types.DocRefArtifact {
+		if item, err := m.engine.GetContentItem(ref.Doc); err == nil && item != nil {
+			t := item.Title
+			if t == "" {
+				t = ref.Doc
+			}
+			return t, item.Content
+		}
+		return ref.Doc, "(artifact not found: " + ref.Doc + ")"
+	}
+	c, err := m.engine.GetFileContent(ref.Doc)
+	if err != nil {
+		return ref.Doc, "(could not open " + ref.Doc + ": " + err.Error() + ")"
+	}
+	return ref.Doc, c
+}
+
+// closeDocPane closes the doc pane, gives the diff back its full height, and
+// returns focus to the diff if the pane held it.
+func (m *appModel) closeDocPane() {
+	m.docPane.close()
+	if m.focus == focusDoc {
+		m.focus = focusMain
+		m.diffView.focused = true
+		m.sidebar.focused = false
+	}
+	recalcPaneDimensions(m) // restore the diff's full height
+	m.diffView.ensureVisible()
+}
+
+// annotationsForFile returns the agent annotations targeting the given file.
+func annotationsForFile(session *types.ReviewSession, path string) []types.Annotation {
+	if session == nil {
+		return nil
+	}
+	var out []types.Annotation
+	for _, a := range session.Annotations {
+		if a.TargetRef == path {
+			out = append(out, a)
+		}
+	}
+	return out
 }
 
 // fetchDiff fetches a file diff honoring the full-file display modifier so the
@@ -2797,9 +3075,10 @@ func (m appModel) handleSidebarSelect(msg sidebarSelectMsg) tea.Cmd {
 			}
 		}
 		return loadDiffMsg{
-			path:     msg.path,
-			result:   result,
-			comments: comments,
+			path:        msg.path,
+			result:      result,
+			comments:    comments,
+			annotations: annotationsForFile(session, msg.path),
 		}
 	}
 }
@@ -2893,6 +3172,7 @@ func (m appModel) handleSaveComment(msg saveCommentMsg) tea.Cmd {
 			path:            msg.path,
 			result:          result,
 			comments:        comments,
+			annotations:     annotationsForFile(session, msg.path),
 			selectCommentID: commentID,
 		}
 	}
@@ -3160,30 +3440,32 @@ func (m appModel) renderTitleBar() string {
 		left += " " + badge
 	}
 
-	right := m.renderReviewMeta(dimStyle)
-
-	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right)
-	if gap < 1 || right == "" {
-		return lipgloss.NewStyle().Width(m.width).Render(left)
-	}
-	return left + strings.Repeat(" ", gap) + right
+	center := m.reviewNameText()
+	right := m.renderReviewMetrics(dimStyle)
+	return composeThreeZone(left, center, right, m.width)
 }
 
-// renderReviewMeta builds the right-hand review summary: the latest artifact's
-// title (the review's "name"), the total +/- churn, file count, and HEAD hash.
-// Returns "" when there is nothing under review yet.
-func (m appModel) renderReviewMeta(dim lipgloss.Style) string {
-	items := m.sidebar.contentItems
+// reviewNameText returns the styled review name for the centre of the top bar:
+// the agent-supplied name, falling back to the latest artifact title, or "".
+func (m appModel) reviewNameText() string {
+	name := m.reviewName
+	if name == "" && len(m.sidebar.contentItems) > 0 {
+		name = m.sidebar.contentItems[len(m.sidebar.contentItems)-1].Title
+	}
+	if name == "" {
+		return ""
+	}
+	return lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true).Render(name)
+}
+
+// renderReviewMetrics builds the right-hand review summary: total +/- churn,
+// file count, and HEAD hash. Returns "" when there is nothing under review yet.
+func (m appModel) renderReviewMetrics(dim lipgloss.Style) string {
 	files := m.sidebar.files
-	if len(items) == 0 && len(files) == 0 {
+	if len(files) == 0 && m.headHash == "" {
 		return ""
 	}
 	var parts []string
-	if len(items) > 0 {
-		if title := items[len(items)-1].Title; title != "" {
-			parts = append(parts, lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true).Render(title))
-		}
-	}
 	if len(files) > 0 {
 		adds, dels := 0, 0
 		for _, f := range files {
@@ -3201,6 +3483,47 @@ func (m appModel) renderReviewMeta(dim lipgloss.Style) string {
 		return ""
 	}
 	return strings.Join(parts, dim.Render(" · ")) + " "
+}
+
+// composeThreeZone lays out a bar with left- and right-anchored segments and a
+// centred segment. The centre is placed at the bar's midpoint, nudged aside if it
+// would collide with either edge segment; when everything can't fit it falls back
+// to a simple left|right layout (dropping the centre).
+func composeThreeZone(left, center, right string, width int) string {
+	lw, cw, rw := lipgloss.Width(left), lipgloss.Width(center), lipgloss.Width(right)
+
+	leftRight := func() string {
+		gap := width - lw - rw
+		if gap < 1 || right == "" {
+			return lipgloss.NewStyle().Width(width).Render(left)
+		}
+		return left + strings.Repeat(" ", gap) + right
+	}
+
+	if center == "" {
+		return leftRight()
+	}
+	// Need a space on each side of the centre; if it can't fit, drop it.
+	if lw+cw+rw+2 > width {
+		return leftRight()
+	}
+	centerStart := (width - cw) / 2
+	if centerStart < lw+1 {
+		centerStart = lw + 1
+	}
+	rightStart := width - rw
+	if centerStart+cw > rightStart-1 {
+		centerStart = rightStart - 1 - cw
+	}
+	gap1 := centerStart - lw
+	gap2 := rightStart - (centerStart + cw)
+	if gap1 < 1 {
+		gap1 = 1
+	}
+	if gap2 < 1 {
+		gap2 = 1
+	}
+	return left + strings.Repeat(" ", gap1) + center + strings.Repeat(" ", gap2) + right
 }
 
 func (m appModel) View() tea.View {
@@ -3224,11 +3547,27 @@ func (m appModel) View() tea.View {
 	const bw = 2 // border left + right
 	const bh = 2 // border top + bottom
 
+	// The doc pane's height was already reserved out of the diff column in
+	// recalcPaneDimensions (so the diff's scroll math matches what's rendered).
+	// Here we render it as a box stacked directly under the diff at the diff
+	// column's width, so the sidebar keeps its full height beside both.
+	docPaneBox := func(outerW int) string {
+		docStyle := m.theme.MainPane
+		if m.focus == focusDoc {
+			docStyle = m.theme.MainPaneFocused
+		}
+		m.docPane.width = outerW - bw
+		return docStyle.Width(outerW).Height(m.docPane.height + bh).Render(m.docPane.View())
+	}
+
 	if m.sidebarHidden {
 		mainView := mainStyle.
 			Width(m.diffView.width + bw).
 			Height(m.diffView.height + bh).
 			Render(m.diffView.View())
+		if m.docPane.active {
+			mainView = lipgloss.JoinVertical(lipgloss.Left, mainView, docPaneBox(m.diffView.width+bw))
+		}
 		body = mainView
 	} else if m.layout == layoutStacked {
 		sidebarView := sidebarStyle.
@@ -3241,7 +3580,11 @@ func (m appModel) View() tea.View {
 			Height(m.diffView.height + bh).
 			Render(m.diffView.View())
 
-		body = lipgloss.JoinVertical(lipgloss.Left, sidebarView, mainView)
+		parts := []string{sidebarView, mainView}
+		if m.docPane.active {
+			parts = append(parts, docPaneBox(m.diffView.width+bw))
+		}
+		body = lipgloss.JoinVertical(lipgloss.Left, parts...)
 	} else {
 		sidebarView := sidebarStyle.
 			Width(m.sidebar.width + bw).
@@ -3262,6 +3605,11 @@ func (m appModel) View() tea.View {
 			Height(m.diffView.height + bh).
 			Render(m.diffView.View())
 
+		// Doc pane stacks under the diff only; the sidebar stays full-height beside.
+		if m.docPane.active {
+			mainView = lipgloss.JoinVertical(lipgloss.Left, mainView, docPaneBox(diffOuterW))
+		}
+
 		body = lipgloss.JoinHorizontal(lipgloss.Top, sidebarView, mainView)
 	}
 	m.statusBar.width = m.width
@@ -3275,7 +3623,8 @@ func (m appModel) View() tea.View {
 	m.statusBar.contentID = m.diffView.contentID
 	m.statusBar.diffBaseVersion = m.diffView.diffBaseVersion
 	m.statusBar.diffToVersion = m.diffView.diffToVersion
-	// Review progress (cheap to recompute from the sidebar each render).
+	// Review progress + annotation count (cheap to recompute from the sidebar;
+	// annotationCount is cached and refreshed on load/file-change).
 	reviewed := 0
 	for _, f := range m.sidebar.files {
 		if f.Reviewed {
@@ -3284,6 +3633,14 @@ func (m appModel) View() tea.View {
 	}
 	m.statusBar.fileCount = len(m.sidebar.files)
 	m.statusBar.reviewedCount = reviewed
+	m.statusBar.annotationCount = m.annotationCount
+	// When a changed file is shown, surface its annotation count as "x/n";
+	// otherwise (an artifact, or nothing selected) just show the total.
+	if m.diffView.path != "" && !m.diffView.isViewingContentItem() {
+		m.statusBar.annotationFileCount = len(m.diffView.annotations)
+	} else {
+		m.statusBar.annotationFileCount = -1
+	}
 	statusView := m.statusBar.View()
 	full := lipgloss.JoinVertical(lipgloss.Left, titleBar, body, statusView)
 

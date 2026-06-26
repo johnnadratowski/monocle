@@ -75,6 +75,41 @@ func registerTools(s *sdkmcp.Server) {
 		Name:        "set_file_groups",
 		Description: desc["set_file_groups"],
 	}, handleSetFileGroups)
+
+	sdkmcp.AddTool(s, &sdkmcp.Tool{
+		Name:        "add_annotations",
+		Description: desc["add_annotations"],
+	}, handleAddAnnotations)
+
+	sdkmcp.AddTool(s, &sdkmcp.Tool{
+		Name:        "set_review_name",
+		Description: desc["set_review_name"],
+	}, handleSetReviewName)
+}
+
+type setReviewNameParams struct {
+	Name string `json:"name"`
+}
+
+func handleSetReviewName(ctx context.Context, req *sdkmcp.CallToolRequest, params setReviewNameParams) (*sdkmcp.CallToolResult, any, error) {
+	c, err := client.ConnectDefault()
+	if err != nil {
+		return errResult("connect: %v", err), nil, nil
+	}
+	defer c.Close()
+
+	resp, err := c.Request(
+		&protocol.SetReviewNameMsg{Type: protocol.TypeSetReviewName, Name: params.Name},
+		client.DefaultTimeout,
+	)
+	if err != nil {
+		return errResult("request: %v", err), nil, nil
+	}
+	r := resp.(*protocol.SetReviewNameResponse)
+	if !r.Success {
+		return errResult("%s", r.Message), nil, nil
+	}
+	return textResult(r.Message), nil, nil
 }
 
 // -- Tool parameter types --
@@ -102,17 +137,42 @@ type removeFilesParams struct {
 }
 
 type fileGroupEntryParam struct {
-	Path        string `json:"path"`
-	Category    string `json:"category,omitempty"`
-	Group       string `json:"group,omitempty"`
-	GroupOrder  int    `json:"group_order,omitempty"`
-	SortIndex   int    `json:"sort_index,omitempty"`
-	Criticality int    `json:"criticality,omitempty"`
+	Path            string `json:"path"`
+	Workstream      string `json:"workstream,omitempty"`
+	WorkstreamOrder int    `json:"workstream_order,omitempty"`
+	Category        string `json:"category,omitempty"`
+	Group           string `json:"group,omitempty"`
+	GroupOrder      int    `json:"group_order,omitempty"`
+	SortIndex       int    `json:"sort_index,omitempty"`
+	Criticality     int    `json:"criticality,omitempty"`
 }
 
 type setFileGroupsParams struct {
 	Entries []fileGroupEntryParam `json:"entries"`
 	Replace bool                  `json:"replace,omitempty"`
+}
+
+type docRefParam struct {
+	Kind      string `json:"kind"` // "file" (repo path) or "artifact" (id)
+	Doc       string `json:"doc"`
+	Label     string `json:"label,omitempty"`
+	StartLine int    `json:"start_line,omitempty"`
+	StartCol  int    `json:"start_col,omitempty"`
+	EndLine   int    `json:"end_line,omitempty"`
+	EndCol    int    `json:"end_col,omitempty"`
+}
+
+type annotationEntryParam struct {
+	File      string        `json:"file"`
+	LineStart int           `json:"line_start"`
+	LineEnd   int           `json:"line_end"`
+	Summary   string        `json:"summary"`
+	Refs      []docRefParam `json:"refs,omitempty"`
+}
+
+type addAnnotationsParams struct {
+	Entries []annotationEntryParam `json:"entries"`
+	Replace bool                   `json:"replace,omitempty"`
 }
 
 // -- Tool handlers --
@@ -316,12 +376,14 @@ func handleSetFileGroups(ctx context.Context, req *sdkmcp.CallToolRequest, param
 	entries := make([]protocol.FileGroupEntry, 0, len(params.Entries))
 	for _, e := range params.Entries {
 		entries = append(entries, protocol.FileGroupEntry{
-			Path:        e.Path,
-			Category:    e.Category,
-			Group:       e.Group,
-			GroupOrder:  e.GroupOrder,
-			SortIndex:   e.SortIndex,
-			Criticality: e.Criticality,
+			Path:            e.Path,
+			Workstream:      e.Workstream,
+			WorkstreamOrder: e.WorkstreamOrder,
+			Category:        e.Category,
+			Group:           e.Group,
+			GroupOrder:      e.GroupOrder,
+			SortIndex:       e.SortIndex,
+			Criticality:     e.Criticality,
 		})
 	}
 
@@ -342,6 +404,58 @@ func handleSetFileGroups(ctx context.Context, req *sdkmcp.CallToolRequest, param
 		return errResult("%s", r.Message), nil, nil
 	}
 	return textResult(r.Message), nil, nil
+}
+
+func handleAddAnnotations(ctx context.Context, req *sdkmcp.CallToolRequest, params addAnnotationsParams) (*sdkmcp.CallToolResult, any, error) {
+	c, err := client.ConnectDefault()
+	if err != nil {
+		return errResult("connect: %v", err), nil, nil
+	}
+	defer c.Close()
+
+	entries := make([]protocol.AnnotationEntry, 0, len(params.Entries))
+	for _, e := range params.Entries {
+		refs := make([]types.DocRef, 0, len(e.Refs))
+		for _, r := range e.Refs {
+			kind := types.DocRefKind(r.Kind)
+			if kind != types.DocRefArtifact {
+				kind = types.DocRefFile
+			}
+			refs = append(refs, types.DocRef{
+				Kind:      kind,
+				Doc:       r.Doc,
+				Label:     r.Label,
+				StartLine: r.StartLine,
+				StartCol:  r.StartCol,
+				EndLine:   r.EndLine,
+				EndCol:    r.EndCol,
+			})
+		}
+		entries = append(entries, protocol.AnnotationEntry{
+			File:      e.File,
+			LineStart: e.LineStart,
+			LineEnd:   e.LineEnd,
+			Summary:   e.Summary,
+			Refs:      refs,
+		})
+	}
+
+	resp, err := c.Request(
+		&protocol.AddAnnotationsMsg{
+			Type:    protocol.TypeAddAnnotations,
+			Entries: entries,
+			Replace: params.Replace,
+		},
+		client.DefaultTimeout,
+	)
+	if err != nil {
+		return errResult("request: %v", err), nil, nil
+	}
+	r := resp.(*protocol.AddAnnotationsResponse)
+	if !r.Success {
+		return errResult("%s", r.Message), nil, nil
+	}
+	return textResult(r.Summary()), nil, nil
 }
 
 // -- Helpers --

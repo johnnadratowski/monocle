@@ -51,6 +51,30 @@ func (s *stubEngine) ClearComments() error {
 	s.cleared = true
 	return nil
 }
+func (s *stubEngine) DeleteComment(id string) error {
+	if s.session == nil {
+		return nil
+	}
+	filtered := s.session.Comments[:0]
+	for _, c := range s.session.Comments {
+		if c.ID != id {
+			filtered = append(filtered, c)
+		}
+	}
+	s.session.Comments = filtered
+	return nil
+}
+func (s *stubEngine) ResolveComment(id string) error {
+	if s.session == nil {
+		return nil
+	}
+	for i := range s.session.Comments {
+		if s.session.Comments[i].ID == id {
+			s.session.Comments[i].Resolved = true
+		}
+	}
+	return nil
+}
 func (s *stubEngine) DismissArtifact(id string) error {
 	s.dismissCalled = true
 	filtered := s.contentItems[:0]
@@ -90,6 +114,57 @@ func newTestSession(withComments bool) *types.ReviewSession {
 		}
 	}
 	return session
+}
+
+// TestDeleteCommentOnArtifactKeepsArtifactOpen guards against the regression
+// where deleting (or resolving) a comment on a content item returned a bare
+// fileChangedMsg, which the handler treated as "no valid file" and switched the
+// view to the first changed file — closing the artifact the user was reviewing.
+func TestDeleteCommentOnArtifactKeepsArtifactOpen(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		msg  tea.Msg
+	}{
+		{"delete", deleteCommentMsg{commentID: "c1"}},
+		{"resolve", resolveCommentMsg{commentID: "c1"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			session := &types.ReviewSession{
+				ID: "test",
+				Comments: []types.ReviewComment{
+					{ID: "c1", Body: "fix this", TargetRef: "plan-1", TargetType: types.TargetContent},
+				},
+			}
+			engine := &stubEngine{
+				cfg:     &types.Config{},
+				session: session,
+				contentItems: []types.ContentItem{
+					{ID: "plan-1", Title: "Plan", Content: "the plan", ContentType: "md"},
+				},
+			}
+			m := NewApp(engine)
+			// Simulate viewing the artifact in the diff pane.
+			m.diffView.contentMode = true
+			m.diffView.contentID = "plan-1"
+
+			result, cmd := m.Update(tc.msg)
+			_ = result
+			if cmd == nil {
+				t.Fatal("expected a command from the comment handler")
+			}
+			out := cmd()
+			if _, ok := out.(fileChangedMsg); ok {
+				t.Fatalf("%s on an artifact must not emit fileChangedMsg (closes the artifact)", tc.name)
+			}
+			lc, ok := out.(loadContentMsg)
+			if !ok {
+				t.Fatalf("expected loadContentMsg to reload the artifact in place, got %T", out)
+			}
+			if lc.id != "plan-1" {
+				t.Errorf("expected reload of plan-1, got %q", lc.id)
+			}
+		})
+	}
 }
 
 func TestSubmitSuccess_AlwaysClearsComments(t *testing.T) {

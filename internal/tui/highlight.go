@@ -66,6 +66,54 @@ type changeRange struct {
 	start, end int
 }
 
+// isCommentToken reports whether a chroma token type is any kind of comment
+// (single-line, multiline, hashbang, preprocessor, special). Comment subtypes
+// occupy a contiguous range above chroma.Comment.
+func isCommentToken(t chroma.TokenType) bool {
+	return t >= chroma.Comment && t <= chroma.CommentSpecial
+}
+
+// commentOnlyLines tokenises content with the lexer for path and returns the set
+// of 1-based line numbers whose non-whitespace characters are entirely inside
+// comment tokens. Tokenising the whole string at once classifies multi-line
+// block comments correctly. Lines with any code (or no comment at all) are
+// excluded, so a trailing `x = 1 // note` is never treated as comment-only.
+func (h *highlighter) commentOnlyLines(path, content string) map[int]bool {
+	lexer := h.getLexer(path)
+	iter, err := lexer.Tokenise(nil, content)
+	if err != nil {
+		return nil
+	}
+	hasComment := map[int]bool{}
+	hasCode := map[int]bool{}
+	line := 1
+	for _, tok := range iter.Tokens() {
+		comment := isCommentToken(tok.Type)
+		for _, r := range tok.Value {
+			switch {
+			case r == '\n':
+				line++
+			case r == ' ' || r == '\t' || r == '\r':
+				// whitespace is neutral
+			case comment:
+				hasComment[line] = true
+			default:
+				hasCode[line] = true
+			}
+		}
+	}
+	if len(hasComment) == 0 {
+		return nil
+	}
+	out := map[int]bool{}
+	for ln := range hasComment {
+		if !hasCode[ln] {
+			out[ln] = true
+		}
+	}
+	return out
+}
+
 // highlightLine renders content with syntax highlighting and diff backgrounds.
 // bg is the base background for the line (nil for context lines).
 // changeBg is the background for changed characters (nil if no intra-line changes).

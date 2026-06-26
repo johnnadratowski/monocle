@@ -5,8 +5,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/josephschmitt/monocle/internal/types"
 )
+
+// newID mints a unique identifier for rows whose caller didn't supply one.
+func newID() string { return uuid.New().String() }
 
 // CreateSession inserts a new review session.
 func (d *DB) CreateSession(s *types.ReviewSession) error {
@@ -156,6 +160,7 @@ func (d *DB) ReplaceChangedFiles(sessionID string, files []*types.ChangedFile) e
 func (d *DB) GetChangedFiles(sessionID string) ([]types.ChangedFile, error) {
 	rows, err := d.Query(
 		`SELECT cf.path, cf.status, cf.reviewed, cf.additions, cf.deletions,
+		        COALESCE(fm.workstream, ''), COALESCE(fm.workstream_order, 0),
 		        COALESCE(fm.category, ''), COALESCE(fm.group_label, ''),
 		        COALESCE(fm.group_order, 0), COALESCE(fm.sort_index, 0),
 		        COALESCE(fm.criticality, 0)
@@ -175,6 +180,7 @@ func (d *DB) GetChangedFiles(sessionID string) ([]types.ChangedFile, error) {
 		var status string
 		var reviewed int
 		if err := rows.Scan(&f.Path, &status, &reviewed, &f.Additions, &f.Deletions,
+			&f.Workstream, &f.WorkstreamOrder,
 			&f.Category, &f.GroupLabel, &f.GroupOrder, &f.SortIndex, &f.Criticality); err != nil {
 			return nil, err
 		}
@@ -203,15 +209,17 @@ func (d *DB) SetFileMetadata(sessionID string, metas []types.ChangedFile, replac
 	for _, m := range metas {
 		if _, err := tx.Exec(
 			`INSERT INTO file_metadata
-			   (session_id, path, category, group_label, group_order, sort_index, criticality)
-			 VALUES (?, ?, ?, ?, ?, ?, ?)
+			   (session_id, path, workstream, workstream_order, category, group_label, group_order, sort_index, criticality)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 			 ON CONFLICT(session_id, path) DO UPDATE SET
+			     workstream = excluded.workstream,
+			     workstream_order = excluded.workstream_order,
 			     category = excluded.category,
 			     group_label = excluded.group_label,
 			     group_order = excluded.group_order,
 			     sort_index = excluded.sort_index,
 			     criticality = excluded.criticality`,
-			sessionID, m.Path, m.Category, m.GroupLabel, m.GroupOrder, m.SortIndex, m.Criticality,
+			sessionID, m.Path, m.Workstream, m.WorkstreamOrder, m.Category, m.GroupLabel, m.GroupOrder, m.SortIndex, m.Criticality,
 		); err != nil {
 			return fmt.Errorf("upsert file metadata %s: %w", m.Path, err)
 		}
@@ -225,11 +233,89 @@ func (d *DB) ClearFileMetadata(sessionID string) error {
 	return err
 }
 
+// SetAnnotations upserts agent annotations. With replaceAll=true, every
+// annotation for the session is cleared first. Otherwise it does a per-file
+// replace: annotations for each file present in the batch are removed before the
+// new ones are inserted, so re-annotating one file leaves other files untouched.
+// Annotations with an empty ID are assigned one.
+func (d *DB) SetAnnotations(sessionID string, anns []types.Annotation, replaceAll bool) error {
+	tx, err := d.Begin()
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if replaceAll {
+		if _, err := tx.Exec(`DELETE FROM annotations WHERE session_id = ?`, sessionID); err != nil {
+			return fmt.Errorf("clear annotations: %w", err)
+		}
+	} else {
+		seen := map[string]bool{}
+		for _, a := range anns {
+			if seen[a.TargetRef] {
+				continue
+			}
+			seen[a.TargetRef] = true
+			if _, err := tx.Exec(`DELETE FROM annotations WHERE session_id = ? AND target_ref = ?`, sessionID, a.TargetRef); err != nil {
+				return fmt.Errorf("clear annotations for %s: %w", a.TargetRef, err)
+			}
+		}
+	}
+
+	for _, a := range anns {
+		id := a.ID
+		if id == "" {
+			id = newID()
+		}
+		refsJSON, _ := json.Marshal(a.Refs)
+		if _, err := tx.Exec(
+			`INSERT INTO annotations
+			   (id, session_id, target_ref, line_start, line_end, summary, refs, review_round)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			id, sessionID, a.TargetRef, a.LineStart, a.LineEnd, a.Summary, string(refsJSON), a.ReviewRound,
+		); err != nil {
+			return fmt.Errorf("insert annotation: %w", err)
+		}
+	}
+	return tx.Commit()
+}
+
+// GetAnnotations returns all annotations for a session, ordered by file then
+// starting line.
+func (d *DB) GetAnnotations(sessionID string) ([]types.Annotation, error) {
+	rows, err := d.Query(
+		`SELECT id, target_ref, line_start, line_end, summary, refs, review_round, created_at, updated_at
+		 FROM annotations WHERE session_id = ? ORDER BY target_ref, line_start`, sessionID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []types.Annotation
+	for rows.Next() {
+		var a types.Annotation
+		var refsJSON string
+		if err := rows.Scan(&a.ID, &a.TargetRef, &a.LineStart, &a.LineEnd, &a.Summary, &refsJSON, &a.ReviewRound, &a.CreatedAt, &a.UpdatedAt); err != nil {
+			return nil, err
+		}
+		_ = json.Unmarshal([]byte(refsJSON), &a.Refs)
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+// DeleteAnnotations removes all annotations for a session.
+func (d *DB) DeleteAnnotations(sessionID string) error {
+	_, err := d.Exec(`DELETE FROM annotations WHERE session_id = ?`, sessionID)
+	return err
+}
+
 // GetFileMetadata returns the agent-supplied grouping metadata for a session,
 // keyed by path. Each value carries only the metadata fields (Path + grouping).
 func (d *DB) GetFileMetadata(sessionID string) (map[string]types.ChangedFile, error) {
 	rows, err := d.Query(
-		`SELECT path, category, group_label, group_order, sort_index, criticality
+		`SELECT path, workstream, workstream_order, category, group_label, group_order, sort_index, criticality
 		 FROM file_metadata WHERE session_id = ?`, sessionID,
 	)
 	if err != nil {
@@ -240,7 +326,7 @@ func (d *DB) GetFileMetadata(sessionID string) (map[string]types.ChangedFile, er
 	out := make(map[string]types.ChangedFile)
 	for rows.Next() {
 		var f types.ChangedFile
-		if err := rows.Scan(&f.Path, &f.Category, &f.GroupLabel, &f.GroupOrder, &f.SortIndex, &f.Criticality); err != nil {
+		if err := rows.Scan(&f.Path, &f.Workstream, &f.WorkstreamOrder, &f.Category, &f.GroupLabel, &f.GroupOrder, &f.SortIndex, &f.Criticality); err != nil {
 			return nil, err
 		}
 		out[f.Path] = f

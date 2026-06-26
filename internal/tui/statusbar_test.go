@@ -19,6 +19,7 @@ func TestStatusBarReviewMetrics(t *testing.T) {
 		{Type: types.CommentSuggestion},
 		{Type: types.CommentNote},
 	})
+	m.annotationCount = 4
 	m.agentActive = true
 	m.feedbackStatus = "request_changes"
 	m.baseRef = "main"
@@ -31,6 +32,7 @@ func TestStatusBarReviewMetrics(t *testing.T) {
 		"1 suggestion",
 		"1 note",
 		"(1/4 resolved)",
+		"4 annotations",
 		"✎ agent working",
 		"⌛ feedback pending",
 	} {
@@ -41,6 +43,24 @@ func TestStatusBarReviewMetrics(t *testing.T) {
 	// ref/files moved to the top bar.
 	if strings.Contains(out, "ref:") || strings.Contains(out, "5 files") {
 		t.Error("status bar should no longer show ref or raw file count")
+	}
+}
+
+func TestStatusBarAnnotationPerFileCount(t *testing.T) {
+	m := newStatusBarModel(DefaultTheme())
+	m.width = 240
+	m.subscriberCount = 1
+	m.annotationCount = 7
+
+	// No file selected (default): show the total only.
+	if out := m.View(); !strings.Contains(out, "7 annotations") || strings.Contains(out, "/7 annotations") {
+		t.Errorf("no-file case should show total only, got: %q", out)
+	}
+
+	// A file is selected with 2 of the 7 annotations: show x/n.
+	m.annotationFileCount = 2
+	if out := m.View(); !strings.Contains(out, "2/7 annotations") {
+		t.Errorf("file case should show x/n, got: %q", out)
 	}
 }
 

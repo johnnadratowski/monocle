@@ -908,3 +908,348 @@ func TestOffScreenAccountsForCommentRows(t *testing.T) {
 		t.Errorf("lastVisibleLine = %d, want 7", got)
 	}
 }
+
+func TestAnnotationRenderingAndToggle(t *testing.T) {
+	theme := DefaultTheme()
+	m := diffViewModel{
+		theme: &theme, hl: newHighlighter(), mdStyler: newMarkdownStyler(theme),
+		path: "main.go", width: 80, height: 30, style: diffStyleUnified,
+		hunks: []types.DiffHunk{{
+			OldStart: 1, OldCount: 0, NewStart: 1, NewCount: 3, Header: "f",
+			Lines: []types.DiffLine{
+				{Kind: types.DiffLineAdded, NewLineNum: 1, Content: "line one"},
+				{Kind: types.DiffLineAdded, NewLineNum: 2, Content: "line two"},
+				{Kind: types.DiffLineAdded, NewLineNum: 3, Content: "line three"},
+			},
+		}},
+		annotations: []types.Annotation{
+			{TargetRef: "main.go", LineStart: 1, LineEnd: 2, Summary: "guards the deposit",
+				Refs: []types.DocRef{{Kind: types.DocRefFile, Doc: "TODO.md", Label: "srv-008", StartLine: 40, EndLine: 52}}},
+		},
+	}
+	m.buildLines()
+
+	// An annotation box line exists; lines 1-2 are flagged annotated, line 3 is not.
+	var annLine *diffViewLine
+	annotatedCount := 0
+	for i := range m.lines {
+		if m.lines[i].isAnnotation {
+			annLine = &m.lines[i]
+		}
+		if m.lines[i].annotated {
+			annotatedCount++
+		}
+	}
+	if annLine == nil {
+		t.Fatal("expected an annotation line in the built lines")
+	}
+	if annotatedCount != 2 {
+		t.Errorf("annotated code lines = %d, want 2 (lines 1-2)", annotatedCount)
+	}
+	out := m.View()
+	if !strings.Contains(out, "guards the deposit") {
+		t.Error("rendered view should contain the annotation summary")
+	}
+	if !strings.Contains(out, "srv-008") {
+		t.Error("rendered view should contain the ref label")
+	}
+
+	// Hiding overlays removes the annotation box and the range flags.
+	m.ToggleOverlays()
+	for _, ln := range m.lines {
+		if ln.isAnnotation {
+			t.Error("annotation line should be gone when overlays hidden")
+		}
+		if ln.annotated {
+			t.Error("annotated flag should be cleared when overlays hidden")
+		}
+	}
+	if strings.Contains(m.View(), "guards the deposit") {
+		t.Error("summary should not render when overlays hidden")
+	}
+}
+
+// TestAnnotationRailInWrapAndFileModes covers two regressions: the cyan range
+// rail must render in wrap mode (renderWrappedLine) and in current-file view, and
+// switching to file view must keep annotations (not clear them).
+func TestAnnotationRailInWrapAndFileModes(t *testing.T) {
+	theme := DefaultTheme()
+	railCount := func(s string) int { return strings.Count(s, "46m▌") }
+
+	// Wrap mode, unified: a long annotated line wraps and every row keeps the rail.
+	wm := diffViewModel{
+		theme: &theme, hl: newHighlighter(), mdStyler: newMarkdownStyler(theme),
+		path: "main.go", width: 28, height: 40, style: diffStyleUnified, wrap: true,
+		hunks: []types.DiffHunk{{
+			OldStart: 1, OldCount: 0, NewStart: 1, NewCount: 1, Header: "f",
+			Lines: []types.DiffLine{
+				{Kind: types.DiffLineAdded, NewLineNum: 1, Content: "a long line that will wrap across this narrow pane several times over"},
+			},
+		}},
+		annotations: []types.Annotation{{TargetRef: "main.go", LineStart: 1, LineEnd: 1, Summary: "n"}},
+	}
+	wm.buildLines()
+	if railCount(wm.View()) < 2 {
+		t.Error("wrap mode should draw the range rail on every wrapped row")
+	}
+
+	// File view: annotations present and railed.
+	fm := diffViewModel{
+		theme: &theme, hl: newHighlighter(), mdStyler: newMarkdownStyler(theme),
+		path: "main.go", width: 60, height: 40, style: diffStyleFile,
+		annotations: []types.Annotation{{TargetRef: "main.go", LineStart: 2, LineEnd: 3, Summary: "n"}},
+	}
+	fm.buildFileViewLines("a\nb\nc\nd\n")
+	got := 0
+	for _, ln := range fm.lines {
+		if ln.annotated {
+			got++
+		}
+	}
+	if got != 2 {
+		t.Errorf("file view should flag the 2 in-range lines, got %d", got)
+	}
+	if railCount(fm.View()) != 2 {
+		t.Errorf("file view should draw 2 rails, got %d", railCount(fm.View()))
+	}
+}
+
+// TestAnnotationBoxWrapsWithRightBorder verifies a long annotation wraps to the
+// pane width with a right border, and that screenLinesFor matches the rows drawn.
+func TestAnnotationBoxWrapsWithRightBorder(t *testing.T) {
+	theme := DefaultTheme()
+	const width = 40
+	m := diffViewModel{
+		theme: &theme, hl: newHighlighter(), mdStyler: newMarkdownStyler(theme),
+		path: "main.go", width: width, height: 40, style: diffStyleUnified,
+		hunks: []types.DiffHunk{{
+			OldStart: 1, OldCount: 0, NewStart: 1, NewCount: 1, Header: "f",
+			Lines: []types.DiffLine{{Kind: types.DiffLineAdded, NewLineNum: 1, Content: "x"}},
+		}},
+		annotations: []types.Annotation{{TargetRef: "main.go", LineStart: 1, LineEnd: 1,
+			Summary: "a really long annotation summary that must wrap across several rows inside the box"}},
+	}
+	m.buildLines()
+
+	annIdx := -1
+	for i := range m.lines {
+		if m.lines[i].isAnnotation {
+			annIdx = i
+		}
+	}
+	if annIdx < 0 {
+		t.Fatal("no annotation box")
+	}
+	rows := m.annotationBoxRows(m.lines[annIdx].content)
+	if len(rows) < 2 {
+		t.Fatalf("expected the long summary to wrap, got %d rows", len(rows))
+	}
+	if m.screenLinesFor(annIdx) != len(rows) {
+		t.Errorf("screenLinesFor=%d but %d rows drawn", m.screenLinesFor(annIdx), len(rows))
+	}
+
+	// Box rows are the ones with the right border; each is exactly pane width and
+	// starts with the left bar.
+	boxRows := 0
+	for _, line := range strings.Split(stripANSISeq(m.View()), "\n") {
+		if !strings.HasSuffix(line, "│") {
+			continue
+		}
+		boxRows++
+		if w := len([]rune(line)); w != width {
+			t.Errorf("box row width = %d, want %d: %q", w, width, line)
+		}
+		if !strings.HasPrefix(line, "▌") {
+			t.Errorf("box row should start with the left bar: %q", line)
+		}
+	}
+	if boxRows != len(rows) {
+		t.Errorf("rendered %d bordered box rows, want %d", boxRows, len(rows))
+	}
+}
+
+// TestAnchorLineForCursorOnBox verifies the re-anchor source line falls back to
+// the nearest code line when the cursor sits on an annotation/comment box, so
+// toggles (t / a) don't jump the viewport to the top.
+func TestAnchorLineForCursorOnBox(t *testing.T) {
+	theme := DefaultTheme()
+	m := diffViewModel{
+		theme: &theme, hl: newHighlighter(), mdStyler: newMarkdownStyler(theme),
+		path: "main.go", width: 80, height: 40, style: diffStyleUnified,
+		hunks: []types.DiffHunk{{
+			OldStart: 1, OldCount: 0, NewStart: 1, NewCount: 3, Header: "f",
+			Lines: []types.DiffLine{
+				{Kind: types.DiffLineAdded, NewLineNum: 1, Content: "a"},
+				{Kind: types.DiffLineAdded, NewLineNum: 2, Content: "b"},
+				{Kind: types.DiffLineAdded, NewLineNum: 3, Content: "c"},
+			},
+		}},
+		annotations: []types.Annotation{{TargetRef: "main.go", LineStart: 2, LineEnd: 3, Summary: "n"}},
+	}
+	m.buildLines()
+	boxIdx := -1
+	for i := range m.lines {
+		if m.lines[i].isAnnotation {
+			boxIdx = i
+		}
+	}
+	if boxIdx < 0 {
+		t.Fatal("no annotation box built")
+	}
+	m.cursor = boxIdx
+	if ln := m.anchorLineForCursor(); ln != 3 {
+		t.Errorf("anchorLineForCursor on a box = %d, want 3 (nearest code line)", ln)
+	}
+}
+
+// TestJumpToMark verifies < / > navigation lands on comment and annotation
+// boxes and stops at the ends (no wrap-around).
+func TestJumpToMark(t *testing.T) {
+	theme := DefaultTheme()
+	m := diffViewModel{
+		theme: &theme, hl: newHighlighter(), mdStyler: newMarkdownStyler(theme),
+		path: "main.go", width: 80, height: 40, style: diffStyleUnified,
+		hunks: []types.DiffHunk{{
+			OldStart: 1, OldCount: 0, NewStart: 1, NewCount: 4, Header: "f",
+			Lines: []types.DiffLine{
+				{Kind: types.DiffLineAdded, NewLineNum: 1, Content: "a"},
+				{Kind: types.DiffLineAdded, NewLineNum: 2, Content: "b"},
+				{Kind: types.DiffLineAdded, NewLineNum: 3, Content: "c"},
+				{Kind: types.DiffLineAdded, NewLineNum: 4, Content: "d"},
+			},
+		}},
+		comments: []types.ReviewComment{
+			{ID: "c1", TargetRef: "main.go", LineStart: 2, LineEnd: 2, Type: types.CommentIssue, Body: "fix"},
+		},
+		annotations: []types.Annotation{
+			{TargetRef: "main.go", LineStart: 4, LineEnd: 4, Summary: "note"},
+		},
+	}
+	m.buildLines()
+	m.cursor = 0
+
+	if !m.JumpToMark(1) || !m.lines[m.cursor].isComment {
+		t.Fatalf("first > should land on the comment box (cursor=%d)", m.cursor)
+	}
+	if !m.JumpToMark(1) || !m.lines[m.cursor].isAnnotation {
+		t.Fatalf("second > should land on the annotation box (cursor=%d)", m.cursor)
+	}
+	if m.JumpToMark(1) {
+		t.Error("> past the last mark should be a no-op")
+	}
+	if !m.JumpToMark(-1) || !m.lines[m.cursor].isComment {
+		t.Errorf("< should return to the comment box (cursor=%d)", m.cursor)
+	}
+}
+
+// TestAnnotationRenderingSplit covers the gap that split (and full-file) modes
+// previously rendered no annotations at all: the box, the annotated flags, and
+// the cyan range bar must all appear in split mode too.
+func TestAnnotationRenderingSplit(t *testing.T) {
+	theme := DefaultTheme()
+	m := diffViewModel{
+		theme: &theme, hl: newHighlighter(), mdStyler: newMarkdownStyler(theme),
+		path: "main.go", width: 100, height: 30, style: diffStyleSplit,
+		hunks: []types.DiffHunk{{
+			OldStart: 1, OldCount: 0, NewStart: 1, NewCount: 3, Header: "f",
+			Lines: []types.DiffLine{
+				{Kind: types.DiffLineAdded, NewLineNum: 1, Content: "line one"},
+				{Kind: types.DiffLineAdded, NewLineNum: 2, Content: "line two"},
+				{Kind: types.DiffLineAdded, NewLineNum: 3, Content: "line three"},
+			},
+		}},
+		annotations: []types.Annotation{
+			{TargetRef: "main.go", LineStart: 1, LineEnd: 2, Summary: "guards the deposit"},
+		},
+	}
+	m.buildLines()
+
+	annotatedCount := 0
+	hasBox := false
+	for i := range m.lines {
+		if m.lines[i].isAnnotation {
+			hasBox = true
+		}
+		if m.lines[i].annotated {
+			annotatedCount++
+		}
+	}
+	if !hasBox {
+		t.Error("split mode should insert the annotation box")
+	}
+	if annotatedCount != 2 {
+		t.Errorf("split annotated code lines = %d, want 2", annotatedCount)
+	}
+	out := m.View()
+	if !strings.Contains(out, "guards the deposit") {
+		t.Error("split view should render the annotation summary")
+	}
+	if !strings.Contains(out, annotationRangeBar) {
+		t.Error("split view should render the cyan range bar")
+	}
+}
+
+// TestCommentFilterCycle covers the three-state comment filter: shown → dimmed →
+// hidden → shown. Dim flags the comment-only line; hide removes it from the view
+// and from navigation; the third press restores everything.
+func TestCommentFilterCycle(t *testing.T) {
+	theme := DefaultTheme()
+	m := diffViewModel{
+		theme: &theme, hl: newHighlighter(), mdStyler: newMarkdownStyler(theme),
+		path: "main.go", width: 80, height: 30, style: diffStyleUnified,
+		hunks: []types.DiffHunk{{
+			OldStart: 1, OldCount: 0, NewStart: 1, NewCount: 3, Header: "f",
+			Lines: []types.DiffLine{
+				{Kind: types.DiffLineAdded, NewLineNum: 1, Content: "// explain"},
+				{Kind: types.DiffLineAdded, NewLineNum: 2, Content: "doWork()"},
+				{Kind: types.DiffLineAdded, NewLineNum: 3, Content: "x := 1 // trailing"},
+			},
+		}},
+	}
+	m.buildLines()
+	if m.commentFilter != commentsShown || len(m.commentLines) != 0 {
+		t.Fatalf("should start shown with no comment lines, got filter=%d lines=%v", m.commentFilter, m.commentLines)
+	}
+
+	// 1st press → dimmed: comment-only line flagged, still present in the view.
+	m.CycleCommentFilter()
+	if m.commentFilter != commentsDimmed {
+		t.Fatalf("after 1 press filter=%d, want dimmed", m.commentFilter)
+	}
+	if !m.commentLines[1] || m.commentLines[2] || m.commentLines[3] {
+		t.Errorf("only line 1 should be comment-only, got %v", m.commentLines)
+	}
+	commentIdx := -1
+	for i, ln := range m.lines {
+		if ln.newLineNum == 1 {
+			commentIdx = i
+		}
+	}
+	if commentIdx < 0 {
+		t.Fatal("comment line should still be in m.lines when dimmed")
+	}
+	if m.screenLinesFor(commentIdx) != 1 {
+		t.Error("dimmed comment line should still occupy a screen row")
+	}
+
+	// 2nd press → hidden: the comment line occupies no rows and is unselectable.
+	m.CycleCommentFilter()
+	if m.commentFilter != commentsHidden {
+		t.Fatalf("after 2 presses filter=%d, want hidden", m.commentFilter)
+	}
+	if m.screenLinesFor(commentIdx) != 0 {
+		t.Error("hidden comment line should occupy zero screen rows")
+	}
+	if m.isSelectable(commentIdx) {
+		t.Error("hidden comment line should not be selectable")
+	}
+
+	// 3rd press → shown: everything restored.
+	m.CycleCommentFilter()
+	if m.commentFilter != commentsShown || len(m.commentLines) != 0 {
+		t.Errorf("after 3 presses should be shown with no comment lines, got filter=%d lines=%v", m.commentFilter, m.commentLines)
+	}
+	if m.screenLinesFor(commentIdx) != 1 {
+		t.Error("comment line should occupy a row again when shown")
+	}
+}

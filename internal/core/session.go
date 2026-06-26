@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/josephschmitt/monocle/internal/db"
 	"github.com/josephschmitt/monocle/internal/types"
-	"github.com/google/uuid"
 )
 
 // SessionManager handles session lifecycle operations.
@@ -86,6 +86,12 @@ func (sm *SessionManager) ResumeSession(sessionID string) (*types.ReviewSession,
 		return nil, fmt.Errorf("get additional files: %w", err)
 	}
 	session.AdditionalFiles = additionalFiles
+
+	annotations, err := sm.db.GetAnnotations(session.ID)
+	if err != nil {
+		return nil, fmt.Errorf("get annotations: %w", err)
+	}
+	session.Annotations = annotations
 
 	// Build file statuses map
 	session.FileStatuses = make(map[string]bool)

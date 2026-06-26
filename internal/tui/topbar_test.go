@@ -47,3 +47,32 @@ func TestReviewMetaChurnAndName(t *testing.T) {
 		}
 	}
 }
+
+func TestReviewNameIsCentered(t *testing.T) {
+	const width = 120
+	m := appModel{width: width, reviewName: "Center Me"}
+	m.sidebar.files = []types.ChangedFile{{Path: "a.go", Additions: 1}}
+
+	out := stripANSISeq(m.renderTitleBar())
+	idx := strings.Index(out, "Center Me")
+	if idx < 0 {
+		t.Fatal("review name not found in the top bar")
+	}
+	want := (width - len("Center Me")) / 2
+	if idx < want-6 || idx > want+6 {
+		t.Errorf("review name starts at col %d, expected ~%d (centered)", idx, want)
+	}
+}
+
+func TestReviewNameOverridesArtifactTitle(t *testing.T) {
+	m := appModel{width: 200, reviewName: "Add OAuth login"}
+	m.sidebar.contentItems = []types.ContentItem{{ID: "p1", Title: "Some plan title"}}
+	m.sidebar.files = []types.ChangedFile{{Path: "a.go", Additions: 1}}
+	out := m.renderTitleBar()
+	if !strings.Contains(out, "Add OAuth login") {
+		t.Errorf("top bar should show the agent-set review name, got: %q", out)
+	}
+	if strings.Contains(out, "Some plan title") {
+		t.Error("review name should take precedence over the artifact title")
+	}
+}

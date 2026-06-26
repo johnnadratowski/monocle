@@ -21,6 +21,16 @@ const (
 	diffStyleFile // raw file content, no diff coloring
 )
 
+// commentFilterMode controls how source-code comment-only lines are shown. The
+// `#` key cycles through the three states.
+type commentFilterMode int
+
+const (
+	commentsShown  commentFilterMode = iota // normal syntax highlighting
+	commentsDimmed                          // comment-only lines rendered faint
+	commentsHidden                          // comment-only lines removed from the view
+)
+
 // diffViewLine represents a rendered line in the diff view.
 type diffViewLine struct {
 	kind       types.DiffLineKind
@@ -31,6 +41,11 @@ type diffViewLine struct {
 	hunkHeader string
 	isComment  bool
 	comment    *types.ReviewComment
+
+	// Agent annotation rendering.
+	isAnnotation bool
+	annotation   *types.Annotation
+	annotated    bool // this code line falls within an annotation's range (draws a gutter bar)
 
 	// Paired line content for intra-line diff highlighting (unified mode)
 	pairContent string
@@ -50,19 +65,23 @@ type diffViewLine struct {
 }
 
 type diffViewModel struct {
-	path      string
-	hunks     []types.DiffHunk
-	comments  []types.ReviewComment
-	lines     []diffViewLine
-	cursor    int
-	offset    int // scroll offset
-	width     int
-	height    int
-	focused   bool
-	style     diffStyle
-	theme     *Theme
-	hl        *highlighter
-	isBinary  bool // true when hunk content contains binary control characters
+	path          string
+	hunks         []types.DiffHunk
+	comments      []types.ReviewComment
+	annotations   []types.Annotation // agent-authored, for the current file
+	hideOverlays  bool               // when true, comments + annotations are not inserted
+	commentFilter commentFilterMode  // show / dim / hide source-code comment-only lines
+	commentLines  map[int]bool       // new-file line numbers that are comment-only (when filter != shown)
+	lines         []diffViewLine
+	cursor        int
+	offset        int // scroll offset
+	width         int
+	height        int
+	focused       bool
+	style         diffStyle
+	theme         *Theme
+	hl            *highlighter
+	isBinary      bool // true when hunk content contains binary control characters
 
 	hOffset  int  // horizontal scroll offset (runes)
 	wrap     bool // soft-wrap long lines
@@ -83,20 +102,20 @@ type diffViewModel struct {
 	mouseDragActive bool
 
 	// Comment expansion on hover
-	expandedCommentID string        // ID of the currently expanded comment (empty = none)
-	expandSeq         int           // sequence counter; incremented on each cursor move to debounce
+	expandedCommentID  string        // ID of the currently expanded comment (empty = none)
+	expandSeq          int           // sequence counter; incremented on each cursor move to debounce
 	commentExpandDelay time.Duration // <0 = disabled, 0 = instant, >0 = delay before auto-expand
 
 	// Content view mode (for plans/docs)
-	contentMode        bool
-	contentID          string
-	contentTitle       string
-	contentHasDiff      bool // true when multiple versions exist for diffing
-	contentVersionCount int  // number of versions for this content item
-	diffBaseVersion     int  // base version being diffed from (0 = default latest-vs-previous)
-	diffToVersion       int  // target version being diffed to
-	contentDiffContent string // current content text, for toggling back from diff view
-	mdStyler           *markdownStyler
+	contentMode         bool
+	contentID           string
+	contentTitle        string
+	contentHasDiff      bool   // true when multiple versions exist for diffing
+	contentVersionCount int    // number of versions for this content item
+	diffBaseVersion     int    // base version being diffed from (0 = default latest-vs-previous)
+	diffToVersion       int    // target version being diffed to
+	contentDiffContent  string // current content text, for toggling back from diff view
+	mdStyler            *markdownStyler
 
 	// Content diff auto-switch (from config diff_style)
 	preferredContentDiffStyle diffStyle // unified or split
@@ -121,6 +140,7 @@ func (m *diffViewModel) clearFileState() {
 	m.hunks = nil
 	m.lines = nil
 	m.comments = nil
+	m.annotations = nil
 	m.isBinary = false
 	m.cursor = 0
 	m.offset = 0
@@ -144,6 +164,7 @@ type loadDiffMsg struct {
 	path            string
 	result          *types.DiffResult
 	comments        []types.ReviewComment
+	annotations     []types.Annotation
 	selectCommentID string // if set, auto-select and expand this comment after loading
 	anchorLine      int    // if set, re-anchor cursor to this new-file line after loading
 }
@@ -167,6 +188,7 @@ type loadFileContentMsg struct {
 	content         string
 	err             error
 	comments        []types.ReviewComment
+	annotations     []types.Annotation
 	selectCommentID string
 	anchorLine      int // re-anchor cursor to this new-file line after load (0 = none)
 }
@@ -254,6 +276,7 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 		}
 		m.path = msg.path
 		m.comments = msg.comments
+		m.annotations = msg.annotations
 		m.isBinary = isBinaryContent(m.hunks)
 		// If in file view mode, store hunks but fetch file content instead
 		if m.style == diffStyleFile {
@@ -307,6 +330,7 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 		}
 		m.hunks = nil
 		m.comments = msg.comments
+		m.annotations = nil
 		prevCursor := m.cursor
 		prevOffset := m.offset
 		m.buildContentLines(msg.content)
@@ -339,6 +363,7 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 		m.contentMode = false
 		m.hunks = msg.result.Hunks
 		m.comments = msg.comments
+		m.annotations = nil
 		m.style = msg.preferredStyle
 		m.diffBaseVersion = msg.fromVersion
 		m.diffToVersion = msg.toVersion
@@ -355,6 +380,7 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 			m.path = msg.path
 			m.hunks = nil
 			m.comments = nil
+			m.annotations = nil
 			m.lines = []diffViewLine{{
 				kind:       types.DiffLineContext,
 				content:    msg.err.Error(),
@@ -367,6 +393,7 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 		}
 		m.style = diffStyleFile
 		m.comments = msg.comments
+		m.annotations = msg.annotations
 		sameFile := msg.path == m.path
 		prevCursor := m.cursor
 		prevOffset := m.offset
@@ -399,6 +426,7 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 		m.path = msg.path
 		m.hunks = nil
 		m.comments = msg.comments
+		m.annotations = nil
 		m.style = diffStyleFile
 		m.buildFileViewLines(msg.content)
 		m.cursor = m.nearestSelectable(0, 1)
@@ -600,6 +628,10 @@ func (m diffViewModel) View() string {
 
 	for i := m.offset; i < len(m.lines) && screenUsed < m.height; i++ {
 		line := m.lines[i]
+		// Hide-comments filter: comment-only lines are removed from the view.
+		if m.isHiddenComment(line) {
+			continue
+		}
 		selected := i == m.cursor
 		inVisual := m.visualMode && m.inVisualRange(i)
 
@@ -608,6 +640,8 @@ func (m diffViewModel) View() string {
 			rendered = m.renderHunkHeader(line, selected)
 		} else if line.isComment {
 			rendered = m.renderCommentLine(line, selected)
+		} else if line.isAnnotation {
+			rendered = m.renderAnnotationLine(line, selected)
 		} else if line.isSplit {
 			rendered = m.renderSplitLine(line, selected, inVisual)
 		} else if m.style == diffStyleFile || m.contentMode {
@@ -677,14 +711,16 @@ func (m *diffViewModel) buildLines() {
 	isMd := isMarkdownFile(m.path)
 
 	// File-level comments (LineStart == 0) rendered before hunks
-	for i := range m.comments {
-		c := &m.comments[i]
-		if c.TargetRef == m.path && c.LineStart == 0 {
-			m.lines = append(m.lines, diffViewLine{
-				isComment: true,
-				comment:   c,
-				content:   formatInlineComment(c),
-			})
+	if !m.hideOverlays {
+		for i := range m.comments {
+			c := &m.comments[i]
+			if c.TargetRef == m.path && c.LineStart == 0 {
+				m.lines = append(m.lines, diffViewLine{
+					isComment: true,
+					comment:   c,
+					content:   formatInlineComment(c),
+				})
+			}
 		}
 	}
 
@@ -729,25 +765,29 @@ func (m *diffViewModel) buildLines() {
 				mdCodeLang:    codeLang,
 			})
 
-			// Insert comments after their last targeted line
-			for i := range m.comments {
-				c := &m.comments[i]
-				anchor := c.LineEnd
-				if anchor == 0 {
-					anchor = c.LineStart
-				}
-				if c.TargetRef == m.path && anchor == dl.NewLineNum && dl.NewLineNum > 0 {
-					m.lines = append(m.lines, diffViewLine{
-						isComment: true,
-						comment:   c,
-						content:   formatInlineComment(c),
-					})
+			if !m.hideOverlays {
+				// Insert comments after their last targeted line
+				for i := range m.comments {
+					c := &m.comments[i]
+					anchor := c.LineEnd
+					if anchor == 0 {
+						anchor = c.LineStart
+					}
+					if c.TargetRef == m.path && anchor == dl.NewLineNum && dl.NewLineNum > 0 {
+						m.lines = append(m.lines, diffViewLine{
+							isComment: true,
+							comment:   c,
+							content:   formatInlineComment(c),
+						})
+					}
 				}
 			}
 		}
 	}
 
 	m.pairLines()
+	m.insertInlineAnnotations()
+	m.computeCommentLines()
 }
 
 // buildContentLines builds lines for a content item (plan/doc) displayed as a document.
@@ -814,6 +854,8 @@ func (m *diffViewModel) buildContentLines(content string) {
 			}
 		}
 	}
+
+	m.computeCommentLines()
 }
 
 // buildFileViewLines builds lines from raw file content for file view mode.
@@ -880,20 +922,25 @@ func (m *diffViewModel) buildFileViewLines(content string) {
 			}
 		}
 	}
+
+	m.insertInlineAnnotations()
+	m.computeCommentLines()
 }
 
 func (m *diffViewModel) buildSplitLines() {
 	isMd := isMarkdownFile(m.path)
 
 	// File-level comments (LineStart == 0) rendered before hunks
-	for i := range m.comments {
-		c := &m.comments[i]
-		if c.TargetRef == m.path && c.LineStart == 0 {
-			m.lines = append(m.lines, diffViewLine{
-				isComment: true,
-				comment:   c,
-				content:   formatInlineComment(c),
-			})
+	if !m.hideOverlays {
+		for i := range m.comments {
+			c := &m.comments[i]
+			if c.TargetRef == m.path && c.LineStart == 0 {
+				m.lines = append(m.lines, diffViewLine{
+					isComment: true,
+					comment:   c,
+					content:   formatInlineComment(c),
+				})
+			}
 		}
 	}
 
@@ -1008,6 +1055,9 @@ func (m *diffViewModel) buildSplitLines() {
 		// Insert inline comments after their target lines
 		m.insertInlineComments(hunk)
 	}
+
+	m.insertInlineAnnotations()
+	m.computeCommentLines()
 }
 
 // pairLines pairs consecutive removed/added line runs for intra-line diff highlighting.
@@ -1052,6 +1102,87 @@ func (m *diffViewModel) pairLines() {
 			i++
 		}
 	}
+}
+
+// annotationColor is the accent used for agent annotations (boxes + the gutter
+// range bar). Distinct from comment colors so the two channels read apart.
+const annotationColor = "6" // cyan
+
+// annotationRangeBar is the solid glyph drawn as the far-left rail on every code
+// line inside an annotation's range. A full block on a cyan background reads as
+// an unbroken vertical line down the left edge of the annotated block.
+const annotationRangeBar = "▌"
+
+// gutterWithRangeBar renders a (plain, ASCII line-number) gutter. When the line
+// is inside an annotation's range it draws a solid cyan rail in the leftmost
+// column — at the far-left edge of the pane — so the range reads as a continuous
+// vertical line down the side. base is the gutter's normal style.
+func gutterWithRangeBar(gutter string, base lipgloss.Style, annotated bool, bg color.Color) string {
+	if !annotated || len(gutter) == 0 {
+		return base.Render(gutter)
+	}
+	// Solid cyan block in column 0; the rest of the gutter keeps its normal style.
+	rail := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(annotationColor)).
+		Background(lipgloss.Color(annotationColor)).
+		Render(annotationRangeBar)
+	return rail + base.Render(gutter[1:])
+}
+
+// renderDimmedComment renders a source-code comment line faint/greyed (used by
+// the hide-comments filter), padded to width on the line's background.
+func renderDimmedComment(content string, bg color.Color, width int) string {
+	style := lipgloss.NewStyle().Faint(true).Foreground(lipgloss.Color("8"))
+	if bg != nil {
+		style = style.Background(bg)
+	}
+	return applyBgAndPad(style.Render(content), bg, width)
+}
+
+// renderAnnotationLine renders an agent annotation box. Each sub-line is tinted
+// with the annotation accent and prefixed with a bar so it reads as a single
+// attached block; when selected it reverses like other inline overlays.
+// annotationBoxRows wraps an annotation box's logical lines (summary, refs) to
+// the inner content width — between the left bar and the right border — so long
+// text wraps instead of running off the pane.
+func (m diffViewModel) annotationBoxRows(content string) []string {
+	cw := m.width - 2 // left bar + right border
+	if cw < 1 {
+		cw = 1
+	}
+	var rows []string
+	for _, logical := range strings.Split(content, "\n") {
+		w := wrapContent(logical, cw)
+		if len(w) == 0 {
+			rows = append(rows, "")
+			continue
+		}
+		rows = append(rows, w...)
+	}
+	return rows
+}
+
+func (m diffViewModel) renderAnnotationLine(line diffViewLine, selected bool) string {
+	style := lipgloss.NewStyle().Foreground(lipgloss.Color(annotationColor))
+	if selected && m.focused {
+		style = style.Reverse(true)
+	}
+	barStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(annotationColor))
+	leftBar := barStyle.Render("▌")
+	rightBar := barStyle.Render("│")
+	cw := m.width - 2
+	if cw < 1 {
+		cw = 1
+	}
+	rows := m.annotationBoxRows(line.content)
+	var b strings.Builder
+	for i, r := range rows {
+		if i > 0 {
+			b.WriteString("\n")
+		}
+		b.WriteString(leftBar + style.Render(padToWidth(r, cw)) + rightBar)
+	}
+	return b.String()
 }
 
 func (m diffViewModel) renderHunkHeader(line diffViewLine, selected bool) string {
@@ -1297,7 +1428,12 @@ func (m diffViewModel) renderContentLine(line diffViewLine, _, contentWidth int,
 	if len(gutter) < gutterWidth {
 		gutter = fmt.Sprintf("%-*s", gutterWidth, gutter)
 	}
-	renderedGutter := gutterStyle.Render(gutter)
+	renderedGutter := gutterWithRangeBar(gutter, gutterStyle, line.annotated, nil)
+
+	// Hide-comments filter: dim comment-only lines.
+	if m.isDimmedComment(line) {
+		return renderedGutter + renderDimmedComment(content, nil, contentWidth)
+	}
 
 	// Render content: markdown styling or syntax highlighting
 	var renderedContent string
@@ -1377,7 +1513,14 @@ func (m diffViewModel) renderDiffLine(line diffViewLine, _, contentWidth int, se
 	if len(gutter) < gutterWidth {
 		gutter = fmt.Sprintf("%-*s", gutterWidth, gutter)
 	}
-	renderedGutter := gutterStyle.Render(gutter)
+	// Annotated code lines get a cyan bar in the gutter's trailing column to mark
+	// the annotation's range.
+	renderedGutter := gutterWithRangeBar(gutter, gutterStyle, line.annotated, lineBg)
+
+	// Hide-comments filter: dim comment-only lines instead of syntax-highlighting.
+	if m.isDimmedComment(line) {
+		return renderedGutter + renderDimmedComment(content, lineBg, contentWidth)
+	}
 
 	// Render content: markdown styling or syntax highlighting
 	isMd := isMarkdownFile(m.path)
@@ -1504,14 +1647,18 @@ func (m diffViewModel) renderSplitLine(line diffViewLine, selected, inVisual boo
 	// (when over-wide) lets the terminal wrap the row. Hard-fitting both sides
 	// keeps the divider in a stable column regardless of content or wrap mode.
 	sideW := gutterW + contentW
-	leftStyled := fitToWidth(m.renderSplitSide(leftGutter, leftRawContent, line.kind, line.leftEmpty, leftChanges, gutterW, contentW, line), sideW)
-	rightStyled := fitToWidth(m.renderSplitSide(rightGutter, rightRawContent, line.rightKind, line.rightEmpty, rightChanges, gutterW, contentW, line), sideW)
+	// Annotation ranges and the comment dim are keyed on new-file lines, so they
+	// apply to the right (new) side; the left side only dims on context lines,
+	// where both sides show the same line.
+	dimmed := m.isDimmedComment(line)
+	leftStyled := fitToWidth(m.renderSplitSide(leftGutter, leftRawContent, line.kind, line.leftEmpty, leftChanges, gutterW, contentW, line, false, dimmed && line.kind == types.DiffLineContext), sideW)
+	rightStyled := fitToWidth(m.renderSplitSide(rightGutter, rightRawContent, line.rightKind, line.rightEmpty, rightChanges, gutterW, contentW, line, line.annotated, dimmed), sideW)
 	divStyled := lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(divider)
 
 	return leftStyled + divStyled + rightStyled
 }
 
-func (m diffViewModel) renderSplitSide(gutter, content string, kind types.DiffLineKind, empty bool, changes []changeRange, gutterW, contentW int, line diffViewLine) string {
+func (m diffViewModel) renderSplitSide(gutter, content string, kind types.DiffLineKind, empty bool, changes []changeRange, gutterW, contentW int, line diffViewLine, annotated, dimmed bool) string {
 	if empty {
 		full := strings.Repeat(" ", gutterW) + strings.Repeat(" ", contentW)
 		return lipgloss.NewStyle().Faint(true).Render(full)
@@ -1536,7 +1683,12 @@ func (m diffViewModel) renderSplitSide(gutter, content string, kind types.DiffLi
 	if len(gutter) < gutterW {
 		gutter = fmt.Sprintf("%-*s", gutterW, gutter)
 	}
-	renderedGutter := gutterStyle.Render(gutter)
+	renderedGutter := gutterWithRangeBar(gutter, gutterStyle, annotated, lineBg)
+
+	// Hide-comments filter: dim comment-only lines.
+	if dimmed {
+		return renderedGutter + renderDimmedComment(content, lineBg, contentW)
+	}
 
 	// Render content: markdown styling or syntax highlighting
 	isMd := isMarkdownFile(m.path)
@@ -1614,7 +1766,9 @@ func (m diffViewModel) renderWrappedLine(gutter, content string, gutterWidth, co
 		if len(chunkGutter) < gutterWidth {
 			chunkGutter = fmt.Sprintf("%-*s", gutterWidth, chunkGutter)
 		}
-		renderedGutter := gutterStyle.Render(chunkGutter)
+		// Annotated lines keep the cyan range rail on every wrapped row.
+		annotated := mdLine != nil && mdLine.annotated
+		renderedGutter := gutterWithRangeBar(chunkGutter, gutterStyle, annotated, lineBg)
 
 		// Render content: markdown styling or syntax highlighting
 		var renderedContent string
@@ -1738,9 +1892,54 @@ func (m *diffViewModel) ToggleFullFile() tea.Cmd {
 	m.fullFile = !m.fullFile
 	path := m.path
 	full := m.fullFile
-	anchor := m.lineNumAt(m.cursor)
+	anchor := m.anchorLineForCursor()
 	return func() tea.Msg {
 		return requestFileDiffMsg{path: path, full: full, anchorLine: anchor}
+	}
+}
+
+// ToggleOverlays hides or shows inline comments and annotations, re-anchoring the
+// cursor to the same source line so the viewport doesn't jump.
+func (m *diffViewModel) ToggleOverlays() {
+	anchor := m.anchorLineForCursor()
+	m.hideOverlays = !m.hideOverlays
+	m.buildLines()
+	if anchor > 0 {
+		if idx := m.indexForNewLine(anchor); idx >= 0 {
+			m.cursor = idx
+		}
+	}
+	if m.cursor >= len(m.lines) {
+		m.cursor = len(m.lines) - 1
+	}
+	if m.cursor < 0 {
+		m.cursor = 0
+	}
+	m.cursor = m.nearestSelectable(m.cursor, 1)
+	m.ensureVisible()
+}
+
+// CycleCommentFilter advances the comment filter: shown → dimmed → hidden →
+// shown. Dim renders comment-only lines faint; hide removes them from the view
+// (skipped at render and in navigation). It recomputes the comment-line set and
+// nudges the cursor off any now-hidden line; no rebuild, so scroll stays stable.
+func (m *diffViewModel) CycleCommentFilter() {
+	m.commentFilter = (m.commentFilter + 1) % 3
+	m.computeCommentLines()
+	m.cursor = m.nearestSelectable(m.cursor, 1)
+	m.ensureVisible()
+}
+
+// CommentFilterLabel returns a short label for the current filter state, or ""
+// when comments are shown normally. Used for a transient status hint.
+func (m diffViewModel) CommentFilterLabel() string {
+	switch m.commentFilter {
+	case commentsDimmed:
+		return "comments dimmed"
+	case commentsHidden:
+		return "comments hidden"
+	default:
+		return ""
 	}
 }
 
@@ -1766,7 +1965,7 @@ func (m *diffViewModel) CycleDiffStyle() tea.Cmd {
 
 	// Source line under the cursor, preserved across the rebuild so the
 	// viewport re-anchors instead of keeping a now-meaningless line index.
-	srcLine := m.lineNumAt(m.cursor)
+	srcLine := m.anchorLineForCursor()
 
 	// Viewing a content diff: cycle unified → split → back to content
 	if !m.contentMode && m.contentID != "" {
@@ -1855,6 +2054,10 @@ func (m diffViewModel) screenLinesFor(idx int) int {
 		return 1
 	}
 	line := m.lines[idx]
+	// Hidden comment lines occupy no screen rows (filter in the hide state).
+	if m.isHiddenComment(line) {
+		return 0
+	}
 	// Comments render as a multi-line box regardless of wrap mode: a collapsed
 	// comment is a 3-line box (line.content), an expanded one spans its body.
 	// This must match what renderCommentLine/View actually draw, or the scroll
@@ -1865,6 +2068,11 @@ func (m diffViewModel) screenLinesFor(idx int) int {
 			return strings.Count(formatExpandedComment(line.comment, m.width, origCode, m.wrap), "\n") + 1
 		}
 		return strings.Count(line.content, "\n") + 1
+	}
+	// Annotation boxes wrap their text to the pane width; count the wrapped rows
+	// so scroll math matches what renderAnnotationLine draws.
+	if line.isAnnotation {
+		return len(m.annotationBoxRows(line.content))
 	}
 	if !m.wrap {
 		return 1
@@ -2081,6 +2289,20 @@ func (m diffViewModel) lastVisibleLine() int {
 		last = i
 	}
 	return last
+}
+
+// JumpToMark moves the cursor to the next (dir=+1) or previous (dir=-1) review
+// mark — an inline comment box or an agent annotation box — and scrolls it into
+// view. No-op when there are no marks in that direction (no wrap-around).
+func (m *diffViewModel) JumpToMark(dir int) bool {
+	for i := m.cursor + dir; i >= 0 && i < len(m.lines); i += dir {
+		if m.lines[i].isComment || m.lines[i].isAnnotation {
+			m.cursor = i
+			m.ensureVisible()
+			return true
+		}
+	}
+	return false
 }
 
 func (m *diffViewModel) ensureVisible() {
@@ -2304,6 +2526,10 @@ func (m diffViewModel) isSelectable(idx int) bool {
 	if line.isHunk {
 		return false
 	}
+	// Hidden comment lines can't hold the cursor (filter in the hide state).
+	if m.isHiddenComment(line) {
+		return false
+	}
 	if line.isComment {
 		return true
 	}
@@ -2394,6 +2620,30 @@ func (m diffViewModel) currentDiffLine() int {
 	return m.lineNumAt(m.cursor)
 }
 
+// anchorLineForCursor returns the new-file line to re-anchor the viewport on
+// after a rebuild (diff-style toggle, full-file toggle, refresh). When the cursor
+// sits on a row with no file number — a hunk header, a comment box, or an
+// annotation box — it falls back to the nearest code line so the viewport stays
+// put instead of jumping to the top.
+func (m diffViewModel) anchorLineForCursor() int {
+	if ln := m.lineNumAt(m.cursor); ln > 0 {
+		return ln
+	}
+	for d := 1; d < len(m.lines); d++ {
+		if i := m.cursor - d; i >= 0 {
+			if ln := m.lineNumAt(i); ln > 0 {
+				return ln
+			}
+		}
+		if i := m.cursor + d; i < len(m.lines) {
+			if ln := m.lineNumAt(i); ln > 0 {
+				return ln
+			}
+		}
+	}
+	return 0
+}
+
 // EditorTargetLine returns the new-file line number an external editor should
 // open at: the cursor's line when the cursor is visible in the viewport,
 // otherwise the line at the top of the viewport — so the editor lands where the
@@ -2481,12 +2731,18 @@ func (m diffViewModel) displayLinesFor(idx int) int {
 		return 1
 	}
 	line := m.lines[idx]
+	// Hidden comment lines render nothing (filter in the hide state).
+	if m.isHiddenComment(line) {
+		return 0
+	}
 
 	var rendered string
 	if line.isHunk {
 		rendered = m.renderHunkHeader(line, false)
 	} else if line.isComment {
 		rendered = m.renderCommentLine(line, false)
+	} else if line.isAnnotation {
+		rendered = m.renderAnnotationLine(line, false)
 	} else if line.isSplit {
 		rendered = m.renderSplitLine(line, false, false)
 	} else if m.style == diffStyleFile || m.contentMode {
@@ -2546,7 +2802,7 @@ type openCommentMsg struct {
 	lineStart   int
 	lineEnd     int
 	targetType  types.TargetType
-	prefillBody string           // pre-filled body text (for suggestions)
+	prefillBody string            // pre-filled body text (for suggestions)
 	prefillType types.CommentType // pre-set comment type (zero value = default)
 }
 
@@ -2655,6 +2911,199 @@ func (m *diffViewModel) insertInlineComments(hunk types.DiffHunk) {
 		}
 	}
 	m.lines = result
+}
+
+// insertInlineAnnotations flags every code line inside an annotation's range so
+// the gutter draws the cyan range bar, and inserts each annotation's box after
+// the last line of its range. Runs as a single post-build pass so unified,
+// split, and full-file modes all render annotations identically. No-op when
+// overlays are hidden.
+func (m *diffViewModel) insertInlineAnnotations() {
+	if m.hideOverlays || len(m.annotations) == 0 {
+		return
+	}
+	var result []diffViewLine
+	for _, line := range m.lines {
+		// New-file line number: split lines carry it on the right side.
+		ln := line.rightLineNum
+		if ln == 0 {
+			ln = line.newLineNum
+		}
+		if ln > 0 && m.lineInAnnotation(ln) {
+			line.annotated = true
+		}
+		result = append(result, line)
+		if ln == 0 {
+			continue
+		}
+		for i := range m.annotations {
+			a := &m.annotations[i]
+			if a.TargetRef == m.path && annotationAnchor(a) == ln {
+				result = append(result, diffViewLine{
+					isAnnotation: true,
+					annotation:   a,
+					content:      formatAnnotation(a),
+				})
+			}
+		}
+	}
+	m.lines = result
+}
+
+// computeCommentLines classifies which displayed code lines are source-code
+// comment-only and records their new-file line numbers, so the renderer can dim
+// them. It reconstructs the new-file text from the built lines (in order) and
+// tokenises it once, so block comments spanning consecutive lines classify
+// correctly. No-op (and clears the set) when the toggle is off.
+func (m *diffViewModel) computeCommentLines() {
+	m.commentLines = nil
+	if m.commentFilter == commentsShown || m.hl == nil {
+		return
+	}
+	type codeLine struct {
+		num  int
+		text string
+	}
+	var code []codeLine
+	for _, ln := range m.lines {
+		if ln.isHunk || ln.isComment || ln.isAnnotation {
+			continue
+		}
+		// New-file side: split lines carry it on the right.
+		num, text := ln.rightLineNum, ln.rightContent
+		if num == 0 {
+			num, text = ln.newLineNum, ln.content
+		}
+		if num <= 0 {
+			continue
+		}
+		code = append(code, codeLine{num, text})
+	}
+	if len(code) == 0 {
+		return
+	}
+	var sb strings.Builder
+	for i, c := range code {
+		if i > 0 {
+			sb.WriteByte('\n')
+		}
+		sb.WriteString(c.text)
+	}
+	set := m.hl.commentOnlyLines(m.path, sb.String())
+	if len(set) == 0 {
+		return
+	}
+	m.commentLines = make(map[int]bool, len(set))
+	for i, c := range code {
+		if set[i+1] {
+			m.commentLines[c.num] = true
+		}
+	}
+}
+
+// commentLineNum returns the new-file line number of a code line that the
+// comment filter has classified as comment-only, or 0 when the line is not a
+// classified comment line.
+func (m diffViewModel) commentLineNum(line diffViewLine) int {
+	if len(m.commentLines) == 0 || line.isHunk || line.isComment || line.isAnnotation {
+		return 0
+	}
+	num := line.rightLineNum
+	if num == 0 {
+		num = line.newLineNum
+	}
+	if num > 0 && m.commentLines[num] {
+		return num
+	}
+	return 0
+}
+
+// isDimmedComment reports whether a code line should be rendered faint because
+// the filter is in the dim state and the line is comment-only.
+func (m diffViewModel) isDimmedComment(line diffViewLine) bool {
+	return m.commentFilter == commentsDimmed && m.commentLineNum(line) > 0
+}
+
+// isHiddenComment reports whether a code line should be removed from the view
+// because the filter is in the hide state and the line is comment-only.
+func (m diffViewModel) isHiddenComment(line diffViewLine) bool {
+	return m.commentFilter == commentsHidden && m.commentLineNum(line) > 0
+}
+
+// CursorAnnotation returns the annotation under the cursor: the annotation whose
+// box the cursor is on, or the one whose code range covers the cursor's line.
+func (m diffViewModel) CursorAnnotation() *types.Annotation {
+	if m.cursor < 0 || m.cursor >= len(m.lines) {
+		return nil
+	}
+	line := m.lines[m.cursor]
+	if line.isAnnotation {
+		return line.annotation
+	}
+	ln := line.newLineNum
+	if ln <= 0 {
+		return nil
+	}
+	for i := range m.annotations {
+		a := &m.annotations[i]
+		if a.TargetRef != m.path {
+			continue
+		}
+		end := a.LineEnd
+		if end == 0 {
+			end = a.LineStart
+		}
+		if ln >= a.LineStart && ln <= end {
+			return a
+		}
+	}
+	return nil
+}
+
+// annotationAnchor returns the new-file line after which an annotation's box is
+// drawn (the last line of its range).
+func annotationAnchor(a *types.Annotation) int {
+	if a.LineEnd > 0 {
+		return a.LineEnd
+	}
+	return a.LineStart
+}
+
+// lineInAnnotation reports whether a new-file line number falls within any
+// annotation's range for the current file (used to draw the gutter range bar).
+func (m diffViewModel) lineInAnnotation(lineNum int) bool {
+	for i := range m.annotations {
+		a := &m.annotations[i]
+		if a.TargetRef != m.path {
+			continue
+		}
+		end := a.LineEnd
+		if end == 0 {
+			end = a.LineStart
+		}
+		if lineNum >= a.LineStart && lineNum <= end {
+			return true
+		}
+	}
+	return false
+}
+
+// formatAnnotation renders the inline annotation box: a one-line summary and,
+// when present, a line of numbered doc links.
+func formatAnnotation(a *types.Annotation) string {
+	lines := []string{fmt.Sprintf("  ⟐ %s", a.Summary)}
+	if len(a.Refs) > 0 {
+		parts := make([]string, 0, len(a.Refs))
+		for i, r := range a.Refs {
+			label := r.Label
+			if label == "" {
+				label = r.Doc
+			}
+			parts = append(parts, fmt.Sprintf("[%d] %s", i+1, label))
+		}
+		lines = append(lines, "    ↪ "+strings.Join(parts, "  "))
+	}
+	return strings.Join(lines, "\n")
 }
 
 func formatInlineComment(c *types.ReviewComment) string {
@@ -2852,4 +3301,3 @@ func formatExpandedComment(c *types.ReviewComment, width int, originalCode strin
 	lines = append(lines, fmt.Sprintf("  ╚═══%s", strings.Repeat("═", footerDashes)))
 	return strings.Join(lines, "\n")
 }
-

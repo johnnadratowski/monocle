@@ -5,7 +5,7 @@ description: "CLI commands for agents to interact with a running monocle session
 
 These commands are used by agents — via installed skills, MCP tools, or directly from the command line — to communicate with a running monocle session.
 
-When registered in **MCP tools mode**, agents call these operations as MCP tools (`review_status`, `get_feedback`, `send_artifact`, `add_files`, `remove_files`, `set_file_groups`) instead of CLI commands. The behavior is identical — the MCP server connects to the same Unix socket internally.
+When registered in **MCP tools mode**, agents call these operations as MCP tools (`review_status`, `get_feedback`, `send_artifact`, `add_files`, `remove_files`, `set_file_groups`, `add_annotations`, `set_review_name`) instead of CLI commands. The behavior is identical — the MCP server connects to the same Unix socket internally.
 
 When registered in **skills mode**, agents invoke the corresponding CLI commands below.
 
@@ -213,11 +213,23 @@ The manifest is a JSON array of entries (or an object with an `entries` array), 
 ]
 ```
 
+When a change spans multiple independent efforts, add an optional `workstream` (with `workstream_order`) to nest groups under a top-level workstream header — files then read as **workstream → group → files**:
+
+```json
+[
+  { "path": "search/ui.tsx",    "workstream": "Search",   "workstream_order": 0, "group": "UI",      "group_order": 0 },
+  { "path": "search/api.go",    "workstream": "Search",   "workstream_order": 0, "group": "Backend", "group_order": 1 },
+  { "path": "payments/api.go",  "workstream": "Payments", "workstream_order": 1, "group": "Backend", "group_order": 0 }
+]
+```
+
 ### Entry fields
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `path` | string | **(Required)** Changed-file path, as shown by `review status` (repo-relative). |
+| `workstream` | string | Optional top-level grouping above `group`. Use it when the change spans multiple independent efforts; omit it for a single-workstream change. Files nest as workstream → group → files. |
+| `workstream_order` | int | Display order of the workstream; lower workstreams are shown first. |
 | `group` | string | Free-form group label (e.g. `UI`, `Backend`, `Database`). Files without a group fall back to a heuristic category. |
 | `group_order` | int | Display order of the group; lower groups are shown first. |
 | `sort_index` | int | Order within the group; lower first. Defaults to Monocle's computed import order (dependencies first), then lines-changed. |
@@ -240,7 +252,7 @@ In MCP tools mode, call the `set_file_groups` tool:
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `entries` | object array | Yes | Grouping entries (`path`, `group`, `group_order`, `sort_index`, `category`, `criticality`). |
+| `entries` | object array | Yes | Grouping entries (`path`, `workstream`, `workstream_order`, `group`, `group_order`, `sort_index`, `category`, `criticality`). |
 | `replace` | boolean | No | Replace all prior grouping metadata. |
 
 ### Example
@@ -248,3 +260,83 @@ In MCP tools mode, call the `set_file_groups` tool:
 ```bash
 monocle review group-files --file groups.json --replace
 ```
+
+## `monocle review annotate`
+
+Attach short rationale notes to specific ranges of the changed code to guide the reviewer, each linking out to the docs that motivate it. **Annotations are shown to the reviewer only — they are not review feedback and are never sent back to the agent.** They render as a distinct box below the code range, with a colored bar marking the annotated lines.
+
+```bash
+monocle review annotate [--file manifest.json] [--replace] [--json] [--workdir PATH] [--socket PATH]
+```
+
+The manifest is a JSON array of entries (or an object with an `entries` array), read from `--file` or stdin:
+
+```json
+[
+  {
+    "file": "api/handler.go",
+    "line_start": 40,
+    "line_end": 52,
+    "summary": "Guards the on-chain deposit before the goal is created",
+    "refs": [
+      { "kind": "file", "doc": "docs/todo.md", "label": "srv-008", "start_line": 120, "end_line": 135 }
+    ]
+  }
+]
+```
+
+### Entry fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `file` | string | **(Required)** Changed-file path (from `review status`) the note explains. |
+| `line_start` / `line_end` | int | **(Required)** The exact code range the note covers. |
+| `summary` | string | One line: why this code exists / what it does. |
+| `refs` | array | Doc links. Each has `kind` (`file` for a repo path, `artifact` for a sent artifact id), `doc` (path or id), `label` (link text), and a `start_line`/`start_col`/`end_line`/`end_col` range into the doc (1-based lines, 0-based cols). |
+
+### Flags
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--file PATH` | | Path to the JSON manifest (`-` or omitted reads stdin). |
+| `--replace` | | Clear all existing annotations first (default replaces per file). |
+| `--json` | | Output the result as structured JSON. |
+| `--workdir PATH` | `-C` | Override the working directory. Also reads from `MONOCLE_WORKDIR`. |
+| `--socket PATH` | | Override the Unix socket path. Also reads from `MONOCLE_SOCKET`. |
+
+### Validation and response
+
+Each entry is validated before it is stored. The response reports how many were **accepted** and lists any **rejected** entries with a reason so you can correct and resend. An entry is rejected when:
+
+- `line_start` is less than 1,
+- `line_end` is less than `line_start`,
+- `summary` is empty, or
+- `file` is not one of the review's changed files.
+
+Doc refs that can't be resolved (a wrong repo path or unknown artifact id) don't reject the entry — they come back as **warnings**. The annotation is still stored, but the link will read "not found" to the reviewer, so fix the ref and resend.
+
+Annotations are pinned to a round's exact code ranges, so they are **cleared automatically when the reviewer submits and the round advances**. Re-annotate against the revised code each round.
+
+### MCP tool equivalent
+
+In MCP tools mode, call the `add_annotations` tool with the same `entries` (and optional `replace`) shape. The tool returns the same accepted / rejected / warning summary as text.
+
+### Example
+
+```bash
+monocle review annotate --file annotations.json
+```
+
+## `monocle review set-name`
+
+Give the current review a short, human-friendly name shown in Monocle's top bar (e.g. "Add OAuth login"). Call this once when you start a review so the reviewer can see at a glance what they're reviewing.
+
+```bash
+monocle review set-name "Add OAuth login" [--json] [--workdir PATH] [--socket PATH]
+```
+
+Pass an empty string to clear the name. The top bar falls back to the latest artifact title when no name is set.
+
+### MCP tool equivalent
+
+In MCP tools mode, call the `set_review_name` tool with `name` (a brief title; empty to clear).

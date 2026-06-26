@@ -1,6 +1,11 @@
 package protocol
 
-import "github.com/josephschmitt/monocle/internal/types"
+import (
+	"fmt"
+	"strings"
+
+	"github.com/josephschmitt/monocle/internal/types"
+)
 
 // Inbound message types (from CLI subcommands to engine via socket)
 const (
@@ -13,6 +18,8 @@ const (
 	TypeAddAdditionalFiles    = "add_additional_files"
 	TypeRemoveAdditionalFiles = "remove_additional_files"
 	TypeSetFileGroups         = "set_file_groups"
+	TypeAddAnnotations        = "add_annotations"
+	TypeSetReviewName         = "set_review_name"
 	TypeMarkActivity          = "mark_activity"
 	TypeAwaitReview           = "await_review"
 )
@@ -28,6 +35,8 @@ const (
 	TypeAddAdditionalFilesResponse    = "add_additional_files_response"
 	TypeRemoveAdditionalFilesResponse = "remove_additional_files_response"
 	TypeSetFileGroupsResponse         = "set_file_groups_response"
+	TypeAddAnnotationsResponse        = "add_annotations_response"
+	TypeSetReviewNameResponse         = "set_review_name_response"
 	TypeMarkActivityResponse          = "mark_activity_response"
 	TypeAwaitReviewResponse           = "await_review_response"
 )
@@ -199,12 +208,14 @@ type RemoveAdditionalFilesResponse struct {
 
 // FileGroupEntry is one file's agent-supplied grouping metadata.
 type FileGroupEntry struct {
-	Path        string `json:"path"`
-	Category    string `json:"category,omitempty"`
-	Group       string `json:"group,omitempty"`
-	GroupOrder  int    `json:"group_order,omitempty"`
-	SortIndex   int    `json:"sort_index,omitempty"`
-	Criticality int    `json:"criticality,omitempty"`
+	Path            string `json:"path"`
+	Workstream      string `json:"workstream,omitempty"`
+	WorkstreamOrder int    `json:"workstream_order,omitempty"`
+	Category        string `json:"category,omitempty"`
+	Group           string `json:"group,omitempty"`
+	GroupOrder      int    `json:"group_order,omitempty"`
+	SortIndex       int    `json:"sort_index,omitempty"`
+	Criticality     int    `json:"criticality,omitempty"`
 }
 
 // SetFileGroupsMsg assigns grouping metadata to changed files. When Replace is
@@ -223,6 +234,89 @@ type SetFileGroupsResponse struct {
 	Success bool   `json:"success"`
 	Message string `json:"message,omitempty"`
 	Count   int    `json:"count"`
+}
+
+// AnnotationEntry is one agent annotation: a rationale attached to a code range
+// in a file, with structured doc links.
+type AnnotationEntry struct {
+	File      string         `json:"file"`
+	LineStart int            `json:"line_start"`
+	LineEnd   int            `json:"line_end"`
+	Summary   string         `json:"summary"`
+	Refs      []types.DocRef `json:"refs,omitempty"`
+}
+
+// AddAnnotationsMsg attaches agent annotations to code ranges. Replace=true
+// clears all annotations for the session first; otherwise it replaces per file.
+type AddAnnotationsMsg struct {
+	Type    string            `json:"type"`
+	Entries []AnnotationEntry `json:"entries"`
+	Replace bool              `json:"replace,omitempty"`
+}
+
+// SetReviewNameMsg sets a human-friendly name for the current review, shown in
+// the TUI's top bar. An empty name clears it.
+type SetReviewNameMsg struct {
+	Type string `json:"type"`
+	Name string `json:"name"`
+}
+
+type SetReviewNameResponse struct {
+	Type    string `json:"type"`
+	Success bool   `json:"success"`
+	Message string `json:"message,omitempty"`
+}
+
+// AnnotationReject explains why one annotation entry failed validation and was
+// not stored, so the agent can correct it and resend.
+type AnnotationReject struct {
+	File      string `json:"file"`
+	LineStart int    `json:"line_start"`
+	LineEnd   int    `json:"line_end"`
+	Reason    string `json:"reason"`
+}
+
+// AddAnnotationsResponse acknowledges an annotation update. Count is the number
+// of accepted (stored) entries. Rejected lists entries dropped by validation
+// (bad ranges, files outside the review); Warnings flags non-fatal problems
+// such as doc refs that don't resolve — the annotation is still stored, but the
+// link will read "not found" to the reviewer.
+type AddAnnotationsResponse struct {
+	Type     string             `json:"type"`
+	Success  bool               `json:"success"`
+	Message  string             `json:"message,omitempty"`
+	Count    int                `json:"count"`
+	Rejected []AnnotationReject `json:"rejected,omitempty"`
+	Warnings []string           `json:"warnings,omitempty"`
+}
+
+// Summary renders a human/agent-readable description of the result, including
+// any rejected entries and ref-resolution warnings. Shared by the MCP tool and
+// the `monocle review annotate` CLI so both report identically.
+func (r *AddAnnotationsResponse) Summary() string {
+	var b strings.Builder
+	b.WriteString(r.Message)
+	if len(r.Rejected) > 0 {
+		fmt.Fprintf(&b, "\n\nRejected %d entr%s (not stored — fix and resend):",
+			len(r.Rejected), plural(len(r.Rejected), "y", "ies"))
+		for _, rej := range r.Rejected {
+			fmt.Fprintf(&b, "\n  - %s:%d-%d — %s", rej.File, rej.LineStart, rej.LineEnd, rej.Reason)
+		}
+	}
+	if len(r.Warnings) > 0 {
+		b.WriteString("\n\nWarnings (annotation stored, but the reviewer will see these refs as unresolved):")
+		for _, w := range r.Warnings {
+			fmt.Fprintf(&b, "\n  - %s", w)
+		}
+	}
+	return b.String()
+}
+
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
 }
 
 // MarkActivityMsg notifies the engine that a write-tool just fired in the

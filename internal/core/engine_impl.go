@@ -285,6 +285,8 @@ func (e *Engine) applyFileMetadata(sessionID string, files []types.ChangedFile) 
 	}
 	for i := range files {
 		if m, ok := meta[files[i].Path]; ok {
+			files[i].Workstream = m.Workstream
+			files[i].WorkstreamOrder = m.WorkstreamOrder
 			files[i].Category = m.Category
 			files[i].GroupLabel = m.GroupLabel
 			files[i].GroupOrder = m.GroupOrder
@@ -311,12 +313,14 @@ func (e *Engine) handleSetFileGroups(msg *protocol.SetFileGroupsMsg) *protocol.S
 	metas := make([]types.ChangedFile, 0, len(msg.Entries))
 	for _, en := range msg.Entries {
 		metas = append(metas, types.ChangedFile{
-			Path:        en.Path,
-			Category:    en.Category,
-			GroupLabel:  en.Group,
-			GroupOrder:  en.GroupOrder,
-			SortIndex:   en.SortIndex,
-			Criticality: en.Criticality,
+			Path:            en.Path,
+			Workstream:      en.Workstream,
+			WorkstreamOrder: en.WorkstreamOrder,
+			Category:        en.Category,
+			GroupLabel:      en.Group,
+			GroupOrder:      en.GroupOrder,
+			SortIndex:       en.SortIndex,
+			Criticality:     en.Criticality,
 		})
 	}
 	if err := e.database.SetFileMetadata(session.ID, metas, msg.Replace); err != nil {
@@ -484,6 +488,161 @@ func (e *Engine) GetAdditionalFiles() []types.AdditionalFile {
 	return afs
 }
 
+// GetAnnotations returns the agent-authored annotations for the active session.
+func (e *Engine) GetAnnotations() []types.Annotation {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if e.current == nil {
+		return nil
+	}
+	return e.current.Annotations
+}
+
+// handleSetReviewName records the agent-supplied review name on the current
+// session and notifies the TUI so the top bar updates.
+func (e *Engine) handleSetReviewName(msg *protocol.SetReviewNameMsg) *protocol.SetReviewNameResponse {
+	name := strings.TrimSpace(msg.Name)
+	e.mu.Lock()
+	if e.current == nil {
+		e.mu.Unlock()
+		return &protocol.SetReviewNameResponse{
+			Type:    protocol.TypeSetReviewNameResponse,
+			Success: false,
+			Message: "no active session",
+		}
+	}
+	e.current.ReviewName = name
+	e.mu.Unlock()
+
+	e.emit(EventFileChanged, EventPayload{Kind: EventFileChanged})
+	return &protocol.SetReviewNameResponse{
+		Type:    protocol.TypeSetReviewNameResponse,
+		Success: true,
+		Message: fmt.Sprintf("Review name set to %q", name),
+	}
+}
+
+// handleAddAnnotations persists agent annotations, refreshes the in-memory view,
+// and notifies the TUI. Annotations are a separate channel from reviewer
+// comments and are never returned to the agent as feedback.
+func (e *Engine) handleAddAnnotations(msg *protocol.AddAnnotationsMsg) *protocol.AddAnnotationsResponse {
+	e.mu.RLock()
+	session := e.current
+	e.mu.RUnlock()
+	if session == nil {
+		return &protocol.AddAnnotationsResponse{
+			Type:    protocol.TypeAddAnnotationsResponse,
+			Success: false,
+			Message: "no active session",
+		}
+	}
+
+	// Annotations render on the diff, so only the review's changed files can carry
+	// them; build the allow-set once.
+	changed := make(map[string]bool)
+	for _, f := range e.GetChangedFiles() {
+		changed[f.Path] = true
+	}
+
+	var (
+		anns     = make([]types.Annotation, 0, len(msg.Entries))
+		rejected []protocol.AnnotationReject
+		warnings []string
+	)
+	for _, en := range msg.Entries {
+		start, end := en.LineStart, en.LineEnd
+		if end == 0 {
+			end = start // single-line shorthand
+		}
+		reject := func(reason string) {
+			rejected = append(rejected, protocol.AnnotationReject{
+				File: en.File, LineStart: en.LineStart, LineEnd: en.LineEnd, Reason: reason,
+			})
+		}
+		switch {
+		case start < 1:
+			reject("line_start must be >= 1")
+			continue
+		case end < start:
+			reject(fmt.Sprintf("line_end (%d) must be >= line_start (%d)", end, start))
+			continue
+		case strings.TrimSpace(en.Summary) == "":
+			reject("summary is required")
+			continue
+		case !changed[en.File]:
+			reject("file is not one of the review's changed files")
+			continue
+		}
+		// Unresolvable refs are a warning, not a rejection: the annotation is still
+		// useful, the link just reads "not found" to the reviewer.
+		for _, r := range en.Refs {
+			if reason := e.docRefResolveError(r); reason != "" {
+				warnings = append(warnings, fmt.Sprintf("%s:%d — %s", en.File, start, reason))
+			}
+		}
+		anns = append(anns, types.Annotation{
+			TargetRef:   en.File,
+			LineStart:   start,
+			LineEnd:     end,
+			Summary:     en.Summary,
+			Refs:        en.Refs,
+			ReviewRound: session.ReviewRound,
+		})
+	}
+
+	// Apply when there's something to store, or when a replace was requested (so a
+	// bare replace can clear the file/session). Skip the write — and the clear —
+	// when nothing is accepted and replace is off, to avoid no-op churn.
+	if len(anns) > 0 || msg.Replace {
+		if err := e.database.SetAnnotations(session.ID, anns, msg.Replace); err != nil {
+			return &protocol.AddAnnotationsResponse{
+				Type:    protocol.TypeAddAnnotationsResponse,
+				Success: false,
+				Message: err.Error(),
+			}
+		}
+
+		// Reload from the DB so the in-memory copy carries minted IDs, then notify.
+		if reloaded, err := e.database.GetAnnotations(session.ID); err == nil {
+			e.mu.Lock()
+			if e.current != nil && e.current.ID == session.ID {
+				e.current.Annotations = reloaded
+			}
+			e.mu.Unlock()
+		}
+		e.emit(EventFileChanged, EventPayload{Kind: EventFileChanged})
+	}
+
+	return &protocol.AddAnnotationsResponse{
+		Type:     protocol.TypeAddAnnotationsResponse,
+		Success:  true,
+		Message:  fmt.Sprintf("Added %d annotation(s)", len(anns)),
+		Count:    len(anns),
+		Rejected: rejected,
+		Warnings: warnings,
+	}
+}
+
+// docRefResolveError returns a human-readable reason when a doc ref can't be
+// resolved against the current session, or "" when it resolves. Drives the
+// non-fatal warnings on add_annotations so the agent learns about typo'd links.
+func (e *Engine) docRefResolveError(r types.DocRef) string {
+	if strings.TrimSpace(r.Doc) == "" {
+		return "ref is missing a doc path"
+	}
+	switch r.Kind {
+	case types.DocRefArtifact:
+		if item, err := e.GetContentItem(r.Doc); err != nil || item == nil {
+			return fmt.Sprintf("artifact ref %q could not be resolved", r.Doc)
+		}
+	default: // file
+		if _, err := e.GetFileContent(r.Doc); err != nil {
+			return fmt.Sprintf("file ref %q could not be resolved", r.Doc)
+		}
+	}
+	return ""
+}
+
 // applyAdditionalFileMetadata merges grouping metadata onto additional files,
 // matched by display Name first then absolute Path (the agent may reference
 // either). Safe to call under e.mu held (it only reads the DB and mutates afs).
@@ -498,6 +657,8 @@ func (e *Engine) applyAdditionalFileMetadata(sessionID string, afs []types.Addit
 			m, ok = meta[afs[i].Path]
 		}
 		if ok {
+			afs[i].Workstream = m.Workstream
+			afs[i].WorkstreamOrder = m.WorkstreamOrder
 			afs[i].Category = m.Category
 			afs[i].GroupLabel = m.GroupLabel
 			afs[i].GroupOrder = m.GroupOrder
@@ -883,6 +1044,11 @@ func (e *Engine) ClearReview() error {
 		return fmt.Errorf("clear additional files: %w", err)
 	}
 	e.current.AdditionalFiles = nil
+
+	if err := e.database.DeleteAnnotations(sessionID); err != nil {
+		return fmt.Errorf("clear annotations: %w", err)
+	}
+	e.current.Annotations = nil
 
 	if err := e.database.ResetAllReviewed(sessionID); err != nil {
 		return fmt.Errorf("reset reviewed: %w", err)
@@ -2258,6 +2424,20 @@ func (e *Engine) completeQueuedDelivery() {
 	}
 
 	_ = e.ClearComments()
+
+	// Annotations are pinned to a round's exact code ranges; once the reviewer has
+	// consumed this round's feedback the agent will revise the code, so the ranges
+	// (and their highlights) no longer line up. Wipe them so each round starts with
+	// a clean slate and the agent re-annotates against the new code.
+	if session != nil {
+		if err := e.database.DeleteAnnotations(session.ID); err == nil {
+			e.mu.Lock()
+			if e.current != nil && e.current.ID == session.ID {
+				e.current.Annotations = nil
+			}
+			e.mu.Unlock()
+		}
+	}
 
 	e.feedback.ClearStatus()
 

@@ -31,6 +31,9 @@ const (
 	TypeGetAdditionalFiles       = "get_additional_files"
 	TypeGetAdditionalFileContent = "get_additional_file_content"
 
+	// Annotations (agent-authored; read by the TUI)
+	TypeGetAnnotations = "get_annotations"
+
 	// Comments
 	TypeAddComment     = "add_comment"
 	TypeEditComment    = "edit_comment"
@@ -109,6 +112,9 @@ const (
 	// Additional files
 	TypeGetAdditionalFilesResponse       = "get_additional_files_response"
 	TypeGetAdditionalFileContentResponse = "get_additional_file_content_response"
+
+	// Annotations
+	TypeGetAnnotationsResponse = "get_annotations_response"
 
 	// Comments
 	TypeAddCommentResponse     = "add_comment_response"
@@ -237,6 +243,15 @@ type GetChangedFilesMsg struct {
 type GetChangedFilesResponse struct {
 	Type  string              `json:"type"`
 	Files []types.ChangedFile `json:"files,omitempty"`
+}
+
+type GetAnnotationsMsg struct {
+	Type string `json:"type"`
+}
+
+type GetAnnotationsResponse struct {
+	Type        string             `json:"type"`
+	Annotations []types.Annotation `json:"annotations,omitempty"`
 }
 
 type GetFileDiffMsg struct {

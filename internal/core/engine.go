@@ -85,6 +85,9 @@ type EngineAPI interface {
 	RemoveAdditionalFile(path string) error
 	GetAdditionalFileContent(absPath string) (string, error)
 
+	// Annotations (agent-authored)
+	GetAnnotations() []types.Annotation
+
 	// Commenting
 	AddComment(target CommentTarget, commentType types.CommentType, body string) (*types.ReviewComment, error)
 	EditComment(commentID string, commentType types.CommentType, body string) (*types.ReviewComment, error)

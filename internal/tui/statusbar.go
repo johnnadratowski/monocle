@@ -10,40 +10,43 @@ import (
 )
 
 type statusBarModel struct {
-	agentName          string
-	baseRef            string
-	fileCount          int
-	reviewedCount      int
-	commentCount       int
-	commentIssues      int
-	commentSuggestions int
-	commentNotes       int
-	commentResolved    int
-	agentActive        bool // agent has reported a write-tool action since the last review
-	feedbackStatus     string
-	subscriberCount    int
-	connectionMode     string // "queue" for queue-mode connections
-	socketStarted      bool
-	commandMode        bool
-	commandBuffer      string
-	searchMode         bool
-	searchBuffer       string
-	searchBackward     bool
-	searchInfo         string // transient "match i/N" indicator after a search
-	contextHints       string // override hints when set (e.g. comment-specific keybinds)
-	diffStyle          diffStyle
-	contentMode        bool   // true when viewing content (plan/doc) in raw mode
-	contentID          string // non-empty when viewing a content item (raw or diff)
-	diffBaseVersion    int    // base version being diffed from (0 = default)
-	diffToVersion      int    // target version being diffed to
-	waitingForReview   bool
-	width              int
-	theme              Theme
+	agentName           string
+	baseRef             string
+	fileCount           int
+	reviewedCount       int
+	annotationCount     int
+	annotationFileCount int // annotations in the selected file; -1 = no file selected
+	commentCount        int
+	commentIssues       int
+	commentSuggestions  int
+	commentNotes        int
+	commentResolved     int
+	agentActive         bool // agent has reported a write-tool action since the last review
+	feedbackStatus      string
+	subscriberCount     int
+	connectionMode      string // "queue" for queue-mode connections
+	socketStarted       bool
+	commandMode         bool
+	commandBuffer       string
+	searchMode          bool
+	searchBuffer        string
+	searchBackward      bool
+	searchInfo          string // transient "match i/N" indicator after a search
+	contextHints        string // override hints when set (e.g. comment-specific keybinds)
+	diffStyle           diffStyle
+	contentMode         bool   // true when viewing content (plan/doc) in raw mode
+	contentID           string // non-empty when viewing a content item (raw or diff)
+	diffBaseVersion     int    // base version being diffed from (0 = default)
+	diffToVersion       int    // target version being diffed to
+	waitingForReview    bool
+	width               int
+	theme               Theme
 }
 
 func newStatusBarModel(theme Theme) statusBarModel {
 	return statusBarModel{
-		theme: theme,
+		theme:               theme,
+		annotationFileCount: -1, // no file selected until set
 	}
 }
 
@@ -176,6 +179,12 @@ func (m statusBarModel) View() string {
 		parts = append(parts, reviewedStyle.Render(fmt.Sprintf("%d/%d reviewed", m.reviewedCount, m.fileCount)))
 	}
 	parts = append(parts, m.commentSummary())
+	if m.annotationFileCount >= 0 {
+		// x/n: annotations in the selected file out of the session total.
+		parts = append(parts, fmt.Sprintf("%d/%d annotations", m.annotationFileCount, m.annotationCount))
+	} else {
+		parts = append(parts, fmt.Sprintf("%d annotations", m.annotationCount))
+	}
 
 	if m.searchInfo != "" {
 		searchStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("4"))

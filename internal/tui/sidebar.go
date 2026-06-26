@@ -34,11 +34,11 @@ type sidebarModel struct {
 	// model is unchanged from flat mode — headers are decorations, not items.
 	groupMode     bool
 	groupedFiles  []types.ChangedFile
-	groupHeaderAt map[int]string
+	groupHeaderAt map[int][]groupHeaderLine
 	// Grouped order + headers for the additional-files section (agent-attached
 	// files participate in grouping too).
 	groupedAdditional  []types.AdditionalFile
-	additionalHeaderAt map[int]string
+	additionalHeaderAt map[int][]groupHeaderLine
 
 	// Filter state: "" = show all, "unreviewed" = hide reviewed, "reviewed" = hide unreviewed
 	reviewFilter string
@@ -174,6 +174,7 @@ func (m sidebarModel) View() string {
 
 	sectionStyle := lipgloss.NewStyle().Bold(true).Width(m.width)
 	groupHeaderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("4")).Bold(true).Width(m.width)
+	workstreamHeaderStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Bold(true).Underline(true).Width(m.width)
 
 	// Render only items within the viewport [offset, offset+viewportHeight)
 	contentItemCt := len(m.contentItems)
@@ -187,6 +188,57 @@ func (m sidebarModel) View() string {
 	}
 
 	linesUsed := 0
+
+	// ruleWidth guards against a zero/negative width.
+	ruleWidth := m.width
+	if ruleWidth < 1 {
+		ruleWidth = 1
+	}
+	ruleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	// writeSeparator draws a horizontal rule between built-in sidebar sections.
+	writeSeparator := func() bool {
+		if linesUsed+1 > availableLines {
+			return false
+		}
+		b.WriteString(ruleStyle.Render(strings.Repeat("─", ruleWidth)))
+		b.WriteString("\n")
+		linesUsed++
+		return true
+	}
+
+	// renderGroupHeaders draws the stacked headers (workstream + group) at a
+	// display index, indenting nested levels. A blank line separates top-level
+	// (workstream) groups — but not subgroups, and not the first workstream. It
+	// returns false when the viewport is full and the caller should stop.
+	renderedWorkstream := false
+	renderGroupHeaders := func(hdrs []groupHeaderLine) bool {
+		for _, h := range hdrs {
+			if h.level == 0 && renderedWorkstream {
+				if linesUsed+1 > availableLines {
+					return false
+				}
+				b.WriteString("\n")
+				linesUsed++
+			}
+			if h.level == 0 {
+				renderedWorkstream = true
+			}
+			if linesUsed+1 > availableLines {
+				return false
+			}
+			style := workstreamHeaderStyle
+			text := h.text
+			if h.level > 0 {
+				indent := strings.Repeat("  ", h.level)
+				style = groupHeaderStyle.Width(m.width - len(indent))
+				text = indent + text
+			}
+			b.WriteString(style.Render(text))
+			b.WriteString("\n")
+			linesUsed++
+		}
+		return true
+	}
 
 	// Artifacts section header (if any content items exist)
 	if contentItemCt > 0 {
@@ -214,12 +266,8 @@ func (m sidebarModel) View() string {
 	for idx := m.offset; idx < totalItems && linesUsed < availableLines; idx++ {
 		// Files section header (when crossing from content items to files)
 		if idx == contentItemCt && contentItemCt > 0 {
-			if linesUsed > 0 {
-				if linesUsed+1 > availableLines {
-					break
-				}
-				b.WriteString("\n")
-				linesUsed++
+			if linesUsed > 0 && !writeSeparator() {
+				break
 			}
 
 			fileCount := len(m.files)
@@ -252,12 +300,8 @@ func (m sidebarModel) View() string {
 
 		// Additional Files section header
 		if idx == additionalStart && additionalCt > 0 {
-			if linesUsed > 0 {
-				if linesUsed+1 > availableLines {
-					break
-				}
-				b.WriteString("\n")
-				linesUsed++
+			if linesUsed > 0 && !writeSeparator() {
+				break
 			}
 
 			var header string
@@ -281,26 +325,21 @@ func (m sidebarModel) View() string {
 			}
 		}
 
-		// Grouped mode: draw the category header before the first file of its group.
+		// Grouped mode: draw the workstream/group headers before the first file of
+		// the group (workstream header first when a new workstream starts).
 		if m.groupMode && idx >= contentItemCt && idx < additionalStart {
-			if hdr, ok := m.groupHeaderAt[idx-contentItemCt]; ok {
-				if linesUsed+1 > availableLines {
+			if hdrs, ok := m.groupHeaderAt[idx-contentItemCt]; ok {
+				if !renderGroupHeaders(hdrs) {
 					break
 				}
-				b.WriteString(groupHeaderStyle.Render(hdr))
-				b.WriteString("\n")
-				linesUsed++
 			}
 		}
 		// Grouped mode: the same for the additional-files section.
 		if m.groupMode && idx >= additionalStart {
-			if hdr, ok := m.additionalHeaderAt[idx-additionalStart]; ok {
-				if linesUsed+1 > availableLines {
+			if hdrs, ok := m.additionalHeaderAt[idx-additionalStart]; ok {
+				if !renderGroupHeaders(hdrs) {
 					break
 				}
-				b.WriteString(groupHeaderStyle.Render(hdr))
-				b.WriteString("\n")
-				linesUsed++
 			}
 		}
 
