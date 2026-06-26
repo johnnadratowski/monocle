@@ -171,6 +171,8 @@ func Decode(data []byte) (any, error) {
 		msg = &GetSubscriberCountMsg{}
 	case TypeGetSocketPath:
 		msg = &GetSocketPathMsg{}
+	case TypeGetServerInfo:
+		msg = &GetServerInfoMsg{}
 	case TypeSetPause:
 		msg = &SetPauseMsg{}
 
@@ -275,6 +277,8 @@ func Decode(data []byte) (any, error) {
 		msg = &GetSubscriberCountResponse{}
 	case TypeGetSocketPathResponse:
 		msg = &GetSocketPathResponse{}
+	case TypeGetServerInfoResponse:
+		msg = &GetServerInfoResponse{}
 	case TypeSetPauseResponse:
 		msg = &SetPauseResponse{}
 

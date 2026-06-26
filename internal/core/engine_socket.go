@@ -476,6 +476,13 @@ func (e *Engine) handleGetSocketPath(_ *protocol.GetSocketPathMsg) *protocol.Get
 	}
 }
 
+func (e *Engine) handleGetServerInfo(_ *protocol.GetServerInfoMsg) *protocol.GetServerInfoResponse {
+	return &protocol.GetServerInfoResponse{
+		Type:    protocol.TypeGetServerInfoResponse,
+		Version: Version,
+	}
+}
+
 // handleSetPause routes the TUI's pause keybind through the daemon so the
 // real pause flag flips on the engine that the agent's `monocle review
 // status` and `get-feedback --wait` consult. Pre-fix, the client's
