@@ -5,38 +5,103 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+
+	"github.com/josephschmitt/monocle/internal/types"
 )
 
 type statusBarModel struct {
-	agentName       string
-	baseRef         string
-	fileCount       int
-	commentCount    int
-	feedbackStatus  string
-	subscriberCount int
-	connectionMode  string // "queue" for queue-mode connections
-	socketStarted   bool
-	commandMode     bool
-	commandBuffer   string
-	searchMode      bool
-	searchBuffer    string
-	searchBackward  bool
-	searchInfo      string // transient "match i/N" indicator after a search
-	contextHints    string // override hints when set (e.g. comment-specific keybinds)
-	diffStyle        diffStyle
-	contentMode      bool   // true when viewing content (plan/doc) in raw mode
-	contentID        string // non-empty when viewing a content item (raw or diff)
-	diffBaseVersion  int    // base version being diffed from (0 = default)
-	diffToVersion    int    // target version being diffed to
-	waitingForReview bool
-	width            int
-	theme            Theme
+	agentName          string
+	baseRef            string
+	fileCount          int
+	reviewedCount      int
+	commentCount       int
+	commentIssues      int
+	commentSuggestions int
+	commentNotes       int
+	commentResolved    int
+	agentActive        bool // agent has reported a write-tool action since the last review
+	feedbackStatus     string
+	subscriberCount    int
+	connectionMode     string // "queue" for queue-mode connections
+	socketStarted      bool
+	commandMode        bool
+	commandBuffer      string
+	searchMode         bool
+	searchBuffer       string
+	searchBackward     bool
+	searchInfo         string // transient "match i/N" indicator after a search
+	contextHints       string // override hints when set (e.g. comment-specific keybinds)
+	diffStyle          diffStyle
+	contentMode        bool   // true when viewing content (plan/doc) in raw mode
+	contentID          string // non-empty when viewing a content item (raw or diff)
+	diffBaseVersion    int    // base version being diffed from (0 = default)
+	diffToVersion      int    // target version being diffed to
+	waitingForReview   bool
+	width              int
+	theme              Theme
 }
 
 func newStatusBarModel(theme Theme) statusBarModel {
 	return statusBarModel{
 		theme: theme,
 	}
+}
+
+// setCommentStats records the total, per-type, and resolved comment counts for
+// the status bar's review summary.
+func (m *statusBarModel) setCommentStats(comments []types.ReviewComment) {
+	m.commentCount = len(comments)
+	m.commentIssues, m.commentSuggestions, m.commentNotes, m.commentResolved = 0, 0, 0, 0
+	for _, c := range comments {
+		switch c.Type {
+		case types.CommentIssue:
+			m.commentIssues++
+		case types.CommentSuggestion:
+			m.commentSuggestions++
+		case types.CommentNote:
+			m.commentNotes++
+		}
+		if c.Resolved {
+			m.commentResolved++
+		}
+	}
+}
+
+// commentSummary renders the comment breakdown by type plus resolved progress,
+// or "0 comments" when there are none.
+func (m statusBarModel) commentSummary() string {
+	if m.commentCount == 0 {
+		return "0 comments"
+	}
+	var seg []string
+	if m.commentIssues > 0 {
+		seg = append(seg, lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Render(fmt.Sprintf("%d issue%s", m.commentIssues, plural(m.commentIssues))))
+	}
+	if m.commentSuggestions > 0 {
+		seg = append(seg, lipgloss.NewStyle().Foreground(lipgloss.Color("4")).Render(fmt.Sprintf("%d suggestion%s", m.commentSuggestions, plural(m.commentSuggestions))))
+	}
+	if m.commentNotes > 0 {
+		seg = append(seg, fmt.Sprintf("%d note%s", m.commentNotes, plural(m.commentNotes)))
+	}
+	other := m.commentCount - m.commentIssues - m.commentSuggestions - m.commentNotes
+	if other > 0 {
+		seg = append(seg, fmt.Sprintf("%d other", other))
+	}
+	summary := strings.Join(seg, " ")
+	// Resolved progress, greened when everything is resolved.
+	resStyle := lipgloss.NewStyle()
+	if m.commentResolved >= m.commentCount {
+		resStyle = resStyle.Foreground(lipgloss.Color("2"))
+	}
+	return summary + " " + resStyle.Render(fmt.Sprintf("(%d/%d resolved)", m.commentResolved, m.commentCount))
+}
+
+// plural returns "s" for counts other than 1.
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
 }
 
 func (m statusBarModel) View() string {
@@ -80,15 +145,13 @@ func (m statusBarModel) View() string {
 		connLabel = lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Render("● Disconnected")
 	}
 
-	// Info sections
+	// Info sections. The base ref and raw file count moved to the top bar, so the
+	// status bar focuses on review progress.
 	parts := []string{connLabel}
 
-	if m.baseRef != "" && m.baseRef != "WORKING" {
-		ref := m.baseRef
-		if len(ref) > 8 {
-			ref = ref[:8]
-		}
-		parts = append(parts, fmt.Sprintf("ref:%s", ref))
+	// Agent-working pulse: the agent has written files since the last review.
+	if m.agentActive {
+		parts = append(parts, lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true).Render("✎ agent working"))
 	}
 
 	if m.contentID != "" && !m.contentMode {
@@ -105,17 +168,25 @@ func (m statusBarModel) View() string {
 		parts = append(parts, lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Bold(true).Render("[FILE]"))
 	}
 
-	parts = append(parts, fmt.Sprintf("%d files", m.fileCount))
-	parts = append(parts, fmt.Sprintf("%d comments", m.commentCount))
+	if m.fileCount > 0 {
+		reviewedStyle := lipgloss.NewStyle()
+		if m.reviewedCount >= m.fileCount {
+			reviewedStyle = reviewedStyle.Foreground(lipgloss.Color("2")) // all reviewed
+		}
+		parts = append(parts, reviewedStyle.Render(fmt.Sprintf("%d/%d reviewed", m.reviewedCount, m.fileCount)))
+	}
+	parts = append(parts, m.commentSummary())
 
 	if m.searchInfo != "" {
 		searchStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("4"))
 		parts = append(parts, searchStyle.Render(m.searchInfo))
 	}
 
-	if m.feedbackStatus != "" && m.feedbackStatus != "none" {
-		fbStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
-		parts = append(parts, fbStyle.Render(m.feedbackStatus))
+	// Pending-feedback indicator: the reviewer submitted feedback the agent has
+	// not yet picked up. "delivered"/"none" are terminal states, not pending.
+	if m.feedbackStatus != "" && m.feedbackStatus != "none" && m.feedbackStatus != "delivered" {
+		fbStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Bold(true)
+		parts = append(parts, fbStyle.Render("⌛ feedback pending"))
 	}
 
 	// Key hints (right-aligned, collapse to H:help when narrow)
