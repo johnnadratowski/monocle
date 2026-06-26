@@ -266,6 +266,9 @@ type appModel struct {
 	// annotationCount caches the session's total agent annotation count for the
 	// status bar; refreshed on load and on file-change events.
 	annotationCount int
+
+	// reviewName is the agent-supplied name for the review, shown in the top bar.
+	reviewName string
 }
 
 // NewApp creates the root appModel and wires up all subsystems.
@@ -519,6 +522,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusBar.baseRef = m.displayBaseRef(session)
 			m.statusBar.agentName = session.Agent
 			m.annotationCount = len(session.Annotations)
+			m.reviewName = session.ReviewName
 		}
 		m.statusBar.fileCount = len(msg.files)
 		m.statusBar.socketStarted = m.engine.GetSocketPath() != ""
@@ -611,6 +615,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusBar.baseRef = m.displayBaseRef(session)
 			m.statusBar.setCommentStats(session.Comments)
 			m.annotationCount = len(session.Annotations)
+			m.reviewName = session.ReviewName
 		}
 		// Auto-advance to next unreviewed item after marking reviewed
 		if msg.advance {
@@ -3388,10 +3393,13 @@ func (m appModel) renderReviewMeta(dim lipgloss.Style) string {
 		return ""
 	}
 	var parts []string
-	if len(items) > 0 {
-		if title := items[len(items)-1].Title; title != "" {
-			parts = append(parts, lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true).Render(title))
-		}
+	// Prefer the agent-supplied review name; fall back to the latest artifact title.
+	name := m.reviewName
+	if name == "" && len(items) > 0 {
+		name = items[len(items)-1].Title
+	}
+	if name != "" {
+		parts = append(parts, lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true).Render(name))
 	}
 	if len(files) > 0 {
 		adds, dels := 0, 0

@@ -80,6 +80,36 @@ func registerTools(s *sdkmcp.Server) {
 		Name:        "add_annotations",
 		Description: desc["add_annotations"],
 	}, handleAddAnnotations)
+
+	sdkmcp.AddTool(s, &sdkmcp.Tool{
+		Name:        "set_review_name",
+		Description: desc["set_review_name"],
+	}, handleSetReviewName)
+}
+
+type setReviewNameParams struct {
+	Name string `json:"name"`
+}
+
+func handleSetReviewName(ctx context.Context, req *sdkmcp.CallToolRequest, params setReviewNameParams) (*sdkmcp.CallToolResult, any, error) {
+	c, err := client.ConnectDefault()
+	if err != nil {
+		return errResult("connect: %v", err), nil, nil
+	}
+	defer c.Close()
+
+	resp, err := c.Request(
+		&protocol.SetReviewNameMsg{Type: protocol.TypeSetReviewName, Name: params.Name},
+		client.DefaultTimeout,
+	)
+	if err != nil {
+		return errResult("request: %v", err), nil, nil
+	}
+	r := resp.(*protocol.SetReviewNameResponse)
+	if !r.Success {
+		return errResult("%s", r.Message), nil, nil
+	}
+	return textResult(r.Message), nil, nil
 }
 
 // -- Tool parameter types --

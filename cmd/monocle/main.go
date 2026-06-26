@@ -47,6 +47,7 @@ type ReviewCmd struct {
 	RemoveFiles  ReviewRemoveFilesCmd  `cmd:"remove-files" help:"Remove previously-added files from the review session"`
 	GroupFiles   ReviewGroupFilesCmd   `cmd:"group-files" help:"Assign category/group/order metadata to changed files for the grouped sidebar view"`
 	Annotate     ReviewAnnotateCmd     `cmd:"annotate" help:"Attach agent rationale + doc links to code ranges (shown to the reviewer, not sent back as feedback)"`
+	SetName      ReviewSetNameCmd      `cmd:"set-name" help:"Set a human-friendly name for the current review (shown in the top bar)"`
 }
 
 // WorkDirFlag is embedded by commands that support --workdir.
@@ -106,6 +107,46 @@ type ReviewAnnotateCmd struct {
 	File    string `help:"Path to a JSON manifest of annotation entries ('-' for stdin)" type:"path" default:"-"`
 	Replace bool   `help:"Clear all existing annotations first instead of replacing per file" default:"false"`
 	JSON    bool   `help:"Output as JSON" default:"false"`
+}
+
+type ReviewSetNameCmd struct {
+	WorkDirFlag
+	Socket string `help:"Override socket path" env:"MONOCLE_SOCKET" default:""`
+	Name   string `arg:"" help:"The review name (empty to clear)" default:""`
+	JSON   bool   `help:"Output as JSON" default:"false"`
+}
+
+func (cmd *ReviewSetNameCmd) Run() error {
+	socketPath, err := resolveSocketForWorkDir(cmd.Socket, cmd.WorkDir)
+	if err != nil {
+		return err
+	}
+	c, err := client.Connect(socketPath)
+	if err != nil {
+		if errors.Is(err, client.ErrNotRunning) {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return err
+	}
+	defer c.Close()
+
+	resp, err := c.Request(
+		&protocol.SetReviewNameMsg{Type: protocol.TypeSetReviewName, Name: cmd.Name},
+		client.DefaultTimeout,
+	)
+	if err != nil {
+		return fmt.Errorf("set-name: %w", err)
+	}
+	r := resp.(*protocol.SetReviewNameResponse)
+	if cmd.JSON {
+		return printJSON(r)
+	}
+	if !r.Success {
+		return fmt.Errorf("%s", r.Message)
+	}
+	fmt.Println(r.Message)
+	return nil
 }
 
 type RunCmd struct {

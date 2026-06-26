@@ -47,3 +47,16 @@ func TestReviewMetaChurnAndName(t *testing.T) {
 		}
 	}
 }
+
+func TestReviewNameOverridesArtifactTitle(t *testing.T) {
+	m := appModel{width: 200, reviewName: "Add OAuth login"}
+	m.sidebar.contentItems = []types.ContentItem{{ID: "p1", Title: "Some plan title"}}
+	m.sidebar.files = []types.ChangedFile{{Path: "a.go", Additions: 1}}
+	out := m.renderTitleBar()
+	if !strings.Contains(out, "Add OAuth login") {
+		t.Errorf("top bar should show the agent-set review name, got: %q", out)
+	}
+	if strings.Contains(out, "Some plan title") {
+		t.Error("review name should take precedence over the artifact title")
+	}
+}

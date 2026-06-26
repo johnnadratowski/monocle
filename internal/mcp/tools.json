@@ -26,5 +26,9 @@
   {
     "name": "add_annotations",
     "description": "Attach short rationale notes to specific ranges of the changed code to guide the reviewer, each linking out to the docs that motivate it. These annotations are shown to the reviewer only — they are NOT review feedback and are never sent back to you. Provide entries: file (a changed-file path from review_status), line_start and line_end (the exact code range the note explains), summary (one line: why this code exists / what it does), and refs — an array of doc links, each with kind ('file' for a repo path or 'artifact' for a sent artifact id), doc (the path or artifact id), label (link text), and a line/column range into that doc (start_line, start_col, end_line, end_col; 1-based lines, 0-based cols) pointing at the relevant passage in a TODO or design doc. Keep summaries to one line; attach multiple refs when several docs apply. Set replace=true to clear all prior annotations first (default replaces per file). The reviewer clicks or keys through the refs to open the doc passage beside the code. The response reports how many were accepted and lists any rejected entries with reasons (e.g. line_end < line_start, or a file that isn't in the review) plus warnings for doc refs that don't resolve — read it and resend corrected entries. Annotations are cleared automatically when the reviewer submits and the round advances, so re-annotate against the new code each round."
+  },
+  {
+    "name": "set_review_name",
+    "description": "Give the current review a short, human-friendly name shown in Monocle's top bar (e.g. 'Add OAuth login' or 'Payments refactor'). Call this once when you start a review so the reviewer can see at a glance what they're reviewing. Pass name (a brief title); an empty name clears it."
   }
 ]

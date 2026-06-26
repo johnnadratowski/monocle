@@ -41,6 +41,7 @@ type ReviewSession struct {
 	Agent           string
 	RepoRoot        string
 	BaseRef         string
+	ReviewName      string // optional agent-supplied name for the review (shown in the top bar)
 	ChangedFiles    []ChangedFile
 	ContentItems    []ContentItem
 	AdditionalFiles []AdditionalFile

@@ -19,6 +19,7 @@ const (
 	TypeRemoveAdditionalFiles = "remove_additional_files"
 	TypeSetFileGroups         = "set_file_groups"
 	TypeAddAnnotations        = "add_annotations"
+	TypeSetReviewName         = "set_review_name"
 	TypeMarkActivity          = "mark_activity"
 	TypeAwaitReview           = "await_review"
 )
@@ -35,6 +36,7 @@ const (
 	TypeRemoveAdditionalFilesResponse = "remove_additional_files_response"
 	TypeSetFileGroupsResponse         = "set_file_groups_response"
 	TypeAddAnnotationsResponse        = "add_annotations_response"
+	TypeSetReviewNameResponse         = "set_review_name_response"
 	TypeMarkActivityResponse          = "mark_activity_response"
 	TypeAwaitReviewResponse           = "await_review_response"
 )
@@ -250,6 +252,19 @@ type AddAnnotationsMsg struct {
 	Type    string            `json:"type"`
 	Entries []AnnotationEntry `json:"entries"`
 	Replace bool              `json:"replace,omitempty"`
+}
+
+// SetReviewNameMsg sets a human-friendly name for the current review, shown in
+// the TUI's top bar. An empty name clears it.
+type SetReviewNameMsg struct {
+	Type string `json:"type"`
+	Name string `json:"name"`
+}
+
+type SetReviewNameResponse struct {
+	Type    string `json:"type"`
+	Success bool   `json:"success"`
+	Message string `json:"message,omitempty"`
 }
 
 // AnnotationReject explains why one annotation entry failed validation and was

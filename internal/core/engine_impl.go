@@ -498,6 +498,30 @@ func (e *Engine) GetAnnotations() []types.Annotation {
 	return e.current.Annotations
 }
 
+// handleSetReviewName records the agent-supplied review name on the current
+// session and notifies the TUI so the top bar updates.
+func (e *Engine) handleSetReviewName(msg *protocol.SetReviewNameMsg) *protocol.SetReviewNameResponse {
+	name := strings.TrimSpace(msg.Name)
+	e.mu.Lock()
+	if e.current == nil {
+		e.mu.Unlock()
+		return &protocol.SetReviewNameResponse{
+			Type:    protocol.TypeSetReviewNameResponse,
+			Success: false,
+			Message: "no active session",
+		}
+	}
+	e.current.ReviewName = name
+	e.mu.Unlock()
+
+	e.emit(EventFileChanged, EventPayload{Kind: EventFileChanged})
+	return &protocol.SetReviewNameResponse{
+		Type:    protocol.TypeSetReviewNameResponse,
+		Success: true,
+		Message: fmt.Sprintf("Review name set to %q", name),
+	}
+}
+
 // handleAddAnnotations persists agent annotations, refreshes the in-memory view,
 // and notifies the TUI. Annotations are a separate channel from reviewer
 // comments and are never returned to the agent as feedback.

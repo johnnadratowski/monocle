@@ -45,6 +45,8 @@ func Decode(data []byte) (any, error) {
 		msg = &SetFileGroupsMsg{}
 	case TypeAddAnnotations:
 		msg = &AddAnnotationsMsg{}
+	case TypeSetReviewName:
+		msg = &SetReviewNameMsg{}
 	case TypeGetAnnotations:
 		msg = &GetAnnotationsMsg{}
 	case TypeMarkActivity:
@@ -71,6 +73,8 @@ func Decode(data []byte) (any, error) {
 		msg = &SetFileGroupsResponse{}
 	case TypeAddAnnotationsResponse:
 		msg = &AddAnnotationsResponse{}
+	case TypeSetReviewNameResponse:
+		msg = &SetReviewNameResponse{}
 	case TypeGetAnnotationsResponse:
 		msg = &GetAnnotationsResponse{}
 	case TypeMarkActivityResponse:
