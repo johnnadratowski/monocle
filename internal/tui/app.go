@@ -101,6 +101,10 @@ type loadContentDiffMsg struct {
 
 type feedbackPickedUpMsg struct{}
 
+// activityPulseMsg fires when the agent reports a write-tool action, so the
+// status bar can show that the agent is actively making changes.
+type activityPulseMsg struct{}
+
 type pauseChangedMsg struct {
 	status string
 }
@@ -598,7 +602,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		session := m.engine.GetSession()
 		if session != nil {
 			m.statusBar.baseRef = m.displayBaseRef(session)
-			m.statusBar.commentCount = len(session.Comments)
+			m.statusBar.setCommentStats(session.Comments)
 		}
 		// Auto-advance to next unreviewed item after marking reviewed
 		if msg.advance {
@@ -711,6 +715,12 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case waitStatusMsg:
 		m.statusBar.waitingForReview = msg.waiting
+		return m, nil
+
+	case activityPulseMsg:
+		// The agent just wrote files; show the pulse until the reviewer's feedback
+		// is delivered (feedbackPickedUpMsg clears it).
+		m.statusBar.agentActive = true
 		return m, nil
 
 	case baseRefChangedMsg:
@@ -1178,7 +1188,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusBar.feedbackStatus = m.engine.GetFeedbackStatus()
 		session := m.engine.GetSession()
 		if session != nil {
-			m.statusBar.commentCount = len(session.Comments)
+			m.statusBar.setCommentStats(session.Comments)
 			m.statusBar.fileCount = len(session.ChangedFiles)
 			m.statusBar.baseRef = m.displayBaseRef(session)
 		}
@@ -1196,7 +1206,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Clear comments — they're now frozen in the submission record
 		if session != nil && len(session.Comments) > 0 {
 			_ = m.engine.ClearComments()
-			m.statusBar.commentCount = 0
+			m.statusBar.setCommentStats(nil)
 		}
 
 		// Reload diff view to remove inline comment annotations
@@ -1218,12 +1228,14 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Queued feedback was picked up by the agent (pull delivery completed)
 	case feedbackPickedUpMsg:
 		m.statusBar.feedbackStatus = "delivered"
+		// The agent's prior activity has now been reviewed — stop the pulse.
+		m.statusBar.agentActive = false
 		session := m.engine.GetSession()
 
 		m.syncArtifactsAfterSubmit(session)
 
 		if session != nil {
-			m.statusBar.commentCount = 0
+			m.statusBar.setCommentStats(nil)
 			m.statusBar.fileCount = len(session.ChangedFiles)
 		}
 
@@ -1373,7 +1385,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		session := m.engine.GetSession()
 		if session != nil {
 			m.statusBar.baseRef = m.displayBaseRef(session)
-			m.statusBar.commentCount = len(session.Comments)
+			m.statusBar.setCommentStats(session.Comments)
 		}
 		// Reload current view to remove inline comment markers
 		if msg.reloadPath != "" && msg.isContent {
@@ -1400,7 +1412,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		session := m.engine.GetSession()
 		if session != nil {
 			m.statusBar.baseRef = m.displayBaseRef(session)
-			m.statusBar.commentCount = len(session.Comments)
+			m.statusBar.setCommentStats(session.Comments)
 		}
 		// If viewing a content item or an added file, it no longer exists —
 		// clear the view rather than trying to reload a deleted target.
@@ -1433,7 +1445,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		recalcStackedLayout(&m)
 		session := m.engine.GetSession()
 		if session != nil {
-			m.statusBar.commentCount = len(session.Comments)
+			m.statusBar.setCommentStats(session.Comments)
 		}
 		if m.diffView.contentMode && m.diffView.contentID == msg.id {
 			m.diffView.contentMode = false
@@ -1458,7 +1470,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		recalcStackedLayout(&m)
 		session := m.engine.GetSession()
 		if session != nil {
-			m.statusBar.commentCount = len(session.Comments)
+			m.statusBar.setCommentStats(session.Comments)
 		}
 		// If the removed file was being viewed, clear the diff pane.
 		if m.diffView.additionalFilePath == msg.path {
@@ -3263,6 +3275,15 @@ func (m appModel) View() tea.View {
 	m.statusBar.contentID = m.diffView.contentID
 	m.statusBar.diffBaseVersion = m.diffView.diffBaseVersion
 	m.statusBar.diffToVersion = m.diffView.diffToVersion
+	// Review progress (cheap to recompute from the sidebar each render).
+	reviewed := 0
+	for _, f := range m.sidebar.files {
+		if f.Reviewed {
+			reviewed++
+		}
+	}
+	m.statusBar.fileCount = len(m.sidebar.files)
+	m.statusBar.reviewedCount = reviewed
 	statusView := m.statusBar.View()
 	full := lipgloss.JoinVertical(lipgloss.Left, titleBar, body, statusView)
 
@@ -3432,5 +3453,8 @@ func BridgeEngineEvents(engine core.EngineAPI, p *tea.Program) {
 	})
 	engine.On(core.EventWaitStatusChanged, func(e core.EventPayload) {
 		p.Send(waitStatusMsg{waiting: e.Status == "waiting"})
+	})
+	engine.On(core.EventActivityChanged, func(e core.EventPayload) {
+		p.Send(activityPulseMsg{})
 	})
 }
