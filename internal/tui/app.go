@@ -1988,6 +1988,12 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			if a := m.diffView.CursorAnnotation(); a != nil && len(a.Refs) > 0 {
 				return m.openOrCycleDocPane(a), nil
 			}
+			// No annotation under the cursor: if the doc pane is open, o closes it
+			// so the same key dismisses the pane from anywhere in the diff.
+			if m.docPane.active {
+				m.closeDocPane()
+				return m, nil
+			}
 		case focusDoc:
 			// Already in the pane: cycle to the next ref, closing after the last.
 			return m.cycleDocRefOrClose(), nil
