@@ -808,7 +808,7 @@ func TestChurnAndFileMetadataRoundtrip(t *testing.T) {
 
 	// Apply agent grouping for one file only.
 	metas := []types.ChangedFile{
-		{Path: "ui/App.tsx", Category: "code", GroupLabel: "UI", GroupOrder: 0, SortIndex: 2, Criticality: 5},
+		{Path: "ui/App.tsx", Workstream: "Search", WorkstreamOrder: 1, Category: "code", GroupLabel: "UI", GroupOrder: 0, SortIndex: 2, Criticality: 5},
 	}
 	if err := d.SetFileMetadata("s1", metas, true); err != nil {
 		t.Fatalf("set metadata: %v", err)
@@ -834,6 +834,9 @@ func TestChurnAndFileMetadataRoundtrip(t *testing.T) {
 	u := byPath["ui/App.tsx"]
 	if u.GroupLabel != "UI" || u.GroupOrder != 0 || u.SortIndex != 2 || u.Criticality != 5 || u.Category != "code" {
 		t.Errorf("ui metadata not joined correctly: %+v", u)
+	}
+	if u.Workstream != "Search" || u.WorkstreamOrder != 1 {
+		t.Errorf("ui workstream not joined correctly: %q order %d", u.Workstream, u.WorkstreamOrder)
 	}
 	if u.Additions != 12 {
 		t.Errorf("ui churn = +%d, want +12", u.Additions)

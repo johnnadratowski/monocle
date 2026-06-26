@@ -285,6 +285,8 @@ func (e *Engine) applyFileMetadata(sessionID string, files []types.ChangedFile) 
 	}
 	for i := range files {
 		if m, ok := meta[files[i].Path]; ok {
+			files[i].Workstream = m.Workstream
+			files[i].WorkstreamOrder = m.WorkstreamOrder
 			files[i].Category = m.Category
 			files[i].GroupLabel = m.GroupLabel
 			files[i].GroupOrder = m.GroupOrder
@@ -311,12 +313,14 @@ func (e *Engine) handleSetFileGroups(msg *protocol.SetFileGroupsMsg) *protocol.S
 	metas := make([]types.ChangedFile, 0, len(msg.Entries))
 	for _, en := range msg.Entries {
 		metas = append(metas, types.ChangedFile{
-			Path:        en.Path,
-			Category:    en.Category,
-			GroupLabel:  en.Group,
-			GroupOrder:  en.GroupOrder,
-			SortIndex:   en.SortIndex,
-			Criticality: en.Criticality,
+			Path:            en.Path,
+			Workstream:      en.Workstream,
+			WorkstreamOrder: en.WorkstreamOrder,
+			Category:        en.Category,
+			GroupLabel:      en.Group,
+			GroupOrder:      en.GroupOrder,
+			SortIndex:       en.SortIndex,
+			Criticality:     en.Criticality,
 		})
 	}
 	if err := e.database.SetFileMetadata(session.ID, metas, msg.Replace); err != nil {
@@ -629,6 +633,8 @@ func (e *Engine) applyAdditionalFileMetadata(sessionID string, afs []types.Addit
 			m, ok = meta[afs[i].Path]
 		}
 		if ok {
+			afs[i].Workstream = m.Workstream
+			afs[i].WorkstreamOrder = m.WorkstreamOrder
 			afs[i].Category = m.Category
 			afs[i].GroupLabel = m.GroupLabel
 			afs[i].GroupOrder = m.GroupOrder

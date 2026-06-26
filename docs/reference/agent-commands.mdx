@@ -213,11 +213,23 @@ The manifest is a JSON array of entries (or an object with an `entries` array), 
 ]
 ```
 
+When a change spans multiple independent efforts, add an optional `workstream` (with `workstream_order`) to nest groups under a top-level workstream header — files then read as **workstream → group → files**:
+
+```json
+[
+  { "path": "search/ui.tsx",    "workstream": "Search",   "workstream_order": 0, "group": "UI",      "group_order": 0 },
+  { "path": "search/api.go",    "workstream": "Search",   "workstream_order": 0, "group": "Backend", "group_order": 1 },
+  { "path": "payments/api.go",  "workstream": "Payments", "workstream_order": 1, "group": "Backend", "group_order": 0 }
+]
+```
+
 ### Entry fields
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `path` | string | **(Required)** Changed-file path, as shown by `review status` (repo-relative). |
+| `workstream` | string | Optional top-level grouping above `group`. Use it when the change spans multiple independent efforts; omit it for a single-workstream change. Files nest as workstream → group → files. |
+| `workstream_order` | int | Display order of the workstream; lower workstreams are shown first. |
 | `group` | string | Free-form group label (e.g. `UI`, `Backend`, `Database`). Files without a group fall back to a heuristic category. |
 | `group_order` | int | Display order of the group; lower groups are shown first. |
 | `sort_index` | int | Order within the group; lower first. Defaults to Monocle's computed import order (dependencies first), then lines-changed. |
@@ -240,7 +252,7 @@ In MCP tools mode, call the `set_file_groups` tool:
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `entries` | object array | Yes | Grouping entries (`path`, `group`, `group_order`, `sort_index`, `category`, `criticality`). |
+| `entries` | object array | Yes | Grouping entries (`path`, `workstream`, `workstream_order`, `group`, `group_order`, `sort_index`, `category`, `criticality`). |
 | `replace` | boolean | No | Replace all prior grouping metadata. |
 
 ### Example

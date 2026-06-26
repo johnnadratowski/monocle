@@ -160,6 +160,7 @@ func (d *DB) ReplaceChangedFiles(sessionID string, files []*types.ChangedFile) e
 func (d *DB) GetChangedFiles(sessionID string) ([]types.ChangedFile, error) {
 	rows, err := d.Query(
 		`SELECT cf.path, cf.status, cf.reviewed, cf.additions, cf.deletions,
+		        COALESCE(fm.workstream, ''), COALESCE(fm.workstream_order, 0),
 		        COALESCE(fm.category, ''), COALESCE(fm.group_label, ''),
 		        COALESCE(fm.group_order, 0), COALESCE(fm.sort_index, 0),
 		        COALESCE(fm.criticality, 0)
@@ -179,6 +180,7 @@ func (d *DB) GetChangedFiles(sessionID string) ([]types.ChangedFile, error) {
 		var status string
 		var reviewed int
 		if err := rows.Scan(&f.Path, &status, &reviewed, &f.Additions, &f.Deletions,
+			&f.Workstream, &f.WorkstreamOrder,
 			&f.Category, &f.GroupLabel, &f.GroupOrder, &f.SortIndex, &f.Criticality); err != nil {
 			return nil, err
 		}
@@ -207,15 +209,17 @@ func (d *DB) SetFileMetadata(sessionID string, metas []types.ChangedFile, replac
 	for _, m := range metas {
 		if _, err := tx.Exec(
 			`INSERT INTO file_metadata
-			   (session_id, path, category, group_label, group_order, sort_index, criticality)
-			 VALUES (?, ?, ?, ?, ?, ?, ?)
+			   (session_id, path, workstream, workstream_order, category, group_label, group_order, sort_index, criticality)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 			 ON CONFLICT(session_id, path) DO UPDATE SET
+			     workstream = excluded.workstream,
+			     workstream_order = excluded.workstream_order,
 			     category = excluded.category,
 			     group_label = excluded.group_label,
 			     group_order = excluded.group_order,
 			     sort_index = excluded.sort_index,
 			     criticality = excluded.criticality`,
-			sessionID, m.Path, m.Category, m.GroupLabel, m.GroupOrder, m.SortIndex, m.Criticality,
+			sessionID, m.Path, m.Workstream, m.WorkstreamOrder, m.Category, m.GroupLabel, m.GroupOrder, m.SortIndex, m.Criticality,
 		); err != nil {
 			return fmt.Errorf("upsert file metadata %s: %w", m.Path, err)
 		}
@@ -311,7 +315,7 @@ func (d *DB) DeleteAnnotations(sessionID string) error {
 // keyed by path. Each value carries only the metadata fields (Path + grouping).
 func (d *DB) GetFileMetadata(sessionID string) (map[string]types.ChangedFile, error) {
 	rows, err := d.Query(
-		`SELECT path, category, group_label, group_order, sort_index, criticality
+		`SELECT path, workstream, workstream_order, category, group_label, group_order, sort_index, criticality
 		 FROM file_metadata WHERE session_id = ?`, sessionID,
 	)
 	if err != nil {
@@ -322,7 +326,7 @@ func (d *DB) GetFileMetadata(sessionID string) (map[string]types.ChangedFile, er
 	out := make(map[string]types.ChangedFile)
 	for rows.Next() {
 		var f types.ChangedFile
-		if err := rows.Scan(&f.Path, &f.Category, &f.GroupLabel, &f.GroupOrder, &f.SortIndex, &f.Criticality); err != nil {
+		if err := rows.Scan(&f.Path, &f.Workstream, &f.WorkstreamOrder, &f.Category, &f.GroupLabel, &f.GroupOrder, &f.SortIndex, &f.Criticality); err != nil {
 			return nil, err
 		}
 		out[f.Path] = f

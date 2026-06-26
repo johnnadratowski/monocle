@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-const schemaVersion = 10
+const schemaVersion = 11
 
 const dropSQL = `
 DROP TABLE IF EXISTS review_snapshot_files;
@@ -70,6 +70,8 @@ CREATE TABLE IF NOT EXISTS annotations (
 CREATE TABLE IF NOT EXISTS file_metadata (
 	session_id TEXT NOT NULL REFERENCES sessions(id),
 	path TEXT NOT NULL,
+	workstream TEXT NOT NULL DEFAULT '',
+	workstream_order INTEGER NOT NULL DEFAULT 0,
 	category TEXT NOT NULL DEFAULT '',
 	group_label TEXT NOT NULL DEFAULT '',
 	group_order INTEGER NOT NULL DEFAULT 0,

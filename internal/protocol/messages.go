@@ -206,12 +206,14 @@ type RemoveAdditionalFilesResponse struct {
 
 // FileGroupEntry is one file's agent-supplied grouping metadata.
 type FileGroupEntry struct {
-	Path        string `json:"path"`
-	Category    string `json:"category,omitempty"`
-	Group       string `json:"group,omitempty"`
-	GroupOrder  int    `json:"group_order,omitempty"`
-	SortIndex   int    `json:"sort_index,omitempty"`
-	Criticality int    `json:"criticality,omitempty"`
+	Path            string `json:"path"`
+	Workstream      string `json:"workstream,omitempty"`
+	WorkstreamOrder int    `json:"workstream_order,omitempty"`
+	Category        string `json:"category,omitempty"`
+	Group           string `json:"group,omitempty"`
+	GroupOrder      int    `json:"group_order,omitempty"`
+	SortIndex       int    `json:"sort_index,omitempty"`
+	Criticality     int    `json:"criticality,omitempty"`
 }
 
 // SetFileGroupsMsg assigns grouping metadata to changed files. When Replace is

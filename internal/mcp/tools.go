@@ -107,12 +107,14 @@ type removeFilesParams struct {
 }
 
 type fileGroupEntryParam struct {
-	Path        string `json:"path"`
-	Category    string `json:"category,omitempty"`
-	Group       string `json:"group,omitempty"`
-	GroupOrder  int    `json:"group_order,omitempty"`
-	SortIndex   int    `json:"sort_index,omitempty"`
-	Criticality int    `json:"criticality,omitempty"`
+	Path            string `json:"path"`
+	Workstream      string `json:"workstream,omitempty"`
+	WorkstreamOrder int    `json:"workstream_order,omitempty"`
+	Category        string `json:"category,omitempty"`
+	Group           string `json:"group,omitempty"`
+	GroupOrder      int    `json:"group_order,omitempty"`
+	SortIndex       int    `json:"sort_index,omitempty"`
+	Criticality     int    `json:"criticality,omitempty"`
 }
 
 type setFileGroupsParams struct {
@@ -344,12 +346,14 @@ func handleSetFileGroups(ctx context.Context, req *sdkmcp.CallToolRequest, param
 	entries := make([]protocol.FileGroupEntry, 0, len(params.Entries))
 	for _, e := range params.Entries {
 		entries = append(entries, protocol.FileGroupEntry{
-			Path:        e.Path,
-			Category:    e.Category,
-			Group:       e.Group,
-			GroupOrder:  e.GroupOrder,
-			SortIndex:   e.SortIndex,
-			Criticality: e.Criticality,
+			Path:            e.Path,
+			Workstream:      e.Workstream,
+			WorkstreamOrder: e.WorkstreamOrder,
+			Category:        e.Category,
+			Group:           e.Group,
+			GroupOrder:      e.GroupOrder,
+			SortIndex:       e.SortIndex,
+			Criticality:     e.Criticality,
 		})
 	}
 

@@ -65,11 +65,13 @@ type ChangedFile struct {
 
 	// Agent-supplied grouping metadata (see SetFileGroups). Empty/zero when the
 	// agent has not categorized the file; the TUI falls back to a path heuristic.
-	Category    string // overrides the heuristic category when set
-	GroupLabel  string // free-form group, e.g. "UI", "Backend", "Database"
-	GroupOrder  int    // display order of the group (lower first)
-	SortIndex   int    // order within the group (lower first)
-	Criticality int    // optional agent-assigned importance (higher = more critical)
+	Workstream      string // optional top-level grouping above GroupLabel, e.g. a feature/workstream name
+	WorkstreamOrder int    // display order of the workstream (lower first)
+	Category        string // overrides the heuristic category when set
+	GroupLabel      string // free-form group, e.g. "UI", "Backend", "Database"
+	GroupOrder      int    // display order of the group (lower first)
+	SortIndex       int    // order within the group (lower first)
+	Criticality     int    // optional agent-assigned importance (higher = more critical)
 
 	// ImportOrder is the intra-changeset import rank computed natively by Monocle:
 	// a file imported by others sorts before its dependents (dependencies first).
@@ -85,10 +87,12 @@ type AdditionalFile struct {
 
 	// Agent-supplied grouping metadata (see SetFileGroups), matched by Name or
 	// Path. Lets agent-attached files participate in the grouped sidebar view.
-	Category   string
-	GroupLabel string
-	GroupOrder int
-	SortIndex  int
+	Workstream      string
+	WorkstreamOrder int
+	Category        string
+	GroupLabel      string
+	GroupOrder      int
+	SortIndex       int
 }
 
 type ContentItem struct {

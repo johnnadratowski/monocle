@@ -118,13 +118,23 @@ func resolvedCategoryFor(category, path string) fileCategory {
 // groupItem is the grouping-relevant projection of a file (changed or
 // additional), so the grouping logic can be shared across file kinds.
 type groupItem struct {
-	path       string
-	category   string // agent override ("" = heuristic)
-	groupLabel string // agent group label ("" = category group)
-	groupOrder int
-	sortIndex  int
-	importRank int // intra-changeset import order (0 if unknown); dependencies first
-	churn      int
+	path            string
+	workstream      string // optional top-level group above groupLabel ("" = none)
+	workstreamOrder int
+	category        string // agent override ("" = heuristic)
+	groupLabel      string // agent group label ("" = category group)
+	groupOrder      int
+	sortIndex       int
+	importRank      int // intra-changeset import order (0 if unknown); dependencies first
+	churn           int
+}
+
+// groupHeaderLine is one rendered header row in the grouped sidebar. level 0 is a
+// workstream (top-level) header; level 1 is a group header nested under it (or a
+// top-level group header when no workstream is set).
+type groupHeaderLine struct {
+	text  string
+	level int
 }
 
 // groupBucket accumulates items for one group during grouping.
@@ -144,10 +154,77 @@ type groupBucket[T any] struct {
 // groups in the fixed category order. Within a group, items sort by agent sort
 // index, then intra-changeset import order (dependencies first), then churn
 // descending, then path.
-func groupItemsBy[T any](items []T, proj func(T) groupItem) ([]T, map[int]string) {
+func groupItemsBy[T any](items []T, proj func(T) groupItem) ([]T, map[int][]groupHeaderLine) {
+	// First partition by workstream (the optional top level), preserving
+	// first-appearance order. The empty workstream ("") collects files the agent
+	// left unworkstreamed and renders at the top with no workstream header.
+	type wsBucket struct {
+		name  string
+		order int
+		items []T
+	}
+	wsMap := map[string]*wsBucket{}
+	var wsKeys []string
+	for _, it := range items {
+		gi := proj(it)
+		w := wsMap[gi.workstream]
+		if w == nil {
+			w = &wsBucket{name: gi.workstream, order: gi.workstreamOrder}
+			wsMap[gi.workstream] = w
+			wsKeys = append(wsKeys, gi.workstream)
+		}
+		if gi.workstreamOrder < w.order { // workstream order = smallest among its files
+			w.order = gi.workstreamOrder
+		}
+		w.items = append(w.items, it)
+	}
+	orderedWs := make([]*wsBucket, 0, len(wsKeys))
+	for _, k := range wsKeys {
+		orderedWs = append(orderedWs, wsMap[k])
+	}
+	sort.SliceStable(orderedWs, func(i, j int) bool {
+		a, b := orderedWs[i], orderedWs[j]
+		if (a.name == "") != (b.name == "") {
+			return a.name == "" // unworkstreamed files first (top level)
+		}
+		if a.order != b.order {
+			return a.order < b.order
+		}
+		return a.name < b.name
+	})
+
+	flat := make([]T, 0, len(items))
+	headers := map[int][]groupHeaderLine{}
+	for _, w := range orderedWs {
+		buckets := bucketizeByGroup(w.items, proj)
+		groupLevel := 0
+		if w.name != "" {
+			groupLevel = 1
+		}
+		for bi, b := range buckets {
+			start := len(flat)
+			if bi == 0 && w.name != "" {
+				headers[start] = append(headers[start], groupHeaderLine{
+					text:  fmt.Sprintf("%s  %d", w.name, len(w.items)),
+					level: 0,
+				})
+			}
+			headers[start] = append(headers[start], groupHeaderLine{
+				text:  fmt.Sprintf("%s %s  %d", b.icon, b.label, len(b.items)),
+				level: groupLevel,
+			})
+			flat = append(flat, b.items...)
+		}
+	}
+	return flat, headers
+}
+
+// bucketizeByGroup groups items by agent group label or heuristic category and
+// returns the buckets in display order (agent groups first, then by order/label),
+// with each bucket's items sorted by the within-group ordering.
+func bucketizeByGroup[T any](items []T, proj func(T) groupItem) []*groupBucket[T] {
 	groups := map[string]*groupBucket[T]{}
 	var keys []string
-
 	for _, it := range items {
 		gi := proj(it)
 		var key string
@@ -189,8 +266,6 @@ func groupItemsBy[T any](items []T, proj func(T) groupItem) ([]T, map[int]string
 		return a.label < b.label
 	})
 
-	flat := make([]T, 0, len(items))
-	headers := map[int]string{}
 	for _, b := range ordered {
 		sort.SliceStable(b.items, func(i, j int) bool {
 			x, y := proj(b.items[i]), proj(b.items[j])
@@ -205,37 +280,39 @@ func groupItemsBy[T any](items []T, proj func(T) groupItem) ([]T, map[int]string
 			}
 			return x.path < y.path
 		})
-		headers[len(flat)] = fmt.Sprintf("%s %s  %d", b.icon, b.label, len(b.items))
-		flat = append(flat, b.items...)
 	}
-	return flat, headers
+	return ordered
 }
 
 // groupFiles reorders changed files for the grouped view.
-func groupFiles(files []types.ChangedFile) ([]types.ChangedFile, map[int]string) {
+func groupFiles(files []types.ChangedFile) ([]types.ChangedFile, map[int][]groupHeaderLine) {
 	return groupItemsBy(files, func(f types.ChangedFile) groupItem {
 		return groupItem{
-			path:       f.Path,
-			category:   f.Category,
-			groupLabel: f.GroupLabel,
-			groupOrder: f.GroupOrder,
-			sortIndex:  f.SortIndex,
-			importRank: f.ImportOrder,
-			churn:      f.Additions + f.Deletions,
+			path:            f.Path,
+			workstream:      f.Workstream,
+			workstreamOrder: f.WorkstreamOrder,
+			category:        f.Category,
+			groupLabel:      f.GroupLabel,
+			groupOrder:      f.GroupOrder,
+			sortIndex:       f.SortIndex,
+			importRank:      f.ImportOrder,
+			churn:           f.Additions + f.Deletions,
 		}
 	})
 }
 
 // groupAdditionalFiles reorders agent-attached additional files for the grouped
 // view, using the same grouping rules (additional files carry no churn).
-func groupAdditionalFiles(files []types.AdditionalFile) ([]types.AdditionalFile, map[int]string) {
+func groupAdditionalFiles(files []types.AdditionalFile) ([]types.AdditionalFile, map[int][]groupHeaderLine) {
 	return groupItemsBy(files, func(f types.AdditionalFile) groupItem {
 		return groupItem{
-			path:       f.Name,
-			category:   f.Category,
-			groupLabel: f.GroupLabel,
-			groupOrder: f.GroupOrder,
-			sortIndex:  f.SortIndex,
+			path:            f.Name,
+			workstream:      f.Workstream,
+			workstreamOrder: f.WorkstreamOrder,
+			category:        f.Category,
+			groupLabel:      f.GroupLabel,
+			groupOrder:      f.GroupOrder,
+			sortIndex:       f.SortIndex,
 		}
 	})
 }
