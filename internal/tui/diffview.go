@@ -188,6 +188,7 @@ type loadFileContentMsg struct {
 	content         string
 	err             error
 	comments        []types.ReviewComment
+	annotations     []types.Annotation
 	selectCommentID string
 	anchorLine      int // re-anchor cursor to this new-file line after load (0 = none)
 }
@@ -392,7 +393,7 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 		}
 		m.style = diffStyleFile
 		m.comments = msg.comments
-		m.annotations = nil
+		m.annotations = msg.annotations
 		sameFile := msg.path == m.path
 		prevCursor := m.cursor
 		prevOffset := m.offset
@@ -1739,7 +1740,9 @@ func (m diffViewModel) renderWrappedLine(gutter, content string, gutterWidth, co
 		if len(chunkGutter) < gutterWidth {
 			chunkGutter = fmt.Sprintf("%-*s", gutterWidth, chunkGutter)
 		}
-		renderedGutter := gutterStyle.Render(chunkGutter)
+		// Annotated lines keep the cyan range rail on every wrapped row.
+		annotated := mdLine != nil && mdLine.annotated
+		renderedGutter := gutterWithRangeBar(chunkGutter, gutterStyle, annotated, lineBg)
 
 		// Render content: markdown styling or syntax highlighting
 		var renderedContent string
@@ -1863,7 +1866,7 @@ func (m *diffViewModel) ToggleFullFile() tea.Cmd {
 	m.fullFile = !m.fullFile
 	path := m.path
 	full := m.fullFile
-	anchor := m.lineNumAt(m.cursor)
+	anchor := m.anchorLineForCursor()
 	return func() tea.Msg {
 		return requestFileDiffMsg{path: path, full: full, anchorLine: anchor}
 	}
@@ -1872,7 +1875,7 @@ func (m *diffViewModel) ToggleFullFile() tea.Cmd {
 // ToggleOverlays hides or shows inline comments and annotations, re-anchoring the
 // cursor to the same source line so the viewport doesn't jump.
 func (m *diffViewModel) ToggleOverlays() {
-	anchor := m.lineNumAt(m.cursor)
+	anchor := m.anchorLineForCursor()
 	m.hideOverlays = !m.hideOverlays
 	m.buildLines()
 	if anchor > 0 {
@@ -1936,7 +1939,7 @@ func (m *diffViewModel) CycleDiffStyle() tea.Cmd {
 
 	// Source line under the cursor, preserved across the rebuild so the
 	// viewport re-anchors instead of keeping a now-meaningless line index.
-	srcLine := m.lineNumAt(m.cursor)
+	srcLine := m.anchorLineForCursor()
 
 	// Viewing a content diff: cycle unified → split → back to content
 	if !m.contentMode && m.contentID != "" {
@@ -2588,6 +2591,30 @@ func (m diffViewModel) lineNumAt(idx int) int {
 
 func (m diffViewModel) currentDiffLine() int {
 	return m.lineNumAt(m.cursor)
+}
+
+// anchorLineForCursor returns the new-file line to re-anchor the viewport on
+// after a rebuild (diff-style toggle, full-file toggle, refresh). When the cursor
+// sits on a row with no file number — a hunk header, a comment box, or an
+// annotation box — it falls back to the nearest code line so the viewport stays
+// put instead of jumping to the top.
+func (m diffViewModel) anchorLineForCursor() int {
+	if ln := m.lineNumAt(m.cursor); ln > 0 {
+		return ln
+	}
+	for d := 1; d < len(m.lines); d++ {
+		if i := m.cursor - d; i >= 0 {
+			if ln := m.lineNumAt(i); ln > 0 {
+				return ln
+			}
+		}
+		if i := m.cursor + d; i < len(m.lines) {
+			if ln := m.lineNumAt(i); ln > 0 {
+				return ln
+			}
+		}
+	}
+	return 0
 }
 
 // EditorTargetLine returns the new-file line number an external editor should

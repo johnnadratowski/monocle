@@ -635,7 +635,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// comment changes) appear, re-anchored so the viewport doesn't jump.
 			path := m.diffView.path
 			full := m.diffView.fullFile
-			anchor := m.diffView.lineNumAt(m.diffView.cursor)
+			anchor := m.diffView.anchorLineForCursor()
 			return m, func() tea.Msg {
 				return requestFileDiffMsg{path: path, full: full, anchorLine: anchor}
 			}
@@ -965,6 +965,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				path:            path,
 				content:         content,
 				comments:        comments,
+				annotations:     annotationsForFile(session, path),
 				selectCommentID: selectID,
 				anchorLine:      anchorLine,
 			}

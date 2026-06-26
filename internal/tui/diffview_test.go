@@ -969,6 +969,85 @@ func TestAnnotationRenderingAndToggle(t *testing.T) {
 	}
 }
 
+// TestAnnotationRailInWrapAndFileModes covers two regressions: the cyan range
+// rail must render in wrap mode (renderWrappedLine) and in current-file view, and
+// switching to file view must keep annotations (not clear them).
+func TestAnnotationRailInWrapAndFileModes(t *testing.T) {
+	theme := DefaultTheme()
+	railCount := func(s string) int { return strings.Count(s, "46m▌") }
+
+	// Wrap mode, unified: a long annotated line wraps and every row keeps the rail.
+	wm := diffViewModel{
+		theme: &theme, hl: newHighlighter(), mdStyler: newMarkdownStyler(theme),
+		path: "main.go", width: 28, height: 40, style: diffStyleUnified, wrap: true,
+		hunks: []types.DiffHunk{{
+			OldStart: 1, OldCount: 0, NewStart: 1, NewCount: 1, Header: "f",
+			Lines: []types.DiffLine{
+				{Kind: types.DiffLineAdded, NewLineNum: 1, Content: "a long line that will wrap across this narrow pane several times over"},
+			},
+		}},
+		annotations: []types.Annotation{{TargetRef: "main.go", LineStart: 1, LineEnd: 1, Summary: "n"}},
+	}
+	wm.buildLines()
+	if railCount(wm.View()) < 2 {
+		t.Error("wrap mode should draw the range rail on every wrapped row")
+	}
+
+	// File view: annotations present and railed.
+	fm := diffViewModel{
+		theme: &theme, hl: newHighlighter(), mdStyler: newMarkdownStyler(theme),
+		path: "main.go", width: 60, height: 40, style: diffStyleFile,
+		annotations: []types.Annotation{{TargetRef: "main.go", LineStart: 2, LineEnd: 3, Summary: "n"}},
+	}
+	fm.buildFileViewLines("a\nb\nc\nd\n")
+	got := 0
+	for _, ln := range fm.lines {
+		if ln.annotated {
+			got++
+		}
+	}
+	if got != 2 {
+		t.Errorf("file view should flag the 2 in-range lines, got %d", got)
+	}
+	if railCount(fm.View()) != 2 {
+		t.Errorf("file view should draw 2 rails, got %d", railCount(fm.View()))
+	}
+}
+
+// TestAnchorLineForCursorOnBox verifies the re-anchor source line falls back to
+// the nearest code line when the cursor sits on an annotation/comment box, so
+// toggles (t / a) don't jump the viewport to the top.
+func TestAnchorLineForCursorOnBox(t *testing.T) {
+	theme := DefaultTheme()
+	m := diffViewModel{
+		theme: &theme, hl: newHighlighter(), mdStyler: newMarkdownStyler(theme),
+		path: "main.go", width: 80, height: 40, style: diffStyleUnified,
+		hunks: []types.DiffHunk{{
+			OldStart: 1, OldCount: 0, NewStart: 1, NewCount: 3, Header: "f",
+			Lines: []types.DiffLine{
+				{Kind: types.DiffLineAdded, NewLineNum: 1, Content: "a"},
+				{Kind: types.DiffLineAdded, NewLineNum: 2, Content: "b"},
+				{Kind: types.DiffLineAdded, NewLineNum: 3, Content: "c"},
+			},
+		}},
+		annotations: []types.Annotation{{TargetRef: "main.go", LineStart: 2, LineEnd: 3, Summary: "n"}},
+	}
+	m.buildLines()
+	boxIdx := -1
+	for i := range m.lines {
+		if m.lines[i].isAnnotation {
+			boxIdx = i
+		}
+	}
+	if boxIdx < 0 {
+		t.Fatal("no annotation box built")
+	}
+	m.cursor = boxIdx
+	if ln := m.anchorLineForCursor(); ln != 3 {
+		t.Errorf("anchorLineForCursor on a box = %d, want 3 (nearest code line)", ln)
+	}
+}
+
 // TestJumpToMark verifies < / > navigation lands on comment and annotation
 // boxes and stops at the ends (no wrap-around).
 func TestJumpToMark(t *testing.T) {
