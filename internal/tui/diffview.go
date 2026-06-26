@@ -1142,19 +1142,45 @@ func renderDimmedComment(content string, bg color.Color, width int) string {
 // renderAnnotationLine renders an agent annotation box. Each sub-line is tinted
 // with the annotation accent and prefixed with a bar so it reads as a single
 // attached block; when selected it reverses like other inline overlays.
+// annotationBoxRows wraps an annotation box's logical lines (summary, refs) to
+// the inner content width — between the left bar and the right border — so long
+// text wraps instead of running off the pane.
+func (m diffViewModel) annotationBoxRows(content string) []string {
+	cw := m.width - 2 // left bar + right border
+	if cw < 1 {
+		cw = 1
+	}
+	var rows []string
+	for _, logical := range strings.Split(content, "\n") {
+		w := wrapContent(logical, cw)
+		if len(w) == 0 {
+			rows = append(rows, "")
+			continue
+		}
+		rows = append(rows, w...)
+	}
+	return rows
+}
+
 func (m diffViewModel) renderAnnotationLine(line diffViewLine, selected bool) string {
 	style := lipgloss.NewStyle().Foreground(lipgloss.Color(annotationColor))
 	if selected && m.focused {
 		style = style.Reverse(true)
 	}
-	bar := lipgloss.NewStyle().Foreground(lipgloss.Color(annotationColor)).Render("▌")
-	subLines := strings.Split(line.content, "\n")
+	barStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(annotationColor))
+	leftBar := barStyle.Render("▌")
+	rightBar := barStyle.Render("│")
+	cw := m.width - 2
+	if cw < 1 {
+		cw = 1
+	}
+	rows := m.annotationBoxRows(line.content)
 	var b strings.Builder
-	for i, sl := range subLines {
+	for i, r := range rows {
 		if i > 0 {
 			b.WriteString("\n")
 		}
-		b.WriteString(bar + style.Render(fmt.Sprintf("%-*s", m.width-1, sl)))
+		b.WriteString(leftBar + style.Render(padToWidth(r, cw)) + rightBar)
 	}
 	return b.String()
 }
@@ -2043,9 +2069,10 @@ func (m diffViewModel) screenLinesFor(idx int) int {
 		}
 		return strings.Count(line.content, "\n") + 1
 	}
-	// Annotation boxes render their content as-is (1–2 lines), regardless of wrap.
+	// Annotation boxes wrap their text to the pane width; count the wrapped rows
+	// so scroll math matches what renderAnnotationLine draws.
 	if line.isAnnotation {
-		return strings.Count(line.content, "\n") + 1
+		return len(m.annotationBoxRows(line.content))
 	}
 	if !m.wrap {
 		return 1

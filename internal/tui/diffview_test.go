@@ -1014,6 +1014,60 @@ func TestAnnotationRailInWrapAndFileModes(t *testing.T) {
 	}
 }
 
+// TestAnnotationBoxWrapsWithRightBorder verifies a long annotation wraps to the
+// pane width with a right border, and that screenLinesFor matches the rows drawn.
+func TestAnnotationBoxWrapsWithRightBorder(t *testing.T) {
+	theme := DefaultTheme()
+	const width = 40
+	m := diffViewModel{
+		theme: &theme, hl: newHighlighter(), mdStyler: newMarkdownStyler(theme),
+		path: "main.go", width: width, height: 40, style: diffStyleUnified,
+		hunks: []types.DiffHunk{{
+			OldStart: 1, OldCount: 0, NewStart: 1, NewCount: 1, Header: "f",
+			Lines: []types.DiffLine{{Kind: types.DiffLineAdded, NewLineNum: 1, Content: "x"}},
+		}},
+		annotations: []types.Annotation{{TargetRef: "main.go", LineStart: 1, LineEnd: 1,
+			Summary: "a really long annotation summary that must wrap across several rows inside the box"}},
+	}
+	m.buildLines()
+
+	annIdx := -1
+	for i := range m.lines {
+		if m.lines[i].isAnnotation {
+			annIdx = i
+		}
+	}
+	if annIdx < 0 {
+		t.Fatal("no annotation box")
+	}
+	rows := m.annotationBoxRows(m.lines[annIdx].content)
+	if len(rows) < 2 {
+		t.Fatalf("expected the long summary to wrap, got %d rows", len(rows))
+	}
+	if m.screenLinesFor(annIdx) != len(rows) {
+		t.Errorf("screenLinesFor=%d but %d rows drawn", m.screenLinesFor(annIdx), len(rows))
+	}
+
+	// Box rows are the ones with the right border; each is exactly pane width and
+	// starts with the left bar.
+	boxRows := 0
+	for _, line := range strings.Split(stripANSISeq(m.View()), "\n") {
+		if !strings.HasSuffix(line, "│") {
+			continue
+		}
+		boxRows++
+		if w := len([]rune(line)); w != width {
+			t.Errorf("box row width = %d, want %d: %q", w, width, line)
+		}
+		if !strings.HasPrefix(line, "▌") {
+			t.Errorf("box row should start with the left bar: %q", line)
+		}
+	}
+	if boxRows != len(rows) {
+		t.Errorf("rendered %d bordered box rows, want %d", boxRows, len(rows))
+	}
+}
+
 // TestAnchorLineForCursorOnBox verifies the re-anchor source line falls back to
 // the nearest code line when the cursor sits on an annotation/comment box, so
 // toggles (t / a) don't jump the viewport to the top.
