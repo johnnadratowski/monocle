@@ -3587,6 +3587,13 @@ func (m appModel) View() tea.View {
 	m.statusBar.fileCount = len(m.sidebar.files)
 	m.statusBar.reviewedCount = reviewed
 	m.statusBar.annotationCount = m.annotationCount
+	// When a changed file is shown, surface its annotation count as "x/n";
+	// otherwise (an artifact, or nothing selected) just show the total.
+	if m.diffView.path != "" && !m.diffView.isViewingContentItem() {
+		m.statusBar.annotationFileCount = len(m.diffView.annotations)
+	} else {
+		m.statusBar.annotationFileCount = -1
+	}
 	statusView := m.statusBar.View()
 	full := lipgloss.JoinVertical(lipgloss.Left, titleBar, body, statusView)
 

@@ -46,6 +46,24 @@ func TestStatusBarReviewMetrics(t *testing.T) {
 	}
 }
 
+func TestStatusBarAnnotationPerFileCount(t *testing.T) {
+	m := newStatusBarModel(DefaultTheme())
+	m.width = 240
+	m.subscriberCount = 1
+	m.annotationCount = 7
+
+	// No file selected (default): show the total only.
+	if out := m.View(); !strings.Contains(out, "7 annotations") || strings.Contains(out, "/7 annotations") {
+		t.Errorf("no-file case should show total only, got: %q", out)
+	}
+
+	// A file is selected with 2 of the 7 annotations: show x/n.
+	m.annotationFileCount = 2
+	if out := m.View(); !strings.Contains(out, "2/7 annotations") {
+		t.Errorf("file case should show x/n, got: %q", out)
+	}
+}
+
 func TestStatusBarNoCommentsAndDelivered(t *testing.T) {
 	m := newStatusBarModel(DefaultTheme())
 	m.width = 240
