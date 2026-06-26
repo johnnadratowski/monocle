@@ -54,22 +54,22 @@ const (
 	TypeGetSubmissions   = "get_submissions"
 
 	// Base ref
-	TypeSetBaseRef         = "set_base_ref"
-	TypeSetAutoAdvanceRef  = "set_auto_advance_ref"
-	TypeIsAutoAdvanceRef   = "is_auto_advance_ref"
-	TypeSelectedBaseRef    = "selected_base_ref"
-	TypeRecentCommits      = "recent_commits"
+	TypeSetBaseRef        = "set_base_ref"
+	TypeSetAutoAdvanceRef = "set_auto_advance_ref"
+	TypeIsAutoAdvanceRef  = "is_auto_advance_ref"
+	TypeSelectedBaseRef   = "selected_base_ref"
+	TypeRecentCommits     = "recent_commits"
 
 	// Snapshots
-	TypeGetSnapshots       = "get_snapshots"
-	TypeSetSnapshotBase    = "set_snapshot_base"
-	TypeClearSnapshotBase  = "clear_snapshot_base"
-	TypeGetActiveSnapshot  = "get_active_snapshot"
-	TypeHasSnapshots       = "has_snapshots"
+	TypeGetSnapshots      = "get_snapshots"
+	TypeSetSnapshotBase   = "set_snapshot_base"
+	TypeClearSnapshotBase = "clear_snapshot_base"
+	TypeGetActiveSnapshot = "get_active_snapshot"
+	TypeHasSnapshots      = "has_snapshots"
 
 	// Config
-	TypeGetConfig              = "get_config"
-	TypeSaveConfig             = "save_config"
+	TypeGetConfig               = "get_config"
+	TypeSaveConfig              = "save_config"
 	TypeIsReviewTrackingEnabled = "is_review_tracking_enabled"
 
 	// Status
@@ -78,6 +78,7 @@ const (
 	TypeReloadPendingFeedback = "reload_pending_feedback"
 	TypeGetSubscriberCount    = "get_subscriber_count"
 	TypeGetSocketPath         = "get_socket_path"
+	TypeGetServerInfo         = "get_server_info"
 
 	// Pause flow
 	TypeSetPause = "set_pause"
@@ -156,6 +157,7 @@ const (
 	TypeReloadPendingFeedbackResponse = "reload_pending_feedback_response"
 	TypeGetSubscriberCountResponse    = "get_subscriber_count_response"
 	TypeGetSocketPathResponse         = "get_socket_path_response"
+	TypeGetServerInfoResponse         = "get_server_info_response"
 
 	// Pause flow
 	TypeSetPauseResponse = "set_pause_response"
@@ -179,9 +181,9 @@ type StartSessionMsg struct {
 }
 
 type StartSessionResponse struct {
-	Type    string                `json:"type"`
-	Session *types.ReviewSession  `json:"session,omitempty"`
-	Error   string                `json:"error,omitempty"`
+	Type    string               `json:"type"`
+	Session *types.ReviewSession `json:"session,omitempty"`
+	Error   string               `json:"error,omitempty"`
 }
 
 type ResumeSessionMsg struct {
@@ -190,9 +192,9 @@ type ResumeSessionMsg struct {
 }
 
 type ResumeSessionResponse struct {
-	Type    string                `json:"type"`
-	Session *types.ReviewSession  `json:"session,omitempty"`
-	Error   string                `json:"error,omitempty"`
+	Type    string               `json:"type"`
+	Session *types.ReviewSession `json:"session,omitempty"`
+	Error   string               `json:"error,omitempty"`
 }
 
 type GetSessionMsg struct {
@@ -200,8 +202,8 @@ type GetSessionMsg struct {
 }
 
 type GetSessionResponse struct {
-	Type    string                `json:"type"`
-	Session *types.ReviewSession  `json:"session,omitempty"`
+	Type    string               `json:"type"`
+	Session *types.ReviewSession `json:"session,omitempty"`
 }
 
 type ListSessionsMsg struct {
@@ -696,6 +698,17 @@ type GetSocketPathMsg struct {
 type GetSocketPathResponse struct {
 	Type string `json:"type"`
 	Path string `json:"path,omitempty"`
+}
+
+// GetServerInfoMsg requests the running engine's build/version info so the TUI
+// can show which server it is connected to and flag a version mismatch.
+type GetServerInfoMsg struct {
+	Type string `json:"type"`
+}
+
+type GetServerInfoResponse struct {
+	Type    string `json:"type"`
+	Version string `json:"version,omitempty"`
 }
 
 // --- Pause flow ---

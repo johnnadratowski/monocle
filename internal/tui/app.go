@@ -250,6 +250,12 @@ type appModel struct {
 
 	nonGitMode bool            // directory mode (no git)
 	infoBanner infoBannerModel // info modal for non-git startup
+
+	// Top-bar build info: the client (TUI) version vs the connected engine's,
+	// plus the current HEAD short hash shown alongside the review metrics.
+	clientVersion string
+	serverVersion string
+	headHash      string
 }
 
 // NewApp creates the root appModel and wires up all subsystems.
@@ -333,7 +339,21 @@ func NewApp(engine core.EngineAPI, opts ...AppOptions) appModel {
 		dv.style = diffStyleFile
 	}
 
+	// Build info for the top bar: the connected engine's version (to flag a
+	// client/server mismatch) and the current HEAD short hash.
+	serverVersion := ""
+	headHash := ""
+	if engine != nil {
+		serverVersion = engine.ServerVersion()
+		if commits, err := engine.RecentCommits(1); err == nil && len(commits) > 0 {
+			headHash = shortHash(commits[0].Hash)
+		}
+	}
+
 	return appModel{
+		clientVersion:     Version,
+		serverVersion:     serverVersion,
+		headHash:          headHash,
 		engine:            engine,
 		sidebar:           sidebar,
 		diffView:          dv,
@@ -3088,9 +3108,36 @@ type loadContentMsg struct {
 }
 
 // View renders the full TUI layout.
-func (m appModel) View() tea.View {
-	// Title bar
-	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("4")).Render(" o_(◉) monocle")
+// shortHash truncates a git hash to a short, readable form.
+func shortHash(h string) string {
+	if len(h) > 8 {
+		return h[:8]
+	}
+	return h
+}
+
+// renderTitleBar builds the top bar: the app name + client/server build info on
+// the left (with a mismatch warning when the connected engine's version differs),
+// and the review name + churn metrics on the right when an agent has sent content
+// for review.
+func (m appModel) renderTitleBar() string {
+	nameStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("4"))
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	warnStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Bold(true)
+
+	left := nameStyle.Render(" o_(◉) monocle")
+
+	client := m.clientVersion
+	if client == "" {
+		client = "dev"
+	}
+	if m.serverVersion != "" && m.serverVersion != client {
+		// Client/server version mismatch — surface it loudly.
+		left += warnStyle.Render(fmt.Sprintf(" %s  ⚠ server %s", client, m.serverVersion))
+	} else {
+		left += dimStyle.Render(" " + client)
+	}
+
 	if m.focusModeActive {
 		badge := lipgloss.NewStyle().
 			Background(lipgloss.Color("5")).
@@ -3098,9 +3145,55 @@ func (m appModel) View() tea.View {
 			Bold(true).
 			Padding(0, 1).
 			Render("FOCUS MODE")
-		title = title + " " + badge
+		left += " " + badge
 	}
-	titleBar := lipgloss.NewStyle().Width(m.width).Render(title)
+
+	right := m.renderReviewMeta(dimStyle)
+
+	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right)
+	if gap < 1 || right == "" {
+		return lipgloss.NewStyle().Width(m.width).Render(left)
+	}
+	return left + strings.Repeat(" ", gap) + right
+}
+
+// renderReviewMeta builds the right-hand review summary: the latest artifact's
+// title (the review's "name"), the total +/- churn, file count, and HEAD hash.
+// Returns "" when there is nothing under review yet.
+func (m appModel) renderReviewMeta(dim lipgloss.Style) string {
+	items := m.sidebar.contentItems
+	files := m.sidebar.files
+	if len(items) == 0 && len(files) == 0 {
+		return ""
+	}
+	var parts []string
+	if len(items) > 0 {
+		if title := items[len(items)-1].Title; title != "" {
+			parts = append(parts, lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true).Render(title))
+		}
+	}
+	if len(files) > 0 {
+		adds, dels := 0, 0
+		for _, f := range files {
+			adds += f.Additions
+			dels += f.Deletions
+		}
+		churn := lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Render(fmt.Sprintf("+%d", adds)) +
+			"/" + lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Render(fmt.Sprintf("-%d", dels))
+		parts = append(parts, churn, dim.Render(fmt.Sprintf("%d files", len(files))))
+	}
+	if m.headHash != "" {
+		parts = append(parts, dim.Render("@"+m.headHash))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, dim.Render(" · ")) + " "
+}
+
+func (m appModel) View() tea.View {
+	// Title bar
+	titleBar := m.renderTitleBar()
 
 	sidebarStyle := m.theme.SidebarBorder
 	if m.focus == focusSidebar {

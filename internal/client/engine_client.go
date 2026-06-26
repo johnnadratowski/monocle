@@ -1424,6 +1424,20 @@ func (c *EngineClient) GetSocketPath() string {
 	return r.Path
 }
 
+// ServerVersion returns the connected engine's build version (over the socket),
+// so the TUI can show it and flag a client/server mismatch. Returns "" on error.
+func (c *EngineClient) ServerVersion() string {
+	resp, err := c.request(&protocol.GetServerInfoMsg{Type: protocol.TypeGetServerInfo})
+	if err != nil {
+		return ""
+	}
+	r, ok := resp.(*protocol.GetServerInfoResponse)
+	if !ok {
+		return ""
+	}
+	return r.Version
+}
+
 // --- EngineAPI: config ---
 
 // GetConfig returns a cached pointer. The caller's documented flow is
