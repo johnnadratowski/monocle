@@ -17,6 +17,7 @@ const (
 	EventAdditionalFileAdded   EventKind = "additional_file_added"
 	EventFeedbackPickedUp      EventKind = "feedback_picked_up"
 	EventWaitStatusChanged     EventKind = "wait_status_changed"
+	EventActivityChanged       EventKind = "activity_changed"
 )
 
 // EventPayload carries data for an engine event.

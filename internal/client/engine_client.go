@@ -158,6 +158,7 @@ func (c *EngineClient) dialAndSubscribe() error {
 			string(core.EventAdditionalFileAdded),
 			string(core.EventFeedbackPickedUp),
 			string(core.EventWaitStatusChanged),
+			string(core.EventActivityChanged),
 		},
 		Passive: true,
 	}

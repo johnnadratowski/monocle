@@ -2294,6 +2294,10 @@ func (e *Engine) handleMarkActivity(_ *protocol.MarkActivityMsg) *protocol.MarkA
 	e.mu.Lock()
 	e.hasUnreviewedActivity = true
 	e.mu.Unlock()
+	// Pulse the TUI so it can show that the agent is actively making changes. The
+	// flag (and pulse) clears when the reviewer's feedback is next delivered,
+	// which fires EventFeedbackPickedUp.
+	e.emit(EventActivityChanged, EventPayload{Kind: EventActivityChanged, Status: "active"})
 	return &protocol.MarkActivityResponse{
 		Type:    protocol.TypeMarkActivityResponse,
 		Success: true,
