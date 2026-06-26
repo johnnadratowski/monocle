@@ -258,6 +258,10 @@ type appModel struct {
 	clientVersion string
 	serverVersion string
 	headHash      string
+
+	// annotationCount caches the session's total agent annotation count for the
+	// status bar; refreshed on load and on file-change events.
+	annotationCount int
 }
 
 // NewApp creates the root appModel and wires up all subsystems.
@@ -510,6 +514,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if session != nil {
 			m.statusBar.baseRef = m.displayBaseRef(session)
 			m.statusBar.agentName = session.Agent
+			m.annotationCount = len(session.Annotations)
 		}
 		m.statusBar.fileCount = len(msg.files)
 		m.statusBar.socketStarted = m.engine.GetSocketPath() != ""
@@ -601,6 +606,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if session != nil {
 			m.statusBar.baseRef = m.displayBaseRef(session)
 			m.statusBar.commentCount = len(session.Comments)
+			m.annotationCount = len(session.Annotations)
 		}
 		// Auto-advance to next unreviewed item after marking reviewed
 		if msg.advance {
@@ -3485,6 +3491,17 @@ func (m appModel) View() tea.View {
 	m.statusBar.contentID = m.diffView.contentID
 	m.statusBar.diffBaseVersion = m.diffView.diffBaseVersion
 	m.statusBar.diffToVersion = m.diffView.diffToVersion
+	// Review progress + annotation count (cheap to recompute from the sidebar;
+	// annotationCount is cached and refreshed on load/file-change).
+	reviewed := 0
+	for _, f := range m.sidebar.files {
+		if f.Reviewed {
+			reviewed++
+		}
+	}
+	m.statusBar.fileCount = len(m.sidebar.files)
+	m.statusBar.reviewedCount = reviewed
+	m.statusBar.annotationCount = m.annotationCount
 	statusView := m.statusBar.View()
 	full := lipgloss.JoinVertical(lipgloss.Left, titleBar, body, statusView)
 

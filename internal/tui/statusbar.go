@@ -8,21 +8,23 @@ import (
 )
 
 type statusBarModel struct {
-	agentName       string
-	baseRef         string
-	fileCount       int
-	commentCount    int
-	feedbackStatus  string
-	subscriberCount int
-	connectionMode  string // "queue" for queue-mode connections
-	socketStarted   bool
-	commandMode     bool
-	commandBuffer   string
-	searchMode      bool
-	searchBuffer    string
-	searchBackward  bool
-	searchInfo      string // transient "match i/N" indicator after a search
-	contextHints    string // override hints when set (e.g. comment-specific keybinds)
+	agentName        string
+	baseRef          string
+	fileCount        int
+	reviewedCount    int
+	annotationCount  int
+	commentCount     int
+	feedbackStatus   string
+	subscriberCount  int
+	connectionMode   string // "queue" for queue-mode connections
+	socketStarted    bool
+	commandMode      bool
+	commandBuffer    string
+	searchMode       bool
+	searchBuffer     string
+	searchBackward   bool
+	searchInfo       string // transient "match i/N" indicator after a search
+	contextHints     string // override hints when set (e.g. comment-specific keybinds)
 	diffStyle        diffStyle
 	contentMode      bool   // true when viewing content (plan/doc) in raw mode
 	contentID        string // non-empty when viewing a content item (raw or diff)
@@ -80,16 +82,9 @@ func (m statusBarModel) View() string {
 		connLabel = lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Render("● Disconnected")
 	}
 
-	// Info sections
+	// Info sections. The base ref and file count moved to the top bar, so the
+	// status bar focuses on review progress.
 	parts := []string{connLabel}
-
-	if m.baseRef != "" && m.baseRef != "WORKING" {
-		ref := m.baseRef
-		if len(ref) > 8 {
-			ref = ref[:8]
-		}
-		parts = append(parts, fmt.Sprintf("ref:%s", ref))
-	}
 
 	if m.contentID != "" && !m.contentMode {
 		// Viewing a content item diff
@@ -105,8 +100,15 @@ func (m statusBarModel) View() string {
 		parts = append(parts, lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Bold(true).Render("[FILE]"))
 	}
 
-	parts = append(parts, fmt.Sprintf("%d files", m.fileCount))
+	if m.fileCount > 0 {
+		reviewedStyle := lipgloss.NewStyle()
+		if m.reviewedCount >= m.fileCount {
+			reviewedStyle = reviewedStyle.Foreground(lipgloss.Color("2")) // all reviewed
+		}
+		parts = append(parts, reviewedStyle.Render(fmt.Sprintf("%d/%d reviewed", m.reviewedCount, m.fileCount)))
+	}
 	parts = append(parts, fmt.Sprintf("%d comments", m.commentCount))
+	parts = append(parts, fmt.Sprintf("%d annotations", m.annotationCount))
 
 	if m.searchInfo != "" {
 		searchStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("4"))
