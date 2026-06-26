@@ -3374,33 +3374,32 @@ func (m appModel) renderTitleBar() string {
 		left += " " + badge
 	}
 
-	right := m.renderReviewMeta(dimStyle)
-
-	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right)
-	if gap < 1 || right == "" {
-		return lipgloss.NewStyle().Width(m.width).Render(left)
-	}
-	return left + strings.Repeat(" ", gap) + right
+	center := m.reviewNameText()
+	right := m.renderReviewMetrics(dimStyle)
+	return composeThreeZone(left, center, right, m.width)
 }
 
-// renderReviewMeta builds the right-hand review summary: the latest artifact's
-// title (the review's "name"), the total +/- churn, file count, and HEAD hash.
-// Returns "" when there is nothing under review yet.
-func (m appModel) renderReviewMeta(dim lipgloss.Style) string {
-	items := m.sidebar.contentItems
+// reviewNameText returns the styled review name for the centre of the top bar:
+// the agent-supplied name, falling back to the latest artifact title, or "".
+func (m appModel) reviewNameText() string {
+	name := m.reviewName
+	if name == "" && len(m.sidebar.contentItems) > 0 {
+		name = m.sidebar.contentItems[len(m.sidebar.contentItems)-1].Title
+	}
+	if name == "" {
+		return ""
+	}
+	return lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true).Render(name)
+}
+
+// renderReviewMetrics builds the right-hand review summary: total +/- churn,
+// file count, and HEAD hash. Returns "" when there is nothing under review yet.
+func (m appModel) renderReviewMetrics(dim lipgloss.Style) string {
 	files := m.sidebar.files
-	if len(items) == 0 && len(files) == 0 {
+	if len(files) == 0 && m.headHash == "" {
 		return ""
 	}
 	var parts []string
-	// Prefer the agent-supplied review name; fall back to the latest artifact title.
-	name := m.reviewName
-	if name == "" && len(items) > 0 {
-		name = items[len(items)-1].Title
-	}
-	if name != "" {
-		parts = append(parts, lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true).Render(name))
-	}
 	if len(files) > 0 {
 		adds, dels := 0, 0
 		for _, f := range files {
@@ -3418,6 +3417,47 @@ func (m appModel) renderReviewMeta(dim lipgloss.Style) string {
 		return ""
 	}
 	return strings.Join(parts, dim.Render(" · ")) + " "
+}
+
+// composeThreeZone lays out a bar with left- and right-anchored segments and a
+// centred segment. The centre is placed at the bar's midpoint, nudged aside if it
+// would collide with either edge segment; when everything can't fit it falls back
+// to a simple left|right layout (dropping the centre).
+func composeThreeZone(left, center, right string, width int) string {
+	lw, cw, rw := lipgloss.Width(left), lipgloss.Width(center), lipgloss.Width(right)
+
+	leftRight := func() string {
+		gap := width - lw - rw
+		if gap < 1 || right == "" {
+			return lipgloss.NewStyle().Width(width).Render(left)
+		}
+		return left + strings.Repeat(" ", gap) + right
+	}
+
+	if center == "" {
+		return leftRight()
+	}
+	// Need a space on each side of the centre; if it can't fit, drop it.
+	if lw+cw+rw+2 > width {
+		return leftRight()
+	}
+	centerStart := (width - cw) / 2
+	if centerStart < lw+1 {
+		centerStart = lw + 1
+	}
+	rightStart := width - rw
+	if centerStart+cw > rightStart-1 {
+		centerStart = rightStart - 1 - cw
+	}
+	gap1 := centerStart - lw
+	gap2 := rightStart - (centerStart + cw)
+	if gap1 < 1 {
+		gap1 = 1
+	}
+	if gap2 < 1 {
+		gap2 = 1
+	}
+	return left + strings.Repeat(" ", gap1) + center + strings.Repeat(" ", gap2) + right
 }
 
 func (m appModel) View() tea.View {
