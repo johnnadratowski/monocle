@@ -20,17 +20,19 @@ type stubEngine struct {
 	dismissCalled  bool
 }
 
-func (s *stubEngine) GetConfig() *types.Config                  { return s.cfg }
-func (s *stubEngine) GetSession() *types.ReviewSession           { return s.session }
-func (s *stubEngine) GetFeedbackStatus() string { return "" }
-func (s *stubEngine) GetQueuedCount() int        { return 0 }
-func (s *stubEngine) ReloadPendingFeedback()     {}
-func (s *stubEngine) SelectedBaseRef() string    { return "" }
-func (s *stubEngine) GetChangedFiles() []types.ChangedFile       { return nil }
-func (s *stubEngine) GetAdditionalFiles() []types.AdditionalFile { return nil }
-func (s *stubEngine) MarkContentReviewed(id string) error        { return nil }
-func (s *stubEngine) UnmarkContentReviewed(id string) error      { return nil }
-func (s *stubEngine) GetContentItems() []types.ContentItem       { return s.contentItems }
+func (s *stubEngine) ServerVersion() string                        { return "" }
+func (s *stubEngine) RecentCommits(n int) ([]core.LogEntry, error) { return nil, nil }
+func (s *stubEngine) GetConfig() *types.Config                     { return s.cfg }
+func (s *stubEngine) GetSession() *types.ReviewSession             { return s.session }
+func (s *stubEngine) GetFeedbackStatus() string                    { return "" }
+func (s *stubEngine) GetQueuedCount() int                          { return 0 }
+func (s *stubEngine) ReloadPendingFeedback()                       {}
+func (s *stubEngine) SelectedBaseRef() string                      { return "" }
+func (s *stubEngine) GetChangedFiles() []types.ChangedFile         { return nil }
+func (s *stubEngine) GetAdditionalFiles() []types.AdditionalFile   { return nil }
+func (s *stubEngine) MarkContentReviewed(id string) error          { return nil }
+func (s *stubEngine) UnmarkContentReviewed(id string) error        { return nil }
+func (s *stubEngine) GetContentItems() []types.ContentItem         { return s.contentItems }
 func (s *stubEngine) GetContentItem(id string) (*types.ContentItem, error) {
 	for i := range s.contentItems {
 		if s.contentItems[i].ID == id {
@@ -39,12 +41,12 @@ func (s *stubEngine) GetContentItem(id string) (*types.ContentItem, error) {
 	}
 	return nil, fmt.Errorf("not found")
 }
-func (s *stubEngine) GetSnapshots() ([]types.ReviewSnapshot, error)   { return nil, nil }
-func (s *stubEngine) SetSnapshotBase(snapshotID int) error             { return nil }
-func (s *stubEngine) ClearSnapshotBase()                               {}
-func (s *stubEngine) GetActiveSnapshot() *types.ReviewSnapshot         { return nil }
-func (s *stubEngine) HasSnapshots() (bool, error)                      { return false, nil }
-func (s *stubEngine) IsReviewTrackingEnabled() bool                    { return s.cfg != nil && s.cfg.ReviewTracking }
+func (s *stubEngine) GetSnapshots() ([]types.ReviewSnapshot, error) { return nil, nil }
+func (s *stubEngine) SetSnapshotBase(snapshotID int) error          { return nil }
+func (s *stubEngine) ClearSnapshotBase()                            {}
+func (s *stubEngine) GetActiveSnapshot() *types.ReviewSnapshot      { return nil }
+func (s *stubEngine) HasSnapshots() (bool, error)                   { return false, nil }
+func (s *stubEngine) IsReviewTrackingEnabled() bool                 { return s.cfg != nil && s.cfg.ReviewTracking }
 func (s *stubEngine) ClearComments() error {
 	s.cleared = true
 	return nil

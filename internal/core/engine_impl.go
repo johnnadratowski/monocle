@@ -2089,6 +2089,12 @@ func (e *Engine) GetSocketPath() string {
 	return e.server.SocketPath()
 }
 
+// ServerVersion returns the engine's build version (the in-process value). The
+// socket-backed EngineClient overrides this with the remote engine's version.
+func (e *Engine) ServerVersion() string {
+	return Version
+}
+
 // -- Events --
 
 func (e *Engine) On(event EventKind, callback EventCallback) UnsubscribeFunc {

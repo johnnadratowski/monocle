@@ -145,6 +145,7 @@ type EngineAPI interface {
 	// Connection status
 	GetSubscriberCount() int
 	GetSocketPath() string
+	ServerVersion() string
 
 	// Events
 	On(event EventKind, callback EventCallback) UnsubscribeFunc

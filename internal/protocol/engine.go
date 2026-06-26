@@ -81,6 +81,7 @@ const (
 	TypeReloadPendingFeedback = "reload_pending_feedback"
 	TypeGetSubscriberCount    = "get_subscriber_count"
 	TypeGetSocketPath         = "get_socket_path"
+	TypeGetServerInfo         = "get_server_info"
 
 	// Pause flow
 	TypeSetPause = "set_pause"
@@ -162,6 +163,7 @@ const (
 	TypeReloadPendingFeedbackResponse = "reload_pending_feedback_response"
 	TypeGetSubscriberCountResponse    = "get_subscriber_count_response"
 	TypeGetSocketPathResponse         = "get_socket_path_response"
+	TypeGetServerInfoResponse         = "get_server_info_response"
 
 	// Pause flow
 	TypeSetPauseResponse = "set_pause_response"
@@ -711,6 +713,17 @@ type GetSocketPathMsg struct {
 type GetSocketPathResponse struct {
 	Type string `json:"type"`
 	Path string `json:"path,omitempty"`
+}
+
+// GetServerInfoMsg requests the running engine's build/version info so the TUI
+// can show which server it is connected to and flag a version mismatch.
+type GetServerInfoMsg struct {
+	Type string `json:"type"`
+}
+
+type GetServerInfoResponse struct {
+	Type    string `json:"type"`
+	Version string `json:"version,omitempty"`
 }
 
 // --- Pause flow ---

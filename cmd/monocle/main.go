@@ -155,6 +155,8 @@ type UninstallCmd struct {
 
 func main() {
 	adapters.Version = version
+	core.Version = version
+	tui.Version = version
 
 	cli := CLI{}
 	ctx := kong.Parse(&cli,

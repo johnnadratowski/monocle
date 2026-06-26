@@ -733,6 +733,8 @@ func (s *SocketServer) handleMessage(msg any) any {
 		return s.engine.handleGetSubscriberCount(m)
 	case *protocol.GetSocketPathMsg:
 		return s.engine.handleGetSocketPath(m)
+	case *protocol.GetServerInfoMsg:
+		return s.engine.handleGetServerInfo(m)
 	case *protocol.SetPauseMsg:
 		return s.engine.handleSetPause(m)
 
