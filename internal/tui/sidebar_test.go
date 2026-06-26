@@ -1,10 +1,70 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/josephschmitt/monocle/internal/types"
 )
+
+func TestSidebarSectionRulesAndWorkstreamSpacing(t *testing.T) {
+	keys := DefaultKeyMap()
+	m := newSidebarModel(&keys)
+	m.width = 44
+	m.height = 40
+	m.groupMode = true
+	m.contentItems = []types.ContentItem{{ID: "p1", Title: "Plan"}}
+	m.files = []types.ChangedFile{
+		{Path: "search/ui.tsx", Workstream: "Search", WorkstreamOrder: 0, GroupLabel: "UI"},
+		{Path: "payments/api.go", Workstream: "Payments", WorkstreamOrder: 1, GroupLabel: "Backend"},
+	}
+	m.applyReviewedFilter()
+	m.rebuildGroups()
+
+	out := stripANSISeq(m.View())
+
+	// A horizontal rule separates the Artifacts and Files sections.
+	if !strings.Contains(out, "───") {
+		t.Errorf("expected a horizontal rule between sections, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Search") || !strings.Contains(out, "Payments") {
+		t.Error("expected both workstream headers to render")
+	}
+	// A blank line separates the two top-level workstreams: find the Payments
+	// header line and confirm the preceding rendered line is empty.
+	lines := strings.Split(out, "\n")
+	payIdx := -1
+	for i, ln := range lines {
+		if strings.Contains(ln, "Payments") {
+			payIdx = i
+		}
+	}
+	if payIdx <= 0 {
+		t.Fatal("Payments workstream header not found")
+	}
+	if strings.TrimSpace(lines[payIdx-1]) != "" {
+		t.Errorf("expected a blank line before the Payments workstream, prev line: %q", lines[payIdx-1])
+	}
+}
+
+// stripANSISeq removes ANSI escape sequences for plain-text assertions.
+func stripANSISeq(s string) string {
+	var b strings.Builder
+	inEsc := false
+	for _, r := range s {
+		switch {
+		case r == 0x1b:
+			inEsc = true
+		case inEsc && (r == 'm'):
+			inEsc = false
+		case inEsc:
+			// skip
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
 
 func TestCycleReviewFilter_TrackingEnabled(t *testing.T) {
 	keys := DefaultKeyMap()

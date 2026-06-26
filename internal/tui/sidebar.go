@@ -189,11 +189,40 @@ func (m sidebarModel) View() string {
 
 	linesUsed := 0
 
+	// ruleWidth guards against a zero/negative width.
+	ruleWidth := m.width
+	if ruleWidth < 1 {
+		ruleWidth = 1
+	}
+	ruleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	// writeSeparator draws a horizontal rule between built-in sidebar sections.
+	writeSeparator := func() bool {
+		if linesUsed+1 > availableLines {
+			return false
+		}
+		b.WriteString(ruleStyle.Render(strings.Repeat("─", ruleWidth)))
+		b.WriteString("\n")
+		linesUsed++
+		return true
+	}
+
 	// renderGroupHeaders draws the stacked headers (workstream + group) at a
-	// display index, indenting nested levels. It returns false when the viewport
-	// is full and the caller should stop rendering.
+	// display index, indenting nested levels. A blank line separates top-level
+	// (workstream) groups — but not subgroups, and not the first workstream. It
+	// returns false when the viewport is full and the caller should stop.
+	renderedWorkstream := false
 	renderGroupHeaders := func(hdrs []groupHeaderLine) bool {
 		for _, h := range hdrs {
+			if h.level == 0 && renderedWorkstream {
+				if linesUsed+1 > availableLines {
+					return false
+				}
+				b.WriteString("\n")
+				linesUsed++
+			}
+			if h.level == 0 {
+				renderedWorkstream = true
+			}
 			if linesUsed+1 > availableLines {
 				return false
 			}
@@ -237,12 +266,8 @@ func (m sidebarModel) View() string {
 	for idx := m.offset; idx < totalItems && linesUsed < availableLines; idx++ {
 		// Files section header (when crossing from content items to files)
 		if idx == contentItemCt && contentItemCt > 0 {
-			if linesUsed > 0 {
-				if linesUsed+1 > availableLines {
-					break
-				}
-				b.WriteString("\n")
-				linesUsed++
+			if linesUsed > 0 && !writeSeparator() {
+				break
 			}
 
 			fileCount := len(m.files)
@@ -275,12 +300,8 @@ func (m sidebarModel) View() string {
 
 		// Additional Files section header
 		if idx == additionalStart && additionalCt > 0 {
-			if linesUsed > 0 {
-				if linesUsed+1 > availableLines {
-					break
-				}
-				b.WriteString("\n")
-				linesUsed++
+			if linesUsed > 0 && !writeSeparator() {
+				break
 			}
 
 			var header string
