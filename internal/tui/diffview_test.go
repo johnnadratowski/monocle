@@ -1016,9 +1016,10 @@ func TestAnnotationRenderingSplit(t *testing.T) {
 	}
 }
 
-// TestHideCommentsToggle covers the hide-comments filter: toggling on classifies
-// comment-only lines and the View still renders; toggling off clears them.
-func TestHideCommentsToggle(t *testing.T) {
+// TestCommentFilterCycle covers the three-state comment filter: shown → dimmed →
+// hidden → shown. Dim flags the comment-only line; hide removes it from the view
+// and from navigation; the third press restores everything.
+func TestCommentFilterCycle(t *testing.T) {
 	theme := DefaultTheme()
 	m := diffViewModel{
 		theme: &theme, hl: newHighlighter(), mdStyler: newMarkdownStyler(theme),
@@ -1033,23 +1034,49 @@ func TestHideCommentsToggle(t *testing.T) {
 		}},
 	}
 	m.buildLines()
-	if len(m.commentLines) != 0 {
-		t.Fatalf("comment lines should be empty before toggle, got %v", m.commentLines)
+	if m.commentFilter != commentsShown || len(m.commentLines) != 0 {
+		t.Fatalf("should start shown with no comment lines, got filter=%d lines=%v", m.commentFilter, m.commentLines)
 	}
 
-	m.ToggleHideComments()
-	if !m.commentLines[1] {
-		t.Error("line 1 (// explain) should be flagged comment-only")
+	// 1st press → dimmed: comment-only line flagged, still present in the view.
+	m.CycleCommentFilter()
+	if m.commentFilter != commentsDimmed {
+		t.Fatalf("after 1 press filter=%d, want dimmed", m.commentFilter)
 	}
-	if m.commentLines[2] || m.commentLines[3] {
-		t.Errorf("only the comment-only line should be flagged, got %v", m.commentLines)
+	if !m.commentLines[1] || m.commentLines[2] || m.commentLines[3] {
+		t.Errorf("only line 1 should be comment-only, got %v", m.commentLines)
 	}
-	if m.View() == "" {
-		t.Error("view should still render with the filter on")
+	commentIdx := -1
+	for i, ln := range m.lines {
+		if ln.newLineNum == 1 {
+			commentIdx = i
+		}
+	}
+	if commentIdx < 0 {
+		t.Fatal("comment line should still be in m.lines when dimmed")
+	}
+	if m.screenLinesFor(commentIdx) != 1 {
+		t.Error("dimmed comment line should still occupy a screen row")
 	}
 
-	m.ToggleHideComments()
-	if len(m.commentLines) != 0 {
-		t.Errorf("comment lines should clear when filter off, got %v", m.commentLines)
+	// 2nd press → hidden: the comment line occupies no rows and is unselectable.
+	m.CycleCommentFilter()
+	if m.commentFilter != commentsHidden {
+		t.Fatalf("after 2 presses filter=%d, want hidden", m.commentFilter)
+	}
+	if m.screenLinesFor(commentIdx) != 0 {
+		t.Error("hidden comment line should occupy zero screen rows")
+	}
+	if m.isSelectable(commentIdx) {
+		t.Error("hidden comment line should not be selectable")
+	}
+
+	// 3rd press → shown: everything restored.
+	m.CycleCommentFilter()
+	if m.commentFilter != commentsShown || len(m.commentLines) != 0 {
+		t.Errorf("after 3 presses should be shown with no comment lines, got filter=%d lines=%v", m.commentFilter, m.commentLines)
+	}
+	if m.screenLinesFor(commentIdx) != 1 {
+		t.Error("comment line should occupy a row again when shown")
 	}
 }

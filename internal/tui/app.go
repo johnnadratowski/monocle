@@ -1948,7 +1948,12 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case Matches(key, km.HideComments):
-		m.diffView.ToggleHideComments()
+		m.diffView.CycleCommentFilter()
+		if label := m.diffView.CommentFilterLabel(); label != "" {
+			m.statusBar.searchInfo = label
+		} else {
+			m.statusBar.searchInfo = "comments shown"
+		}
 		return m, nil
 
 	case Matches(key, km.OpenDocRef):

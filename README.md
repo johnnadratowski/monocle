@@ -233,7 +233,7 @@ Monocle exposes review operations via **MCP tools** (default for Claude Code, an
 | `t`                    | Cycle diff style (unified/split/file) (any pane)          |
 | `a`                    | Toggle full-file diff (whole file vs. changed lines)      |
 | `O`                    | Hide / show inline comments + annotations                 |
-| `#`                    | Dim / show source-code comment-only lines                 |
+| `#`                    | Cycle source-code comments: dim → hide → show             |
 | `o`                    | Open / cycle annotation doc links (closes after the last) |
 | `T`                    | Cycle layout (auto/side-by-side/stacked)                  |
 | `R`                    | Force reload files                                        |

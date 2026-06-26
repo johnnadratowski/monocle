@@ -21,6 +21,16 @@ const (
 	diffStyleFile // raw file content, no diff coloring
 )
 
+// commentFilterMode controls how source-code comment-only lines are shown. The
+// `#` key cycles through the three states.
+type commentFilterMode int
+
+const (
+	commentsShown  commentFilterMode = iota // normal syntax highlighting
+	commentsDimmed                          // comment-only lines rendered faint
+	commentsHidden                          // comment-only lines removed from the view
+)
+
 // diffViewLine represents a rendered line in the diff view.
 type diffViewLine struct {
 	kind       types.DiffLineKind
@@ -55,23 +65,23 @@ type diffViewLine struct {
 }
 
 type diffViewModel struct {
-	path             string
-	hunks            []types.DiffHunk
-	comments         []types.ReviewComment
-	annotations      []types.Annotation // agent-authored, for the current file
-	hideOverlays     bool               // when true, comments + annotations are not inserted
-	hideCodeComments bool               // when true, source-code comment-only lines are dimmed
-	commentLines     map[int]bool       // new-file line numbers that are comment-only (when hideCodeComments)
-	lines            []diffViewLine
-	cursor           int
-	offset           int // scroll offset
-	width            int
-	height           int
-	focused          bool
-	style            diffStyle
-	theme            *Theme
-	hl               *highlighter
-	isBinary         bool // true when hunk content contains binary control characters
+	path          string
+	hunks         []types.DiffHunk
+	comments      []types.ReviewComment
+	annotations   []types.Annotation // agent-authored, for the current file
+	hideOverlays  bool               // when true, comments + annotations are not inserted
+	commentFilter commentFilterMode  // show / dim / hide source-code comment-only lines
+	commentLines  map[int]bool       // new-file line numbers that are comment-only (when filter != shown)
+	lines         []diffViewLine
+	cursor        int
+	offset        int // scroll offset
+	width         int
+	height        int
+	focused       bool
+	style         diffStyle
+	theme         *Theme
+	hl            *highlighter
+	isBinary      bool // true when hunk content contains binary control characters
 
 	hOffset  int  // horizontal scroll offset (runes)
 	wrap     bool // soft-wrap long lines
@@ -617,6 +627,10 @@ func (m diffViewModel) View() string {
 
 	for i := m.offset; i < len(m.lines) && screenUsed < m.height; i++ {
 		line := m.lines[i]
+		// Hide-comments filter: comment-only lines are removed from the view.
+		if m.isHiddenComment(line) {
+			continue
+		}
 		selected := i == m.cursor
 		inVisual := m.visualMode && m.inVisualRange(i)
 
@@ -1093,24 +1107,25 @@ func (m *diffViewModel) pairLines() {
 // range bar). Distinct from comment colors so the two channels read apart.
 const annotationColor = "6" // cyan
 
-// annotationRangeBar is drawn in the trailing gutter column of every code line
-// inside an annotation's range, forming a continuous cyan rail down the block so
-// the reviewer can see exactly which lines the annotation refers to.
+// annotationRangeBar is the solid glyph drawn as the far-left rail on every code
+// line inside an annotation's range. A full block on a cyan background reads as
+// an unbroken vertical line down the left edge of the annotated block.
 const annotationRangeBar = "▌"
 
-// gutterWithRangeBar renders a (plain, ASCII line-number) gutter, replacing its
-// trailing column with the cyan annotation range bar when the line is inside an
-// annotation's range. base is the gutter's normal style; bg (may be nil) is the
-// diff line background so the bar sits on the same color band.
+// gutterWithRangeBar renders a (plain, ASCII line-number) gutter. When the line
+// is inside an annotation's range it draws a solid cyan rail in the leftmost
+// column — at the far-left edge of the pane — so the range reads as a continuous
+// vertical line down the side. base is the gutter's normal style.
 func gutterWithRangeBar(gutter string, base lipgloss.Style, annotated bool, bg color.Color) string {
 	if !annotated || len(gutter) == 0 {
 		return base.Render(gutter)
 	}
-	bar := lipgloss.NewStyle().Foreground(lipgloss.Color(annotationColor)).Bold(true)
-	if bg != nil {
-		bar = bar.Background(bg)
-	}
-	return base.Render(gutter[:len(gutter)-1]) + bar.Render(annotationRangeBar)
+	// Solid cyan block in column 0; the rest of the gutter keeps its normal style.
+	rail := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(annotationColor)).
+		Background(lipgloss.Color(annotationColor)).
+		Render(annotationRangeBar)
+	return rail + base.Render(gutter[1:])
 }
 
 // renderDimmedComment renders a source-code comment line faint/greyed (used by
@@ -1875,12 +1890,28 @@ func (m *diffViewModel) ToggleOverlays() {
 	m.ensureVisible()
 }
 
-// ToggleHideComments dims (or restores) source-code comment-only lines. It only
-// recomputes the comment-line set and re-renders — line count and scroll are
-// unchanged, so the cursor stays put.
-func (m *diffViewModel) ToggleHideComments() {
-	m.hideCodeComments = !m.hideCodeComments
+// CycleCommentFilter advances the comment filter: shown → dimmed → hidden →
+// shown. Dim renders comment-only lines faint; hide removes them from the view
+// (skipped at render and in navigation). It recomputes the comment-line set and
+// nudges the cursor off any now-hidden line; no rebuild, so scroll stays stable.
+func (m *diffViewModel) CycleCommentFilter() {
+	m.commentFilter = (m.commentFilter + 1) % 3
 	m.computeCommentLines()
+	m.cursor = m.nearestSelectable(m.cursor, 1)
+	m.ensureVisible()
+}
+
+// CommentFilterLabel returns a short label for the current filter state, or ""
+// when comments are shown normally. Used for a transient status hint.
+func (m diffViewModel) CommentFilterLabel() string {
+	switch m.commentFilter {
+	case commentsDimmed:
+		return "comments dimmed"
+	case commentsHidden:
+		return "comments hidden"
+	default:
+		return ""
+	}
 }
 
 // CycleDiffStyle cycles through display styles.
@@ -1994,6 +2025,10 @@ func (m diffViewModel) screenLinesFor(idx int) int {
 		return 1
 	}
 	line := m.lines[idx]
+	// Hidden comment lines occupy no screen rows (filter in the hide state).
+	if m.isHiddenComment(line) {
+		return 0
+	}
 	// Comments render as a multi-line box regardless of wrap mode: a collapsed
 	// comment is a 3-line box (line.content), an expanded one spans its body.
 	// This must match what renderCommentLine/View actually draw, or the scroll
@@ -2447,6 +2482,10 @@ func (m diffViewModel) isSelectable(idx int) bool {
 	if line.isHunk {
 		return false
 	}
+	// Hidden comment lines can't hold the cursor (filter in the hide state).
+	if m.isHiddenComment(line) {
+		return false
+	}
 	if line.isComment {
 		return true
 	}
@@ -2624,6 +2663,10 @@ func (m diffViewModel) displayLinesFor(idx int) int {
 		return 1
 	}
 	line := m.lines[idx]
+	// Hidden comment lines render nothing (filter in the hide state).
+	if m.isHiddenComment(line) {
+		return 0
+	}
 
 	var rendered string
 	if line.isHunk {
@@ -2846,7 +2889,7 @@ func (m *diffViewModel) insertInlineAnnotations() {
 // correctly. No-op (and clears the set) when the toggle is off.
 func (m *diffViewModel) computeCommentLines() {
 	m.commentLines = nil
-	if !m.hideCodeComments || m.hl == nil {
+	if m.commentFilter == commentsShown || m.hl == nil {
 		return
 	}
 	type codeLine struct {
@@ -2890,17 +2933,33 @@ func (m *diffViewModel) computeCommentLines() {
 	}
 }
 
-// isDimmedComment reports whether a code line should be dimmed because the
-// hide-comments filter is on and the line is comment-only.
-func (m diffViewModel) isDimmedComment(line diffViewLine) bool {
-	if !m.hideCodeComments || len(m.commentLines) == 0 {
-		return false
+// commentLineNum returns the new-file line number of a code line that the
+// comment filter has classified as comment-only, or 0 when the line is not a
+// classified comment line.
+func (m diffViewModel) commentLineNum(line diffViewLine) int {
+	if len(m.commentLines) == 0 || line.isHunk || line.isComment || line.isAnnotation {
+		return 0
 	}
 	num := line.rightLineNum
 	if num == 0 {
 		num = line.newLineNum
 	}
-	return num > 0 && m.commentLines[num]
+	if num > 0 && m.commentLines[num] {
+		return num
+	}
+	return 0
+}
+
+// isDimmedComment reports whether a code line should be rendered faint because
+// the filter is in the dim state and the line is comment-only.
+func (m diffViewModel) isDimmedComment(line diffViewLine) bool {
+	return m.commentFilter == commentsDimmed && m.commentLineNum(line) > 0
+}
+
+// isHiddenComment reports whether a code line should be removed from the view
+// because the filter is in the hide state and the line is comment-only.
+func (m diffViewModel) isHiddenComment(line diffViewLine) bool {
+	return m.commentFilter == commentsHidden && m.commentLineNum(line) > 0
 }
 
 // CursorAnnotation returns the annotation under the cursor: the annotation whose
