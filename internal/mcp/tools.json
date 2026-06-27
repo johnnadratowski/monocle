@@ -14,5 +14,9 @@
   {
     "name": "add_files",
     "description": "Add file paths to the current Monocle review session."
+  },
+  {
+    "name": "set_base_ref",
+    "description": "Review changes you have already committed. Set the commit to diff against (ref) — e.g. the branch you started from, a SHA, or HEAD~N — and Monocle shows everything since it, including your commits, for review. The ref's own changes are excluded. By default Monocle only shows uncommitted working-tree changes, so call this when your work is committed. The base reverts to HEAD automatically once the reviewer submits. Pass reset=true to go back to working-tree review immediately."
   }
 ]

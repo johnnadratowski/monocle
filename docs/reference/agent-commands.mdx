@@ -5,7 +5,7 @@ description: "CLI commands for agents to interact with a running monocle session
 
 These commands are used by agents — via installed skills, MCP tools, or directly from the command line — to communicate with a running monocle session.
 
-When registered in **MCP tools mode**, agents call these operations as MCP tools (`review_status`, `get_feedback`, `send_artifact`, `add_files`) instead of CLI commands. The behavior is identical — the MCP server connects to the same Unix socket internally.
+When registered in **MCP tools mode**, agents call these operations as MCP tools (`review_status`, `get_feedback`, `send_artifact`, `add_files`, `set_base_ref`) instead of CLI commands. The behavior is identical — the MCP server connects to the same Unix socket internally.
 
 When registered in **skills mode**, agents invoke the corresponding CLI commands below.
 
@@ -158,3 +158,57 @@ In MCP tools mode, call the `add_files` tool:
 ```bash
 monocle review add-files src/feature.go tests/
 ```
+
+---
+
+## `monocle review set-base-ref`
+
+Review work you have **already committed**. By default monocle only shows uncommitted working-tree changes, so once your changes are committed they fall behind the base and disappear from the diff. This command points the diff at a base commit so everything since it — including your commits — is shown for review.
+
+```bash
+monocle review set-base-ref <ref> [--json] [--workdir PATH] [--socket PATH]
+monocle review set-base-ref --reset
+```
+
+The `<ref>` is the commit to diff **against** — its own changes are excluded and the diff shows `ref..worktree`. Pass the branch you started from, a SHA, or `HEAD~N`. The base reverts to `HEAD` automatically once the reviewer submits, so the ref is scoped to a single review.
+
+### Arguments
+
+| Argument | Description |
+|----------|-------------|
+| `ref` | The commit to diff against (e.g. `main`, `HEAD~3`, a SHA). Required unless `--reset` is given. |
+
+### Flags
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--reset` | | Revert to working-tree review immediately (re-enable auto-advance to `HEAD`). |
+| `--json` | | Output the result as structured JSON. |
+| `--workdir PATH` | `-C` | Override the working directory. Also reads from `MONOCLE_WORKDIR`. |
+| `--socket PATH` | | Override the Unix socket path. Also reads from `MONOCLE_SOCKET`. |
+
+### MCP tool equivalent
+
+In MCP tools mode, call the `set_base_ref` tool:
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `ref` | string | Yes* | Commit to diff against (its own changes excluded). |
+| `reset` | boolean | No | When `true`, revert to working-tree review. *Provide either `ref` or `reset`, not both. |
+
+### Examples
+
+```bash
+# Review every commit made on this branch since it forked from main
+monocle review set-base-ref main
+
+# Review the last 3 commits
+monocle review set-base-ref HEAD~3
+
+# Go back to reviewing uncommitted working-tree changes
+monocle review set-base-ref --reset
+```
+
+<Note>
+The base ref is scoped to one review. After the reviewer submits (approve or request changes), monocle automatically returns to working-tree review against `HEAD`. Re-run the command for the next round if you want committed work reviewed again.
+</Note>

@@ -14,6 +14,8 @@ type gitStub struct {
 	diffResult *types.DiffResult
 	commits    []LogEntry
 
+	resolveRefs map[string]string // ref -> resolved sha for ResolveRef (overrides currentRef)
+
 	// Per-path overrides for testing snapshot diffing and auto-unmark
 	fileContents    map[string]string // path -> content for FileContent("", path)
 	hashObjects     map[string]string // path -> sha for HashObject
@@ -52,6 +54,11 @@ func (g *gitStub) RecentCommits(_ int) ([]LogEntry, error) {
 }
 
 func (g *gitStub) ResolveRef(ref string) (string, error) {
+	if g.resolveRefs != nil {
+		if sha, ok := g.resolveRefs[ref]; ok {
+			return sha, nil
+		}
+	}
 	return g.currentRef, nil
 }
 

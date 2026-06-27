@@ -43,6 +43,7 @@ type ReviewCmd struct {
 	GetFeedback  ReviewGetFeedbackCmd  `cmd:"get-feedback" help:"Retrieve review feedback"`
 	SendArtifact ReviewSendArtifactCmd `cmd:"send-artifact" help:"Send content to the reviewer"`
 	AddFiles     ReviewAddFilesCmd     `cmd:"add-files" help:"Add files to the review session"`
+	SetBaseRef   ReviewSetBaseRefCmd   `cmd:"set-base-ref" help:"Diff against a commit so already-committed work is reviewed"`
 }
 
 // WorkDirFlag is embedded by commands that support --workdir.
@@ -79,6 +80,14 @@ type ReviewAddFilesCmd struct {
 	Socket string   `help:"Override socket path" env:"MONOCLE_SOCKET" default:""`
 	Paths  []string `arg:"" required:"" help:"File or directory paths to add for review"`
 	JSON   bool     `help:"Output as JSON" default:"false"`
+}
+
+type ReviewSetBaseRefCmd struct {
+	WorkDirFlag
+	Socket string `help:"Override socket path" env:"MONOCLE_SOCKET" default:""`
+	Ref    string `arg:"" optional:"" help:"Commit to diff against (e.g. main, HEAD~3, a SHA). Its own changes are excluded; everything since it — including commits — is reviewed."`
+	Reset  bool   `help:"Revert to working-tree review (re-enable auto-advance to HEAD)" default:"false"`
+	JSON   bool   `help:"Output as JSON" default:"false"`
 }
 
 type RunCmd struct {
@@ -628,6 +637,64 @@ func (cmd *ReviewAddFilesCmd) Run() error {
 		return printJSON(add)
 	}
 	fmt.Println(add.Message)
+	return nil
+}
+
+func (cmd *ReviewSetBaseRefCmd) Run() error {
+	if cmd.Reset == (cmd.Ref != "") {
+		return fmt.Errorf("provide exactly one of: a ref to diff against, or --reset")
+	}
+
+	socketPath, err := resolveSocketForWorkDir(cmd.Socket, cmd.WorkDir)
+	if err != nil {
+		return err
+	}
+	c, err := client.Connect(socketPath)
+	if err != nil {
+		if errors.Is(err, client.ErrNotRunning) {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return err
+	}
+	defer c.Close()
+
+	// --reset re-enables auto-advance, returning the review to working-tree-vs-HEAD.
+	if cmd.Reset {
+		resp, err := c.Request(
+			&protocol.SetAutoAdvanceRefMsg{Type: protocol.TypeSetAutoAdvanceRef, Enabled: true},
+			client.DefaultTimeout,
+		)
+		if err != nil {
+			return fmt.Errorf("reset base ref: %w", err)
+		}
+		out := resp.(*protocol.SetAutoAdvanceRefResponse)
+		if cmd.JSON {
+			return printJSON(out)
+		}
+		fmt.Println("Base ref reset to working tree (HEAD).")
+		return nil
+	}
+
+	resp, err := c.Request(
+		&protocol.SetBaseRefMsg{
+			Type:      protocol.TypeSetBaseRef,
+			Ref:       cmd.Ref,
+			Exclusive: true,
+		},
+		client.DefaultTimeout,
+	)
+	if err != nil {
+		return fmt.Errorf("set base ref: %w", err)
+	}
+	out := resp.(*protocol.SetBaseRefResponse)
+	if cmd.JSON {
+		return printJSON(out)
+	}
+	if out.Error != "" {
+		return fmt.Errorf("set base ref: %s", out.Error)
+	}
+	fmt.Printf("Reviewing changes since %s (commits included). Resets to HEAD after the review.\n", cmd.Ref)
 	return nil
 }
 

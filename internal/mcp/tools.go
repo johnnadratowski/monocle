@@ -64,6 +64,11 @@ func registerTools(s *sdkmcp.Server) {
 		Name:        "add_files",
 		Description: desc["add_files"],
 	}, handleAddFiles)
+
+	sdkmcp.AddTool(s, &sdkmcp.Tool{
+		Name:        "set_base_ref",
+		Description: desc["set_base_ref"],
+	}, handleSetBaseRef)
 }
 
 // -- Tool parameter types --
@@ -84,6 +89,14 @@ type sendArtifactParams struct {
 
 type addFilesParams struct {
 	Paths []string `json:"paths"`
+}
+
+type setBaseRefParams struct {
+	// Ref is the commit to diff against (its own changes are excluded). Required
+	// unless Reset is true.
+	Ref string `json:"ref,omitempty"`
+	// Reset reverts to working-tree review (re-enables auto-advance to HEAD).
+	Reset bool `json:"reset,omitempty"`
 }
 
 // -- Tool handlers --
@@ -206,6 +219,46 @@ func handleAddFiles(ctx context.Context, req *sdkmcp.CallToolRequest, params add
 
 	add := resp.(*protocol.AddAdditionalFilesResponse)
 	return textResult(add.Message), nil, nil
+}
+
+func handleSetBaseRef(ctx context.Context, req *sdkmcp.CallToolRequest, params setBaseRefParams) (*sdkmcp.CallToolResult, any, error) {
+	if params.Reset == (params.Ref != "") {
+		return errResult("provide exactly one of: ref (commit to diff against), or reset=true"), nil, nil
+	}
+
+	c, err := client.ConnectDefault()
+	if err != nil {
+		return errResult("connect: %v", err), nil, nil
+	}
+	defer c.Close()
+
+	if params.Reset {
+		if _, err := c.Request(
+			&protocol.SetAutoAdvanceRefMsg{Type: protocol.TypeSetAutoAdvanceRef, Enabled: true},
+			client.DefaultTimeout,
+		); err != nil {
+			return errResult("request: %v", err), nil, nil
+		}
+		return textResult("Base ref reset to working tree (HEAD)."), nil, nil
+	}
+
+	resp, err := c.Request(
+		&protocol.SetBaseRefMsg{
+			Type:      protocol.TypeSetBaseRef,
+			Ref:       params.Ref,
+			Exclusive: true,
+		},
+		client.DefaultTimeout,
+	)
+	if err != nil {
+		return errResult("request: %v", err), nil, nil
+	}
+
+	out := resp.(*protocol.SetBaseRefResponse)
+	if out.Error != "" {
+		return errResult("set base ref: %s", out.Error), nil, nil
+	}
+	return textResult(fmt.Sprintf("Reviewing changes since %s (your commits included). Resets to HEAD after the reviewer submits.", params.Ref)), nil, nil
 }
 
 // -- Helpers --

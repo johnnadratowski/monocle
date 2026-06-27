@@ -1050,6 +1050,116 @@ func TestSetBaseRef(t *testing.T) {
 	}
 }
 
+func TestSetBaseRefExact(t *testing.T) {
+	database, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+
+	// SetBaseRef shifts to the parent (ref~1); SetBaseRefExact uses the ref as-is.
+	stub := &gitStub{
+		repoRoot: "/tmp/repo",
+		resolveRefs: map[string]string{
+			"main":   "exactbase_exactbase_exactbase_exactbase01",
+			"main~1": "parentbase_parentbase_parentbase_parent01",
+		},
+	}
+
+	now := time.Now()
+	session := &types.ReviewSession{
+		ID: "sess-1", Agent: "claude",
+		RepoRoot: "/tmp/repo", BaseRef: "old-base", ReviewRound: 1,
+		FileStatuses: make(map[string]bool), CreatedAt: now, UpdatedAt: now,
+	}
+	database.CreateSession(session)
+
+	e := &Engine{
+		feedback:       NewFeedbackQueue(),
+		database:       database,
+		git:            stub,
+		autoAdvanceRef: true,
+		subscribers:    make(map[EventKind]map[int]EventCallback),
+	}
+	e.current = session
+
+	if err := e.SetBaseRefExact("main"); err != nil {
+		t.Fatalf("SetBaseRefExact: %v", err)
+	}
+
+	if e.current.BaseRef != "exactbase_exactbase_exactbase_exactbase01" {
+		t.Errorf("expected exact base ref (no parent shift), got %q", e.current.BaseRef)
+	}
+	if e.autoAdvanceRef {
+		t.Error("expected autoAdvanceRef false after SetBaseRefExact")
+	}
+	if !e.agentBaseRef {
+		t.Error("expected agentBaseRef true after SetBaseRefExact")
+	}
+}
+
+// TestAgentBaseRefResetsAfterReview verifies that an agent-provided base ref
+// reverts to auto-advance (HEAD) once the reviewer submits, while a base set by
+// the reviewer persists across the submission.
+func TestAgentBaseRefResetsAfterReview(t *testing.T) {
+	newEngine := func(t *testing.T) (*Engine, *types.ReviewSession) {
+		t.Helper()
+		database, err := db.Open(":memory:")
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { database.Close() })
+
+		stub := &gitStub{repoRoot: "/tmp/repo", currentRef: "base_base_base_base_base_base_base_base01"}
+		now := time.Now()
+		session := &types.ReviewSession{
+			ID: "sess-1", Agent: "claude",
+			RepoRoot: "/tmp/repo", BaseRef: "old-base", ReviewRound: 1,
+			FileStatuses: make(map[string]bool), CreatedAt: now, UpdatedAt: now,
+		}
+		database.CreateSession(session)
+		e := &Engine{
+			feedback:       NewFeedbackQueue(),
+			database:       database,
+			git:            stub,
+			formatter:      NewReviewFormatter(func(string, int, int) string { return "" }, types.ReviewFormatConfig{}),
+			autoAdvanceRef: true,
+			subscribers:    make(map[EventKind]map[int]EventCallback),
+		}
+		e.current = session
+		return e, session
+	}
+
+	t.Run("agent base resets on submit", func(t *testing.T) {
+		e, _ := newEngine(t)
+		if err := e.SetBaseRefExact("main"); err != nil {
+			t.Fatalf("SetBaseRefExact: %v", err)
+		}
+		if err := e.Submit(types.ActionApprove, "looks good"); err != nil {
+			t.Fatalf("Submit: %v", err)
+		}
+		if !e.IsAutoAdvanceRef() {
+			t.Error("expected auto-advance re-enabled after review of agent base ref")
+		}
+		if e.agentBaseRef {
+			t.Error("expected agentBaseRef cleared after review")
+		}
+	})
+
+	t.Run("reviewer base persists on submit", func(t *testing.T) {
+		e, _ := newEngine(t)
+		if err := e.SetBaseRef("some-commit"); err != nil {
+			t.Fatalf("SetBaseRef: %v", err)
+		}
+		if err := e.Submit(types.ActionApprove, "looks good"); err != nil {
+			t.Fatalf("Submit: %v", err)
+		}
+		if e.IsAutoAdvanceRef() {
+			t.Error("expected reviewer-set base ref to persist (auto-advance stays off)")
+		}
+	})
+}
+
 func TestSetAutoAdvanceRef(t *testing.T) {
 	e := &Engine{
 		feedback:       NewFeedbackQueue(),

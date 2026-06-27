@@ -96,6 +96,7 @@ func TestEngineMessagesRoundTrip(t *testing.T) {
 
 		// Base ref
 		{"SetBaseRef", &SetBaseRefMsg{Type: TypeSetBaseRef, Ref: "main"}},
+		{"SetBaseRefExclusive", &SetBaseRefMsg{Type: TypeSetBaseRef, Ref: "main", Exclusive: true}},
 		{"SetBaseRefResponse", &SetBaseRefResponse{Type: TypeSetBaseRefResponse}},
 		{"SetAutoAdvanceRef", &SetAutoAdvanceRefMsg{Type: TypeSetAutoAdvanceRef, Enabled: true}},
 		{"SetAutoAdvanceRefResponse", &SetAutoAdvanceRefResponse{Type: TypeSetAutoAdvanceRefResponse}},

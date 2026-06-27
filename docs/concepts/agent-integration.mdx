@@ -22,6 +22,7 @@ These operations are available as both MCP tools and skills:
 | Send artifact (blocking) | `send_artifact`, then `get_feedback` with `wait: true` | `/review-plan-wait` | Submit content and iterate on feedback until approved |
 | Check status | `review_status` | — | Check if feedback is pending or a pause was requested |
 | Add files | `add_files` | — | Add files to the current review session |
+| Review committed work | `set_base_ref` | — | Diff against a base commit so already-committed changes are reviewed (reverts to `HEAD` after the review) |
 
 ### Get feedback
 
