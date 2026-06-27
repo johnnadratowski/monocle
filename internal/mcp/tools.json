@@ -30,5 +30,9 @@
   {
     "name": "set_review_name",
     "description": "Give the current review a short, human-friendly name shown in Monocle's top bar (e.g. 'Add OAuth login' or 'Payments refactor'). Call this once when you start a review so the reviewer can see at a glance what they're reviewing. Pass name (a brief title); an empty name clears it."
+  },
+  {
+    "name": "set_base_ref",
+    "description": "Review changes you have already committed. Set the commit to diff against (ref) — e.g. the branch you started from, a SHA, or HEAD~N — and Monocle shows everything since it, including your commits, for review. The ref's own changes are excluded. By default Monocle only shows uncommitted working-tree changes, so call this when your work is committed. The base reverts to HEAD automatically once the reviewer submits. Pass reset=true to go back to working-tree review immediately."
   }
 ]

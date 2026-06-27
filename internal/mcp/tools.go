@@ -85,6 +85,11 @@ func registerTools(s *sdkmcp.Server) {
 		Name:        "set_review_name",
 		Description: desc["set_review_name"],
 	}, handleSetReviewName)
+
+	sdkmcp.AddTool(s, &sdkmcp.Tool{
+		Name:        "set_base_ref",
+		Description: desc["set_base_ref"],
+	}, handleSetBaseRef)
 }
 
 type setReviewNameParams struct {
@@ -173,6 +178,14 @@ type annotationEntryParam struct {
 type addAnnotationsParams struct {
 	Entries []annotationEntryParam `json:"entries"`
 	Replace bool                   `json:"replace,omitempty"`
+}
+
+type setBaseRefParams struct {
+	// Ref is the commit to diff against (its own changes are excluded). Required
+	// unless Reset is true.
+	Ref string `json:"ref,omitempty"`
+	// Reset reverts to working-tree review (re-enables auto-advance to HEAD).
+	Reset bool `json:"reset,omitempty"`
 }
 
 // -- Tool handlers --
@@ -456,6 +469,46 @@ func handleAddAnnotations(ctx context.Context, req *sdkmcp.CallToolRequest, para
 		return errResult("%s", r.Message), nil, nil
 	}
 	return textResult(r.Summary()), nil, nil
+}
+
+func handleSetBaseRef(ctx context.Context, req *sdkmcp.CallToolRequest, params setBaseRefParams) (*sdkmcp.CallToolResult, any, error) {
+	if params.Reset == (params.Ref != "") {
+		return errResult("provide exactly one of: ref (commit to diff against), or reset=true"), nil, nil
+	}
+
+	c, err := client.ConnectDefault()
+	if err != nil {
+		return errResult("connect: %v", err), nil, nil
+	}
+	defer c.Close()
+
+	if params.Reset {
+		if _, err := c.Request(
+			&protocol.SetAutoAdvanceRefMsg{Type: protocol.TypeSetAutoAdvanceRef, Enabled: true},
+			client.DefaultTimeout,
+		); err != nil {
+			return errResult("request: %v", err), nil, nil
+		}
+		return textResult("Base ref reset to working tree (HEAD)."), nil, nil
+	}
+
+	resp, err := c.Request(
+		&protocol.SetBaseRefMsg{
+			Type:      protocol.TypeSetBaseRef,
+			Ref:       params.Ref,
+			Exclusive: true,
+		},
+		client.DefaultTimeout,
+	)
+	if err != nil {
+		return errResult("request: %v", err), nil, nil
+	}
+
+	out := resp.(*protocol.SetBaseRefResponse)
+	if out.Error != "" {
+		return errResult("set base ref: %s", out.Error), nil, nil
+	}
+	return textResult(fmt.Sprintf("Reviewing changes since %s (your commits included). Resets to HEAD after the reviewer submits.", params.Ref)), nil, nil
 }
 
 // -- Helpers --

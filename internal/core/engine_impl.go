@@ -46,6 +46,10 @@ type Engine struct {
 	autoAdvanceRef bool
 	lastKnownHead  string
 	selectedRef    string // the commit the user picked (BaseRef stores its parent for diffing)
+	// agentBaseRef: true when the base was set by an agent (set-base-ref) for a
+	// single review. It is reverted to auto-advance once the reviewer submits, so
+	// the base returns to HEAD after the review concludes.
+	agentBaseRef bool
 
 	// reviewBase: when non-nil, the snapshot is the single source of truth for
 	// review tracking — file list merging, auto-unmark, and diff computation all
@@ -1402,6 +1406,10 @@ func (e *Engine) Submit(action types.SubmitAction, body string) error {
 		}
 	}
 
+	// An agent-provided base ref is scoped to a single review: now that the
+	// reviewer has submitted, revert to auto-advance so the base returns to HEAD.
+	e.resetAgentBaseRefAfterReview()
+
 	e.emit(EventFeedbackStatusChanged, EventPayload{
 		Kind:   EventFeedbackStatusChanged,
 		Status: e.feedback.GetStatus(),
@@ -1504,6 +1512,31 @@ func (e *Engine) SetBaseRef(ref string) error {
 		selected = resolved
 	}
 
+	return e.applyBaseRef(resolved, selected, false)
+}
+
+// SetBaseRefExact sets the diff baseline to exactly the given ref and disables
+// auto-advance. Unlike SetBaseRef it does NOT shift to the ref's parent, so the
+// ref's own changes are excluded and the diff shows ref..worktree. Use it when
+// the caller specifies the commit to diff *against* (e.g. an agent reviewing the
+// commits it made since branching) rather than the earliest commit to include.
+//
+// The base is marked agent-set so it reverts to auto-advance (HEAD) once the
+// reviewer submits — the agent provides a ref for one review, then state returns
+// to normal working-tree review.
+func (e *Engine) SetBaseRefExact(ref string) error {
+	resolved, err := e.git.ResolveRef(ref)
+	if err != nil {
+		return fmt.Errorf("resolve ref %q: %w", ref, err)
+	}
+	return e.applyBaseRef(resolved, resolved, true)
+}
+
+// applyBaseRef stores the diff baseline and the user-facing selection, disables
+// auto-advance, and clears any active snapshot view. diffBase is the commit the
+// diff is computed against; selected is the ref shown to the user. agentSet marks
+// the base as agent-provided so it is reverted after the next review.
+func (e *Engine) applyBaseRef(diffBase, selected string, agentSet bool) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -1511,9 +1544,10 @@ func (e *Engine) SetBaseRef(ref string) error {
 		return fmt.Errorf("no active session")
 	}
 
-	e.current.BaseRef = resolved
+	e.current.BaseRef = diffBase
 	e.current.UpdatedAt = time.Now()
 	e.autoAdvanceRef = false
+	e.agentBaseRef = agentSet
 	e.selectedRef = selected
 	_ = e.database.UpdateSession(e.current)
 
@@ -1531,9 +1565,25 @@ func (e *Engine) SetAutoAdvanceRef(enabled bool) {
 	if enabled {
 		e.lastKnownHead = "" // Force HEAD re-detection on next refresh
 		e.selectedRef = ""
+		e.agentBaseRef = false
 		// Clear review base view but keep snapshots in DB — only approve wipes history
 		e.reviewBase = nil
 	}
+}
+
+// resetAgentBaseRefAfterReview reverts an agent-provided base ref back to
+// auto-advance (HEAD) once a review concludes. It is a no-op when the base was
+// set by the reviewer or auto-advance is already active. Callers must not hold
+// e.mu (SetAutoAdvanceRef and emit acquire it).
+func (e *Engine) resetAgentBaseRefAfterReview() {
+	e.mu.RLock()
+	agentSet := e.agentBaseRef
+	e.mu.RUnlock()
+	if !agentSet {
+		return
+	}
+	e.SetAutoAdvanceRef(true)
+	e.emit(EventFileChanged, EventPayload{Kind: EventFileChanged})
 }
 
 // SelectedBaseRef returns the commit the user selected in the ref picker.

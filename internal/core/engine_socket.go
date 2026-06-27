@@ -325,7 +325,17 @@ func (e *Engine) handleGetSubmissions(_ *protocol.GetSubmissionsMsg) *protocol.G
 // --- Base ref ---
 
 func (e *Engine) handleSetBaseRef(msg *protocol.SetBaseRefMsg) *protocol.SetBaseRefResponse {
-	err := e.SetBaseRef(msg.Ref)
+	var err error
+	if msg.Exclusive {
+		err = e.SetBaseRefExact(msg.Ref)
+	} else {
+		err = e.SetBaseRef(msg.Ref)
+	}
+	if err == nil {
+		// Nudge any connected reviewer TUI to re-diff against the new base
+		// immediately rather than waiting for its periodic refresh tick.
+		e.emit(EventFileChanged, EventPayload{Kind: EventFileChanged})
+	}
 	return &protocol.SetBaseRefResponse{
 		Type:  protocol.TypeSetBaseRefResponse,
 		Error: errString(err),

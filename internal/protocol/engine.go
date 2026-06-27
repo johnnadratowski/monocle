@@ -545,6 +545,10 @@ type GetSubmissionsResponse struct {
 type SetBaseRefMsg struct {
 	Type string `json:"type"`
 	Ref  string `json:"ref"`
+	// Exclusive treats Ref as the commit to diff *against* (its own changes are
+	// excluded; the diff shows Ref..worktree). When false (the TUI ref-picker
+	// default) the base is shifted to Ref's parent so Ref's changes are included.
+	Exclusive bool `json:"exclusive,omitempty"`
 }
 
 type SetBaseRefResponse struct {
