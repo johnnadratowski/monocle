@@ -176,12 +176,20 @@ func (e *Engine) ResumeSession(sessionID string) (*types.ReviewSession, error) {
 		return nil, err
 	}
 
-	if _, _, err := e.sessions.RefreshChangedFiles(session); err != nil {
+	files, _, err := e.sessions.RefreshChangedFiles(session)
+	if err != nil {
 		return nil, fmt.Errorf("refresh changed files: %w", err)
 	}
 
 	e.mu.Lock()
 	e.current = session
+	// Apply grouping metadata and import order up front so the first render is
+	// already grouped. RefreshChangedFiles re-derives the file list from git
+	// (which carries no grouping), so without this the sidebar paints ungrouped
+	// and the grouping only layers in on the next refresh tick.
+	e.applyFileMetadata(session.ID, files)
+	applyImportOrder(session.RepoRoot, files)
+	e.current.ChangedFiles = files
 	// Restore the persisted base-ref state. Without this, auto-advance defaults
 	// back to true and the next refresh advances BaseRef to HEAD — emptying the
 	// diff (and the file list) when the reviewed work has since been committed.

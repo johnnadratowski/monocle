@@ -1077,7 +1077,11 @@ func TestResumeRestoresBaseRefState(t *testing.T) {
 	}
 	defer database.Close()
 
-	stub := &gitStub{repoRoot: "/tmp/repo", currentRef: "headhead_headhead_headhead_headhead_head"}
+	stub := &gitStub{
+		repoRoot:   "/tmp/repo",
+		currentRef: "headhead_headhead_headhead_headhead_head",
+		files:      []types.ChangedFile{{Path: "ui/App.tsx", Status: types.FileModified}},
+	}
 	now := time.Now()
 	session := &types.ReviewSession{
 		ID: "sess-1", Agent: "claude", RepoRoot: "/tmp/repo",
@@ -1088,6 +1092,13 @@ func TestResumeRestoresBaseRefState(t *testing.T) {
 	}
 	if err := database.CreateSession(session); err != nil {
 		t.Fatalf("create: %v", err)
+	}
+	// Grouping metadata persisted from a prior round must be applied immediately
+	// on resume so the sidebar's first paint is grouped (no ungrouped flicker).
+	if err := database.SetFileMetadata(session.ID, []types.ChangedFile{
+		{Path: "ui/App.tsx", GroupLabel: "UI", Category: "code", GroupOrder: 1},
+	}, true); err != nil {
+		t.Fatalf("set file metadata: %v", err)
 	}
 
 	e := &Engine{
@@ -1115,6 +1126,11 @@ func TestResumeRestoresBaseRefState(t *testing.T) {
 	}
 	if e.current.BaseRef != "oldbase_oldbase_oldbase_oldbase_oldbase01" {
 		t.Errorf("base ref should be preserved on resume, got %q", e.current.BaseRef)
+	}
+	// Grouping must be present on the very first GetChangedFiles after resume.
+	got := e.GetChangedFiles()
+	if len(got) != 1 || got[0].GroupLabel != "UI" {
+		t.Errorf("resume should apply grouping up front (no flicker), got %+v", got)
 	}
 }
 
