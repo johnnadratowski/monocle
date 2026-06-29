@@ -2291,29 +2291,81 @@ func (m diffViewModel) lastVisibleLine() int {
 	return last
 }
 
-// JumpToHunk moves the cursor to the first changed line of the next (dir=+1) or
-// previous (dir=-1) diff hunk and scrolls it into view. Hunk header lines aren't
-// selectable, so the cursor lands on the first selectable line of the hunk body.
-// Returns false (a no-op) when there is no hunk in that direction — e.g. at the
-// last/first hunk, or in a non-diff view that has no hunk headers.
-func (m *diffViewModel) JumpToHunk(dir int) bool {
-	for i := m.cursor + dir; i >= 0 && i < len(m.lines); i += dir {
-		if !m.lines[i].isHunk {
-			continue
-		}
-		target := m.nearestSelectable(i, 1)
-		if !m.isSelectable(target) {
-			continue // hunk with no selectable body — keep scanning
-		}
-		// Going backward, the hunk just above the cursor can resolve to the line
-		// the cursor already sits on (cursor is at this hunk's first body line).
-		// Skip it so '[' always lands on an earlier hunk.
-		if dir < 0 && target >= m.cursor {
-			continue
-		}
-		m.cursor = target
-		m.ensureVisible()
+// lineHasChange reports whether line i is an added or removed line on either
+// side of the diff. Comment, annotation, and hunk-header lines never count.
+func (m diffViewModel) lineHasChange(i int) bool {
+	if i < 0 || i >= len(m.lines) {
+		return false
+	}
+	line := m.lines[i]
+	if line.isComment || line.isAnnotation || line.isHunk {
+		return false
+	}
+	if line.kind == types.DiffLineAdded || line.kind == types.DiffLineRemoved {
 		return true
+	}
+	return line.rightKind == types.DiffLineAdded || line.rightKind == types.DiffLineRemoved
+}
+
+// isChangeBlockStart reports whether line i begins a run of changed lines — a
+// changed line whose predecessor is not itself a changed line.
+func (m diffViewModel) isChangeBlockStart(i int) bool {
+	return m.lineHasChange(i) && !m.lineHasChange(i-1)
+}
+
+// landOnChange moves the cursor onto (or as near as possible to) line i and
+// scrolls it into view. Removed lines aren't selectable, so it picks the nearest
+// selectable line — preferring forward into the change block. Returns false when
+// nothing selectable exists.
+func (m *diffViewModel) landOnChange(i int) bool {
+	target := m.nearestSelectable(i, 1)
+	if !m.isSelectable(target) {
+		target = m.nearestSelectable(i, -1)
+	}
+	if !m.isSelectable(target) {
+		return false
+	}
+	m.cursor = target
+	m.ensureVisible()
+	return true
+}
+
+// JumpToChange moves the cursor to the start of the next (dir=+1) or previous
+// (dir=-1) block of changed lines and scrolls it into view. A "block" is a run of
+// consecutive added/removed lines, so this works the same in compact and
+// full-file modes — full-file diffs are a single git hunk, but each contiguous
+// edit is still its own block. Returns false (a no-op) when there is no change in
+// that direction.
+func (m *diffViewModel) JumpToChange(dir int) bool {
+	n := len(m.lines)
+	if n == 0 {
+		return false
+	}
+
+	if dir > 0 {
+		for i := m.cursor + 1; i < n; i++ {
+			if m.isChangeBlockStart(i) {
+				return m.landOnChange(i)
+			}
+		}
+		return false
+	}
+
+	// Backward: if the cursor sits inside a change block past its start, jump to
+	// that block's start first; otherwise find the previous block's start.
+	if m.lineHasChange(m.cursor) {
+		start := m.cursor
+		for start-1 >= 0 && m.lineHasChange(start-1) {
+			start--
+		}
+		if start < m.cursor {
+			return m.landOnChange(start)
+		}
+	}
+	for i := m.cursor - 1; i >= 0; i-- {
+		if m.isChangeBlockStart(i) {
+			return m.landOnChange(i)
+		}
 	}
 	return false
 }

@@ -1142,7 +1142,7 @@ func TestJumpToMark(t *testing.T) {
 	}
 }
 
-func TestJumpToHunk(t *testing.T) {
+func TestJumpToChange(t *testing.T) {
 	theme := DefaultTheme()
 	m := diffViewModel{
 		theme: &theme, hl: newHighlighter(), mdStyler: newMarkdownStyler(theme),
@@ -1165,38 +1165,75 @@ func TestJumpToHunk(t *testing.T) {
 		},
 	}
 	m.buildLines()
-	m.cursor = m.nearestSelectable(0, 1) // first body line of hunk 1
+	m.cursor = m.nearestSelectable(0, 1) // first changed line of block 1
 
-	// The cursor must land on selectable body lines, never on a hunk header.
-	firstHunkCursor := m.cursor
+	firstBlockCursor := m.cursor
 	if m.lines[m.cursor].isHunk {
-		t.Fatal("cursor should start on a body line, not a hunk header")
+		t.Fatal("cursor should start on a changed line, not a hunk header")
 	}
 
-	// ] from inside hunk 1 jumps to the first body line of hunk 2.
-	if !m.JumpToHunk(1) {
-		t.Fatal("] should jump forward to the next hunk")
+	if !m.JumpToChange(1) {
+		t.Fatal("] should jump forward to the next change block")
 	}
 	if m.lines[m.cursor].isHunk || m.lines[m.cursor].newLineNum != 10 {
-		t.Fatalf("] should land on hunk 2's first changed line (got cursor=%d, line=%+v)", m.cursor, m.lines[m.cursor])
+		t.Fatalf("] should land on block 2's first changed line (got cursor=%d, line=%+v)", m.cursor, m.lines[m.cursor])
 	}
 
-	// ] past the last hunk is a no-op (caller falls back to next-file nav).
-	if m.JumpToHunk(1) {
-		t.Error("] past the last hunk should be a no-op")
+	if m.JumpToChange(1) {
+		t.Error("] past the last change should be a no-op")
 	}
 
-	// [ returns to hunk 1's first body line.
-	if !m.JumpToHunk(-1) {
-		t.Fatal("[ should jump back to the previous hunk")
+	if !m.JumpToChange(-1) {
+		t.Fatal("[ should jump back to the previous change block")
 	}
-	if m.cursor != firstHunkCursor {
-		t.Errorf("[ should return to hunk 1's first line (got cursor=%d, want %d)", m.cursor, firstHunkCursor)
+	if m.cursor != firstBlockCursor {
+		t.Errorf("[ should return to block 1's first line (got cursor=%d, want %d)", m.cursor, firstBlockCursor)
 	}
 
-	// [ at the first hunk is a no-op.
-	if m.JumpToHunk(-1) {
-		t.Error("[ at the first hunk should be a no-op")
+	if m.JumpToChange(-1) {
+		t.Error("[ at the first change should be a no-op")
+	}
+}
+
+// TestJumpToChangeFullFile is the case the hunk-header approach got wrong: in
+// full-file mode the whole file is a single git hunk, so jumping must key off
+// runs of changed lines, not hunk headers. Here one hunk holds two separate
+// edits divided by context — [ / ] must stop at each.
+func TestJumpToChangeFullFile(t *testing.T) {
+	theme := DefaultTheme()
+	m := diffViewModel{
+		theme: &theme, hl: newHighlighter(), mdStyler: newMarkdownStyler(theme),
+		path: "main.go", width: 80, height: 40, style: diffStyleUnified, fullFile: true,
+		hunks: []types.DiffHunk{{
+			OldStart: 1, OldCount: 7, NewStart: 1, NewCount: 7, Header: "@@ whole file @@",
+			Lines: []types.DiffLine{
+				{Kind: types.DiffLineContext, OldLineNum: 1, NewLineNum: 1, Content: "ctx1"},
+				{Kind: types.DiffLineAdded, NewLineNum: 2, Content: "edit A1"},
+				{Kind: types.DiffLineAdded, NewLineNum: 3, Content: "edit A2"},
+				{Kind: types.DiffLineContext, OldLineNum: 2, NewLineNum: 4, Content: "ctx2"},
+				{Kind: types.DiffLineContext, OldLineNum: 3, NewLineNum: 5, Content: "ctx3"},
+				{Kind: types.DiffLineAdded, NewLineNum: 6, Content: "edit B1"},
+				{Kind: types.DiffLineContext, OldLineNum: 4, NewLineNum: 7, Content: "ctx4"},
+			},
+		}},
+	}
+	m.buildLines()
+	// Start at the top (first context line).
+	m.cursor = m.nearestSelectable(0, 1)
+
+	// ] stops at the first edit block (line 2), then the second (line 6).
+	if !m.JumpToChange(1) || m.lines[m.cursor].newLineNum != 2 {
+		t.Fatalf("] should stop at the first edit (line 2), got cursor=%d line=%+v", m.cursor, m.lines[m.cursor])
+	}
+	if !m.JumpToChange(1) || m.lines[m.cursor].newLineNum != 6 {
+		t.Fatalf("] should stop at the second edit (line 6), got cursor=%d line=%+v", m.cursor, m.lines[m.cursor])
+	}
+	if m.JumpToChange(1) {
+		t.Error("] past the last edit should be a no-op even in full-file mode")
+	}
+	// [ walks back: from edit B to edit A.
+	if !m.JumpToChange(-1) || m.lines[m.cursor].newLineNum != 2 {
+		t.Fatalf("[ should return to the first edit (line 2), got cursor=%d line=%+v", m.cursor, m.lines[m.cursor])
 	}
 }
 

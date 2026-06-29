@@ -2102,18 +2102,18 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case Matches(key, km.PrevFile):
-		// In the diff pane, jump to the previous diff chunk; fall back to
-		// previous-file navigation at the first chunk or in a non-diff view.
-		if m.focus == focusMain && m.diffView.JumpToHunk(-1) {
+		// In the diff pane, jump to the previous change block; fall back to
+		// previous-file navigation at the first change or in a non-diff view.
+		if m.focus == focusMain && m.diffView.JumpToChange(-1) {
 			return m, nil
 		}
 		cmd := m.sidebar.navigateFile(-1)
 		return m, cmd
 
 	case Matches(key, km.NextFile):
-		// In the diff pane, jump to the next diff chunk; fall back to next-file
-		// navigation at the last chunk or in a non-diff view.
-		if m.focus == focusMain && m.diffView.JumpToHunk(+1) {
+		// In the diff pane, jump to the next change block; fall back to next-file
+		// navigation at the last change or in a non-diff view.
+		if m.focus == focusMain && m.diffView.JumpToChange(+1) {
 			return m, nil
 		}
 		cmd := m.sidebar.navigateFile(+1)
