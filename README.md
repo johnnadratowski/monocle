@@ -209,7 +209,7 @@ Monocle exposes review operations via **MCP tools** (default for Claude Code, an
 | `0`                    | Scroll to column 0 (any pane)                             |
 | `^`                    | Scroll to first non-space (any pane)                      |
 | `$`                    | Scroll to line end (any pane)                             |
-| `[`/`]`                | Previous/next file (any pane)                             |
+| `[`/`]`                | Previous/next diff chunk (in the diff pane); previous/next file otherwise |
 | `{`/`}`                | Previous/next sidebar section (any pane)                  |
 | `Enter`                | Focus diff pane / toggle dir                              |
 | `Tab`                  | Switch pane focus                                         |

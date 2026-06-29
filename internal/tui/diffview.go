@@ -2291,6 +2291,33 @@ func (m diffViewModel) lastVisibleLine() int {
 	return last
 }
 
+// JumpToHunk moves the cursor to the first changed line of the next (dir=+1) or
+// previous (dir=-1) diff hunk and scrolls it into view. Hunk header lines aren't
+// selectable, so the cursor lands on the first selectable line of the hunk body.
+// Returns false (a no-op) when there is no hunk in that direction — e.g. at the
+// last/first hunk, or in a non-diff view that has no hunk headers.
+func (m *diffViewModel) JumpToHunk(dir int) bool {
+	for i := m.cursor + dir; i >= 0 && i < len(m.lines); i += dir {
+		if !m.lines[i].isHunk {
+			continue
+		}
+		target := m.nearestSelectable(i, 1)
+		if !m.isSelectable(target) {
+			continue // hunk with no selectable body — keep scanning
+		}
+		// Going backward, the hunk just above the cursor can resolve to the line
+		// the cursor already sits on (cursor is at this hunk's first body line).
+		// Skip it so '[' always lands on an earlier hunk.
+		if dir < 0 && target >= m.cursor {
+			continue
+		}
+		m.cursor = target
+		m.ensureVisible()
+		return true
+	}
+	return false
+}
+
 // JumpToMark moves the cursor to the next (dir=+1) or previous (dir=-1) review
 // mark — an inline comment box or an agent annotation box — and scrolls it into
 // view. No-op when there are no marks in that direction (no wrap-around).

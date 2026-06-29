@@ -1142,6 +1142,64 @@ func TestJumpToMark(t *testing.T) {
 	}
 }
 
+func TestJumpToHunk(t *testing.T) {
+	theme := DefaultTheme()
+	m := diffViewModel{
+		theme: &theme, hl: newHighlighter(), mdStyler: newMarkdownStyler(theme),
+		path: "main.go", width: 80, height: 40, style: diffStyleUnified,
+		hunks: []types.DiffHunk{
+			{
+				OldStart: 1, OldCount: 0, NewStart: 1, NewCount: 2, Header: "@@ hunk1 @@",
+				Lines: []types.DiffLine{
+					{Kind: types.DiffLineAdded, NewLineNum: 1, Content: "a"},
+					{Kind: types.DiffLineAdded, NewLineNum: 2, Content: "b"},
+				},
+			},
+			{
+				OldStart: 10, OldCount: 0, NewStart: 10, NewCount: 2, Header: "@@ hunk2 @@",
+				Lines: []types.DiffLine{
+					{Kind: types.DiffLineAdded, NewLineNum: 10, Content: "c"},
+					{Kind: types.DiffLineAdded, NewLineNum: 11, Content: "d"},
+				},
+			},
+		},
+	}
+	m.buildLines()
+	m.cursor = m.nearestSelectable(0, 1) // first body line of hunk 1
+
+	// The cursor must land on selectable body lines, never on a hunk header.
+	firstHunkCursor := m.cursor
+	if m.lines[m.cursor].isHunk {
+		t.Fatal("cursor should start on a body line, not a hunk header")
+	}
+
+	// ] from inside hunk 1 jumps to the first body line of hunk 2.
+	if !m.JumpToHunk(1) {
+		t.Fatal("] should jump forward to the next hunk")
+	}
+	if m.lines[m.cursor].isHunk || m.lines[m.cursor].newLineNum != 10 {
+		t.Fatalf("] should land on hunk 2's first changed line (got cursor=%d, line=%+v)", m.cursor, m.lines[m.cursor])
+	}
+
+	// ] past the last hunk is a no-op (caller falls back to next-file nav).
+	if m.JumpToHunk(1) {
+		t.Error("] past the last hunk should be a no-op")
+	}
+
+	// [ returns to hunk 1's first body line.
+	if !m.JumpToHunk(-1) {
+		t.Fatal("[ should jump back to the previous hunk")
+	}
+	if m.cursor != firstHunkCursor {
+		t.Errorf("[ should return to hunk 1's first line (got cursor=%d, want %d)", m.cursor, firstHunkCursor)
+	}
+
+	// [ at the first hunk is a no-op.
+	if m.JumpToHunk(-1) {
+		t.Error("[ at the first hunk should be a no-op")
+	}
+}
+
 // TestAnnotationRenderingSplit covers the gap that split (and full-file) modes
 // previously rendered no annotations at all: the box, the annotated flags, and
 // the cyan range bar must all appear in split mode too.
