@@ -398,6 +398,17 @@ func (m sidebarModel) View() string {
 	return strings.TrimRight(b.String(), "\n")
 }
 
+// selectionStyle returns the full-row highlight for the selected sidebar item: a
+// bright reverse when the sidebar is focused, and a dimmer background when it
+// isn't — so the whole row is highlighted either way (no thin bar indicator),
+// while focus stays distinguishable.
+func (m sidebarModel) selectionStyle() lipgloss.Style {
+	if m.focused {
+		return lipgloss.NewStyle().Reverse(true)
+	}
+	return lipgloss.NewStyle().Background(lipgloss.Color("8"))
+}
+
 func (m sidebarModel) renderFileItem(f types.ChangedFile, selected bool) string {
 	// Status indicator (lazygit-style colors)
 	var statusChar, statusColor string
@@ -446,7 +457,7 @@ func (m sidebarModel) renderFileItem(f types.ChangedFile, selected bool) string 
 	glyph := iconLookup(f.Path).glyph
 	const iconSlack = 2
 
-	if selected && m.focused {
+	if selected {
 		right := " "
 		if m.reviewTracking {
 			plainReview := "○"
@@ -462,14 +473,10 @@ func (m sidebarModel) renderFileItem(f types.ChangedFile, selected bool) string 
 		}
 		name := fmt.Sprintf("%-*s", nameW, truncatePath(f.Path, nameW))
 		padded := prefix + name + right
-		return lipgloss.NewStyle().Reverse(true).Render(padded)
+		return m.selectionStyle().Render(padded)
 	}
 
 	leftPad := " "
-	if selected {
-		leftPad = lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Render("▎")
-	}
-
 	right := " "
 	if m.reviewTracking {
 		right = " " + reviewChar + " "
@@ -496,7 +503,7 @@ func (m sidebarModel) renderDirItem(item visibleItem, selected bool) string {
 	const folderColor = "#e8a838"
 	const iconSlack = 2
 
-	if selected && m.focused {
+	if selected {
 		prefix := fmt.Sprintf(" %s%s %s ", indent, arrow, folderGlyph)
 		nameW := m.width - lipgloss.Width(prefix) - iconSlack
 		if nameW < 1 {
@@ -504,14 +511,10 @@ func (m sidebarModel) renderDirItem(item visibleItem, selected bool) string {
 		}
 		name := fmt.Sprintf("%-*s", nameW, truncatePath(item.node.Name, nameW))
 		padded := prefix + name
-		return lipgloss.NewStyle().Reverse(true).Render(padded)
+		return m.selectionStyle().Render(padded)
 	}
 
 	leftPad := " "
-	if selected {
-		leftPad = lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Render("▎")
-	}
-
 	styledArrow := lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(arrow)
 	styledFolder := lipgloss.NewStyle().Foreground(lipgloss.Color(folderColor)).Render(folderGlyph)
 	prefix := fmt.Sprintf("%s%s%s %s ", leftPad, indent, styledArrow, styledFolder)
@@ -568,7 +571,7 @@ func (m sidebarModel) renderTreeFileItem(item visibleItem, selected bool) string
 	glyph := iconLookup(f.Path).glyph
 	const iconSlack = 2
 
-	if selected && m.focused {
+	if selected {
 		right := " "
 		if m.reviewTracking {
 			plainReview := "○"
@@ -584,14 +587,10 @@ func (m sidebarModel) renderTreeFileItem(item visibleItem, selected bool) string
 		}
 		name := fmt.Sprintf("%-*s", nameW, truncatePath(item.node.Name, nameW))
 		padded := prefix + name + right
-		return lipgloss.NewStyle().Reverse(true).Render(padded)
+		return m.selectionStyle().Render(padded)
 	}
 
 	leftPad := " "
-	if selected {
-		leftPad = lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Render("▎")
-	}
-
 	styledStatus := lipgloss.NewStyle().Foreground(lipgloss.Color(statusColor)).Bold(true).Render(statusChar)
 	right := " "
 	if m.reviewTracking {
@@ -628,7 +627,7 @@ func (m sidebarModel) renderContentItem(item types.ContentItem, selected bool) s
 	glyph := iconLookup(iconPath).glyph
 	const iconSlack = 2
 
-	if selected && m.focused {
+	if selected {
 		right := " "
 		if m.reviewTracking {
 			plainReview := "○"
@@ -644,13 +643,10 @@ func (m sidebarModel) renderContentItem(item types.ContentItem, selected bool) s
 		}
 		name := truncatePath(item.Title, nameW)
 		line := fmt.Sprintf("%s%-*s%s", prefix, nameW, name, right)
-		return lipgloss.NewStyle().Reverse(true).Render(line)
+		return m.selectionStyle().Render(line)
 	}
 
 	leftPad := " "
-	if selected {
-		leftPad = lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Render("▎")
-	}
 	right := " "
 	if m.reviewTracking {
 		right = " " + reviewChar + " "
@@ -677,7 +673,7 @@ func (m sidebarModel) renderAdditionalFileItem(af types.AdditionalFile, selected
 	glyph := iconLookup(af.Path).glyph
 	const iconSlack = 2
 
-	if selected && m.focused {
+	if selected {
 		right := " "
 		if m.reviewTracking {
 			plainReview := "○"
@@ -693,14 +689,10 @@ func (m sidebarModel) renderAdditionalFileItem(af types.AdditionalFile, selected
 		}
 		name := fmt.Sprintf("%-*s", nameW, truncatePath(af.Name, nameW))
 		padded := prefix + name + right
-		return lipgloss.NewStyle().Reverse(true).Render(padded)
+		return m.selectionStyle().Render(padded)
 	}
 
 	leftPad := " "
-	if selected {
-		leftPad = lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Render("▎")
-	}
-
 	right := " "
 	if m.reviewTracking {
 		right = " " + reviewChar + " "
