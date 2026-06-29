@@ -1066,6 +1066,58 @@ func TestSetBaseRef(t *testing.T) {
 	}
 }
 
+// TestResumeRestoresBaseRefState reproduces the resume bug: a session with a
+// deliberately-set base ref (auto-advance OFF) must come back with auto-advance
+// still OFF. Otherwise the next refresh advances BaseRef to HEAD and empties the
+// review's file list when the work has since been committed.
+func TestResumeRestoresBaseRefState(t *testing.T) {
+	database, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+
+	stub := &gitStub{repoRoot: "/tmp/repo", currentRef: "headhead_headhead_headhead_headhead_head"}
+	now := time.Now()
+	session := &types.ReviewSession{
+		ID: "sess-1", Agent: "claude", RepoRoot: "/tmp/repo",
+		BaseRef: "oldbase_oldbase_oldbase_oldbase_oldbase01",
+		// Persisted state: a fixed base the reviewer chose, auto-advance off.
+		ReviewName: "My review", AutoAdvanceRef: false, SelectedRef: "feature-x",
+		FileStatuses: make(map[string]bool), CreatedAt: now, UpdatedAt: now,
+	}
+	if err := database.CreateSession(session); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	e := &Engine{
+		feedback:       NewFeedbackQueue(),
+		database:       database,
+		git:            stub,
+		sessions:       NewSessionManager(database, stub),
+		autoAdvanceRef: true, // engine default — must be overridden by the resume
+		subscribers:    make(map[EventKind]map[int]EventCallback),
+	}
+
+	resumed, err := e.ResumeSession("sess-1")
+	if err != nil {
+		t.Fatalf("resume: %v", err)
+	}
+
+	if e.IsAutoAdvanceRef() {
+		t.Error("resume must restore auto-advance OFF, else the base ref snaps to HEAD and empties the review")
+	}
+	if e.SelectedBaseRef() != "feature-x" {
+		t.Errorf("resume should restore selected ref, got %q", e.SelectedBaseRef())
+	}
+	if resumed.ReviewName != "My review" {
+		t.Errorf("resume should restore review name, got %q", resumed.ReviewName)
+	}
+	if e.current.BaseRef != "oldbase_oldbase_oldbase_oldbase_oldbase01" {
+		t.Errorf("base ref should be preserved on resume, got %q", e.current.BaseRef)
+	}
+}
+
 func TestSetBaseRefExact(t *testing.T) {
 	database, err := db.Open(":memory:")
 	if err != nil {

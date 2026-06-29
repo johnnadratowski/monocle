@@ -158,6 +158,11 @@ func (e *Engine) StartSession(opts SessionOptions) (*types.ReviewSession, error)
 
 	e.mu.Lock()
 	e.current = session
+	// Persist the engine's current auto-advance/selected-ref state onto the new
+	// session row so it survives a later resume.
+	e.current.AutoAdvanceRef = e.autoAdvanceRef
+	e.current.SelectedRef = e.selectedRef
+	_ = e.database.UpdateSession(e.current)
 	e.hasUnreviewedActivity = false
 	e.autoUnmarked = nil
 	e.mu.Unlock()
@@ -177,6 +182,12 @@ func (e *Engine) ResumeSession(sessionID string) (*types.ReviewSession, error) {
 
 	e.mu.Lock()
 	e.current = session
+	// Restore the persisted base-ref state. Without this, auto-advance defaults
+	// back to true and the next refresh advances BaseRef to HEAD — emptying the
+	// diff (and the file list) when the reviewed work has since been committed.
+	e.autoAdvanceRef = session.AutoAdvanceRef
+	e.selectedRef = session.SelectedRef
+	e.lastKnownHead = "" // re-detect HEAD; only advances when auto-advance is on
 	e.hasUnreviewedActivity = false
 	e.autoUnmarked = nil
 	// reviewBase stays nil — Working Tree is the default view.
@@ -516,6 +527,7 @@ func (e *Engine) handleSetReviewName(msg *protocol.SetReviewNameMsg) *protocol.S
 		}
 	}
 	e.current.ReviewName = name
+	_ = e.database.UpdateSession(e.current) // persist so the name survives a resume
 	e.mu.Unlock()
 
 	e.emit(EventFileChanged, EventPayload{Kind: EventFileChanged})
@@ -1549,6 +1561,8 @@ func (e *Engine) applyBaseRef(diffBase, selected string, agentSet bool) error {
 	e.autoAdvanceRef = false
 	e.agentBaseRef = agentSet
 	e.selectedRef = selected
+	e.current.AutoAdvanceRef = false
+	e.current.SelectedRef = selected
 	_ = e.database.UpdateSession(e.current)
 
 	// Clear review base view but keep snapshots in DB — only approve wipes history
@@ -1568,6 +1582,12 @@ func (e *Engine) SetAutoAdvanceRef(enabled bool) {
 		e.agentBaseRef = false
 		// Clear review base view but keep snapshots in DB — only approve wipes history
 		e.reviewBase = nil
+	}
+	// Persist so the choice survives a resume.
+	if e.current != nil {
+		e.current.AutoAdvanceRef = e.autoAdvanceRef
+		e.current.SelectedRef = e.selectedRef
+		_ = e.database.UpdateSession(e.current)
 	}
 }
 

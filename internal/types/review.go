@@ -42,6 +42,8 @@ type ReviewSession struct {
 	RepoRoot        string
 	BaseRef         string
 	ReviewName      string // optional agent-supplied name for the review (shown in the top bar)
+	AutoAdvanceRef  bool   // when true, BaseRef advances to HEAD on refresh; persisted so resume keeps a deliberately-set base
+	SelectedRef     string // the commit the reviewer/agent selected as the base (display); empty in auto-advance mode
 	ChangedFiles    []ChangedFile
 	ContentItems    []ContentItem
 	AdditionalFiles []AdditionalFile

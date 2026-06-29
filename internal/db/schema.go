@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-const schemaVersion = 11
+const schemaVersion = 12
 
 const dropSQL = `
 DROP TABLE IF EXISTS review_snapshot_files;
@@ -32,6 +32,9 @@ CREATE TABLE IF NOT EXISTS sessions (
 	agent TEXT NOT NULL,
 	repo_root TEXT NOT NULL,
 	base_ref TEXT NOT NULL,
+	review_name TEXT NOT NULL DEFAULT '',
+	auto_advance_ref INTEGER NOT NULL DEFAULT 1,
+	selected_ref TEXT NOT NULL DEFAULT '',
 	ignore_patterns TEXT NOT NULL DEFAULT '[]',
 	review_round INTEGER NOT NULL DEFAULT 1,
 	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

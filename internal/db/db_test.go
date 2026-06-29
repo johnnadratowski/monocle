@@ -42,13 +42,16 @@ func TestSessionCRUD(t *testing.T) {
 	now := time.Now()
 
 	s := &types.ReviewSession{
-		ID:          "sess-1",
-		Agent:       "claude",
-		RepoRoot:    "/tmp/repo",
-		BaseRef:     "abc123",
-		ReviewRound: 1,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ID:             "sess-1",
+		Agent:          "claude",
+		RepoRoot:       "/tmp/repo",
+		BaseRef:        "abc123",
+		ReviewName:     "Add OAuth login",
+		AutoAdvanceRef: false, // deliberately-set base; must survive a round-trip
+		SelectedRef:    "feature-tip",
+		ReviewRound:    1,
+		CreatedAt:      now,
+		UpdatedAt:      now,
 	}
 
 	if err := d.CreateSession(s); err != nil {
@@ -62,8 +65,20 @@ func TestSessionCRUD(t *testing.T) {
 	if got.Agent != "claude" {
 		t.Errorf("got agent=%q", got.Agent)
 	}
+	// New persisted fields must round-trip so resume can restore the review.
+	if got.ReviewName != "Add OAuth login" {
+		t.Errorf("review_name not persisted, got %q", got.ReviewName)
+	}
+	if got.AutoAdvanceRef {
+		t.Error("auto_advance_ref=false not persisted (resume would re-enable auto-advance and empty the diff)")
+	}
+	if got.SelectedRef != "feature-tip" {
+		t.Errorf("selected_ref not persisted, got %q", got.SelectedRef)
+	}
 
 	s.BaseRef = "def456"
+	s.ReviewName = "Renamed review"
+	s.AutoAdvanceRef = true
 	if err := d.UpdateSession(s); err != nil {
 		t.Fatalf("update: %v", err)
 	}
@@ -71,6 +86,9 @@ func TestSessionCRUD(t *testing.T) {
 	got, _ = d.GetSession("sess-1")
 	if got.BaseRef != "def456" {
 		t.Errorf("expected updated base_ref, got %q", got.BaseRef)
+	}
+	if got.ReviewName != "Renamed review" || !got.AutoAdvanceRef {
+		t.Errorf("UpdateSession did not persist review_name/auto_advance_ref: %+v", got)
 	}
 
 	summaries, err := d.ListSessions("", 0)

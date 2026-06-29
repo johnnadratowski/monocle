@@ -16,9 +16,9 @@ func newID() string { return uuid.New().String() }
 func (d *DB) CreateSession(s *types.ReviewSession) error {
 	patterns, _ := json.Marshal(s.IgnorePatterns)
 	_, err := d.Exec(
-		`INSERT INTO sessions (id, agent, repo_root, base_ref, ignore_patterns, review_round, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		s.ID, s.Agent, s.RepoRoot, s.BaseRef, string(patterns), s.ReviewRound, s.CreatedAt, s.UpdatedAt,
+		`INSERT INTO sessions (id, agent, repo_root, base_ref, review_name, auto_advance_ref, selected_ref, ignore_patterns, review_round, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		s.ID, s.Agent, s.RepoRoot, s.BaseRef, s.ReviewName, boolToInt(s.AutoAdvanceRef), s.SelectedRef, string(patterns), s.ReviewRound, s.CreatedAt, s.UpdatedAt,
 	)
 	return err
 }
@@ -27,13 +27,15 @@ func (d *DB) CreateSession(s *types.ReviewSession) error {
 func (d *DB) GetSession(id string) (*types.ReviewSession, error) {
 	s := &types.ReviewSession{}
 	var patterns string
+	var autoAdvance int
 	err := d.QueryRow(
-		`SELECT id, agent, repo_root, base_ref, ignore_patterns, review_round, created_at, updated_at
+		`SELECT id, agent, repo_root, base_ref, review_name, auto_advance_ref, selected_ref, ignore_patterns, review_round, created_at, updated_at
 		 FROM sessions WHERE id = ?`, id,
-	).Scan(&s.ID, &s.Agent, &s.RepoRoot, &s.BaseRef, &patterns, &s.ReviewRound, &s.CreatedAt, &s.UpdatedAt)
+	).Scan(&s.ID, &s.Agent, &s.RepoRoot, &s.BaseRef, &s.ReviewName, &autoAdvance, &s.SelectedRef, &patterns, &s.ReviewRound, &s.CreatedAt, &s.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
+	s.AutoAdvanceRef = autoAdvance != 0
 	json.Unmarshal([]byte(patterns), &s.IgnorePatterns)
 	s.FileStatuses = make(map[string]bool)
 	return s, nil
@@ -43,8 +45,8 @@ func (d *DB) GetSession(id string) (*types.ReviewSession, error) {
 func (d *DB) UpdateSession(s *types.ReviewSession) error {
 	patterns, _ := json.Marshal(s.IgnorePatterns)
 	_, err := d.Exec(
-		`UPDATE sessions SET base_ref = ?, review_round = ?, ignore_patterns = ?, updated_at = ? WHERE id = ?`,
-		s.BaseRef, s.ReviewRound, string(patterns), time.Now(), s.ID,
+		`UPDATE sessions SET base_ref = ?, review_name = ?, auto_advance_ref = ?, selected_ref = ?, review_round = ?, ignore_patterns = ?, updated_at = ? WHERE id = ?`,
+		s.BaseRef, s.ReviewName, boolToInt(s.AutoAdvanceRef), s.SelectedRef, s.ReviewRound, string(patterns), time.Now(), s.ID,
 	)
 	return err
 }
