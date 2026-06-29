@@ -2313,21 +2313,20 @@ func (m diffViewModel) isChangeBlockStart(i int) bool {
 	return m.lineHasChange(i) && !m.lineHasChange(i-1)
 }
 
-// landOnChange moves the cursor onto (or as near as possible to) line i and
-// scrolls it into view. Removed lines aren't selectable, so it picks the nearest
-// selectable line — preferring forward into the change block. Returns false when
-// nothing selectable exists.
-func (m *diffViewModel) landOnChange(i int) bool {
-	target := m.nearestSelectable(i, 1)
-	if !m.isSelectable(target) {
-		target = m.nearestSelectable(i, -1)
+// selectableForChange returns the line the cursor should land on for a change
+// block that starts at i. Block-start lines are often removed lines (not
+// selectable), so it picks the nearest selectable line, preferring forward into
+// the block. Returns -1 when no selectable line exists.
+func (m diffViewModel) selectableForChange(i int) int {
+	t := m.nearestSelectable(i, 1)
+	if m.isSelectable(t) {
+		return t
 	}
-	if !m.isSelectable(target) {
-		return false
+	t = m.nearestSelectable(i, -1)
+	if m.isSelectable(t) {
+		return t
 	}
-	m.cursor = target
-	m.ensureVisible()
-	return true
+	return -1
 }
 
 // JumpToChange moves the cursor to the start of the next (dir=+1) or previous
@@ -2344,30 +2343,45 @@ func (m *diffViewModel) JumpToChange(dir int) bool {
 
 	if dir > 0 {
 		for i := m.cursor + 1; i < n; i++ {
-			if m.isChangeBlockStart(i) {
-				return m.landOnChange(i)
+			if m.isChangeBlockStart(i) && m.tryLandOnChange(i) {
+				return true
 			}
 		}
 		return false
 	}
 
-	// Backward: if the cursor sits inside a change block past its start, jump to
-	// that block's start first; otherwise find the previous block's start.
+	// Backward: skip past the block the cursor currently sits in (its start is
+	// before the cursor and would otherwise bounce us back), then jump to the
+	// previous block's start.
+	bound := m.cursor
 	if m.lineHasChange(m.cursor) {
 		start := m.cursor
 		for start-1 >= 0 && m.lineHasChange(start-1) {
 			start--
 		}
-		if start < m.cursor {
-			return m.landOnChange(start)
-		}
+		bound = start
 	}
-	for i := m.cursor - 1; i >= 0; i-- {
-		if m.isChangeBlockStart(i) {
-			return m.landOnChange(i)
+	for i := bound - 1; i >= 0; i-- {
+		if m.isChangeBlockStart(i) && m.tryLandOnChange(i) {
+			return true
 		}
 	}
 	return false
+}
+
+// tryLandOnChange moves the cursor to the selectable line for the change block at
+// i and scrolls it into view. It returns false (without moving) when there is no
+// selectable line or when the landing spot is the cursor's current line — so a
+// block that can't actually be landed on (e.g. a pure deletion) is skipped rather
+// than trapping the cursor.
+func (m *diffViewModel) tryLandOnChange(i int) bool {
+	target := m.selectableForChange(i)
+	if target < 0 || target == m.cursor {
+		return false
+	}
+	m.cursor = target
+	m.ensureVisible()
+	return true
 }
 
 // JumpToMark moves the cursor to the next (dir=+1) or previous (dir=-1) review

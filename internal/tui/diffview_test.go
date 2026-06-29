@@ -1195,6 +1195,48 @@ func TestJumpToChange(t *testing.T) {
 	}
 }
 
+// TestJumpToChangeModificationBlocks guards the [ bounce bug: a modification
+// block is a removed line followed by an added line, so the cursor lands on the
+// added line (the removed start isn't selectable). Pressing [ must reach the
+// PREVIOUS block, not bounce back onto the same added line.
+func TestJumpToChangeModificationBlocks(t *testing.T) {
+	theme := DefaultTheme()
+	m := diffViewModel{
+		theme: &theme, hl: newHighlighter(), mdStyler: newMarkdownStyler(theme),
+		path: "main.go", width: 80, height: 40, style: diffStyleUnified,
+		hunks: []types.DiffHunk{{
+			OldStart: 1, OldCount: 5, NewStart: 1, NewCount: 5, Header: "@@ mod @@",
+			Lines: []types.DiffLine{
+				{Kind: types.DiffLineContext, OldLineNum: 1, NewLineNum: 1, Content: "ctx1"},
+				{Kind: types.DiffLineRemoved, OldLineNum: 2, Content: "old A"},
+				{Kind: types.DiffLineAdded, NewLineNum: 2, Content: "new A"},
+				{Kind: types.DiffLineContext, OldLineNum: 3, NewLineNum: 3, Content: "ctx2"},
+				{Kind: types.DiffLineRemoved, OldLineNum: 4, Content: "old B"},
+				{Kind: types.DiffLineAdded, NewLineNum: 4, Content: "new B"},
+				{Kind: types.DiffLineContext, OldLineNum: 5, NewLineNum: 5, Content: "ctx3"},
+			},
+		}},
+	}
+	m.buildLines()
+	m.cursor = m.nearestSelectable(0, 1)
+
+	if !m.JumpToChange(1) || m.lines[m.cursor].newLineNum != 2 {
+		t.Fatalf("] should land on block A's added line (new 2), got cursor=%d %+v", m.cursor, m.lines[m.cursor])
+	}
+	blockA := m.cursor
+	if !m.JumpToChange(1) || m.lines[m.cursor].newLineNum != 4 {
+		t.Fatalf("] should land on block B's added line (new 4), got cursor=%d %+v", m.cursor, m.lines[m.cursor])
+	}
+	// The regression: [ from block B's added line must move back to block A,
+	// not stay put (bounce) on block B.
+	if !m.JumpToChange(-1) {
+		t.Fatal("[ should jump back to the previous modification block, not bounce")
+	}
+	if m.cursor != blockA {
+		t.Errorf("[ should return to block A (cursor=%d), got cursor=%d %+v", blockA, m.cursor, m.lines[m.cursor])
+	}
+}
+
 // TestJumpToChangeFullFile is the case the hunk-header approach got wrong: in
 // full-file mode the whole file is a single git hunk, so jumping must key off
 // runs of changed lines, not hunk headers. Here one hunk holds two separate
