@@ -1,11 +1,47 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/josephschmitt/monocle/internal/types"
 )
+
+// TestGroupedScrollKeepsCursorVisible guards the grouped-view scroll bug: the
+// many workstream/group header lines must be counted so the cursor never runs
+// off-screen. The old item-index-only ensureVisible failed this.
+func TestGroupedScrollKeepsCursorVisible(t *testing.T) {
+	files := make([]types.ChangedFile, 18)
+	for i := range files {
+		files[i] = types.ChangedFile{Path: fmt.Sprintf("f%d.go", i), Status: types.FileModified}
+	}
+	m := sidebarModel{
+		files: files, groupMode: true, width: 40, height: 10,
+		groupHeaderAt: map[int][]groupHeaderLine{
+			0:  {{text: "Workstream A", level: 0}, {text: "UI", level: 1}},
+			6:  {{text: "Workstream B", level: 0}, {text: "API", level: 1}},
+			12: {{text: "Workstream C", level: 0}, {text: "DB", level: 1}},
+		},
+	}
+	// From the bottom up, and from the top down, the cursor must stay on-screen.
+	for _, start := range []int{len(files) - 1, 0} {
+		m.cursor = start
+		m.offset = 0
+		m.ensureVisible()
+		dir := -1
+		if start == 0 {
+			dir = 1
+		}
+		for m.cursor >= 0 && m.cursor < len(files) {
+			m.ensureVisible()
+			if r := m.cursorScreenRow(m.offset); r < 0 || r >= m.height {
+				t.Fatalf("cursor off-screen at cursor=%d: row=%d offset=%d height=%d", m.cursor, r, m.offset, m.height)
+			}
+			m.cursor += dir
+		}
+	}
+}
 
 func TestAutoToggleSidebar_KeepsWhenFiltered(t *testing.T) {
 	// A review filter narrowed the lists to empty — the sidebar must stay put.

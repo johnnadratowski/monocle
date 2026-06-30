@@ -165,6 +165,54 @@ func (m sidebarModel) Update(msg tea.Msg) (sidebarModel, tea.Cmd) {
 	return m, nil
 }
 
+// artifactsHeaderText / filesHeaderText / additionalHeaderText build the text for
+// each section header (the count/filter/mode parts), used for both the sticky
+// top header and the in-loop section transitions.
+func (m sidebarModel) artifactsHeaderText() string {
+	if m.reviewTracking {
+		reviewed := 0
+		for _, it := range m.contentItems {
+			if it.Reviewed {
+				reviewed++
+			}
+		}
+		return fmt.Sprintf(" Artifacts  %d / %d", reviewed, len(m.contentItems))
+	}
+	return fmt.Sprintf(" Artifacts  %d", len(m.contentItems))
+}
+
+func (m sidebarModel) filesHeaderText() string {
+	modeIndicator := ""
+	if m.treeMode {
+		modeIndicator = " "
+	} else if m.groupMode {
+		modeIndicator = " 󰓫"
+	}
+	if m.reviewTracking {
+		reviewed := 0
+		for _, f := range m.files {
+			if f.Reviewed {
+				reviewed++
+			}
+		}
+		return fmt.Sprintf(" Files%s%s  %d / %d", modeIndicator, m.reviewFilterLabel(), reviewed, len(m.files))
+	}
+	return fmt.Sprintf(" Files%s  %d", modeIndicator, len(m.files))
+}
+
+func (m sidebarModel) additionalHeaderText() string {
+	if m.reviewTracking {
+		reviewed := 0
+		for _, af := range m.additionalFiles {
+			if af.Reviewed {
+				reviewed++
+			}
+		}
+		return fmt.Sprintf(" Additional Files%s  %d / %d", m.reviewFilterLabel(), reviewed, len(m.additionalFiles))
+	}
+	return fmt.Sprintf(" Additional Files  %d", len(m.additionalFiles))
+}
+
 func (m sidebarModel) View() string {
 	if m.width == 0 {
 		return ""
@@ -182,10 +230,9 @@ func (m sidebarModel) View() string {
 	// viewportHeight() subtracts headers from m.height, but when content items
 	// exist the loop already counts headers in linesUsed — use m.height to
 	// avoid double-subtracting.
+	// The sticky section header below is counted in linesUsed, so the loop has
+	// the full pane height available.
 	availableLines := m.height
-	if contentItemCt == 0 {
-		availableLines = m.viewportHeight()
-	}
 
 	linesUsed := 0
 
@@ -240,32 +287,32 @@ func (m sidebarModel) View() string {
 		return true
 	}
 
-	// Artifacts section header (if any content items exist)
-	if contentItemCt > 0 {
+	fileItemCt := m.fileItemCount()
+	additionalStart := contentItemCt + fileItemCt
+	additionalCt := len(m.additionalFiles)
+
+	// Sticky section header: render the header for the section the viewport is
+	// scrolled into, so scrolling past one section shows the next section's
+	// header at the top instead of a stale "Artifacts" header.
+	if totalItems > 0 {
 		var header string
-		if m.reviewTracking {
-			contentReviewed := 0
-			for _, item := range m.contentItems {
-				if item.Reviewed {
-					contentReviewed++
-				}
-			}
-			header = fmt.Sprintf(" Artifacts  %d / %d", contentReviewed, contentItemCt)
-		} else {
-			header = fmt.Sprintf(" Artifacts  %d", contentItemCt)
+		switch {
+		case contentItemCt > 0 && m.offset < contentItemCt:
+			header = m.artifactsHeaderText()
+		case m.offset < additionalStart:
+			header = m.filesHeaderText()
+		default:
+			header = m.additionalHeaderText()
 		}
 		b.WriteString(sectionStyle.Render(header))
 		b.WriteString("\n")
 		linesUsed++
 	}
 
-	fileItemCt := m.fileItemCount()
-	additionalStart := contentItemCt + fileItemCt
-	additionalCt := len(m.additionalFiles)
-
 	for idx := m.offset; idx < totalItems && linesUsed < availableLines; idx++ {
-		// Files section header (when crossing from content items to files)
-		if idx == contentItemCt && contentItemCt > 0 {
+		// Files section header (when scrolling down across the content→files
+		// boundary; when offset is already in files, the sticky header covers it)
+		if idx == contentItemCt && contentItemCt > 0 && m.offset < contentItemCt {
 			if linesUsed > 0 && !writeSeparator() {
 				break
 			}
@@ -298,8 +345,8 @@ func (m sidebarModel) View() string {
 			}
 		}
 
-		// Additional Files section header
-		if idx == additionalStart && additionalCt > 0 {
+		// Additional Files section header (only when scrolling down into it)
+		if idx == additionalStart && additionalCt > 0 && m.offset < additionalStart {
 			if linesUsed > 0 && !writeSeparator() {
 				break
 			}
@@ -366,33 +413,6 @@ func (m sidebarModel) View() string {
 		b.WriteString(line)
 		b.WriteString("\n")
 		linesUsed++
-	}
-
-	// If no content items, show the Files header at the top
-	if contentItemCt == 0 {
-		var header strings.Builder
-		fileCount := len(m.files)
-		modeIndicator := ""
-		if m.treeMode {
-			modeIndicator = " "
-		}
-		var headerStr string
-		if m.reviewTracking {
-			reviewedCount := 0
-			for _, f := range m.files {
-				if f.Reviewed {
-					reviewedCount++
-				}
-			}
-			filterIndicator := m.reviewFilterLabel()
-			headerStr = fmt.Sprintf(" Files%s%s  %d / %d", modeIndicator, filterIndicator, reviewedCount, fileCount)
-		} else {
-			headerStr = fmt.Sprintf(" Files%s  %d", modeIndicator, fileCount)
-		}
-		header.WriteString(sectionStyle.Render(headerStr))
-		header.WriteString("\n")
-		header.WriteString(b.String())
-		return strings.TrimRight(header.String(), "\n")
 	}
 
 	return strings.TrimRight(b.String(), "\n")
@@ -1142,13 +1162,64 @@ func (m *sidebarModel) collapseAll() {
 
 // ensureVisible adjusts the scroll offset so the cursor stays within the
 // visible viewport, mirroring diffViewModel.ensureVisible.
+// cursorScreenRow returns the 0-based screen row at which the cursor item is
+// drawn when rendering starts at `offset`, mirroring View()'s line accounting
+// (sticky section header, section transitions, group/workstream headers and the
+// blank lines between workstreams). This lets ensureVisible account for the
+// variable number of header lines — without it, grouped view scrolls the cursor
+// off-screen because each item can be preceded by several header rows.
+func (m sidebarModel) cursorScreenRow(offset int) int {
+	contentItemCt := len(m.contentItems)
+	fileItemCt := m.fileItemCount()
+	additionalStart := contentItemCt + fileItemCt
+	additionalCt := len(m.additionalFiles)
+
+	linesUsed := 1 // sticky section header (always one line at the top)
+	renderedWorkstream := false
+	countHeaders := func(hdrs []groupHeaderLine) {
+		for _, h := range hdrs {
+			if h.level == 0 && renderedWorkstream {
+				linesUsed++ // blank line between workstreams
+			}
+			if h.level == 0 {
+				renderedWorkstream = true
+			}
+			linesUsed++ // header line
+		}
+	}
+	for idx := offset; idx <= m.cursor && idx < m.totalItems(); idx++ {
+		if idx == contentItemCt && contentItemCt > 0 && offset < contentItemCt {
+			linesUsed += 2 // separator + Files header
+		}
+		if idx == additionalStart && additionalCt > 0 && offset < additionalStart {
+			linesUsed += 2 // separator + Additional Files header
+		}
+		if m.groupMode && idx >= contentItemCt && idx < additionalStart {
+			countHeaders(m.groupHeaderAt[idx-contentItemCt])
+		}
+		if m.groupMode && idx >= additionalStart {
+			countHeaders(m.additionalHeaderAt[idx-additionalStart])
+		}
+		if idx == m.cursor {
+			return linesUsed
+		}
+		linesUsed++ // the item's own line
+	}
+	return linesUsed
+}
+
 func (m *sidebarModel) ensureVisible() {
 	if m.cursor < m.offset {
 		m.offset = m.cursor
 	}
-	vh := m.viewportHeight()
-	if vh > 0 && m.cursor >= m.offset+vh {
-		m.offset = m.cursor - vh + 1
+	avail := m.height
+	if avail < 1 {
+		return
+	}
+	// Scroll down one item at a time until the cursor's actual screen row (which
+	// includes the section/group header lines above it) fits in the viewport.
+	for m.offset < m.cursor && m.cursorScreenRow(m.offset) >= avail {
+		m.offset++
 	}
 }
 
@@ -1185,50 +1256,58 @@ func (m sidebarModel) itemAtLine(lineY int) int {
 	fileItemCt := m.fileItemCount()
 	additionalStart := contentItemCt + fileItemCt
 	additionalCt := len(m.additionalFiles)
+	if totalItems == 0 {
+		return -1
+	}
 
 	line := 0
-
-	// If no content items, "Files" header is prepended at line 0
-	if contentItemCt == 0 {
-		if lineY == line {
-			return -1 // Files header
-		}
-		line++
+	// Sticky section header at the top (mirrors View).
+	if lineY == line {
+		return -1
 	}
+	line++
 
-	// "Artifacts" header (when content items exist)
-	if contentItemCt > 0 {
-		if lineY == line {
-			return -1
-		}
-		line++
-	}
-
+	renderedWorkstream := false
 	for idx := m.offset; idx < totalItems; idx++ {
-		// "Files" section header between content items and files
-		if idx == contentItemCt && contentItemCt > 0 {
-			if line > 0 {
-				if lineY == line {
-					return -1 // blank separator
-				}
-				line++
+		if idx == contentItemCt && contentItemCt > 0 && m.offset < contentItemCt {
+			if lineY == line {
+				return -1 // separator
 			}
+			line++
 			if lineY == line {
 				return -1 // "Files" header
 			}
 			line++
 		}
+		if idx == additionalStart && additionalCt > 0 && m.offset < additionalStart {
+			if lineY == line {
+				return -1 // separator
+			}
+			line++
+			if lineY == line {
+				return -1 // "Additional Files" header
+			}
+			line++
+		}
 
-		// "Additional Files" section header
-		if idx == additionalStart && additionalCt > 0 {
-			if line > 0 {
+		var hdrs []groupHeaderLine
+		if m.groupMode && idx >= contentItemCt && idx < additionalStart {
+			hdrs = m.groupHeaderAt[idx-contentItemCt]
+		} else if m.groupMode && idx >= additionalStart {
+			hdrs = m.additionalHeaderAt[idx-additionalStart]
+		}
+		for _, h := range hdrs {
+			if h.level == 0 && renderedWorkstream {
 				if lineY == line {
-					return -1 // blank separator
+					return -1 // blank line between workstreams
 				}
 				line++
 			}
+			if h.level == 0 {
+				renderedWorkstream = true
+			}
 			if lineY == line {
-				return -1 // "Additional Files" header
+				return -1 // group/workstream header
 			}
 			line++
 		}

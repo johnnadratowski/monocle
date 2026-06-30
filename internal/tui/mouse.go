@@ -207,7 +207,10 @@ func (m appModel) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 	layout := computePaneLayout(&m)
 
 	if !m.sidebarHidden && layout.sidebar.contains(msg.X, msg.Y) {
-		maxOffset := m.sidebar.totalItems() - m.sidebar.viewportHeight()
+		// Allow scrolling until the last item can reach the top. Header/group
+		// lines make an exact "last visible offset" hard to compute, so cap at
+		// the last item (mild over-scroll is fine; under-scroll hid the bottom).
+		maxOffset := m.sidebar.totalItems() - 1
 		if maxOffset < 0 {
 			maxOffset = 0
 		}
