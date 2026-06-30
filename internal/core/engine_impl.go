@@ -198,6 +198,19 @@ func (e *Engine) ResumeSession(sessionID string) (*types.ReviewSession, error) {
 	e.lastKnownHead = "" // re-detect HEAD; only advances when auto-advance is on
 	e.hasUnreviewedActivity = false
 	e.autoUnmarked = nil
+	// Garbage-collect a "zombie" review: a session that still carries a name but
+	// has nothing to review (no changed files, artifacts, added files, or
+	// comments) — e.g. an approved/abandoned review whose name lingered under the
+	// old approve behavior. Treat it as idle so the top bar doesn't show a stale
+	// review name over the splash screen on restart.
+	if e.current.ReviewName != "" &&
+		len(files) == 0 &&
+		len(e.current.ContentItems) == 0 &&
+		len(e.current.AdditionalFiles) == 0 &&
+		len(e.current.Comments) == 0 {
+		e.current.ReviewName = ""
+		_ = e.database.UpdateSession(e.current)
+	}
 	// reviewBase stays nil — Working Tree is the default view.
 	// Snapshots in DB are used for auto-unmark during refresh.
 	e.mu.Unlock()

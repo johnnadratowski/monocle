@@ -1156,6 +1156,40 @@ func TestResumeRestoresBaseRefState(t *testing.T) {
 	}
 }
 
+// TestResumeClearsZombieName verifies that resuming a session that still has a
+// review name but nothing to review (no files/artifacts/added files/comments)
+// drops the stale name, so the top bar doesn't show a review over the splash.
+func TestResumeClearsZombieName(t *testing.T) {
+	database, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+
+	stub := &gitStub{repoRoot: "/tmp/repo", currentRef: "head_head_head_head_head_head_head_head01"} // no files
+	now := time.Now()
+	session := &types.ReviewSession{
+		ID: "sess-1", Agent: "claude", RepoRoot: "/tmp/repo", BaseRef: "base",
+		ReviewName: "Leftover plan review", AutoAdvanceRef: true, ReviewRound: 1,
+		FileStatuses: make(map[string]bool), CreatedAt: now, UpdatedAt: now,
+	}
+	database.CreateSession(session)
+
+	e := &Engine{
+		feedback: NewFeedbackQueue(), database: database, git: stub,
+		sessions: NewSessionManager(database, stub), autoAdvanceRef: true,
+		subscribers: make(map[EventKind]map[int]EventCallback),
+	}
+
+	resumed, err := e.ResumeSession("sess-1")
+	if err != nil {
+		t.Fatalf("resume: %v", err)
+	}
+	if resumed.ReviewName != "" || e.current.ReviewName != "" {
+		t.Errorf("expected stale name cleared on resume, got %q", e.current.ReviewName)
+	}
+}
+
 // TestReviewNameLifecycle covers set_review_name as the review open/start
 // handshake: empty rejected, same is a no-op, a new name replaces an empty or
 // comment-free review, and a new name is refused (unless forced) when the open
