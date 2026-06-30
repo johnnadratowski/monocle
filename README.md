@@ -241,6 +241,7 @@ Monocle exposes review operations via **MCP tools** (default for Claude Code, an
 | `R`                    | Force reload files                                        |
 | `S` / `:submit`        | Submit review                                             |
 | `Ctrl+g`               | Open external editor (comment/submit modal)               |
+| `Ctrl+o`               | Open the file path referenced on the current diff line in `$EDITOR` |
 | `Ctrl+y`               | Copy review to clipboard                                  |
 | `P` / `:pause`         | Pause the agent (wait for your review)                    |
 | `D` / `:clear`         | Clear review (comments, plans, added files, reviewed)     |

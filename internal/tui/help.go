@@ -360,6 +360,7 @@ func (m helpModel) buildContent() string {
 		}},
 		{"General", []struct{ key, desc string }{
 			{Label(km.OpenInEditor), "Open file in editor at cursor"},
+			{Label(km.OpenPathUnderCursor), "Open the file path referenced on the current line"},
 			{Label(km.ToggleDiff), "Cycle diff style (unified/split/file) (any pane)"},
 			{Label(km.ToggleFullDiff), "Toggle full-file diff (whole file vs. changed lines)"},
 			{Label(km.ToggleOverlays), "Hide/show inline comments + annotations"},

@@ -66,14 +66,15 @@ type KeyMap struct {
 	ToggleFocusMode []string
 
 	// General
-	OpenInEditor     []string
-	BaseRef          []string
-	ArtifactVersions []string
-	CycleLayout      []string
-	Refresh          []string
-	Help             []string
-	Quit             []string
-	CommandMode      []string
+	OpenInEditor        []string
+	OpenPathUnderCursor []string // open the file path referenced on the current diff line
+	BaseRef             []string
+	ArtifactVersions    []string
+	CycleLayout         []string
+	Refresh             []string
+	Help                []string
+	Quit                []string
+	CommandMode         []string
 
 	// Wizard (register TUI)
 	WizardAdvance []string
@@ -138,14 +139,15 @@ func DefaultKeyMap() KeyMap {
 		DismissArtifact: []string{"x"},
 		ToggleFocusMode: []string{"F"},
 
-		OpenInEditor:     []string{"ctrl+g"},
-		BaseRef:          []string{"b"},
-		ArtifactVersions: []string{"B"},
-		CycleLayout:      []string{"T"},
-		Refresh:          []string{"R"},
-		Help:             []string{"H"},
-		Quit:             []string{"q"},
-		CommandMode:      []string{":"},
+		OpenInEditor:        []string{"ctrl+g"},
+		OpenPathUnderCursor: []string{"ctrl+o"},
+		BaseRef:             []string{"b"},
+		ArtifactVersions:    []string{"B"},
+		CycleLayout:         []string{"T"},
+		Refresh:             []string{"R"},
+		Help:                []string{"H"},
+		Quit:                []string{"q"},
+		CommandMode:         []string{":"},
 
 		WizardAdvance: []string{"enter"},
 		WizardBack:    []string{"shift+tab", "backspace"},
@@ -165,7 +167,7 @@ var actionNames = []string{
 	"tree_mode", "collapse_all", "expand_all", "prev_section", "next_section", "filter_reviewed",
 	"comment", "file_comment", "suggest", "visual", "reviewed",
 	"submit", "pause", "clear_review", "dismiss_artifact", "dismiss_outdated", "toggle_focus_mode",
-	"open_in_editor", "base_ref", "artifact_versions", "cycle_layout", "refresh", "help", "quit", "command_mode",
+	"open_in_editor", "open_path_under_cursor", "base_ref", "artifact_versions", "cycle_layout", "refresh", "help", "quit", "command_mode",
 	"wizard_advance", "wizard_back", "wizard_toggle",
 }
 
@@ -268,6 +270,8 @@ func (km KeyMap) ApplyOverrides(overrides map[string]string) KeyMap {
 			km.ToggleFocusMode = []string{key}
 		case "open_in_editor":
 			km.OpenInEditor = []string{key}
+		case "open_path_under_cursor":
+			km.OpenPathUnderCursor = []string{key}
 		case "base_ref":
 			km.BaseRef = []string{key}
 		case "artifact_versions":

@@ -2773,6 +2773,14 @@ func lineText(line diffViewLine) string {
 
 // YankText returns the text to copy to the clipboard: the selected lines
 // (joined by newlines) when visual mode is active, otherwise the cursor line.
+// CurrentLineText returns the text content of the line under the cursor.
+func (m diffViewModel) CurrentLineText() string {
+	if m.cursor < 0 || m.cursor >= len(m.lines) {
+		return ""
+	}
+	return lineText(m.lines[m.cursor])
+}
+
 func (m diffViewModel) YankText() string {
 	if m.cursor < 0 || m.cursor >= len(m.lines) {
 		return ""

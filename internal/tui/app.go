@@ -1972,6 +1972,26 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, openFileInEditor(filePath, line, m.editorCommand())
 
+	case Matches(key, km.OpenPathUnderCursor):
+		// Open the file path referenced on the current diff line (gf-style):
+		// resolve a path token from the line and open it in the editor.
+		if m.focus != focusMain || m.diffView.contentMode {
+			break
+		}
+		baseDir := m.repoRoot
+		if m.diffView.path != "" {
+			baseDir = filepath.Dir(filepath.Join(m.repoRoot, m.diffView.path))
+		}
+		path, line, found := findFilePathInLine(m.diffView.CurrentLineText(), m.repoRoot, baseDir)
+		if !found {
+			m.statusBar.searchInfo = "no file path under cursor"
+			return m, nil
+		}
+		if line < 1 {
+			line = 1
+		}
+		return m, openFileInEditor(path, line, m.editorCommand())
+
 	case Matches(key, km.Refresh):
 		return m, m.refreshFiles()
 
