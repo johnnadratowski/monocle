@@ -2380,8 +2380,52 @@ func (m *diffViewModel) tryLandOnChange(i int) bool {
 		return false
 	}
 	m.cursor = target
-	m.ensureVisible()
+	m.centerCursor()
 	return true
+}
+
+// centerCursor scrolls so the cursor sits near the middle of the viewport,
+// clamping at the file ends. Used when jumping between change blocks so the
+// landing chunk is centered rather than pinned to an edge.
+func (m *diffViewModel) centerCursor() {
+	if m.height <= 0 {
+		m.ensureVisible()
+		return
+	}
+	m.offset = m.cursor - m.height/2
+	if m.offset < 0 {
+		m.offset = 0
+	}
+	m.ensureVisible() // clamp + respect screen-line accounting
+}
+
+// LandOnChunkEdge positions the cursor on the first (dir>=0) or last (dir<0)
+// change block in the file and centers it. Used when [ / ] cross into an
+// adjacent file so the cursor lands on a chunk instead of the file's top.
+func (m *diffViewModel) LandOnChunkEdge(dir int) {
+	target := -1
+	if dir >= 0 {
+		for i := 0; i < len(m.lines); i++ {
+			if m.isChangeBlockStart(i) {
+				target = i
+				break
+			}
+		}
+	} else {
+		for i := len(m.lines) - 1; i >= 0; i-- {
+			if m.isChangeBlockStart(i) {
+				target = i
+				break
+			}
+		}
+	}
+	if target < 0 {
+		return
+	}
+	if sel := m.selectableForChange(target); sel >= 0 {
+		m.cursor = sel
+		m.centerCursor()
+	}
 }
 
 // JumpToMark moves the cursor to the next (dir=+1) or previous (dir=-1) review

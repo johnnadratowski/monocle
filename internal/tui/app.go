@@ -241,6 +241,9 @@ type appModel struct {
 	registerPrompt registerPromptModel
 
 	pendingDismissArtifactID string // set while the dismiss-artifact confirm modal is open
+	// pendingChunkLanding is set when [ / ] crosses into an adjacent file from the
+	// diff pane: +1 = land on the new file's first chunk, -1 = its last chunk.
+	pendingChunkLanding int
 
 	pendingDismissAdditionalFilePath string // set while the remove-added-file confirm modal is open
 
@@ -905,6 +908,10 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case loadDiffMsg:
 		var cmd tea.Cmd
 		m.diffView, cmd = m.diffView.Update(msg)
+		if m.pendingChunkLanding != 0 {
+			m.diffView.LandOnChunkEdge(m.pendingChunkLanding)
+			m.pendingChunkLanding = 0
+		}
 		return m, cmd
 
 	// Content item loading (plans, docs)
@@ -1004,6 +1011,10 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case loadFileContentMsg:
 		var cmd tea.Cmd
 		m.diffView, cmd = m.diffView.Update(msg)
+		if m.pendingChunkLanding != 0 {
+			m.diffView.LandOnChunkEdge(m.pendingChunkLanding)
+			m.pendingChunkLanding = 0
+		}
 		return m, cmd
 
 	// Additional file loaded
@@ -2121,21 +2132,27 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case Matches(key, km.PrevFile):
-		// In the diff pane, jump to the previous change block; fall back to
-		// previous-file navigation at the first change or in a non-diff view.
+		// In the diff pane, jump to the previous change block; at the first chunk
+		// cross into the previous file and land on its LAST chunk.
 		if m.focus == focusMain && m.diffView.JumpToChange(-1) {
 			return m, nil
 		}
 		cmd := m.sidebar.navigateFile(-1)
+		if cmd != nil && m.focus == focusMain {
+			m.pendingChunkLanding = -1
+		}
 		return m, cmd
 
 	case Matches(key, km.NextFile):
-		// In the diff pane, jump to the next change block; fall back to next-file
-		// navigation at the last change or in a non-diff view.
+		// In the diff pane, jump to the next change block; at the last chunk cross
+		// into the next file and land on its FIRST chunk.
 		if m.focus == focusMain && m.diffView.JumpToChange(+1) {
 			return m, nil
 		}
 		cmd := m.sidebar.navigateFile(+1)
+		if cmd != nil && m.focus == focusMain {
+			m.pendingChunkLanding = +1
+		}
 		return m, cmd
 
 	case Matches(key, km.PrevSection):

@@ -1237,6 +1237,37 @@ func TestJumpToChangeModificationBlocks(t *testing.T) {
 	}
 }
 
+// TestLandOnChunkEdge verifies cross-file landing: + lands on the first change
+// block, - lands on the last — used when [ / ] cross into an adjacent file.
+func TestLandOnChunkEdge(t *testing.T) {
+	theme := DefaultTheme()
+	m := diffViewModel{
+		theme: &theme, hl: newHighlighter(), mdStyler: newMarkdownStyler(theme),
+		path: "main.go", width: 80, height: 40, style: diffStyleUnified,
+		hunks: []types.DiffHunk{{
+			OldStart: 1, OldCount: 7, NewStart: 1, NewCount: 7, Header: "@@ f @@",
+			Lines: []types.DiffLine{
+				{Kind: types.DiffLineContext, OldLineNum: 1, NewLineNum: 1, Content: "ctx1"},
+				{Kind: types.DiffLineAdded, NewLineNum: 2, Content: "first A"},
+				{Kind: types.DiffLineContext, OldLineNum: 2, NewLineNum: 3, Content: "ctx2"},
+				{Kind: types.DiffLineContext, OldLineNum: 3, NewLineNum: 4, Content: "ctx3"},
+				{Kind: types.DiffLineAdded, NewLineNum: 5, Content: "last B"},
+				{Kind: types.DiffLineContext, OldLineNum: 4, NewLineNum: 6, Content: "ctx4"},
+			},
+		}},
+	}
+	m.buildLines()
+
+	m.LandOnChunkEdge(+1)
+	if m.lines[m.cursor].newLineNum != 2 {
+		t.Errorf("LandOnChunkEdge(+1) should land on the first chunk (line 2), got %+v", m.lines[m.cursor])
+	}
+	m.LandOnChunkEdge(-1)
+	if m.lines[m.cursor].newLineNum != 5 {
+		t.Errorf("LandOnChunkEdge(-1) should land on the last chunk (line 5), got %+v", m.lines[m.cursor])
+	}
+}
+
 // TestJumpToChangeFullFile is the case the hunk-header approach got wrong: in
 // full-file mode the whole file is a single git hunk, so jumping must key off
 // runs of changed lines, not hunk headers. Here one hunk holds two separate
