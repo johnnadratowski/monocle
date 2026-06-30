@@ -1156,6 +1156,91 @@ func TestResumeRestoresBaseRefState(t *testing.T) {
 	}
 }
 
+// TestReviewNameLifecycle covers set_review_name as the review open/start
+// handshake: empty rejected, same is a no-op, a new name replaces an empty or
+// comment-free review, and a new name is refused (unless forced) when the open
+// review has reviewer comments.
+func TestReviewNameLifecycle(t *testing.T) {
+	newEngine := func(t *testing.T) *Engine {
+		t.Helper()
+		database, err := db.Open(":memory:")
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { database.Close() })
+		stub := &gitStub{repoRoot: "/tmp/repo", currentRef: "head_head_head_head_head_head_head_head01"}
+		now := time.Now()
+		session := &types.ReviewSession{
+			ID: "sess-1", Agent: "claude", RepoRoot: "/tmp/repo", BaseRef: "base", ReviewRound: 1,
+			FileStatuses: make(map[string]bool), CreatedAt: now, UpdatedAt: now,
+		}
+		database.CreateSession(session)
+		e := &Engine{feedback: NewFeedbackQueue(), database: database, git: stub, subscribers: make(map[EventKind]map[int]EventCallback)}
+		e.current = session
+		return e
+	}
+	set := func(e *Engine, name string, force bool) *protocol.SetReviewNameResponse {
+		return e.handleSetReviewName(&protocol.SetReviewNameMsg{Type: protocol.TypeSetReviewName, Name: name, Force: force})
+	}
+	addComment := func(t *testing.T, e *Engine) {
+		t.Helper()
+		if _, err := e.AddComment(CommentTarget{TargetType: types.TargetFile, TargetRef: "f.go", LineStart: 1, LineEnd: 1}, types.CommentIssue, "fix"); err != nil {
+			t.Fatalf("AddComment: %v", err)
+		}
+	}
+
+	t.Run("empty name rejected", func(t *testing.T) {
+		e := newEngine(t)
+		if r := set(e, "", false); r.Success {
+			t.Error("empty name must be rejected (closing is reviewer-owned)")
+		}
+	})
+
+	t.Run("idle opens; same name no-op", func(t *testing.T) {
+		e := newEngine(t)
+		if r := set(e, "Review A", false); !r.Success || e.current.ReviewName != "Review A" {
+			t.Fatalf("expected open with name, got success=%v name=%q", r.Success, e.current.ReviewName)
+		}
+		if r := set(e, "Review A", false); !r.Success {
+			t.Error("same name should be a no-op success")
+		}
+	})
+
+	t.Run("new name with no comments auto-replaces and clears old content", func(t *testing.T) {
+		e := newEngine(t)
+		set(e, "Review A", false)
+		_ = e.database.UpsertContentItem("sess-1", &types.ContentItem{ID: "p1", Title: "Plan"})
+		e.current.ContentItems = []types.ContentItem{{ID: "p1", Title: "Plan"}}
+		if r := set(e, "Review B", false); !r.Success {
+			t.Fatalf("expected auto-replace, got: %s", r.Message)
+		}
+		if e.current.ReviewName != "Review B" {
+			t.Errorf("name = %q, want Review B", e.current.ReviewName)
+		}
+		if len(e.current.ContentItems) != 0 {
+			t.Error("old review's artifacts should be cleared on auto-replace")
+		}
+	})
+
+	t.Run("new name refused with comments unless forced", func(t *testing.T) {
+		e := newEngine(t)
+		set(e, "Review A", false)
+		addComment(t, e)
+		if r := set(e, "Review B", false); r.Success {
+			t.Error("should refuse a new review while reviewer comments exist")
+		}
+		if e.current.ReviewName != "Review A" || len(e.current.Comments) != 1 {
+			t.Errorf("refusal must preserve the open review: name=%q comments=%d", e.current.ReviewName, len(e.current.Comments))
+		}
+		if r := set(e, "Review B", true); !r.Success {
+			t.Fatalf("force should succeed: %s", r.Message)
+		}
+		if e.current.ReviewName != "Review B" || len(e.current.Comments) != 0 {
+			t.Errorf("force should discard old review: name=%q comments=%d", e.current.ReviewName, len(e.current.Comments))
+		}
+	})
+}
+
 // TestApproveClearsAgentContent verifies that approving a review removes the
 // agent-provided artifacts and additional files (the review is done), while
 // request_changes keeps them so the agent can keep iterating.
@@ -1192,6 +1277,10 @@ func TestApproveClearsAgentContent(t *testing.T) {
 
 	t.Run("approve removes artifacts and additional files", func(t *testing.T) {
 		e := build(t)
+		// Approve is "stop": it must also clear the name and reset the base.
+		e.current.ReviewName = "Done review"
+		e.current.AutoAdvanceRef = false
+		e.autoAdvanceRef = false
 		if err := e.Submit(types.ActionApprove, "lgtm"); err != nil {
 			t.Fatalf("submit: %v", err)
 		}
@@ -1200,6 +1289,12 @@ func TestApproveClearsAgentContent(t *testing.T) {
 		}
 		if got := e.GetAdditionalFiles(); len(got) != 0 {
 			t.Errorf("approve should remove additional files, got %d", len(got))
+		}
+		if e.current.ReviewName != "" {
+			t.Errorf("approve should clear the review name, got %q", e.current.ReviewName)
+		}
+		if !e.IsAutoAdvanceRef() {
+			t.Error("approve should reset the base to working-tree/HEAD (auto-advance on)")
 		}
 	})
 
@@ -1313,16 +1408,18 @@ func TestAgentBaseRefResetsAfterReview(t *testing.T) {
 		}
 	})
 
-	t.Run("reviewer base persists on submit", func(t *testing.T) {
+	t.Run("reviewer base persists across request_changes", func(t *testing.T) {
+		// request_changes keeps the review open, so a reviewer-set base must
+		// persist. (approve resets the base — covered in TestApproveClearsAgentContent.)
 		e, _ := newEngine(t)
 		if err := e.SetBaseRef("some-commit"); err != nil {
 			t.Fatalf("SetBaseRef: %v", err)
 		}
-		if err := e.Submit(types.ActionApprove, "looks good"); err != nil {
+		if err := e.Submit(types.ActionRequestChanges, "please fix"); err != nil {
 			t.Fatalf("Submit: %v", err)
 		}
 		if e.IsAutoAdvanceRef() {
-			t.Error("expected reviewer-set base ref to persist (auto-advance stays off)")
+			t.Error("expected reviewer-set base ref to persist across request_changes")
 		}
 	})
 }

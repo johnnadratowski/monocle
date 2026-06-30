@@ -329,17 +329,28 @@ monocle review annotate --file annotations.json
 
 ## `monocle review set-name`
 
-Give the current review a short, human-friendly name shown in Monocle's top bar (e.g. "Add OAuth login"). Call this once when you start a review so the reviewer can see at a glance what they're reviewing.
+Start and name a review. The name (shown in Monocle's top bar) also marks the review as **in progress** — naming a review is how you begin one. Call it once at the start of each review.
 
 ```bash
-monocle review set-name "Add OAuth login" [--json] [--workdir PATH] [--socket PATH]
+monocle review set-name "Add OAuth login" [--force] [--json] [--workdir PATH] [--socket PATH]
 ```
 
-Pass an empty string to clear the name. The top bar falls back to the latest artifact title when no name is set.
+Lifecycle rules:
+
+- The **name is required and must be non-empty**. Only the reviewer closes a review (by approving or clearing it) — the agent can't.
+- Calling it again with the **same name** is a no-op.
+- Calling it with a **new name while a review is already open** replaces the old review automatically **if the reviewer hasn't left any comments**. If the reviewer **has** commented, the call is **refused** to protect their work — pass `--force` to discard the in-progress review and start the new one.
+- Approving or clearing a review resets its name (and the diff base), so the next review starts clean.
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--force` | Discard an in-progress review that already has reviewer comments and start this one. |
 
 ### MCP tool equivalent
 
-In MCP tools mode, call the `set_review_name` tool with `name` (a brief title; empty to clear).
+In MCP tools mode, call the `set_review_name` tool with `name` (required) and optional `force` (boolean).
 
 ---
 

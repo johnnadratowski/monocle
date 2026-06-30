@@ -93,7 +93,8 @@ func registerTools(s *sdkmcp.Server) {
 }
 
 type setReviewNameParams struct {
-	Name string `json:"name"`
+	Name  string `json:"name"`
+	Force bool   `json:"force,omitempty"`
 }
 
 func handleSetReviewName(ctx context.Context, req *sdkmcp.CallToolRequest, params setReviewNameParams) (*sdkmcp.CallToolResult, any, error) {
@@ -104,7 +105,7 @@ func handleSetReviewName(ctx context.Context, req *sdkmcp.CallToolRequest, param
 	defer c.Close()
 
 	resp, err := c.Request(
-		&protocol.SetReviewNameMsg{Type: protocol.TypeSetReviewName, Name: params.Name},
+		&protocol.SetReviewNameMsg{Type: protocol.TypeSetReviewName, Name: params.Name, Force: params.Force},
 		client.DefaultTimeout,
 	)
 	if err != nil {

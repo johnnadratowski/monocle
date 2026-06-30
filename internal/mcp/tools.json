@@ -29,7 +29,7 @@
   },
   {
     "name": "set_review_name",
-    "description": "Give the current review a short, human-friendly name shown in Monocle's top bar (e.g. 'Add OAuth login' or 'Payments refactor'). Call this once when you start a review so the reviewer can see at a glance what they're reviewing. Pass name (a brief title); an empty name clears it."
+    "description": "Start/name a review. The name (a brief title, e.g. 'Add OAuth login') is shown in Monocle's top bar AND marks the review as in-progress; this is how you begin a review. Rules: the name is required and must be non-empty (only the reviewer closes a review, by approving or clearing). Calling it again with the SAME name is a no-op. Calling it with a NEW name while a review is already open silently replaces the old one IF the reviewer hasn't left any comments; if the reviewer HAS commented, it is refused — pass force=true to discard their in-progress review and start yours. So: call this once at the start of each review; don't rename mid-review."
   },
   {
     "name": "set_base_ref",

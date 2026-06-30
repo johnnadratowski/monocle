@@ -521,19 +521,47 @@ func (e *Engine) GetAnnotations() []types.Annotation {
 	return e.current.Annotations
 }
 
-// handleSetReviewName records the agent-supplied review name on the current
-// session and notifies the TUI so the top bar updates.
+// handleSetReviewName is the agent's "start a review" handshake. The review name
+// is the open/closed marker: a named session is an in-progress review; clearing
+// the name (reviewer-only, via approve/clear) closes it.
+//
+//   - empty name → rejected (closing is reviewer-owned).
+//   - same name → no-op (so an agent re-asserting its name each turn is fine).
+//   - new name while idle → opens the review.
+//   - new name while a review is open:
+//   - no reviewer comments → silently close the old review and open the new.
+//   - has comments → refused unless force; force discards the old review.
 func (e *Engine) handleSetReviewName(msg *protocol.SetReviewNameMsg) *protocol.SetReviewNameResponse {
 	name := strings.TrimSpace(msg.Name)
+	reject := func(format string, a ...any) *protocol.SetReviewNameResponse {
+		return &protocol.SetReviewNameResponse{Type: protocol.TypeSetReviewNameResponse, Success: false, Message: fmt.Sprintf(format, a...)}
+	}
+
 	e.mu.Lock()
 	if e.current == nil {
 		e.mu.Unlock()
-		return &protocol.SetReviewNameResponse{
-			Type:    protocol.TypeSetReviewNameResponse,
-			Success: false,
-			Message: "no active session",
-		}
+		return reject("no active session")
 	}
+	if name == "" {
+		e.mu.Unlock()
+		return reject("review name cannot be empty — only the reviewer closes a review (approve or clear)")
+	}
+	current := e.current.ReviewName
+	if current == name {
+		e.mu.Unlock()
+		return &protocol.SetReviewNameResponse{Type: protocol.TypeSetReviewNameResponse, Success: true, Message: fmt.Sprintf("Review name set to %q", name)}
+	}
+
+	// Starting a different review. If one is already open and the reviewer has
+	// authored comments, refuse unless force; otherwise close the old one first.
+	if current != "" {
+		if n := len(e.current.Comments); n > 0 && !msg.Force {
+			e.mu.Unlock()
+			return reject("review %q is in progress with %d comment(s) — pass force to discard it and start %q", current, n, name)
+		}
+		_ = e.clearReviewLocked() // drop the old review's content + base (and reviewer comments when forcing)
+	}
+
 	e.current.ReviewName = name
 	_ = e.database.UpdateSession(e.current) // persist so the name survives a resume
 	e.mu.Unlock()
@@ -1045,7 +1073,11 @@ func (e *Engine) ClearComments() error {
 func (e *Engine) ClearReview() error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	return e.clearReviewLocked()
+}
 
+// clearReviewLocked performs a full review reset. Callers must hold e.mu.
+func (e *Engine) clearReviewLocked() error {
 	if e.current == nil {
 		return fmt.Errorf("no active session")
 	}
@@ -1462,10 +1494,11 @@ func (e *Engine) Submit(action types.SubmitAction, body string) error {
 	}
 
 	// On approve the review is complete — remove the agent-provided artifacts and
-	// additional files so they don't linger in the tree for the next review.
-	// (request_changes keeps them so the agent can iterate on the same content.)
+	// additional files, clear the review name, and reset the base to the working
+	// tree/HEAD. (request_changes keeps everything so the agent can iterate.)
 	if action == types.ActionApprove {
 		e.clearReviewContent(session.ID)
+		e.closeReviewOnApprove()
 	}
 
 	// An agent-provided base ref is scoped to a single review: now that the
@@ -1654,6 +1687,32 @@ func (e *Engine) resetAgentBaseRefAfterReview() {
 	}
 	e.SetAutoAdvanceRef(true)
 	e.emit(EventFileChanged, EventPayload{Kind: EventFileChanged})
+}
+
+// closeReviewOnApprove is the "stop" half of the review lifecycle: approving a
+// review clears its name and resets the diff base back to the working tree/HEAD
+// (regardless of who set the base), so a completed review resumes as idle rather
+// than re-loading its old name and base on restart.
+func (e *Engine) closeReviewOnApprove() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.current == nil {
+		return
+	}
+	e.current.ReviewName = ""
+	e.current.AutoAdvanceRef = true
+	e.current.SelectedRef = ""
+	e.autoAdvanceRef = true
+	e.selectedRef = ""
+	e.agentBaseRef = false
+	e.lastKnownHead = ""
+	e.reviewBase = nil
+	if e.git != nil {
+		if head, err := e.git.CurrentRef(); err == nil {
+			e.current.BaseRef = head
+		}
+	}
+	_ = e.database.UpdateSession(e.current)
 }
 
 // SelectedBaseRef returns the commit the user selected in the ref picker.

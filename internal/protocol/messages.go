@@ -259,6 +259,9 @@ type AddAnnotationsMsg struct {
 type SetReviewNameMsg struct {
 	Type string `json:"type"`
 	Name string `json:"name"`
+	// Force discards an in-progress review that already has reviewer comments and
+	// replaces it with this one. Ignored when the open review has no comments.
+	Force bool `json:"force,omitempty"`
 }
 
 type SetReviewNameResponse struct {

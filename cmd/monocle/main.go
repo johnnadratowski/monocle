@@ -113,7 +113,8 @@ type ReviewAnnotateCmd struct {
 type ReviewSetNameCmd struct {
 	WorkDirFlag
 	Socket string `help:"Override socket path" env:"MONOCLE_SOCKET" default:""`
-	Name   string `arg:"" help:"The review name (empty to clear)" default:""`
+	Name   string `arg:"" help:"The review name (required, non-empty)"`
+	Force  bool   `help:"Discard an in-progress review that has reviewer comments and start this one" default:"false"`
 	JSON   bool   `help:"Output as JSON" default:"false"`
 }
 
@@ -133,7 +134,7 @@ func (cmd *ReviewSetNameCmd) Run() error {
 	defer c.Close()
 
 	resp, err := c.Request(
-		&protocol.SetReviewNameMsg{Type: protocol.TypeSetReviewName, Name: cmd.Name},
+		&protocol.SetReviewNameMsg{Type: protocol.TypeSetReviewName, Name: cmd.Name, Force: cmd.Force},
 		client.DefaultTimeout,
 	)
 	if err != nil {
