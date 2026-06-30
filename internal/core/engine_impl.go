@@ -1090,6 +1090,23 @@ func (e *Engine) ClearReview() error {
 	return nil
 }
 
+// clearReviewContent removes the agent-provided artifacts (content items) and
+// additional files for the session. Called when a review is approved (complete)
+// so they don't linger in the tree. Comments/annotations are cleared separately
+// at delivery time. Safe to call when there is nothing to clear.
+func (e *Engine) clearReviewContent(sessionID string) {
+	if err := e.database.DeleteContentItems(sessionID); err != nil {
+		return
+	}
+	_ = e.database.DeleteAdditionalFiles(sessionID)
+	e.mu.Lock()
+	if e.current != nil && e.current.ID == sessionID {
+		e.current.ContentItems = nil
+		e.current.AdditionalFiles = nil
+	}
+	e.mu.Unlock()
+}
+
 // -- Review status --
 
 func (e *Engine) MarkReviewed(path string) error {
@@ -1424,6 +1441,13 @@ func (e *Engine) Submit(action types.SubmitAction, body string) error {
 			e.mu.Unlock()
 			_ = e.ResetAllReviewed()
 		}
+	}
+
+	// On approve the review is complete — remove the agent-provided artifacts and
+	// additional files so they don't linger in the tree for the next review.
+	// (request_changes keeps them so the agent can iterate on the same content.)
+	if action == types.ActionApprove {
+		e.clearReviewContent(session.ID)
 	}
 
 	// An agent-provided base ref is scoped to a single review: now that the

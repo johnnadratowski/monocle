@@ -1284,6 +1284,19 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.diffView.comments = nil
 		}
 
+		// On approve the engine removes the agent's artifacts and additional
+		// files; refresh the sidebar copies so they leave the tree. On
+		// request_changes these re-fetches return the unchanged lists.
+		m.sidebar.contentItems = m.engine.GetContentItems()
+		m.sidebar.additionalFiles = m.engine.GetAdditionalFiles()
+		m.sidebar.files = m.engine.GetChangedFiles()
+		m.sidebar.applyReviewedFilter()
+		m.sidebar.rebuildTree()
+		m.sidebar.rebuildGroups()
+		m.sidebar.clampOffset()
+		recalcStackedLayout(&m)
+		m.statusBar.fileCount = len(m.sidebar.files)
+
 		// Restore focus mode state
 		if m.focusModeActive {
 			m.sidebarHidden = m.focusModeSavedSidebar
@@ -1292,6 +1305,19 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.sidebarAutoHidden = m.sidebarHidden && !m.sidebarHasItems()
 			m.autoToggleSidebar()
 			recalcPaneDimensions(&m)
+		}
+
+		// If the view pointed at an artifact/added file that approve removed,
+		// drop to the first remaining file (or clear when nothing is left).
+		if m.diffView.path != "" && !m.diffViewShowsValidFile() {
+			m.diffView.contentMode = false
+			m.diffView.contentID = ""
+			m.diffView.additionalFilePath = ""
+			if len(m.sidebar.files) > 0 {
+				m.sidebar.selectPath(m.sidebar.files[0].Path)
+				return m, m.handleSidebarSelect(sidebarSelectMsg{path: m.sidebar.files[0].Path})
+			}
+			m.diffView.clearFileState()
 		}
 		return m, nil
 

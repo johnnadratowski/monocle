@@ -16,6 +16,7 @@ type stubEngine struct {
 	cfg            *types.Config
 	session        *types.ReviewSession
 	contentItems   []types.ContentItem
+	changedFiles   []types.ChangedFile
 	cleared        bool
 	dismissCalled  bool
 }
@@ -28,7 +29,7 @@ func (s *stubEngine) GetFeedbackStatus() string                    { return "" }
 func (s *stubEngine) GetQueuedCount() int                          { return 0 }
 func (s *stubEngine) ReloadPendingFeedback()                       {}
 func (s *stubEngine) SelectedBaseRef() string                      { return "" }
-func (s *stubEngine) GetChangedFiles() []types.ChangedFile         { return nil }
+func (s *stubEngine) GetChangedFiles() []types.ChangedFile         { return s.changedFiles }
 func (s *stubEngine) GetAdditionalFiles() []types.AdditionalFile   { return nil }
 func (s *stubEngine) MarkContentReviewed(id string) error          { return nil }
 func (s *stubEngine) UnmarkContentReviewed(id string) error        { return nil }
@@ -223,11 +224,15 @@ func TestSubmitSuccess_AgentDisconnected_ClearsComments(t *testing.T) {
 }
 
 func TestSubmitSuccess_PreservesContentView(t *testing.T) {
+	item := types.ContentItem{ID: "plan-1", Title: "Plan"}
 	engine := &stubEngine{
-		cfg:     &types.Config{},
-		session: newTestSession(false),
+		cfg:          &types.Config{},
+		session:      newTestSession(false),
+		contentItems: []types.ContentItem{item}, // still present (request_changes case)
 	}
+	engine.session.ContentItems = []types.ContentItem{item}
 	m := NewApp(engine)
+	m.sidebar.contentItems = engine.contentItems
 	m.diffView.contentMode = true
 	m.diffView.contentID = "plan-1"
 	m.diffView.path = "plan-1"
@@ -305,15 +310,19 @@ func TestSubmitSuccess_RecalcsStackedLayout(t *testing.T) {
 		t.Fatalf("expected stacked layout, got %v", m.layout)
 	}
 
-	// Add files and content items to establish a baseline sidebar height.
+	// Add files and content items to establish a baseline sidebar height. submit
+	// re-fetches from the engine, so seed the stub (here the artifact still
+	// exists — the request_changes / non-approve case).
 	item := types.ContentItem{ID: "plan-1", Title: "Plan"}
-	m.sidebar.files = []types.ChangedFile{{Path: "file.go", Status: "M"}}
-	m.sidebar.contentItems = []types.ContentItem{item}
+	engine.changedFiles = []types.ChangedFile{{Path: "file.go", Status: "M"}}
+	engine.contentItems = []types.ContentItem{item}
 	engine.session.ContentItems = []types.ContentItem{item}
+	m.sidebar.files = engine.changedFiles
+	m.sidebar.contentItems = engine.contentItems
 	m.sidebar.rebuildTree()
 	recalcStackedLayout(&m)
 
-	// Submit feedback — artifacts persist across rounds.
+	// Submit feedback — artifacts persist when the engine still has them.
 	result, _ = m.Update(submitSuccessMsg{})
 	app := result.(appModel)
 
@@ -338,8 +347,10 @@ func TestSubmitSuccess_FocusModeRestoresDimensions(t *testing.T) {
 	result, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 40})
 	m = result.(appModel)
 
-	// Add files so the sidebar stays visible after focus mode restore
-	m.sidebar.files = []types.ChangedFile{{Path: "file.go", Status: "M"}}
+	// Add files so the sidebar stays visible after focus mode restore. submit
+	// re-fetches from the engine, so seed the stub too.
+	engine.changedFiles = []types.ChangedFile{{Path: "file.go", Status: "M"}}
+	m.sidebar.files = engine.changedFiles
 
 	// Enter focus mode (sidebar hidden)
 	m.focusModeSavedSidebar = false
@@ -379,8 +390,10 @@ func TestSubmitSuccess_NoAgent_FocusModeRestoresDimensions(t *testing.T) {
 	result, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 40})
 	m = result.(appModel)
 
-	// Add files so the sidebar stays visible after focus mode restore
-	m.sidebar.files = []types.ChangedFile{{Path: "file.go", Status: "M"}}
+	// Add files so the sidebar stays visible after focus mode restore. submit
+	// re-fetches from the engine, so seed the stub too.
+	engine.changedFiles = []types.ChangedFile{{Path: "file.go", Status: "M"}}
+	m.sidebar.files = engine.changedFiles
 
 	// Enter focus mode
 	m.focusModeSavedSidebar = false

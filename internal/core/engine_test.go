@@ -1134,6 +1134,67 @@ func TestResumeRestoresBaseRefState(t *testing.T) {
 	}
 }
 
+// TestApproveClearsAgentContent verifies that approving a review removes the
+// agent-provided artifacts and additional files (the review is done), while
+// request_changes keeps them so the agent can keep iterating.
+func TestApproveClearsAgentContent(t *testing.T) {
+	build := func(t *testing.T) *Engine {
+		t.Helper()
+		database, err := db.Open(":memory:")
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { database.Close() })
+		stub := &gitStub{repoRoot: "/tmp/repo", currentRef: "base_base_base_base_base_base_base_base01"}
+		now := time.Now()
+		session := &types.ReviewSession{
+			ID: "sess-1", Agent: "claude", RepoRoot: "/tmp/repo", BaseRef: "base", ReviewRound: 1,
+			FileStatuses: make(map[string]bool), CreatedAt: now, UpdatedAt: now,
+		}
+		database.CreateSession(session)
+		_ = database.UpsertContentItem(session.ID, &types.ContentItem{ID: "plan-1", Title: "Plan", Content: "x"})
+		_ = database.UpsertAdditionalFile(session.ID, &types.AdditionalFile{Path: "/tmp/extra.txt", Name: "extra.txt"})
+		session.ContentItems = []types.ContentItem{{ID: "plan-1", Title: "Plan"}}
+		session.AdditionalFiles = []types.AdditionalFile{{Path: "/tmp/extra.txt", Name: "extra.txt"}}
+		e := &Engine{
+			feedback:       NewFeedbackQueue(),
+			database:       database,
+			git:            stub,
+			formatter:      NewReviewFormatter(func(string, int, int) string { return "" }, types.ReviewFormatConfig{}),
+			autoAdvanceRef: true,
+			subscribers:    make(map[EventKind]map[int]EventCallback),
+		}
+		e.current = session
+		return e
+	}
+
+	t.Run("approve removes artifacts and additional files", func(t *testing.T) {
+		e := build(t)
+		if err := e.Submit(types.ActionApprove, "lgtm"); err != nil {
+			t.Fatalf("submit: %v", err)
+		}
+		if got := e.GetContentItems(); len(got) != 0 {
+			t.Errorf("approve should remove artifacts, got %d", len(got))
+		}
+		if got := e.GetAdditionalFiles(); len(got) != 0 {
+			t.Errorf("approve should remove additional files, got %d", len(got))
+		}
+	})
+
+	t.Run("request_changes keeps artifacts and additional files", func(t *testing.T) {
+		e := build(t)
+		if err := e.Submit(types.ActionRequestChanges, "please fix"); err != nil {
+			t.Fatalf("submit: %v", err)
+		}
+		if got := e.GetContentItems(); len(got) != 1 {
+			t.Errorf("request_changes should keep artifacts, got %d", len(got))
+		}
+		if got := e.GetAdditionalFiles(); len(got) != 1 {
+			t.Errorf("request_changes should keep additional files, got %d", len(got))
+		}
+	})
+}
+
 func TestSetBaseRefExact(t *testing.T) {
 	database, err := db.Open(":memory:")
 	if err != nil {
