@@ -35,6 +35,8 @@ Create either or both files — you only need to include the settings you want t
   "context_lines": 3,
   "full_file_diff": false,
   "editor": "",
+  "editor_mode": "terminal",
+  "editor_focus": true,
   "ignore_patterns": [],
   "keybindings": {},
   "mouse": true,
@@ -66,6 +68,8 @@ Create either or both files — you only need to include the settings you want t
 | `context_lines` | integer | `3` | Unchanged lines shown around diff hunks |
 | `full_file_diff` | `true`, `false` | `false` | Show the whole file with diff coloring instead of compact hunks (toggle with `a`) |
 | `editor` | string | `""` | External editor command (overrides `$VISUAL`/`$EDITOR`); may include flags, e.g. `"code --wait"` |
+| `editor_mode` | `"terminal"`, `"tmux_vertical"`, `"tmux_horizontal"`, `"tmux_window"` | `"terminal"` | How `Ctrl+g`/`Ctrl+o` open a file: `terminal` takes over Monocle's screen; the `tmux_*` modes (when running inside tmux) open the editor in a side-by-side split, a stacked split, or a new tmux window/tab. tmux modes fall back to `terminal` outside tmux. `Ctrl+Shift+g`/`Ctrl+Shift+o` always use `terminal`. |
+| `editor_focus` | `true`, `false` | `true` | Whether a new tmux split/window takes focus (the `tmux_*` modes). Set `false` to keep focus on Monocle. |
 | `ignore_patterns` | string array | `[]` | Glob patterns for files to exclude |
 | `min_diff_width` | integer | `80` | Minimum character width for the diff viewer in side-by-side layout |
 | `mouse` | `true`, `false` | `true` | Enable mouse interactions (click, scroll, drag) |

@@ -45,6 +45,7 @@ func DefaultConfig() *types.Config {
 		},
 		MinDiffWidth:   80,
 		ReviewTracking: true,
+		EditorMode:     "terminal",
 	}
 }
 

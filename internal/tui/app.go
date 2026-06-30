@@ -1943,54 +1943,26 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return tea.WindowSizeMsg{Width: m.width, Height: m.height}
 		}
 
-	case Matches(key, km.OpenInEditor):
-		var filePath string
-		var line int
-		if m.focus == focusSidebar {
-			if f := m.sidebar.selectedFile(); f != nil {
-				filePath = filepath.Join(m.repoRoot, f.Path)
-			} else if af := m.sidebar.selectedAdditionalFile(); af != nil {
-				filePath = af.Path
-			}
-			line = 1
-		} else {
-			if m.diffView.contentMode {
-				break
-			}
-			if m.diffView.additionalFilePath != "" {
-				filePath = m.diffView.additionalFilePath
-			} else if m.diffView.path != "" {
-				filePath = filepath.Join(m.repoRoot, m.diffView.path)
-			}
-			line = m.diffView.EditorTargetLine()
-			if line < 1 {
-				line = 1
-			}
-		}
-		if filePath == "" {
+	case Matches(key, km.OpenInEditor), Matches(key, km.OpenInEditorTakeover):
+		// Open the file under review in the editor. Ctrl+g honors the configured
+		// editor_mode (tmux split/window); Ctrl+Shift+g always takes over.
+		filePath, line, ok := m.editorTargetFile()
+		if !ok {
 			break
 		}
-		return m, openFileInEditor(filePath, line, m.editorCommand())
+		takeover := Matches(key, km.OpenInEditorTakeover)
+		return m, m.openFileCmd(filePath, line, takeover)
 
-	case Matches(key, km.OpenPathUnderCursor):
-		// Open the file path referenced on the current diff line (gf-style):
-		// resolve a path token from the line and open it in the editor.
-		if m.focus != focusMain || m.diffView.contentMode {
-			break
-		}
-		baseDir := m.repoRoot
-		if m.diffView.path != "" {
-			baseDir = filepath.Dir(filepath.Join(m.repoRoot, m.diffView.path))
-		}
-		path, line, found := findFilePathInLine(m.diffView.CurrentLineText(), m.repoRoot, baseDir)
-		if !found {
+	case Matches(key, km.OpenPathUnderCursor), Matches(key, km.OpenPathUnderCursorTakeover):
+		// Open the file path referenced on the current diff line (gf-style).
+		// Ctrl+o honors editor_mode; Ctrl+Shift+o always takes over.
+		path, line, ok := m.pathUnderCursor()
+		if !ok {
 			m.statusBar.searchInfo = "no file path under cursor"
 			return m, nil
 		}
-		if line < 1 {
-			line = 1
-		}
-		return m, openFileInEditor(path, line, m.editorCommand())
+		takeover := Matches(key, km.OpenPathUnderCursorTakeover)
+		return m, m.openFileCmd(path, line, takeover)
 
 	case Matches(key, km.Refresh):
 		return m, m.refreshFiles()
@@ -2940,6 +2912,96 @@ func (m appModel) editorCommand() string {
 		return cfg.Editor
 	}
 	return ""
+}
+
+// editorMode returns the configured open mode ("terminal" by default).
+func (m appModel) editorMode() string {
+	if m.engine != nil {
+		if cfg := m.engine.GetConfig(); cfg != nil && cfg.EditorMode != "" {
+			return cfg.EditorMode
+		}
+	}
+	return "terminal"
+}
+
+// editorFocus reports whether a new tmux split/window should take focus
+// (defaults to true).
+func (m appModel) editorFocus() bool {
+	if m.engine != nil {
+		if cfg := m.engine.GetConfig(); cfg != nil && cfg.EditorFocus != nil {
+			return *cfg.EditorFocus
+		}
+	}
+	return true
+}
+
+// openFileCmd opens filePath at line in the external editor. forceTakeover
+// ignores the configured tmux mode and always takes over the terminal (used by
+// the Ctrl+Shift+g / Ctrl+Shift+o bindings).
+func (m appModel) openFileCmd(filePath string, line int, forceTakeover bool) tea.Cmd {
+	mode := m.editorMode()
+	if forceTakeover {
+		mode = "terminal"
+	}
+	return openFileInEditorWith(editorOpenSpec{
+		filePath:   filePath,
+		line:       line,
+		configured: m.editorCommand(),
+		mode:       mode,
+		focus:      m.editorFocus(),
+	})
+}
+
+// editorTargetFile resolves the file (and line) the editor should open for the
+// current focus/selection: the sidebar's selected file/added file, or the file
+// shown in the diff pane. Returns ok=false when there is no openable file (e.g.
+// viewing a content artifact).
+func (m appModel) editorTargetFile() (string, int, bool) {
+	if m.focus == focusSidebar {
+		if f := m.sidebar.selectedFile(); f != nil {
+			return filepath.Join(m.repoRoot, f.Path), 1, true
+		}
+		if af := m.sidebar.selectedAdditionalFile(); af != nil {
+			return af.Path, 1, true
+		}
+		return "", 0, false
+	}
+	if m.diffView.contentMode {
+		return "", 0, false
+	}
+	var filePath string
+	if m.diffView.additionalFilePath != "" {
+		filePath = m.diffView.additionalFilePath
+	} else if m.diffView.path != "" {
+		filePath = filepath.Join(m.repoRoot, m.diffView.path)
+	}
+	if filePath == "" {
+		return "", 0, false
+	}
+	line := m.diffView.EditorTargetLine()
+	if line < 1 {
+		line = 1
+	}
+	return filePath, line, true
+}
+
+// pathUnderCursor resolves the file path referenced on the current diff line.
+func (m appModel) pathUnderCursor() (string, int, bool) {
+	if m.focus != focusMain || m.diffView.contentMode {
+		return "", 0, false
+	}
+	baseDir := m.repoRoot
+	if m.diffView.path != "" {
+		baseDir = filepath.Dir(filepath.Join(m.repoRoot, m.diffView.path))
+	}
+	path, line, ok := findFilePathInLine(m.diffView.CurrentLineText(), m.repoRoot, baseDir)
+	if !ok {
+		return "", 0, false
+	}
+	if line < 1 {
+		line = 1
+	}
+	return path, line, true
 }
 
 // cycleFocus moves focus across the visible panes: sidebar (when shown), the

@@ -17,14 +17,23 @@ type Config struct {
 	ContextLines   int               `json:"context_lines"`
 	FullFileDiff   bool              `json:"full_file_diff"` // show whole file (with diff coloring) instead of compact hunks
 	Editor         string            `json:"editor"`         // external editor command; overrides $VISUAL/$EDITOR when set
-	ReviewFormat      ReviewFormatConfig `json:"review_format"`
-	AutoFocusMode     bool               `json:"auto_focus_mode"`
-	Mouse              *bool `json:"mouse"`
-	MinDiffWidth       int   `json:"min_diff_width"`
-	CommentExpand         *bool  `json:"comment_expand"`
-	CommentExpandDelay    int    `json:"comment_expand_delay"`
-	MarkReviewedOnSubmit  string `json:"mark_reviewed_on_submit"` // "all" (default), "commented", "manual"
-	ReviewTracking        bool   `json:"review_tracking"`         // enable reviewed state, snapshots, change detection (default: true)
+	// EditorMode controls how Ctrl+g / Ctrl+o open a file: "terminal" (take over
+	// Monocle's screen, the default), "tmux_vertical" (side-by-side split),
+	// "tmux_horizontal" (stacked split), or "tmux_window" (new tmux window/tab).
+	// tmux modes require running inside tmux; otherwise they fall back to
+	// "terminal". Ctrl+Shift+g / Ctrl+Shift+o always use "terminal".
+	EditorMode string `json:"editor_mode"`
+	// EditorFocus controls whether a new tmux split/window takes focus. Defaults
+	// to true (focus the editor); set false to keep focus on Monocle.
+	EditorFocus          *bool              `json:"editor_focus"`
+	ReviewFormat         ReviewFormatConfig `json:"review_format"`
+	AutoFocusMode        bool               `json:"auto_focus_mode"`
+	Mouse                *bool              `json:"mouse"`
+	MinDiffWidth         int                `json:"min_diff_width"`
+	CommentExpand        *bool              `json:"comment_expand"`
+	CommentExpandDelay   int                `json:"comment_expand_delay"`
+	MarkReviewedOnSubmit string             `json:"mark_reviewed_on_submit"` // "all" (default), "commented", "manual"
+	ReviewTracking       bool               `json:"review_tracking"`         // enable reviewed state, snapshots, change detection (default: true)
 	// IdleTimeout controls how long `monocle serve` stays running after the
 	// last client disconnects (minus a 60s grace window). Serialised as a
 	// Go duration string (e.g. "30m", "1h"); an empty/zero value uses the

@@ -359,8 +359,10 @@ func (m helpModel) buildContent() string {
 			{"Ctrl+G", "Open in external editor"},
 		}},
 		{"General", []struct{ key, desc string }{
-			{Label(km.OpenInEditor), "Open file in editor at cursor"},
+			{Label(km.OpenInEditor), "Open file in editor at cursor (per editor_mode)"},
+			{Label(km.OpenInEditorTakeover), "Open file in editor, always taking over the screen"},
 			{Label(km.OpenPathUnderCursor), "Open the file path referenced on the current line"},
+			{Label(km.OpenPathUnderCursorTakeover), "Open the path under cursor, always taking over the screen"},
 			{Label(km.ToggleDiff), "Cycle diff style (unified/split/file) (any pane)"},
 			{Label(km.ToggleFullDiff), "Toggle full-file diff (whole file vs. changed lines)"},
 			{Label(km.ToggleOverlays), "Hide/show inline comments + annotations"},
