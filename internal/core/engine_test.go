@@ -668,9 +668,31 @@ func TestClearReview(t *testing.T) {
 		t.Fatalf("MarkFileReviewed: %v", err)
 	}
 
+	// Stuck state: a deliberately-set base ref (auto-advance off) and a name.
+	e.current.ReviewName = "Stuck review"
+	e.current.AutoAdvanceRef = false
+	e.current.SelectedRef = "oldcommit"
+	e.autoAdvanceRef = false
+	e.selectedRef = "oldcommit"
+	e.agentBaseRef = true
+
 	// Clear the review
 	if err := e.ClearReview(); err != nil {
 		t.Fatalf("ClearReview: %v", err)
+	}
+
+	// Verify the base ref + review name were reset (full reset unsticks an old base)
+	if e.current.ReviewName != "" {
+		t.Errorf("expected review name cleared, got %q", e.current.ReviewName)
+	}
+	if !e.autoAdvanceRef || !e.current.AutoAdvanceRef {
+		t.Error("expected auto-advance re-enabled after clear")
+	}
+	if e.selectedRef != "" || e.current.SelectedRef != "" {
+		t.Error("expected selected ref cleared after clear")
+	}
+	if e.agentBaseRef {
+		t.Error("expected agentBaseRef cleared after clear")
 	}
 
 	// Verify comments cleared

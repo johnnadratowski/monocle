@@ -1087,6 +1087,24 @@ func (e *Engine) ClearReview() error {
 	// Wipe snapshot history — :clear is a full reset
 	e.deleteSnapshots()
 
+	// A full reset also drops the review name and any deliberately-set base ref,
+	// returning the review to a clean working-tree state. Set the fields directly
+	// (we already hold e.mu) rather than calling SetAutoAdvanceRef.
+	e.current.ReviewName = ""
+	e.current.AutoAdvanceRef = true
+	e.current.SelectedRef = ""
+	e.autoAdvanceRef = true
+	e.selectedRef = ""
+	e.agentBaseRef = false
+	e.lastKnownHead = "" // force HEAD re-detection so the base advances on next refresh
+	e.reviewBase = nil
+	if e.git != nil {
+		if head, err := e.git.CurrentRef(); err == nil {
+			e.current.BaseRef = head
+		}
+	}
+	_ = e.database.UpdateSession(e.current)
+
 	return nil
 }
 

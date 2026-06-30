@@ -1509,6 +1509,9 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if session != nil {
 			m.statusBar.baseRef = m.displayBaseRef(session)
 			m.statusBar.setCommentStats(session.Comments)
+			// A full clear also drops the review name and resets the base ref.
+			m.reviewName = session.ReviewName
+			m.annotationCount = len(session.Annotations)
 		}
 		// If viewing a content item or an added file, it no longer exists —
 		// clear the view rather than trying to reload a deleted target.
@@ -1520,13 +1523,11 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.diffView.hunks = nil
 			m.diffView.lines = nil
 			m.diffView.comments = nil
-			return m, nil
 		}
-		// Reload current file view to remove inline comment markers
-		if msg.reloadPath != "" {
-			return m, m.handleSidebarSelect(sidebarSelectMsg{path: msg.reloadPath})
-		}
-		return m, nil
+		// Recompute the file list from git: clearing resets the base ref to the
+		// working tree, so the changed-file set (and any stuck old-base files)
+		// must be refreshed.
+		return m, m.refreshFiles()
 
 	case artifactDismissedMsg:
 		if msg.err != nil {
@@ -2527,12 +2528,17 @@ func (m appModel) executeCommand(cmd string) tea.Cmd {
 					}
 				}
 			}
-			if !hasComments && !hasContent && !hasAdditionalFiles && !hasReviewed {
+			// A deliberately-set base ref (auto-advance off) or a review name is
+			// also clearable state, so D can reset a review that's stuck on an old
+			// base even when it has no comments/plans/added files.
+			hasBaseOverride := !engine.IsAutoAdvanceRef()
+			hasReviewName := session.ReviewName != ""
+			if !hasComments && !hasContent && !hasAdditionalFiles && !hasReviewed && !hasBaseOverride && !hasReviewName {
 				return nil
 			}
 			return openConfirmMsg{
 				title:   "Clear Review",
-				message: "Clear all comments, plans, added files, and reviewed states? This cannot be undone.",
+				message: "Clear all comments, plans, added files, reviewed states, the review name, and reset the diff base to the working tree? This cannot be undone.",
 				action:  confirmClear,
 			}
 		}
