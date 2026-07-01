@@ -289,7 +289,7 @@ func (m helpModel) buildContent() string {
 		{Label(km.ScrollEnd), "Scroll to line end (any pane)"},
 		{Label(km.Wrap), "Toggle line wrapping (any pane)"},
 		{Label(km.PrevFile) + "/" + Label(km.NextFile), "Previous/next diff chunk in the diff pane, else previous/next file"},
-		{Label(km.PrevSection) + "/" + Label(km.NextSection), "Previous/next section (any pane)"},
+		{Label(km.PrevSection) + "/" + Label(km.NextSection), "Previous/next file (any pane)"},
 		{Label(km.Select), "Focus diff pane / toggle dir"},
 		{Label(km.FocusSwap) + "/shift+tab", "Switch pane focus (sidebar/diff/doc)"},
 		{Label(km.OpenDocRef), "Open/cycle annotation doc links; closes after the last"},

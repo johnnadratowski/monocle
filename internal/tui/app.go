@@ -2156,12 +2156,12 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case Matches(key, km.PrevSection):
-		cmd := m.sidebar.jumpToPrevSection()
-		return m, cmd
+		// { always moves to the previous file (from any pane).
+		return m, m.sidebar.navigateFile(-1)
 
 	case Matches(key, km.NextSection):
-		cmd := m.sidebar.jumpToNextSection()
-		return m, cmd
+		// } always moves to the next file (from any pane).
+		return m, m.sidebar.navigateFile(+1)
 
 	case Matches(key, km.Select):
 		if m.focus == focusSidebar {
@@ -2937,6 +2937,18 @@ func (m appModel) editorCommand() string {
 	return ""
 }
 
+// currentPaneLabel returns the path/title shown in the diff pane's bottom-border
+// footer, so the current file is identifiable even with the sidebar hidden.
+func (m appModel) currentPaneLabel() string {
+	if m.diffView.isViewingContentItem() {
+		return m.diffView.contentTitle
+	}
+	if m.diffView.additionalFilePath != "" {
+		return m.diffView.additionalFilePath
+	}
+	return m.diffView.path
+}
+
 // editorMode returns the configured open mode ("terminal" by default).
 func (m appModel) editorMode() string {
 	if m.engine != nil {
@@ -3680,6 +3692,17 @@ func (m appModel) View() tea.View {
 		mainStyle = m.theme.MainPaneFocused
 	}
 
+	// diffBox renders the diff into its bordered pane and embeds the current file
+	// path in the bottom border so the file is identifiable with the sidebar hidden.
+	paneLabel := m.currentPaneLabel()
+	paneBorderColor := mainStyle.GetBorderBottomForeground()
+	diffBox := func(outerW, outerH int) string {
+		return withPathFooter(
+			mainStyle.Width(outerW).Height(outerH).Render(m.diffView.View()),
+			paneLabel, paneBorderColor,
+		)
+	}
+
 	var body string
 
 	// lipgloss v2: Width/Height set the OUTER dimensions (including border).
@@ -3702,10 +3725,7 @@ func (m appModel) View() tea.View {
 	}
 
 	if m.sidebarHidden {
-		mainView := mainStyle.
-			Width(m.diffView.width + bw).
-			Height(m.diffView.height + bh).
-			Render(m.diffView.View())
+		mainView := diffBox(m.diffView.width+bw, m.diffView.height+bh)
 		if m.docPane.active {
 			mainView = lipgloss.JoinVertical(lipgloss.Left, mainView, docPaneBox(m.diffView.width+bw))
 		}
@@ -3716,10 +3736,7 @@ func (m appModel) View() tea.View {
 			Height(m.sidebar.height + bh).
 			Render(m.sidebar.View())
 
-		mainView := mainStyle.
-			Width(m.diffView.width + bw).
-			Height(m.diffView.height + bh).
-			Render(m.diffView.View())
+		mainView := diffBox(m.diffView.width+bw, m.diffView.height+bh)
 
 		parts := []string{sidebarView, mainView}
 		if m.docPane.active {
@@ -3741,10 +3758,7 @@ func (m appModel) View() tea.View {
 		}
 		m.diffView.width = diffContentW
 
-		mainView := mainStyle.
-			Width(diffOuterW).
-			Height(m.diffView.height + bh).
-			Render(m.diffView.View())
+		mainView := diffBox(diffOuterW, m.diffView.height+bh)
 
 		// Doc pane stacks under the diff only; the sidebar stays full-height beside.
 		if m.docPane.active {
