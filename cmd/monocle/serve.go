@@ -13,9 +13,67 @@ import (
 	"time"
 
 	"github.com/josephschmitt/monocle/internal/adapters"
+	"github.com/josephschmitt/monocle/internal/client"
 	"github.com/josephschmitt/monocle/internal/core"
 	"github.com/josephschmitt/monocle/internal/db"
+	"github.com/josephschmitt/monocle/internal/protocol"
 )
+
+// serveHealthTimeout bounds the health-check ping used before connecting to an
+// existing serve. Short enough that a hung serve doesn't stall startup, long
+// enough that a busy-but-live serve (a large first refresh) isn't falsely reaped.
+const serveHealthTimeout = 3 * time.Second
+
+// serveIsHealthy pings the serve at socketPath with a get_server_info request.
+// It returns (true, "") when the serve replies within timeout — and, when
+// checkVersion is set, reports wantVersion — otherwise (false, reason).
+func serveIsHealthy(socketPath, wantVersion string, checkVersion bool, timeout time.Duration) (bool, string) {
+	c, err := client.Connect(socketPath)
+	if err != nil {
+		return false, "connect failed"
+	}
+	defer c.Close()
+	resp, err := c.Request(&protocol.GetServerInfoMsg{Type: protocol.TypeGetServerInfo}, timeout)
+	if err != nil {
+		return false, "no response within " + timeout.String()
+	}
+	info, ok := resp.(*protocol.GetServerInfoResponse)
+	if !ok {
+		return false, "unexpected response"
+	}
+	if checkVersion && info.Version != "" && wantVersion != "" && info.Version != wantVersion {
+		return false, fmt.Sprintf("version mismatch (serve %q, this %q)", info.Version, wantVersion)
+	}
+	return true, ""
+}
+
+// reapUnhealthyServe terminates an existing serve on socketPath when it is
+// unresponsive (accepts connections but never replies — a hung/stale serve) or,
+// when checkVersion is set, runs a different binary version than this process.
+// It then removes the socket and pid files so the caller's EnsureServe spawns a
+// fresh serve. A healthy, version-matching serve is left untouched.
+func reapUnhealthyServe(socketPath string, checkVersion bool) {
+	if _, err := os.Stat(socketPath); err != nil {
+		return // nothing bound → EnsureServe will spawn
+	}
+	if ok, _ := serveIsHealthy(socketPath, version, checkVersion, serveHealthTimeout); ok {
+		return
+	}
+	pidPath := pidFilePath(socketPath)
+	if pid, err := readPIDFile(pidPath); err == nil && pidIsAlive(pid) && pidLooksLikeMonocle(pid) {
+		if proc, err := os.FindProcess(pid); err == nil {
+			_ = proc.Signal(syscall.SIGTERM)
+			for i := 0; i < 40 && pidIsAlive(pid); i++ {
+				time.Sleep(50 * time.Millisecond)
+			}
+			if pidIsAlive(pid) {
+				_ = proc.Signal(syscall.SIGKILL) // last resort if it ignored SIGTERM
+			}
+		}
+	}
+	_ = os.Remove(socketPath)
+	removePIDFile(pidPath)
+}
 
 // ServeCmd runs a headless engine + socket server. Frontends (TUI, Desktop,
 // future plugins) connect as thin socket clients instead of embedding their
@@ -330,4 +388,3 @@ func (c *StopCmd) Run() error {
 	}
 	return fmt.Errorf("timed out waiting for monocle serve (pid %d) to exit", pid)
 }
-

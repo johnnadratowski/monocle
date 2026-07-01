@@ -1080,6 +1080,18 @@ func runTUI(socketOverride string, workdir string, additionalPaths []string, con
 		return err
 	}
 
+	// Before connecting, health-check any existing serve. One that accepts
+	// connections but doesn't respond (a hung or stale old-binary serve holding
+	// the socket) would make the TUI hang on its first request. Reap it — and,
+	// on the default socket, a serve running a different binary version — so
+	// EnsureServe spawns a fresh one instead. An explicit --socket is only reaped
+	// when fully unresponsive (the version may differ intentionally).
+	resolvedSocket := socketOverride
+	if resolvedSocket == "" {
+		resolvedSocket = adapters.DefaultSocketPath(repoRoot)
+	}
+	reapUnhealthyServe(resolvedSocket, socketOverride == "")
+
 	// Auto-spawn `monocle serve` for this repo if none is running, then
 	// connect as a thin client. The engine (SQLite, session, feedback
 	// queue, socket server) all live in the serve process; the TUI holds
