@@ -3067,13 +3067,43 @@ func (m *diffViewModel) insertInlineAnnotations() {
 	if m.hideOverlays || len(m.annotations) == 0 {
 		return
 	}
+	lineNumOf := func(line diffViewLine) int {
+		// New-file line number: split lines carry it on the right side.
+		if line.rightLineNum > 0 {
+			return line.rightLineNum
+		}
+		return line.newLineNum
+	}
+
+	// Anchor each annotation's box to the LAST shown line within its range rather
+	// than strictly LineEnd. When the range extends past the last line the diff
+	// includes (end-of-file annotations, or an agent LineEnd that overshoots),
+	// LineEnd isn't a shown line — so anchoring to it dropped the box even though
+	// the gutter bar rendered. The last in-range shown line always exists when any
+	// part of the range is visible.
+	anchors := make([]int, len(m.annotations))
+	for i := range m.annotations {
+		a := &m.annotations[i]
+		if a.TargetRef != m.path {
+			continue
+		}
+		end := a.LineEnd
+		if end == 0 {
+			end = a.LineStart
+		}
+		best := 0
+		for _, line := range m.lines {
+			ln := lineNumOf(line)
+			if ln >= a.LineStart && ln <= end && ln > best {
+				best = ln
+			}
+		}
+		anchors[i] = best
+	}
+
 	var result []diffViewLine
 	for _, line := range m.lines {
-		// New-file line number: split lines carry it on the right side.
-		ln := line.rightLineNum
-		if ln == 0 {
-			ln = line.newLineNum
-		}
+		ln := lineNumOf(line)
 		if ln > 0 && m.lineInAnnotation(ln) {
 			line.annotated = true
 		}
@@ -3082,12 +3112,11 @@ func (m *diffViewModel) insertInlineAnnotations() {
 			continue
 		}
 		for i := range m.annotations {
-			a := &m.annotations[i]
-			if a.TargetRef == m.path && annotationAnchor(a) == ln {
+			if anchors[i] > 0 && anchors[i] == ln {
 				result = append(result, diffViewLine{
 					isAnnotation: true,
-					annotation:   a,
-					content:      formatAnnotation(a),
+					annotation:   &m.annotations[i],
+					content:      formatAnnotation(&m.annotations[i]),
 				})
 			}
 		}
@@ -3203,15 +3232,6 @@ func (m diffViewModel) CursorAnnotation() *types.Annotation {
 		}
 	}
 	return nil
-}
-
-// annotationAnchor returns the new-file line after which an annotation's box is
-// drawn (the last line of its range).
-func annotationAnchor(a *types.Annotation) int {
-	if a.LineEnd > 0 {
-		return a.LineEnd
-	}
-	return a.LineStart
 }
 
 // lineInAnnotation reports whether a new-file line number falls within any

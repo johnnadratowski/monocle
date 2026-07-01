@@ -1237,6 +1237,47 @@ func TestJumpToChangeModificationBlocks(t *testing.T) {
 	}
 }
 
+// TestAnnotationBoxAtEndOfShownDiff guards the "gutter shows but the box is
+// missing" bug: an annotation whose LineEnd runs past the last line the diff
+// includes (an end-of-file annotation, or an agent LineEnd that overshoots) must
+// still render its box, anchored to the last shown line within the range.
+func TestAnnotationBoxAtEndOfShownDiff(t *testing.T) {
+	theme := DefaultTheme()
+	m := diffViewModel{
+		theme: &theme, hl: newHighlighter(), mdStyler: newMarkdownStyler(theme),
+		path: "q.sql", width: 80, height: 40, style: diffStyleUnified,
+		hunks: []types.DiffHunk{{
+			OldStart: 1, OldCount: 0, NewStart: 1, NewCount: 3, Header: "@@ f @@",
+			Lines: []types.DiffLine{
+				{Kind: types.DiffLineAdded, NewLineNum: 1, Content: "a"},
+				{Kind: types.DiffLineAdded, NewLineNum: 2, Content: "b"},
+				{Kind: types.DiffLineAdded, NewLineNum: 3, Content: "c"}, // last shown line
+			},
+		}},
+		// Range 2..9 overshoots the last shown line (3) — LineEnd 9 is never shown.
+		annotations: []types.Annotation{
+			{TargetRef: "q.sql", LineStart: 2, LineEnd: 9, Summary: "end-of-file note"},
+		},
+	}
+	m.buildLines()
+
+	hasBox := false
+	for i := range m.lines {
+		if m.lines[i].isAnnotation {
+			hasBox = true
+		}
+	}
+	if !hasBox {
+		t.Fatal("annotation box must render even when LineEnd overshoots the last shown line")
+	}
+	// The box should sit right after the last in-range shown line (new line 3).
+	for i := 0; i < len(m.lines)-1; i++ {
+		if m.lines[i].newLineNum == 3 && !m.lines[i+1].isAnnotation {
+			t.Error("annotation box should be anchored after the last shown in-range line (3)")
+		}
+	}
+}
+
 // TestLandOnChunkEdge verifies cross-file landing: + lands on the first change
 // block, - lands on the last — used when [ / ] cross into an adjacent file.
 func TestLandOnChunkEdge(t *testing.T) {
