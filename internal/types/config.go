@@ -15,8 +15,9 @@ type Config struct {
 	Wrap           bool              `json:"wrap"`
 	TabSize        int               `json:"tab_size"`
 	ContextLines   int               `json:"context_lines"`
-	FullFileDiff   bool              `json:"full_file_diff"` // show whole file (with diff coloring) instead of compact hunks
-	Editor         string            `json:"editor"`         // external editor command; overrides $VISUAL/$EDITOR when set
+	FullFileDiff   bool              `json:"full_file_diff"`  // show whole file (with diff coloring) instead of compact hunks
+	Editor         string            `json:"editor"`          // external editor command; overrides $VISUAL/$EDITOR when set
+	MarkdownViewer string            `json:"markdown_viewer"` // external rendered-markdown viewer for artifacts / .md files (default: glow)
 	// EditorMode controls how Ctrl+g / Ctrl+o open a file: "terminal" (take over
 	// Monocle's screen, the default), "tmux_vertical" (side-by-side split),
 	// "tmux_horizontal" (stacked split), or "tmux_window" (new tmux window/tab).

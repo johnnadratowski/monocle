@@ -243,6 +243,7 @@ Monocle exposes review operations via **MCP tools** (default for Claude Code, an
 | `Ctrl+g`               | Open the file under review in `$EDITOR` (per `editor_mode`); also opens external editor in comment/submit modals |
 | `Ctrl+o`               | Open the file path referenced on the current diff line in `$EDITOR` (per `editor_mode`) |
 | `Ctrl+Shift+g` / `Ctrl+Shift+o` | Same as `Ctrl+g` / `Ctrl+o` but always take over the screen (ignore `editor_mode`) |
+| `Ctrl+p`               | Open the current artifact or `.md` file in a rendered markdown viewer (`markdown_viewer`, default `glow`) |
 | `Ctrl+y`               | Copy review to clipboard                                  |
 | `P` / `:pause`         | Pause the agent (wait for your review)                    |
 | `D` / `:clear`         | Clear review (comments, plans, added files, reviewed)     |
@@ -351,6 +352,7 @@ Monocle loads settings from JSON config files:
   "editor": "",
   "editor_mode": "terminal",
   "editor_focus": true,
+  "markdown_viewer": "",
   "ignore_patterns": [],
   "keybindings": {},
   "mouse": true,
@@ -382,6 +384,7 @@ Monocle loads settings from JSON config files:
 | `editor`                             | string                                     | `""`         | External editor command (overrides `$VISUAL`/`$EDITOR`); may include flags, e.g. `"code --wait"` |
 | `editor_mode`                        | `"terminal"`, `"tmux_vertical"`, `"tmux_horizontal"`, `"tmux_window"` | `"terminal"` | How `Ctrl+g`/`Ctrl+o` open: take over the screen, or (inside tmux) open in a side-by-side split, stacked split, or new window/tab. Falls back to `terminal` outside tmux |
 | `editor_focus`                       | `true`, `false`                            | `true`       | Whether a new tmux split/window takes focus                              |
+| `markdown_viewer`                    | string                                     | `""`         | Rendered-markdown viewer for `Ctrl+p` (artifacts / `.md` files); may include flags. Empty falls back to `glow` |
 | `ignore_patterns`                    | string array                               | `[]`         | Glob patterns for files to exclude                                       |
 | `min_diff_width`                     | integer                                    | `80`         | Minimum character width for the diff viewer in side-by-side layout       |
 | `mouse`                              | `true`, `false`                            | `true`       | Enable mouse interactions (click, scroll, drag)                          |

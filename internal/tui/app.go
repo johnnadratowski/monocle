@@ -1146,6 +1146,12 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case openFileInEditorDoneMsg:
 		return m, m.refreshFiles()
 
+	case markdownViewerDoneMsg:
+		if msg.err != nil {
+			m.statusBar.searchInfo = "markdown viewer failed: " + msg.err.Error()
+		}
+		return m, nil
+
 	case closeHelpMsg:
 		m.overlay = overlayNone
 		return m, nil
@@ -1987,6 +1993,15 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		takeover := Matches(key, km.OpenPathUnderCursorTakeover)
 		return m, m.openFileCmd(path, line, takeover)
+
+	case Matches(key, km.OpenInMarkdownViewer):
+		// Open the current artifact or .md file in a rendered markdown viewer.
+		filePath, cleanup, ok, why := m.markdownViewerTarget()
+		if !ok {
+			m.statusBar.searchInfo = why
+			return m, nil
+		}
+		return m, openInMarkdownViewer(filePath, m.markdownViewerCommand(), cleanup)
 
 	case Matches(key, km.Refresh):
 		return m, m.refreshFiles()
@@ -2947,6 +2962,78 @@ func (m appModel) editorCommand() string {
 		return cfg.Editor
 	}
 	return ""
+}
+
+// markdownViewerCommand returns the configured markdown viewer command
+// ("" → default "glow", resolved in resolveMarkdownViewer).
+func (m appModel) markdownViewerCommand() string {
+	if m.engine == nil {
+		return ""
+	}
+	if cfg := m.engine.GetConfig(); cfg != nil {
+		return cfg.MarkdownViewer
+	}
+	return ""
+}
+
+// markdownViewerTarget resolves what to open in the rendered markdown viewer for
+// the current focus/selection. Artifacts (content items) have no on-disk file, so
+// their body is written to a temp .md file and a cleanup func is returned. Real
+// files are only openable when they have a markdown extension. Returns ok=false
+// with a human-readable reason otherwise.
+func (m appModel) markdownViewerTarget() (filePath string, cleanup func(), ok bool, why string) {
+	if m.focus == focusSidebar {
+		if ci := m.sidebar.selectedContentItem(); ci != nil {
+			return m.artifactMarkdownTemp(ci.ID)
+		}
+		if f := m.sidebar.selectedFile(); f != nil {
+			if isMarkdownPath(f.Path) {
+				return filepath.Join(m.repoRoot, f.Path), nil, true, ""
+			}
+			return "", nil, false, "not a markdown file"
+		}
+		if af := m.sidebar.selectedAdditionalFile(); af != nil {
+			if isMarkdownPath(af.Path) {
+				return af.Path, nil, true, ""
+			}
+			return "", nil, false, "not a markdown file"
+		}
+		return "", nil, false, "no markdown file or artifact selected"
+	}
+	// Diff/main pane.
+	if m.diffView.isViewingContentItem() {
+		return m.artifactMarkdownTemp(m.diffView.contentID)
+	}
+	if m.diffView.additionalFilePath != "" {
+		if isMarkdownPath(m.diffView.additionalFilePath) {
+			return m.diffView.additionalFilePath, nil, true, ""
+		}
+		return "", nil, false, "not a markdown file"
+	}
+	if m.diffView.path != "" {
+		if isMarkdownPath(m.diffView.path) {
+			return filepath.Join(m.repoRoot, m.diffView.path), nil, true, ""
+		}
+		return "", nil, false, "not a markdown file"
+	}
+	return "", nil, false, "no markdown file or artifact"
+}
+
+// artifactMarkdownTemp loads the content item's body and writes it to a temp .md
+// file for the markdown viewer, returning the path and a cleanup func.
+func (m appModel) artifactMarkdownTemp(contentID string) (string, func(), bool, string) {
+	if m.engine == nil {
+		return "", nil, false, "no engine"
+	}
+	item, err := m.engine.GetContentItem(contentID)
+	if err != nil || item == nil {
+		return "", nil, false, "could not load artifact"
+	}
+	path, cleanup, err := writeArtifactTempMarkdown(item.Content)
+	if err != nil {
+		return "", nil, false, "could not write artifact temp file"
+	}
+	return path, cleanup, true, ""
 }
 
 // syncSidebarSelectionToShown moves the sidebar cursor to the item currently
