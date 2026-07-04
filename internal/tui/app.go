@@ -599,6 +599,8 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else if len(msg.files) == 0 && !m.diffView.isViewingContentItem() && m.diffView.path != "" {
 			m.diffView.clearFileState()
 		}
+		// Keep the highlight on the shown item after the refresh/regroup.
+		m.syncSidebarSelectionToShown()
 		return m, diffCmd
 
 	// Engine events
@@ -627,21 +629,31 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-		// Auto-select first file if the current view is empty or stale
-		if len(m.sidebar.files) > 0 && !m.diffViewShowsValidFile() {
+		// Reconcile the sidebar selection with the diff pane after the list changed.
+		if m.diffViewShowsValidFile() {
+			// The shown item still exists — keep it selected and scrolled into view
+			// (the highlight follows the displayed file even after a regroup).
+			m.syncSidebarSelectionToShown()
+			// Reload only a changed-file diff so freshly-pushed annotations/comments
+			// appear (re-anchored so the viewport doesn't jump). Artifacts/added
+			// files aren't git files and must not be reloaded as one.
+			if m.diffView.path != "" && !m.diffView.isViewingContentItem() && m.diffView.additionalFilePath == "" {
+				path := m.diffView.path
+				full := m.diffView.fullFile
+				anchor := m.diffView.anchorLineForCursor()
+				return m, func() tea.Msg {
+					return requestFileDiffMsg{path: path, full: full, anchorLine: anchor}
+				}
+			}
+			return m, nil
+		}
+		// The shown item is gone (or nothing shown): select and show the first file.
+		if len(m.sidebar.files) > 0 {
 			m.sidebar.selectPath(m.sidebar.files[0].Path)
 			return m, m.handleSidebarSelect(sidebarSelectMsg{path: m.sidebar.files[0].Path})
-		} else if len(m.sidebar.files) == 0 && !m.diffView.isViewingContentItem() && m.diffView.path != "" {
+		}
+		if !m.diffView.isViewingContentItem() && m.diffView.path != "" {
 			m.diffView.clearFileState()
-		} else if m.diffViewShowsValidFile() && m.diffView.path != "" {
-			// Reload the current file's diff so freshly-pushed annotations (and
-			// comment changes) appear, re-anchored so the viewport doesn't jump.
-			path := m.diffView.path
-			full := m.diffView.fullFile
-			anchor := m.diffView.anchorLineForCursor()
-			return m, func() tea.Msg {
-				return requestFileDiffMsg{path: path, full: full, anchorLine: anchor}
-			}
 		}
 		return m, nil
 
@@ -2937,6 +2949,22 @@ func (m appModel) editorCommand() string {
 	return ""
 }
 
+// syncSidebarSelectionToShown moves the sidebar cursor to the item currently
+// shown in the diff pane (file, artifact, or added file) and scrolls it into
+// view, so the highlighted item always matches what's displayed after the file
+// list changes or regroups. No-op when nothing valid is shown.
+func (m *appModel) syncSidebarSelectionToShown() {
+	switch {
+	case m.diffView.isViewingContentItem():
+		m.sidebar.selectContentByID(m.diffView.contentID)
+	case m.diffView.additionalFilePath != "":
+		m.sidebar.selectAdditionalByPath(m.diffView.additionalFilePath)
+	case m.diffView.path != "":
+		m.sidebar.selectPath(m.diffView.path)
+		m.sidebar.ensureVisible()
+	}
+}
+
 // currentPaneLabel returns the path/title shown in the diff pane's bottom-border
 // footer, so the current file is identifiable even with the sidebar hidden.
 func (m appModel) currentPaneLabel() string {
@@ -3001,7 +3029,10 @@ func (m appModel) editorTargetFile() (string, int, bool) {
 		}
 		return "", 0, false
 	}
-	if m.diffView.contentMode {
+	// Artifacts (content items) have no file on disk — never try to open one.
+	// isViewingContentItem covers both raw content mode and the content-diff view,
+	// where diffView.path is a synthetic "content.<ext>" that must not be opened.
+	if m.diffView.isViewingContentItem() {
 		return "", 0, false
 	}
 	var filePath string

@@ -1028,6 +1028,18 @@ func (m *sidebarModel) selectContentByID(id string) {
 	}
 }
 
+// selectAdditionalByPath moves the cursor to the added file matching path.
+func (m *sidebarModel) selectAdditionalByPath(path string) {
+	additionalStart := len(m.contentItems) + m.fileItemCount()
+	for i, af := range m.displayAdditionalFiles() {
+		if af.Path == path {
+			m.cursor = additionalStart + i
+			m.ensureVisible()
+			return
+		}
+	}
+}
+
 // selectPath moves the cursor to the item matching the given file path.
 func (m *sidebarModel) selectPath(path string) {
 	contentCount := len(m.contentItems)
