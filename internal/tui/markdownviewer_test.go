@@ -2,7 +2,10 @@ package tui
 
 import (
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/josephschmitt/monocle/internal/types"
 )
@@ -26,18 +29,62 @@ func TestIsMarkdownPath(t *testing.T) {
 }
 
 func TestResolveMarkdownViewer(t *testing.T) {
-	// Empty falls back to glow.
-	if name, args := resolveMarkdownViewer(""); name != "glow" || len(args) != 0 {
-		t.Errorf("empty config: got %q %v, want glow with no args", name, args)
+	// Empty falls back to glow's pager (glow -p).
+	if name, args := resolveMarkdownViewer(""); name != "glow" || len(args) != 1 || args[0] != "-p" {
+		t.Errorf("empty config: got %q %v, want glow -p", name, args)
 	}
 	// Whitespace-only also falls back.
-	if name, _ := resolveMarkdownViewer("   "); name != "glow" {
-		t.Errorf("whitespace config: got %q, want glow", name)
+	if name, args := resolveMarkdownViewer("   "); name != "glow" || len(args) != 1 {
+		t.Errorf("whitespace config: got %q %v, want glow -p", name, args)
 	}
-	// Configured command with flags splits into name + args.
-	name, args := resolveMarkdownViewer("glow -p -w 100")
-	if name != "glow" || len(args) != 3 || args[0] != "-p" {
-		t.Errorf("flagged config: got %q %v", name, args)
+	// Configured GUI launcher splits into name + args.
+	name, args := resolveMarkdownViewer("open -a MacDown")
+	if name != "open" || len(args) != 2 || args[0] != "-a" || args[1] != "MacDown" {
+		t.Errorf("configured launcher: got %q %v", name, args)
+	}
+}
+
+func TestSanitizeFilename(t *testing.T) {
+	cases := map[string]string{
+		"Implementation Plan":   "Implementation Plan",
+		"feat/add-thing":        "feat-add-thing",
+		"  spaced  ":            "spaced",
+		"weird:*?<>|chars":      "weird------chars",
+		"":                      "artifact",
+		"---":                   "artifact",
+		strings.Repeat("x", 80): strings.Repeat("x", 60),
+	}
+	for in, want := range cases {
+		if got := sanitizeFilename(in); got != want {
+			t.Errorf("sanitizeFilename(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestReapOldArtifactTemps(t *testing.T) {
+	dir := t.TempDir()
+	old := filepath.Join(dir, "old.md")
+	fresh := filepath.Join(dir, "fresh.md")
+	if err := os.WriteFile(old, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(fresh, []byte("y"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	// Backdate the "old" file well past the max age.
+	past := now.Add(-2 * artifactTempMaxAge)
+	if err := os.Chtimes(old, past, past); err != nil {
+		t.Fatal(err)
+	}
+
+	reapOldArtifactTemps(dir, artifactTempMaxAge, now)
+
+	if _, err := os.Stat(old); !os.IsNotExist(err) {
+		t.Errorf("old temp should have been reaped, stat err = %v", err)
+	}
+	if _, err := os.Stat(fresh); err != nil {
+		t.Errorf("fresh temp should survive, stat err = %v", err)
 	}
 }
 
@@ -49,13 +96,13 @@ func TestMarkdownViewerTarget_MarkdownFile(t *testing.T) {
 	m.sidebar.rebuildGroups()
 
 	m.sidebar.cursor = 0 // docs/guide.md
-	path, cleanup, ok, why := m.markdownViewerTarget()
-	if !ok || path != "/repo/docs/guide.md" || cleanup != nil {
+	path, ok, why := m.markdownViewerTarget()
+	if !ok || path != "/repo/docs/guide.md" {
 		t.Errorf("markdown file: got path=%q ok=%v why=%q", path, ok, why)
 	}
 
 	m.sidebar.cursor = 1 // main.go
-	if _, _, ok, why := m.markdownViewerTarget(); ok || why != "not a markdown file" {
+	if _, ok, why := m.markdownViewerTarget(); ok || why != "not a markdown file" {
 		t.Errorf("non-markdown file: ok=%v why=%q", ok, why)
 	}
 }
@@ -68,11 +115,11 @@ func TestMarkdownViewerTarget_Artifact(t *testing.T) {
 	m.diffView.contentID = "plan-1"
 	m.diffView.path = "content.md" // synthetic content-diff path
 
-	path, cleanup, ok, why := m.markdownViewerTarget()
-	if !ok || cleanup == nil {
-		t.Fatalf("artifact: ok=%v cleanup=%v why=%q", ok, cleanup != nil, why)
+	path, ok, why := m.markdownViewerTarget()
+	if !ok {
+		t.Fatalf("artifact: ok=%v why=%q", ok, why)
 	}
-	defer cleanup()
+	defer os.Remove(path)
 	got, err := os.ReadFile(path)
 	if err != nil || string(got) != "# Plan\n" {
 		t.Errorf("artifact temp body = %q (err %v), want %q", string(got), err, "# Plan\n")
@@ -81,17 +128,14 @@ func TestMarkdownViewerTarget_Artifact(t *testing.T) {
 
 func TestWriteArtifactTempMarkdown(t *testing.T) {
 	body := "# Title\n\nSome **markdown** body.\n"
-	path, cleanup, err := writeArtifactTempMarkdown(body)
+	path, err := writeArtifactTempMarkdown("My Plan", body)
 	if err != nil {
 		t.Fatalf("writeArtifactTempMarkdown: %v", err)
 	}
-	defer cleanup()
+	defer os.Remove(path)
 
-	if got := len(path); got == 0 {
-		t.Fatal("expected a temp file path")
-	}
-	if ext := path[len(path)-3:]; ext != ".md" {
-		t.Errorf("temp file should end in .md, got %q", path)
+	if filepath.Base(path) != "My Plan.md" {
+		t.Errorf("temp file should be named after the title, got %q", filepath.Base(path))
 	}
 	got, err := os.ReadFile(path)
 	if err != nil {
@@ -99,10 +143,5 @@ func TestWriteArtifactTempMarkdown(t *testing.T) {
 	}
 	if string(got) != body {
 		t.Errorf("temp body = %q, want %q", string(got), body)
-	}
-
-	cleanup()
-	if _, err := os.Stat(path); !os.IsNotExist(err) {
-		t.Errorf("cleanup should have removed the temp file, stat err = %v", err)
 	}
 }

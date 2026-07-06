@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -15,30 +16,28 @@ type markdownViewerDoneMsg struct {
 }
 
 // openInMarkdownViewer opens filePath in the configured rendered-markdown viewer
-// (default "glow"), taking over Monocle's terminal via tea.ExecProcess. cleanup,
-// when non-nil, runs after the viewer exits — used to remove a temp file written
-// for an artifact that has no on-disk path.
-func openInMarkdownViewer(filePath, configured string, cleanup func()) tea.Cmd {
+// (default "glow -p"), taking over Monocle's terminal via tea.ExecProcess. GUI
+// launchers (e.g. "open -a MacDown") return immediately, so the window stays open
+// beside the terminal; terminal viewers (glow's pager) take over until quit.
+func openInMarkdownViewer(filePath, configured string) tea.Cmd {
 	name, args := resolveMarkdownViewer(configured)
 	args = append(args, filePath)
 	cmd := exec.Command(name, args...)
 	return tea.ExecProcess(cmd, func(execErr error) tea.Msg {
-		if cleanup != nil {
-			cleanup()
-		}
 		return markdownViewerDoneMsg{err: execErr}
 	})
 }
 
 // resolveMarkdownViewer returns the viewer binary and any extra arguments. The
-// configured value may include flags (e.g. "glow -p"). When unset it falls back
-// to "glow", the canonical terminal markdown renderer.
+// configured value may include flags (e.g. "open -a MacDown"). When unset it
+// falls back to "glow -p" — glow's pager, which stays open and scrollable
+// instead of rendering to stdout and exiting immediately.
 func resolveMarkdownViewer(configured string) (string, []string) {
 	if strings.TrimSpace(configured) != "" {
 		parts := strings.Fields(configured)
 		return parts[0], parts[1:]
 	}
-	return "glow", nil
+	return "glow", []string{"-p"}
 }
 
 // markdownExts are the file extensions treated as markdown for the viewer.
@@ -55,19 +54,79 @@ func isMarkdownPath(path string) bool {
 	return markdownExts[strings.ToLower(filepath.Ext(path))]
 }
 
-// writeArtifactTempMarkdown writes body to a temporary .md file and returns its
-// path plus a cleanup func that removes it.
-func writeArtifactTempMarkdown(body string) (string, func(), error) {
-	f, err := os.CreateTemp("", "monocle-artifact-*.md")
+// artifactTempMaxAge is how long an artifact temp file lingers before it's
+// reaped. Long enough for a GUI viewer session, short enough not to accumulate.
+const artifactTempMaxAge = time.Hour
+
+// artifactTempDir returns (creating if needed) the directory that holds temp
+// markdown files rendered from artifacts.
+func artifactTempDir() (string, error) {
+	dir := filepath.Join(os.TempDir(), "monocle-artifacts")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	return dir, nil
+}
+
+// reapOldArtifactTemps removes artifact temp files older than maxAge. It runs on
+// each launch instead of deleting immediately after the viewer exits: a GUI
+// launcher returns before its app has read the file, so an immediate delete would
+// race. Reaping on a delay avoids that while still bounding accumulation.
+func reapOldArtifactTemps(dir string, maxAge time.Duration, now time.Time) {
+	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return "", nil, err
+		return
 	}
-	if _, err := f.WriteString(body); err != nil {
-		f.Close()
-		os.Remove(f.Name())
-		return "", nil, err
+	for _, e := range entries {
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if now.Sub(info.ModTime()) > maxAge {
+			os.Remove(filepath.Join(dir, e.Name()))
+		}
 	}
-	f.Close()
-	name := f.Name()
-	return name, func() { os.Remove(name) }, nil
+}
+
+// writeArtifactTempMarkdown writes body to a .md file (named after title, so the
+// viewer's window/title reads nicely) in the reaped artifact temp dir and returns
+// its path. Old temp files are reaped first; the written file is not deleted
+// immediately (see reapOldArtifactTemps).
+func writeArtifactTempMarkdown(title, body string) (string, error) {
+	dir, err := artifactTempDir()
+	if err != nil {
+		return "", err
+	}
+	reapOldArtifactTemps(dir, artifactTempMaxAge, time.Now())
+
+	path := filepath.Join(dir, sanitizeFilename(title)+".md")
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+// sanitizeFilename turns an artifact title into a safe file base name, keeping
+// alphanumerics, spaces, dashes, underscores and dots, collapsing everything else
+// to a dash. Falls back to "artifact" when nothing usable remains.
+func sanitizeFilename(title string) string {
+	var b strings.Builder
+	for _, r := range title {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case r == ' ', r == '-', r == '_', r == '.':
+			b.WriteRune(r)
+		default:
+			b.WriteRune('-')
+		}
+	}
+	name := strings.Trim(strings.TrimSpace(b.String()), "-.")
+	if len(name) > 60 {
+		name = strings.TrimRight(name[:60], "-. ")
+	}
+	if name == "" {
+		return "artifact"
+	}
+	return name
 }
