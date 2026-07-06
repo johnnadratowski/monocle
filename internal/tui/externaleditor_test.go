@@ -7,14 +7,41 @@ import (
 	"github.com/josephschmitt/monocle/internal/types"
 )
 
+func TestSplitCommandLine(t *testing.T) {
+	cases := []struct {
+		in   string
+		want []string
+	}{
+		{"", nil},
+		{"   ", nil},
+		{"code", []string{"code"}},
+		{"code --wait", []string{"code", "--wait"}},
+		{`open -a "Google Chrome"`, []string{"open", "-a", "Google Chrome"}},
+		{`open -a 'Google Chrome'`, []string{"open", "-a", "Google Chrome"}},
+		{`a  b\ c`, []string{"a", "b c"}}, // backslash-escaped space joins the token
+	}
+	for _, c := range cases {
+		got := splitCommandLine(c.in)
+		if len(got) != len(c.want) {
+			t.Errorf("splitCommandLine(%q) = %v, want %v", c.in, got, c.want)
+			continue
+		}
+		for i := range got {
+			if got[i] != c.want[i] {
+				t.Errorf("splitCommandLine(%q)[%d] = %q, want %q", c.in, i, got[i], c.want[i])
+			}
+		}
+	}
+}
+
 func TestResolveEditor(t *testing.T) {
 	tests := []struct {
-		name      string
+		name       string
 		configured string
-		visual    string
-		editor    string
-		wantName  string
-		wantArgs  []string
+		visual     string
+		editor     string
+		wantName   string
+		wantArgs   []string
 	}{
 		{
 			name:       "configured editor takes precedence over env",

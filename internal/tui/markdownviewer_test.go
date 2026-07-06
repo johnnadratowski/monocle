@@ -42,6 +42,11 @@ func TestResolveMarkdownViewer(t *testing.T) {
 	if name != "open" || len(args) != 2 || args[0] != "-a" || args[1] != "MacDown" {
 		t.Errorf("configured launcher: got %q %v", name, args)
 	}
+	// A quoted app name with a space stays a single argument.
+	name, args = resolveMarkdownViewer(`open -a "Google Chrome"`)
+	if name != "open" || len(args) != 2 || args[1] != "Google Chrome" {
+		t.Errorf("quoted launcher: got %q %v", name, args)
+	}
 }
 
 func TestSanitizeFilename(t *testing.T) {

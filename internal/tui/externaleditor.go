@@ -170,10 +170,67 @@ func shellQuote(s string) string {
 func resolveEditor(configured string) (string, []string) {
 	candidates := []string{configured, os.Getenv("VISUAL"), os.Getenv("EDITOR")}
 	for _, val := range candidates {
-		if val != "" {
-			parts := strings.Fields(val)
+		if parts := splitCommandLine(val); len(parts) > 0 {
 			return parts[0], parts[1:]
 		}
 	}
 	return "vi", nil
+}
+
+// splitCommandLine splits a command string into fields, honoring single and
+// double quotes so a value like `open -a "Google Chrome"` yields three fields
+// (["open", "-a", "Google Chrome"]) rather than four. A backslash escapes the
+// next character outside single quotes. For unquoted input it behaves like
+// strings.Fields.
+func splitCommandLine(s string) []string {
+	var (
+		fields  []string
+		cur     strings.Builder
+		inField bool
+		quote   rune // 0, '\'', or '"'
+		escaped bool
+	)
+	flush := func() {
+		if inField {
+			fields = append(fields, cur.String())
+			cur.Reset()
+			inField = false
+		}
+	}
+	for _, r := range s {
+		switch {
+		case escaped:
+			cur.WriteRune(r)
+			inField = true
+			escaped = false
+		case quote == '\'':
+			if r == '\'' {
+				quote = 0
+			} else {
+				cur.WriteRune(r)
+			}
+		case quote == '"':
+			switch r {
+			case '"':
+				quote = 0
+			case '\\':
+				escaped = true
+			default:
+				cur.WriteRune(r)
+			}
+		case r == '\'' || r == '"':
+			quote = r
+			inField = true
+		case r == '\\':
+			escaped = true
+			inField = true
+		case r == ' ' || r == '\t' || r == '\n' || r == '\r':
+			flush()
+		default:
+			cur.WriteRune(r)
+			inField = true
+		}
+	}
+	flush()
+	return fields
 }

@@ -33,8 +33,7 @@ func openInMarkdownViewer(filePath, configured string) tea.Cmd {
 // falls back to "glow -p" — glow's pager, which stays open and scrollable
 // instead of rendering to stdout and exiting immediately.
 func resolveMarkdownViewer(configured string) (string, []string) {
-	if strings.TrimSpace(configured) != "" {
-		parts := strings.Fields(configured)
+	if parts := splitCommandLine(configured); len(parts) > 0 {
 		return parts[0], parts[1:]
 	}
 	return "glow", []string{"-p"}
