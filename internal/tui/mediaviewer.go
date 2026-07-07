@@ -258,13 +258,15 @@ func samplePixel(img image.Image, b image.Rectangle, ox, oy, ow, oh int) color.C
 // a media file present on disk, returning a synthetic ContentItem describing it
 // so the binary-diff path can render a media card instead of a placeholder.
 func (m diffViewModel) changedMediaFile() (types.ContentItem, bool) {
-	if m.contentMode || m.path == "" || m.repoRoot == "" {
+	if m.contentMode || m.path == "" {
 		return types.ContentItem{}, false
 	}
 	category, mimeType, ok := types.MediaInfo(m.path)
 	if !ok {
 		return types.ContentItem{}, false
 	}
+	// repoRoot may be empty; filepath.Join then yields a path relative to the
+	// TUI's working directory, which is the repo root.
 	full := filepath.Join(m.repoRoot, m.path)
 	info, err := os.Stat(full)
 	if err != nil || info.IsDir() {
