@@ -136,6 +136,10 @@ type diffViewModel struct {
 	mediaItem      types.ContentItem
 	mediaCardWidth int
 
+	// repoRoot lets the binary-diff path resolve a changed media file on disk so
+	// it can render a media card instead of the "binary file" placeholder.
+	repoRoot string
+
 	keys *KeyMap
 }
 
@@ -291,6 +295,23 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 		m.comments = msg.comments
 		m.annotations = msg.annotations
 		m.isBinary = isBinaryContent(m.hunks)
+		// A changed media file (image/video/audio) renders as a media card —
+		// metadata + preview — instead of the "binary file" placeholder. It is a
+		// file (not a content artifact), so contentMode stays off and file-level
+		// comments still target the file.
+		if m.isBinary {
+			if disk, ok := m.changedMediaFile(); ok {
+				m.isBinary = false
+				m.mediaMode = true
+				m.mediaItem = disk
+				m.buildMediaCardLines()
+				m.cursor = 0
+				m.offset = 0
+				m.hOffset = 0
+				m.visualMode = false
+				return m, nil
+			}
+		}
 		// If in file view mode, store hunks but fetch file content instead
 		if m.style == diffStyleFile {
 			path := m.path

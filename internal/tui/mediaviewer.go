@@ -254,6 +254,30 @@ func samplePixel(img image.Image, b image.Rectangle, ox, oy, ow, oh int) color.C
 	return lipgloss.Color(fmt.Sprintf("#%02x%02x%02x", uint8(r>>8), uint8(g>>8), uint8(bl>>8)))
 }
 
+// changedMediaFile reports whether the currently loaded changed file (m.path) is
+// a media file present on disk, returning a synthetic ContentItem describing it
+// so the binary-diff path can render a media card instead of a placeholder.
+func (m diffViewModel) changedMediaFile() (types.ContentItem, bool) {
+	if m.contentMode || m.path == "" || m.repoRoot == "" {
+		return types.ContentItem{}, false
+	}
+	category, mimeType, ok := types.MediaInfo(m.path)
+	if !ok {
+		return types.ContentItem{}, false
+	}
+	full := filepath.Join(m.repoRoot, m.path)
+	info, err := os.Stat(full)
+	if err != nil || info.IsDir() {
+		return types.ContentItem{}, false // e.g. a deleted file — fall back to placeholder
+	}
+	return types.ContentItem{
+		Title:     m.path,
+		MediaPath: full,
+		MediaType: category,
+		MimeType:  mimeType,
+	}, true
+}
+
 // buildMediaCardLines rebuilds the diff view's line list from the media card for
 // the current width, storing each card line as a verbatim (already-styled) line.
 func (m *diffViewModel) buildMediaCardLines() {

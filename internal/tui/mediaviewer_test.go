@@ -105,6 +105,42 @@ func TestAnsiImagePreview(t *testing.T) {
 	}
 }
 
+func TestChangedMediaFile(t *testing.T) {
+	repo := t.TempDir()
+	// Write an image inside the repo.
+	imgPath := writeTestPNG(t, 10, 10)
+	data, _ := os.ReadFile(imgPath)
+	if err := os.MkdirAll(filepath.Join(repo, "assets"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "assets", "logo.png"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// A changed media file on disk → media card.
+	m := diffViewModel{repoRoot: repo, path: "assets/logo.png"}
+	item, ok := m.changedMediaFile()
+	if !ok || item.MediaType != "image" || item.MimeType != "image/png" {
+		t.Fatalf("changedMediaFile = %+v ok=%v", item, ok)
+	}
+	if item.MediaPath != filepath.Join(repo, "assets/logo.png") {
+		t.Errorf("MediaPath = %q", item.MediaPath)
+	}
+
+	// A non-media file → not a media card.
+	if _, ok := (diffViewModel{repoRoot: repo, path: "main.go"}).changedMediaFile(); ok {
+		t.Error("main.go should not be a media file")
+	}
+	// A media path that isn't on disk (e.g. deleted) → falls back.
+	if _, ok := (diffViewModel{repoRoot: repo, path: "gone.png"}).changedMediaFile(); ok {
+		t.Error("missing file should not render a card")
+	}
+	// Content mode (artifact) is handled separately, not here.
+	if _, ok := (diffViewModel{repoRoot: repo, path: "assets/logo.png", contentMode: true}).changedMediaFile(); ok {
+		t.Error("content mode should not use changedMediaFile")
+	}
+}
+
 func TestRenderMediaCard(t *testing.T) {
 	path := writeTestPNG(t, 30, 30)
 	item := types.ContentItem{

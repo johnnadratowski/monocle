@@ -303,6 +303,7 @@ func NewApp(engine core.EngineAPI, opts ...AppOptions) appModel {
 	sidebar.focused = true
 	help := newHelpModel(theme, &keys)
 	dv := newDiffViewModel(&theme, &keys)
+	dv.repoRoot = o.RepoRoot
 	var layoutCfg string
 
 	mouseEnabled := true
