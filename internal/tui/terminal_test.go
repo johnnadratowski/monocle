@@ -1,33 +1,38 @@
 package tui
 
 import (
-	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/josephschmitt/monocle/internal/types"
 )
 
-func TestTmuxTerminalArgs(t *testing.T) {
-	// Not in tmux → not ok.
+func TestTmuxShellArgs(t *testing.T) {
+	// Not in tmux → not ok (takes over instead).
 	t.Setenv("TMUX", "")
-	if _, ok := tmuxTerminalArgs("/x", "tmux_window", true); ok {
+	if _, ok := tmuxShellArgs(shellSpec{dir: "/x", mode: "tmux_window", focus: true}); ok {
 		t.Error("expected ok=false when TMUX unset")
 	}
 
 	t.Setenv("TMUX", "/tmp/tmux-1000/default,1234,0")
+
+	// "terminal" and unset modes take over rather than open a tmux pane.
+	for _, mode := range []string{"terminal", ""} {
+		if _, ok := tmuxShellArgs(shellSpec{dir: "/x", mode: mode, focus: true}); ok {
+			t.Errorf("mode %q should take over (ok=false), not open a tmux pane", mode)
+		}
+	}
+
 	cases := []struct {
 		mode  string
-		first string // expected first tmux subcommand
+		first string
 	}{
 		{"tmux_vertical", "split-window"},
 		{"tmux_horizontal", "split-window"},
 		{"tmux_window", "new-window"},
-		{"terminal", "new-window"}, // non-tmux editor_mode → new window
-		{"", "new-window"},
 	}
 	for _, c := range cases {
-		args, ok := tmuxTerminalArgs("/proj/dir", c.mode, true)
+		args, ok := tmuxShellArgs(shellSpec{dir: "/proj/dir", mode: c.mode, focus: true})
 		if !ok || len(args) == 0 || args[0] != c.first {
 			t.Errorf("mode %q: got %v ok=%v, want first %q", c.mode, args, ok, c.first)
 		}
@@ -36,29 +41,34 @@ func TestTmuxTerminalArgs(t *testing.T) {
 		}
 	}
 
-	// focus=false appends -d (detached, keep focus on Monocle).
-	args, _ := tmuxTerminalArgs("/x", "tmux_window", false)
-	if !contains(args, "-d") {
+	// focus=false appends -d (detached).
+	if args, _ := tmuxShellArgs(shellSpec{dir: "/x", mode: "tmux_window", focus: false}); !contains(args, "-d") {
 		t.Errorf("focus=false should append -d: %v", args)
 	}
-	// focus=true does not.
-	args, _ = tmuxTerminalArgs("/x", "tmux_window", true)
-	if contains(args, "-d") {
+	if args, _ := tmuxShellArgs(shellSpec{dir: "/x", mode: "tmux_window", focus: true}); contains(args, "-d") {
 		t.Errorf("focus=true should not append -d: %v", args)
+	}
+
+	// A command is appended (with a pause) as the tmux shell-command argument.
+	args, _ := tmuxShellArgs(shellSpec{dir: "/x", mode: "tmux_window", focus: true, command: "wc -l foo.txt"})
+	if !strings.Contains(strings.Join(args, " "), "wc -l foo.txt") {
+		t.Errorf("command not passed to tmux: %v", args)
 	}
 }
 
-func TestOsTerminalArgs(t *testing.T) {
-	name, args, ok := osTerminalArgs("/proj")
-	switch runtime.GOOS {
-	case "darwin":
-		if !ok || name != "open" || !contains(args, "Terminal") || !contains(args, "/proj") {
-			t.Errorf("darwin: got %q %v ok=%v", name, args, ok)
+func contains(ss []string, want string) bool {
+	for _, s := range ss {
+		if s == want {
+			return true
 		}
-	case "linux":
-		if !ok || !strings.Contains(strings.Join(args, " "), "/proj") {
-			t.Errorf("linux: got %q %v ok=%v", name, args, ok)
-		}
+	}
+	return false
+}
+
+func TestUserShell(t *testing.T) {
+	t.Setenv("SHELL", "/bin/zsh")
+	if name, flag := userShell(); name != "/bin/zsh" || flag != "-c" {
+		t.Errorf("userShell = (%q, %q), want (/bin/zsh, -c)", name, flag)
 	}
 }
 
@@ -86,11 +96,31 @@ func TestTerminalTargetDir(t *testing.T) {
 	}
 }
 
-func contains(ss []string, want string) bool {
-	for _, s := range ss {
-		if s == want {
-			return true
-		}
+func TestShellTargetFile(t *testing.T) {
+	// Changed file → repo-relative path, cwd repo root.
+	m := appModel{repoRoot: "/repo", focus: focusSidebar}
+	m.sidebar.files = []types.ChangedFile{{Path: "pkg/util.go"}}
+	m.sidebar.rebuildGroups()
+	arg, cwd, ok := m.shellTargetFile()
+	if !ok || arg != "pkg/util.go" || cwd != "/repo" {
+		t.Errorf("changed file: got arg=%q cwd=%q ok=%v", arg, cwd, ok)
 	}
-	return false
+
+	// File shown in the diff pane.
+	f := appModel{repoRoot: "/repo", focus: focusMain}
+	f.diffView.path = "main.go"
+	if arg, _, ok := f.shellTargetFile(); !ok || arg != "main.go" {
+		t.Errorf("shown file: got arg=%q ok=%v", arg, ok)
+	}
+}
+
+func TestRenderShellPrompt(t *testing.T) {
+	// Cursor at start: the prompt begins with "!" and contains the buffer text.
+	out := renderShellPrompt(" foo.txt", 0)
+	if !strings.HasPrefix(out, "!") || !strings.Contains(out, "foo.txt") {
+		t.Errorf("prompt = %q", out)
+	}
+	// Out-of-range cursor is clamped without panicking.
+	_ = renderShellPrompt("abc", 99)
+	_ = renderShellPrompt("abc", -5)
 }

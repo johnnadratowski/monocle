@@ -217,6 +217,13 @@ type appModel struct {
 	commandMode   bool
 	commandBuffer string
 
+	// Shell command prompt state (`!`): an editable line pre-filled with the
+	// current file, run in a shell on Enter.
+	shellMode   bool
+	shellBuffer string
+	shellCursor int    // rune index of the cursor within shellBuffer
+	shellDir    string // working directory for the command
+
 	// Diff search input state
 	searchMode         bool
 	searchBuffer       string
@@ -1166,9 +1173,11 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case openTerminalDoneMsg:
 		if msg.err != nil {
-			m.statusBar.searchInfo = "open terminal failed: " + msg.err.Error()
+			m.statusBar.searchInfo = "shell failed: " + msg.err.Error()
+			return m, nil
 		}
-		return m, nil
+		// The shell may have changed files — refresh.
+		return m, m.refreshFiles()
 
 	case closeHelpMsg:
 		m.overlay = overlayNone
@@ -1741,6 +1750,11 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleCommandModeKey(msg)
 	}
 
+	// Shell command prompt input.
+	if m.shellMode {
+		return m.handleShellModeKey(msg)
+	}
+
 	// Diff search input.
 	if m.searchMode {
 		return m.handleSearchModeKey(msg)
@@ -2028,15 +2042,33 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, openInMarkdownViewer(filePath, m.markdownViewerCommand())
 
-	case Matches(key, km.OpenTerminal):
-		// Open a terminal at the current file's directory (tmux split/window when
-		// inside tmux, else a native terminal window).
+	case Matches(key, km.OpenTerminal), Matches(key, km.OpenTerminalTakeover):
+		// Open a terminal at the current file's directory. Ctrl+t honors
+		// editor_mode (tmux split/window); Ctrl+Shift+t always takes over.
 		dir := m.terminalTargetDir()
 		if dir == "" {
 			m.statusBar.searchInfo = "no directory for terminal"
 			return m, nil
 		}
-		return m, openTerminalCmd(dir, m.editorMode(), m.editorFocus())
+		takeover := Matches(key, km.OpenTerminalTakeover)
+		return m, runShell(shellSpec{dir: dir, mode: m.editorMode(), focus: m.editorFocus(), takeover: takeover})
+
+	case Matches(key, km.ShellCommand):
+		// Prompt for a shell command to run on the current file, pre-filled with
+		// " <file>" and the cursor at the start (type the command, then Enter).
+		arg, cwd, ok := m.shellTargetFile()
+		if !ok {
+			m.statusBar.searchInfo = "no file for shell command"
+			return m, nil
+		}
+		m.shellMode = true
+		m.shellDir = cwd
+		m.shellBuffer = " " + arg
+		m.shellCursor = 0
+		m.statusBar.shellMode = true
+		m.statusBar.shellBuffer = m.shellBuffer
+		m.statusBar.shellCursor = 0
+		return m, nil
 
 	case Matches(key, km.Refresh):
 		return m, m.refreshFiles()
@@ -2294,6 +2326,110 @@ func (m appModel) handleCommandModeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd)
 		}
 		return m, nil
 	}
+}
+
+// handleShellModeKey processes keystrokes while the `!` shell prompt is open.
+// The prompt is a single editable line with a movable cursor (unlike command
+// mode, which only appends) so the user can type a command before the file.
+func (m appModel) handleShellModeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	key := msg.String()
+	runes := []rune(m.shellBuffer)
+	switch key {
+	case "esc":
+		m.exitShellMode()
+		return m, nil
+	case "enter":
+		command := strings.TrimSpace(m.shellBuffer)
+		dir := m.shellDir
+		m.exitShellMode()
+		if command == "" {
+			return m, nil
+		}
+		return m, runShell(shellSpec{dir: dir, command: command, mode: m.editorMode(), focus: m.editorFocus()})
+	case "left", "ctrl+b":
+		if m.shellCursor > 0 {
+			m.shellCursor--
+		}
+	case "right", "ctrl+f":
+		if m.shellCursor < len(runes) {
+			m.shellCursor++
+		}
+	case "home", "ctrl+a":
+		m.shellCursor = 0
+	case "end", "ctrl+e":
+		m.shellCursor = len(runes)
+	case "backspace":
+		if m.shellCursor > 0 {
+			runes = append(runes[:m.shellCursor-1], runes[m.shellCursor:]...)
+			m.shellBuffer = string(runes)
+			m.shellCursor--
+		}
+	case "ctrl+u": // kill to start of line
+		m.shellBuffer = string(runes[m.shellCursor:])
+		m.shellCursor = 0
+	case "ctrl+k": // kill to end of line
+		m.shellBuffer = string(runes[:m.shellCursor])
+	default:
+		if key == "space" {
+			key = " "
+		}
+		if kr := []rune(key); len(kr) == 1 {
+			runes = append(runes[:m.shellCursor], append([]rune{kr[0]}, runes[m.shellCursor:]...)...)
+			m.shellBuffer = string(runes)
+			m.shellCursor++
+		}
+	}
+	m.statusBar.shellBuffer = m.shellBuffer
+	m.statusBar.shellCursor = m.shellCursor
+	return m, nil
+}
+
+// exitShellMode clears the shell prompt state.
+func (m *appModel) exitShellMode() {
+	m.shellMode = false
+	m.shellBuffer = ""
+	m.shellCursor = 0
+	m.shellDir = ""
+	m.statusBar.shellMode = false
+	m.statusBar.shellBuffer = ""
+	m.statusBar.shellCursor = 0
+}
+
+// shellTargetFile resolves the file argument (shell-quoted) and working
+// directory for the `!` shell command. Changed files use their repo-relative
+// path from the repo root; additional files and media artifacts use their
+// absolute/stored path. Text artifacts have no file and return ok=false.
+func (m appModel) shellTargetFile() (arg, cwd string, ok bool) {
+	if m.focus == focusSidebar {
+		if ci := m.sidebar.selectedContentItem(); ci != nil {
+			if ci.MediaPath != "" {
+				return shellQuote(ci.MediaPath), m.repoRoot, true
+			}
+			return "", "", false
+		}
+		if f := m.sidebar.selectedFile(); f != nil {
+			return shellQuote(f.Path), m.repoRoot, true
+		}
+		if af := m.sidebar.selectedAdditionalFile(); af != nil {
+			return shellQuote(af.Path), m.repoRoot, true
+		}
+		return "", "", false
+	}
+	if m.diffView.isViewingContentItem() {
+		if m.engine != nil {
+			if item, err := m.engine.GetContentItem(m.diffView.contentID); err == nil && item != nil && item.MediaPath != "" {
+				return shellQuote(item.MediaPath), m.repoRoot, true
+			}
+		}
+		return "", "", false
+	}
+	if m.diffView.additionalFilePath != "" {
+		return shellQuote(m.diffView.additionalFilePath), m.repoRoot, true
+	}
+	if m.diffView.path != "" {
+		return shellQuote(m.diffView.path), m.repoRoot, true
+	}
+	return "", "", false
 }
 
 // diffSearchable reports whether the diff/content pane has searchable content.

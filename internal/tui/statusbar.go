@@ -28,6 +28,9 @@ type statusBarModel struct {
 	socketStarted       bool
 	commandMode         bool
 	commandBuffer       string
+	shellMode           bool
+	shellBuffer         string
+	shellCursor         int
 	searchMode          bool
 	searchBuffer        string
 	searchBackward      bool
@@ -107,6 +110,32 @@ func plural(n int) string {
 	return "s"
 }
 
+// renderShellPrompt renders the `!` shell prompt line with a block cursor at the
+// given rune index (reverse-video), so the user can see where typing inserts.
+func renderShellPrompt(buffer string, cursor int) string {
+	cursorStyle := lipgloss.NewStyle().Reverse(true)
+	runes := []rune(buffer)
+	if cursor < 0 {
+		cursor = 0
+	}
+	if cursor > len(runes) {
+		cursor = len(runes)
+	}
+	var b strings.Builder
+	b.WriteString("!")
+	for i := 0; i <= len(runes); i++ {
+		switch {
+		case i == cursor && i < len(runes):
+			b.WriteString(cursorStyle.Render(string(runes[i])))
+		case i == cursor: // cursor at end of line
+			b.WriteString(cursorStyle.Render(" "))
+		case i < len(runes):
+			b.WriteRune(runes[i])
+		}
+	}
+	return b.String()
+}
+
 func (m statusBarModel) View() string {
 	if m.width == 0 {
 		return ""
@@ -115,6 +144,10 @@ func (m statusBarModel) View() string {
 	if m.commandMode {
 		cmdLine := fmt.Sprintf(":%s█", m.commandBuffer)
 		return m.theme.StatusBar.Width(m.width).Render(cmdLine)
+	}
+
+	if m.shellMode {
+		return m.theme.StatusBar.Width(m.width).Render(renderShellPrompt(m.shellBuffer, m.shellCursor))
 	}
 
 	if m.searchMode {

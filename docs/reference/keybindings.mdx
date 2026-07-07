@@ -72,7 +72,9 @@ description: "Complete keyboard shortcut reference for monocle."
 | `Ctrl+o` | Open the file path referenced on the current diff line in your `$VISUAL` / `$EDITOR` (at the line number if the reference includes one, e.g. `foo.go:42`) |
 | `Ctrl+Shift+g` / `Ctrl+Shift+o` | Same as `Ctrl+g` / `Ctrl+o`, but always take over the screen — ignoring the `editor_mode` tmux split/window setting |
 | `Ctrl+p` | Open the current artifact/file in an external viewer — markdown/text artifacts and `.md` files in `markdown_viewer` (default [`glow -p`](https://github.com/charmbracelet/glow)); media artifacts and image/video/audio files in `media_viewer` (default Google Chrome) |
-| `Ctrl+t` | Open a terminal at the current file's directory — a tmux split/window (per `editor_mode`) when inside tmux, otherwise a native terminal window |
+| `Ctrl+t` | Open a terminal at the current file's directory — takes over Monocle's screen by default (returns when the shell exits), or opens a tmux split/window when `editor_mode` is a `tmux_*` mode |
+| `Ctrl+Shift+t` | Like `Ctrl+t`, but always takes over the screen (ignores `editor_mode`) |
+| `!` | Run a shell command on the current file — opens a prompt pre-filled with the file path (cursor at the start); type a command and press Enter. Output is shown until you press enter to return |
 | `Ctrl+y` | Copy the formatted review to the clipboard without submitting |
 | `P` / `:pause` | Send a pause notification to the agent (requires MCP channel support) |
 | `D` / `:clear` | Clear the review: removes all comments, plans, added files, and reviewed states |
