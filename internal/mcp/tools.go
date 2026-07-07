@@ -283,8 +283,23 @@ func handleGetFeedback(ctx context.Context, req *sdkmcp.CallToolRequest, params 
 }
 
 func handleSendArtifact(ctx context.Context, req *sdkmcp.CallToolRequest, params sendArtifactParams) (*sdkmcp.CallToolResult, any, error) {
+	// Media files (images, video, audio) are sent by reference: the engine
+	// copies the file into managed storage rather than embedding text content.
+	var mediaPath string
 	content := params.Content
-	if content == "" && params.FilePath != "" {
+	if params.FilePath != "" && content == "" && types.IsMediaFile(params.FilePath) {
+		abs, err := filepath.Abs(params.FilePath)
+		if err != nil {
+			return errResult("resolve media path: %v", err), nil, nil
+		}
+		if _, err := os.Stat(abs); err != nil {
+			return errResult("media file: %v", err), nil, nil
+		}
+		mediaPath = abs
+		if params.ID == "" {
+			params.ID = filepath.Base(params.FilePath)
+		}
+	} else if content == "" && params.FilePath != "" {
 		data, err := os.ReadFile(params.FilePath)
 		if err != nil {
 			return errResult("read file: %v", err), nil, nil
@@ -294,7 +309,7 @@ func handleSendArtifact(ctx context.Context, req *sdkmcp.CallToolRequest, params
 			params.ID = filepath.Base(params.FilePath)
 		}
 	}
-	if content == "" {
+	if content == "" && mediaPath == "" {
 		return errResult("either content or file_path is required"), nil, nil
 	}
 
@@ -312,6 +327,7 @@ func handleSendArtifact(ctx context.Context, req *sdkmcp.CallToolRequest, params
 			Content:     content,
 			ContentType: params.ContentType,
 			IsPlan:      true,
+			MediaPath:   mediaPath,
 		},
 		client.DefaultTimeout,
 	)

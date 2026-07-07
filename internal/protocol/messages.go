@@ -85,6 +85,11 @@ type SubmitContentMsg struct {
 	Content     string `json:"content"`
 	ContentType string `json:"content_type,omitempty"`
 	IsPlan      bool   `json:"is_plan,omitempty"`
+	// MediaPath, when set, marks this submission as a media artifact (image,
+	// video, audio). It is the absolute path to the source file on the agent's
+	// machine; the engine copies it into managed storage. Content is ignored
+	// for media submissions.
+	MediaPath string `json:"media_path,omitempty"`
 }
 
 // SubmitContentResponse acknowledges content submission.

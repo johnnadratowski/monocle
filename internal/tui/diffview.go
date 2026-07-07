@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"image/color"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -62,6 +63,10 @@ type diffViewLine struct {
 	rightContent string
 	rightEmpty   bool // true if this side is a blank filler
 	leftEmpty    bool
+
+	// verbatim lines are rendered exactly as-is (ANSI preserved, no gutter or
+	// syntax/markdown styling). Used for the media artifact card.
+	verbatim bool
 }
 
 type diffViewModel struct {
@@ -123,6 +128,13 @@ type diffViewModel struct {
 
 	// Additional file mode (external files, no diff)
 	additionalFilePath string
+
+	// Media artifact mode: renders a metadata card + (for images) an ANSI
+	// preview instead of text. mediaItem holds the item being shown so the card
+	// can be rebuilt on resize; mediaCardWidth records the width it was built for.
+	mediaMode      bool
+	mediaItem      types.ContentItem
+	mediaCardWidth int
 
 	keys *KeyMap
 }
@@ -265,6 +277,7 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case loadDiffMsg:
 		m.contentMode = false
+		m.mediaMode = false
 		m.contentID = ""
 		m.contentTitle = ""
 		m.additionalFilePath = ""
@@ -309,6 +322,34 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 		return m, m.selectComment(msg.selectCommentID)
 
 	case loadContentMsg:
+		// Media artifacts render a metadata card + preview instead of text.
+		if msg.mediaPath != "" {
+			m.contentMode = true
+			m.mediaMode = true
+			m.contentID = msg.id
+			m.contentTitle = msg.title
+			m.additionalFilePath = ""
+			m.path = filepath.Base(msg.mediaPath)
+			m.hunks = nil
+			m.comments = nil
+			m.annotations = nil
+			m.contentHasDiff = false
+			m.contentVersionCount = 0
+			m.mediaItem = types.ContentItem{
+				ID:        msg.id,
+				Title:     msg.title,
+				MediaPath: msg.mediaPath,
+				MediaType: msg.mediaType,
+				MimeType:  msg.mimeType,
+			}
+			m.buildMediaCardLines()
+			m.cursor = 0
+			m.offset = 0
+			m.hOffset = 0
+			m.visualMode = false
+			return m, nil
+		}
+		m.mediaMode = false
 		isReload := m.contentMode && m.contentID == msg.id
 		m.contentMode = true
 		m.contentID = msg.id
@@ -420,6 +461,7 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 			return m, nil
 		}
 		m.contentMode = false
+		m.mediaMode = false
 		m.contentID = ""
 		m.contentTitle = ""
 		m.additionalFilePath = msg.path
@@ -491,6 +533,9 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 		case key == "l" || key == "right":
 			m.ScrollRight()
 		case Matches(key, m.keys.Comment):
+			if m.mediaMode {
+				break // media artifacts have no line-level targets
+			}
 			// If cursor is on a comment, edit it
 			if c := m.CursorComment(); c != nil {
 				comment := *c
@@ -523,6 +568,9 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 				}
 			}
 		case Matches(key, m.keys.Suggest):
+			if m.mediaMode {
+				break // media artifacts have no line-level targets
+			}
 			// Suggest edit — requires a line target (no file-level suggestions)
 			if m.contentMode {
 				if m.visualMode {
@@ -644,6 +692,9 @@ func (m diffViewModel) View() string {
 			rendered = m.renderAnnotationLine(line, selected)
 		} else if line.isSplit {
 			rendered = m.renderSplitLine(line, selected, inVisual)
+		} else if line.verbatim {
+			// Media card: content is already fully styled; render as-is.
+			rendered = line.content
 		} else if m.style == diffStyleFile || m.contentMode {
 			gutterWidth := 4
 			contentWidth := m.width - gutterWidth

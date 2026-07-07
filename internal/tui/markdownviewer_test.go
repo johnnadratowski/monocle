@@ -93,41 +93,61 @@ func TestReapOldArtifactTemps(t *testing.T) {
 	}
 }
 
-// TestMarkdownViewerTarget_MarkdownFile: a selected .md file in the sidebar
-// resolves to its on-disk path; a non-markdown file is rejected.
-func TestMarkdownViewerTarget_MarkdownFile(t *testing.T) {
+// TestViewerTarget_MarkdownFile: a selected .md file in the sidebar resolves to
+// its on-disk path as a markdown target; a non-markdown/non-media file is rejected.
+func TestViewerTarget_MarkdownFile(t *testing.T) {
 	m := appModel{repoRoot: "/repo", focus: focusSidebar}
 	m.sidebar.files = []types.ChangedFile{{Path: "docs/guide.md"}, {Path: "main.go"}}
 	m.sidebar.rebuildGroups()
 
 	m.sidebar.cursor = 0 // docs/guide.md
-	path, ok, why := m.markdownViewerTarget()
-	if !ok || path != "/repo/docs/guide.md" {
-		t.Errorf("markdown file: got path=%q ok=%v why=%q", path, ok, why)
+	path, kind, ok, why := m.viewerTarget()
+	if !ok || path != "/repo/docs/guide.md" || kind != viewerMarkdown {
+		t.Errorf("markdown file: got path=%q kind=%v ok=%v why=%q", path, kind, ok, why)
 	}
 
 	m.sidebar.cursor = 1 // main.go
-	if _, ok, why := m.markdownViewerTarget(); ok || why != "not a markdown file" {
+	if _, _, ok, why := m.viewerTarget(); ok || why != "not a markdown or media file" {
 		t.Errorf("non-markdown file: ok=%v why=%q", ok, why)
 	}
 }
 
-// TestMarkdownViewerTarget_Artifact: viewing an artifact writes its body to a
-// temp .md file and returns a cleanup func, since artifacts have no on-disk path.
-func TestMarkdownViewerTarget_Artifact(t *testing.T) {
-	eng := &stubEngine{contentItems: []types.ContentItem{{ID: "plan-1", Content: "# Plan\n"}}}
-	m := appModel{repoRoot: "/repo", focus: focusMain, engine: eng}
-	m.diffView.contentID = "plan-1"
-	m.diffView.path = "content.md" // synthetic content-diff path
+// TestViewerTarget_MediaFile: a selected image file routes to the media viewer.
+func TestViewerTarget_MediaFile(t *testing.T) {
+	m := appModel{repoRoot: "/repo", focus: focusSidebar}
+	m.sidebar.files = []types.ChangedFile{{Path: "assets/logo.png"}}
+	m.sidebar.rebuildGroups()
 
-	path, ok, why := m.markdownViewerTarget()
-	if !ok {
-		t.Fatalf("artifact: ok=%v why=%q", ok, why)
+	path, kind, ok, why := m.viewerTarget()
+	if !ok || path != "/repo/assets/logo.png" || kind != viewerMedia {
+		t.Errorf("media file: got path=%q kind=%v ok=%v why=%q", path, kind, ok, why)
+	}
+}
+
+// TestViewerTarget_Artifact: a text artifact writes its body to a temp .md file
+// for the markdown viewer; a media artifact resolves to its stored path directly.
+func TestViewerTarget_Artifact(t *testing.T) {
+	eng := &stubEngine{contentItems: []types.ContentItem{
+		{ID: "plan-1", Content: "# Plan\n"},
+		{ID: "shot-1", MediaPath: "/store/shot.png", MediaType: "image"},
+	}}
+	m := appModel{repoRoot: "/repo", focus: focusMain, engine: eng}
+
+	m.diffView.contentID = "plan-1"
+	m.diffView.path = "content.md"
+	path, kind, ok, why := m.viewerTarget()
+	if !ok || kind != viewerMarkdown {
+		t.Fatalf("text artifact: kind=%v ok=%v why=%q", kind, ok, why)
 	}
 	defer os.Remove(path)
-	got, err := os.ReadFile(path)
-	if err != nil || string(got) != "# Plan\n" {
-		t.Errorf("artifact temp body = %q (err %v), want %q", string(got), err, "# Plan\n")
+	if got, err := os.ReadFile(path); err != nil || string(got) != "# Plan\n" {
+		t.Errorf("artifact temp body = %q (err %v)", string(got), err)
+	}
+
+	m.diffView.contentID = "shot-1"
+	path, kind, ok, why = m.viewerTarget()
+	if !ok || kind != viewerMedia || path != "/store/shot.png" {
+		t.Errorf("media artifact: got path=%q kind=%v ok=%v why=%q", path, kind, ok, why)
 	}
 }
 

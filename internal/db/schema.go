@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-const schemaVersion = 12
+const schemaVersion = 13
 
 const dropSQL = `
 DROP TABLE IF EXISTS review_snapshot_files;
@@ -91,6 +91,9 @@ CREATE TABLE IF NOT EXISTS content_items (
 	content_type TEXT NOT NULL DEFAULT 'text',
 	is_plan INTEGER NOT NULL DEFAULT 0,
 	reviewed INTEGER NOT NULL DEFAULT 0,
+	media_path TEXT NOT NULL DEFAULT '',
+	media_type TEXT NOT NULL DEFAULT '',
+	mime_type TEXT NOT NULL DEFAULT '',
 	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	PRIMARY KEY(id, session_id)

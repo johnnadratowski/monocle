@@ -363,7 +363,7 @@ func (m helpModel) buildContent() string {
 			{Label(km.OpenInEditorTakeover), "Open file in editor, always taking over the screen"},
 			{Label(km.OpenPathUnderCursor), "Open the file path referenced on the current line"},
 			{Label(km.OpenPathUnderCursorTakeover), "Open the path under cursor, always taking over the screen"},
-			{Label(km.OpenInMarkdownViewer), "Open the current artifact / .md file in a rendered markdown viewer"},
+			{Label(km.OpenInMarkdownViewer), "Open artifact/file in external viewer (markdown → markdown_viewer, media → media_viewer)"},
 			{Label(km.ToggleDiff), "Cycle diff style (unified/split/file) (any pane)"},
 			{Label(km.ToggleFullDiff), "Toggle full-file diff (whole file vs. changed lines)"},
 			{Label(km.ToggleOverlays), "Hide/show inline comments + annotations"},

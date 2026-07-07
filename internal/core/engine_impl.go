@@ -2174,15 +2174,8 @@ func (e *Engine) GetReviewStatusInfo() *ReviewStatusInfo {
 
 // SubmitContentForReview adds or updates a content item (plan, doc) for review.
 func (e *Engine) SubmitContentForReview(id, title, content, contentType string, isPlan bool) error {
-	e.mu.Lock()
-	if e.current == nil {
-		e.mu.Unlock()
-		return fmt.Errorf("no active session")
-	}
-	session := e.current
-
 	now := time.Now()
-	item := types.ContentItem{
+	return e.upsertContentItem(types.ContentItem{
 		ID:          id,
 		Title:       title,
 		Content:     content,
@@ -2190,23 +2183,72 @@ func (e *Engine) SubmitContentForReview(id, title, content, contentType string, 
 		IsPlan:      isPlan,
 		CreatedAt:   now,
 		UpdatedAt:   now,
-	}
+	})
+}
 
-	// Upsert into session's content items. If the content text changed, clear
-	// Reviewed so the user has to re-review the new version. Title-only or
-	// metadata-only updates leave Reviewed alone.
+// SubmitMediaForReview stores a media file (image/video/audio) as a media
+// artifact: it copies the source into managed storage and records a content item
+// carrying the media metadata (no content text). Returns an error for
+// unsupported extensions or unreadable sources.
+func (e *Engine) SubmitMediaForReview(id, title, sourcePath string) error {
+	category, mimeType, ok := types.MediaInfo(sourcePath)
+	if !ok {
+		return fmt.Errorf("unsupported media type: %s", filepath.Ext(sourcePath))
+	}
+	e.mu.RLock()
+	session := e.current
+	e.mu.RUnlock()
+	if session == nil {
+		return fmt.Errorf("no active session")
+	}
+	stored, err := copyMediaToStorage(session.ID, id, sourcePath)
+	if err != nil {
+		return fmt.Errorf("store media: %w", err)
+	}
+	now := time.Now()
+	return e.upsertContentItem(types.ContentItem{
+		ID:          id,
+		Title:       title,
+		ContentType: strings.TrimPrefix(filepath.Ext(sourcePath), "."),
+		IsPlan:      true,
+		MediaPath:   stored,
+		MediaType:   category,
+		MimeType:    mimeType,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	})
+}
+
+// upsertContentItem inserts or updates a content item in the active session
+// (in-memory + DB) and emits EventContentItemAdded. Shared by text and media
+// submissions. If the content text or media path changed, Reviewed is cleared so
+// the user re-reviews the new version; title/metadata-only updates leave it.
+func (e *Engine) upsertContentItem(item types.ContentItem) error {
+	e.mu.Lock()
+	if e.current == nil {
+		e.mu.Unlock()
+		return fmt.Errorf("no active session")
+	}
+	session := e.current
+
 	found := false
 	for i := range session.ContentItems {
-		if session.ContentItems[i].ID == id {
-			contentChanged := session.ContentItems[i].Content != content
-			session.ContentItems[i].Title = title
-			session.ContentItems[i].Content = content
-			session.ContentItems[i].ContentType = contentType
-			session.ContentItems[i].IsPlan = isPlan
-			session.ContentItems[i].UpdatedAt = now
+		if session.ContentItems[i].ID == item.ID {
+			contentChanged := session.ContentItems[i].Content != item.Content ||
+				session.ContentItems[i].MediaPath != item.MediaPath
+			item.CreatedAt = session.ContentItems[i].CreatedAt
+			item.Reviewed = session.ContentItems[i].Reviewed
+			session.ContentItems[i].Title = item.Title
+			session.ContentItems[i].Content = item.Content
+			session.ContentItems[i].ContentType = item.ContentType
+			session.ContentItems[i].IsPlan = item.IsPlan
+			session.ContentItems[i].MediaPath = item.MediaPath
+			session.ContentItems[i].MediaType = item.MediaType
+			session.ContentItems[i].MimeType = item.MimeType
+			session.ContentItems[i].UpdatedAt = item.UpdatedAt
 			if contentChanged && session.ContentItems[i].Reviewed {
 				session.ContentItems[i].Reviewed = false
-				_ = e.database.MarkContentItemReviewed(session.ID, id, false)
+				_ = e.database.MarkContentItemReviewed(session.ID, item.ID, false)
 			}
 			item = session.ContentItems[i]
 			found = true
@@ -2224,7 +2266,7 @@ func (e *Engine) SubmitContentForReview(id, title, content, contentType string, 
 	// Update in-memory version count
 	e.mu.Lock()
 	for i := range session.ContentItems {
-		if session.ContentItems[i].ID == id {
+		if session.ContentItems[i].ID == item.ID {
 			session.ContentItems[i].VersionCount = item.VersionCount
 			break
 		}
@@ -2233,9 +2275,8 @@ func (e *Engine) SubmitContentForReview(id, title, content, contentType string, 
 
 	e.emit(EventContentItemAdded, EventPayload{
 		Kind:   EventContentItemAdded,
-		ItemID: id,
+		ItemID: item.ID,
 	})
-
 	return nil
 }
 
@@ -2656,7 +2697,12 @@ func (e *Engine) handleSubmitContent(msg *protocol.SubmitContentMsg) *protocol.S
 		id = uuid.New().String()
 	}
 
-	err := e.SubmitContentForReview(id, msg.Title, msg.Content, msg.ContentType, msg.IsPlan)
+	var err error
+	if msg.MediaPath != "" {
+		err = e.SubmitMediaForReview(id, msg.Title, msg.MediaPath)
+	} else {
+		err = e.SubmitContentForReview(id, msg.Title, msg.Content, msg.ContentType, msg.IsPlan)
+	}
 	if err != nil {
 		return &protocol.SubmitContentResponse{
 			Type:    protocol.TypeSubmitContentResponse,

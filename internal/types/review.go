@@ -109,7 +109,18 @@ type ContentItem struct {
 	Comments     []ReviewComment
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
+
+	// Media artifacts (images, video, audio). When MediaPath is non-empty the
+	// item is a media artifact rather than text/markdown: MediaPath is the
+	// absolute path to Monocle's stored copy, MediaType is the category
+	// ("image"/"video"/"audio"), and MimeType is the full MIME type.
+	MediaPath string
+	MediaType string
+	MimeType  string
 }
+
+// IsMedia reports whether this content item is a media artifact.
+func (c ContentItem) IsMedia() bool { return c.MediaPath != "" }
 
 type ContentVersion struct {
 	ContentItemID string

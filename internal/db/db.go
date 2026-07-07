@@ -29,6 +29,18 @@ func DBPath() string {
 	return filepath.Join(dataDir, "monocle", "monocle.db")
 }
 
+// MediaDir returns the directory where media artifacts are stored, alongside the
+// database (honoring XDG_DATA_HOME). Media files are copied here so they stay
+// viewable even if the agent removes the originals.
+func MediaDir() string {
+	dataDir := os.Getenv("XDG_DATA_HOME")
+	if dataDir == "" {
+		home, _ := os.UserHomeDir()
+		dataDir = filepath.Join(home, ".local", "share")
+	}
+	return filepath.Join(dataDir, "monocle", "media")
+}
+
 // Open opens (or creates) a SQLite database at the given path,
 // enables WAL mode, and runs migrations.
 func Open(path string) (*DB, error) {

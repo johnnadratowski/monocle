@@ -84,6 +84,14 @@ If you run the command again with the same `--id`, monocle updates the existing 
 
 When `--file` is not provided, the command reads content from stdin.
 
+### Media artifacts
+
+When `--file` points at a media file — image, video, or audio (`.png`, `.jpg`, `.gif`, `.webp`, `.svg`, `.mp4`, `.mov`, `.webm`, `.mp3`, `.wav`, and similar) — monocle sends it as a **media artifact** instead of reading it as text. The file is copied into monocle's managed storage (so it stays viewable even if you remove the original), and the reviewer sees a metadata card (type, size, dimensions) with an inline ANSI preview for images. Pressing `Ctrl+p` opens the file in the configured `media_viewer` (default Google Chrome). Use this to submit screenshots, diagrams, or recordings for review.
+
+```bash
+monocle review send-artifact --title "Login screen" --file /tmp/login.png --id login.png
+```
+
 ### Flags
 
 | Flag | Short | Description |

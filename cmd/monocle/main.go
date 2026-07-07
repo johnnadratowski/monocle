@@ -19,6 +19,7 @@ import (
 	"github.com/josephschmitt/monocle/internal/protocol"
 	"github.com/josephschmitt/monocle/internal/tui"
 	"github.com/josephschmitt/monocle/internal/tui/register"
+	"github.com/josephschmitt/monocle/internal/types"
 )
 
 var version = "dev"
@@ -563,9 +564,23 @@ func (cmd *ReviewGetFeedbackCmd) Run() error {
 }
 
 func (cmd *ReviewSendArtifactCmd) Run() error {
-	// Resolve content: --file, or stdin
-	var content string
-	if cmd.File != "" {
+	// Resolve content: --file (text or media), or stdin. Media files (images,
+	// video, audio) are sent by reference — the engine copies them into managed
+	// storage — instead of being read as text content.
+	var content, mediaPath string
+	if cmd.File != "" && types.IsMediaFile(cmd.File) {
+		abs, err := filepath.Abs(cmd.File)
+		if err != nil {
+			return fmt.Errorf("resolve media path: %w", err)
+		}
+		if _, err := os.Stat(abs); err != nil {
+			return fmt.Errorf("media file: %w", err)
+		}
+		mediaPath = abs
+		if cmd.ID == "" {
+			cmd.ID = filepath.Base(cmd.File)
+		}
+	} else if cmd.File != "" {
 		data, err := os.ReadFile(cmd.File)
 		if err != nil {
 			return fmt.Errorf("read file: %w", err)
@@ -608,6 +623,7 @@ func (cmd *ReviewSendArtifactCmd) Run() error {
 			Content:     content,
 			ContentType: cmd.ContentType,
 			IsPlan:      true,
+			MediaPath:   mediaPath,
 		},
 		client.DefaultTimeout,
 	)

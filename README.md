@@ -243,7 +243,7 @@ Monocle exposes review operations via **MCP tools** (default for Claude Code, an
 | `Ctrl+g`               | Open the file under review in `$EDITOR` (per `editor_mode`); also opens external editor in comment/submit modals |
 | `Ctrl+o`               | Open the file path referenced on the current diff line in `$EDITOR` (per `editor_mode`) |
 | `Ctrl+Shift+g` / `Ctrl+Shift+o` | Same as `Ctrl+g` / `Ctrl+o` but always take over the screen (ignore `editor_mode`) |
-| `Ctrl+p`               | Open the current artifact or `.md` file in a rendered markdown viewer (`markdown_viewer`, default `glow -p`) |
+| `Ctrl+p`               | Open the current artifact/file in an external viewer: markdown/text → `markdown_viewer` (default `glow -p`), media (image/video/audio) → `media_viewer` (default Google Chrome) |
 | `Ctrl+y`               | Copy review to clipboard                                  |
 | `P` / `:pause`         | Pause the agent (wait for your review)                    |
 | `D` / `:clear`         | Clear review (comments, plans, added files, reviewed)     |
@@ -353,6 +353,7 @@ Monocle loads settings from JSON config files:
   "editor_mode": "terminal",
   "editor_focus": true,
   "markdown_viewer": "",
+  "media_viewer": "",
   "ignore_patterns": [],
   "keybindings": {},
   "mouse": true,
@@ -385,6 +386,7 @@ Monocle loads settings from JSON config files:
 | `editor_mode`                        | `"terminal"`, `"tmux_vertical"`, `"tmux_horizontal"`, `"tmux_window"` | `"terminal"` | How `Ctrl+g`/`Ctrl+o` open: take over the screen, or (inside tmux) open in a side-by-side split, stacked split, or new window/tab. Falls back to `terminal` outside tmux |
 | `editor_focus`                       | `true`, `false`                            | `true`       | Whether a new tmux split/window takes focus                              |
 | `markdown_viewer`                    | string                                     | `""`         | Rendered-markdown viewer for `Ctrl+p` (artifacts / `.md` files); may include flags and quoted args (e.g. `open -a "Google Chrome"`). Empty falls back to `glow -p` |
+| `media_viewer`                       | string                                     | `""`         | Viewer for media artifacts / files opened with `Ctrl+p` (images, video, audio); may include flags and quoted args. Empty falls back to Google Chrome (`open -a "Google Chrome"` on macOS) |
 | `ignore_patterns`                    | string array                               | `[]`         | Glob patterns for files to exclude                                       |
 | `min_diff_width`                     | integer                                    | `80`         | Minimum character width for the diff viewer in side-by-side layout       |
 | `mouse`                              | `true`, `false`                            | `true`       | Enable mouse interactions (click, scroll, drag)                          |

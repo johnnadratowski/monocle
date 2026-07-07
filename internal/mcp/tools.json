@@ -9,7 +9,7 @@
   },
   {
     "name": "send_artifact",
-    "description": "Send content to Monocle for the reviewer to see. Provide content directly or pass file_path to read from disk."
+    "description": "Send content to Monocle for the reviewer to see. Provide content directly or pass file_path to read from disk. Media files (images, video, audio — .png/.jpg/.gif/.webp/.svg/.mp4/.mov/.webm/.mp3/.wav, etc.) passed via file_path are sent as media artifacts: Monocle copies the file into managed storage and the reviewer opens it in a media viewer (default Google Chrome). Use this to submit screenshots, diagrams, or recordings for review."
   },
   {
     "name": "add_files",

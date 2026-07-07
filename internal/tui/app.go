@@ -581,6 +581,9 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					comments:       msg.contentComments,
 					versionCount:   msg.contentItem.VersionCount,
 					autoSwitchDiff: msg.contentItem.VersionCount > 1 && m.diffView.contentMode,
+					mediaPath:      msg.contentItem.MediaPath,
+					mediaType:      msg.contentItem.MediaType,
+					mimeType:       msg.contentItem.MimeType,
 				})
 			}
 		} else if msg.path != "" && msg.result != nil && msg.path == m.diffView.path {
@@ -1087,6 +1090,9 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					contentType:  item.ContentType,
 					comments:     comments,
 					versionCount: item.VersionCount,
+					mediaPath:    item.MediaPath,
+					mediaType:    item.MediaType,
+					mimeType:     item.MimeType,
 				}
 			}
 			if additionalPath != "" {
@@ -1152,6 +1158,12 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case mediaViewerDoneMsg:
+		if msg.err != nil {
+			m.statusBar.searchInfo = "media viewer failed: " + msg.err.Error()
+		}
+		return m, nil
+
 	case closeHelpMsg:
 		m.overlay = overlayNone
 		return m, nil
@@ -1193,6 +1205,9 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					contentType:  item.ContentType,
 					comments:     comments,
 					versionCount: item.VersionCount,
+					mediaPath:    item.MediaPath,
+					mediaType:    item.MediaType,
+					mimeType:     item.MimeType,
 				}
 			}
 			if additionalPath != "" {
@@ -1995,11 +2010,15 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, m.openFileCmd(path, line, takeover)
 
 	case Matches(key, km.OpenInMarkdownViewer):
-		// Open the current artifact or .md file in a rendered markdown viewer.
-		filePath, ok, why := m.markdownViewerTarget()
+		// Open the current artifact/file in the appropriate external viewer:
+		// media in the media viewer, markdown/text artifacts in the markdown viewer.
+		filePath, kind, ok, why := m.viewerTarget()
 		if !ok {
 			m.statusBar.searchInfo = why
 			return m, nil
+		}
+		if kind == viewerMedia {
+			return m, openInMediaViewer(filePath, m.mediaViewerCommand())
 		}
 		return m, openInMarkdownViewer(filePath, m.markdownViewerCommand())
 
@@ -2812,6 +2831,12 @@ func recalcPaneDimensions(m *appModel) {
 	}
 
 	reserveDocPane(m)
+
+	// Rebuild the media card if the pane width changed, so the ANSI preview and
+	// metadata reflow to the new size.
+	if m.diffView.mediaMode && m.diffView.width != m.diffView.mediaCardWidth {
+		m.diffView.buildMediaCardLines()
+	}
 }
 
 // reserveDocPane carves the bottom of the diff column out for the annotation doc
@@ -2965,7 +2990,7 @@ func (m appModel) editorCommand() string {
 }
 
 // markdownViewerCommand returns the configured markdown viewer command
-// ("" → default "glow", resolved in resolveMarkdownViewer).
+// ("" → default "glow -p", resolved in resolveMarkdownViewer).
 func (m appModel) markdownViewerCommand() string {
 	if m.engine == nil {
 		return ""
@@ -2976,66 +3001,87 @@ func (m appModel) markdownViewerCommand() string {
 	return ""
 }
 
-// markdownViewerTarget resolves what to open in the rendered markdown viewer for
-// the current focus/selection. Artifacts (content items) have no on-disk file, so
-// their body is written to a temp .md file and a cleanup func is returned. Real
-// files are only openable when they have a markdown extension. Returns ok=false
-// with a human-readable reason otherwise.
-func (m appModel) markdownViewerTarget() (filePath string, ok bool, why string) {
+// mediaViewerCommand returns the configured media viewer command ("" → default
+// Google Chrome, resolved in resolveMediaViewer).
+func (m appModel) mediaViewerCommand() string {
+	if m.engine == nil {
+		return ""
+	}
+	if cfg := m.engine.GetConfig(); cfg != nil {
+		return cfg.MediaViewer
+	}
+	return ""
+}
+
+// viewerKind selects which external viewer Ctrl+p routes to.
+type viewerKind int
+
+const (
+	viewerMarkdown viewerKind = iota
+	viewerMedia
+)
+
+// viewerTarget resolves what Ctrl+p should open for the current focus/selection
+// and which viewer to use. Media artifacts/files open in the media viewer; text
+// artifacts and .md files open in the markdown viewer. Text artifacts have no
+// on-disk file, so their body is written to a reaped temp .md file. Returns
+// ok=false with a human-readable reason otherwise.
+func (m appModel) viewerTarget() (filePath string, kind viewerKind, ok bool, why string) {
 	if m.focus == focusSidebar {
 		if ci := m.sidebar.selectedContentItem(); ci != nil {
-			return m.artifactMarkdownTemp(ci.ID)
+			return m.artifactViewerTarget(ci.ID)
 		}
 		if f := m.sidebar.selectedFile(); f != nil {
-			if isMarkdownPath(f.Path) {
-				return filepath.Join(m.repoRoot, f.Path), true, ""
-			}
-			return "", false, "not a markdown file"
+			return fileViewerTarget(filepath.Join(m.repoRoot, f.Path), f.Path)
 		}
 		if af := m.sidebar.selectedAdditionalFile(); af != nil {
-			if isMarkdownPath(af.Path) {
-				return af.Path, true, ""
-			}
-			return "", false, "not a markdown file"
+			return fileViewerTarget(af.Path, af.Path)
 		}
-		return "", false, "no markdown file or artifact selected"
+		return "", 0, false, "no file or artifact selected"
 	}
 	// Diff/main pane.
 	if m.diffView.isViewingContentItem() {
-		return m.artifactMarkdownTemp(m.diffView.contentID)
+		return m.artifactViewerTarget(m.diffView.contentID)
 	}
 	if m.diffView.additionalFilePath != "" {
-		if isMarkdownPath(m.diffView.additionalFilePath) {
-			return m.diffView.additionalFilePath, true, ""
-		}
-		return "", false, "not a markdown file"
+		return fileViewerTarget(m.diffView.additionalFilePath, m.diffView.additionalFilePath)
 	}
 	if m.diffView.path != "" {
-		if isMarkdownPath(m.diffView.path) {
-			return filepath.Join(m.repoRoot, m.diffView.path), true, ""
-		}
-		return "", false, "not a markdown file"
+		return fileViewerTarget(filepath.Join(m.repoRoot, m.diffView.path), m.diffView.path)
 	}
-	return "", false, "no markdown file or artifact"
+	return "", 0, false, "no file or artifact"
 }
 
-// artifactMarkdownTemp loads the content item's body and writes it to a temp .md
-// file (named after its title) for the markdown viewer, returning the path. The
-// temp file is reaped later rather than deleted immediately, so detached GUI
-// viewers can read it (see reapOldArtifactTemps).
-func (m appModel) artifactMarkdownTemp(contentID string) (string, bool, string) {
+// fileViewerTarget classifies an on-disk file as media or markdown by its name.
+func fileViewerTarget(fullPath, name string) (string, viewerKind, bool, string) {
+	if types.IsMediaFile(name) {
+		return fullPath, viewerMedia, true, ""
+	}
+	if isMarkdownPath(name) {
+		return fullPath, viewerMarkdown, true, ""
+	}
+	return "", 0, false, "not a markdown or media file"
+}
+
+// artifactViewerTarget resolves an artifact to a viewer target: media artifacts
+// open their stored file directly; text artifacts are written to a temp .md file
+// (named after the title) for the markdown viewer.
+func (m appModel) artifactViewerTarget(contentID string) (string, viewerKind, bool, string) {
 	if m.engine == nil {
-		return "", false, "no engine"
+		return "", 0, false, "no engine"
 	}
 	item, err := m.engine.GetContentItem(contentID)
 	if err != nil || item == nil {
-		return "", false, "could not load artifact"
+		return "", 0, false, "could not load artifact"
+	}
+	if item.IsMedia() {
+		return item.MediaPath, viewerMedia, true, ""
 	}
 	path, err := writeArtifactTempMarkdown(item.Title, item.Content)
 	if err != nil {
-		return "", false, "could not write artifact temp file"
+		return "", 0, false, "could not write artifact temp file"
 	}
-	return path, true, ""
+	return path, viewerMarkdown, true, ""
 }
 
 // syncSidebarSelectionToShown moves the sidebar cursor to the item currently
@@ -3307,6 +3353,9 @@ func (m appModel) handleSidebarSelect(msg sidebarSelectMsg) tea.Cmd {
 				comments:       comments,
 				versionCount:   item.VersionCount,
 				autoSwitchDiff: item.VersionCount > 1,
+				mediaPath:      item.MediaPath,
+				mediaType:      item.MediaType,
+				mimeType:       item.MimeType,
 			}
 		}
 	}
@@ -3424,6 +3473,9 @@ func (m appModel) handleSaveComment(msg saveCommentMsg) tea.Cmd {
 				comments:        comments,
 				versionCount:    item.VersionCount,
 				selectCommentID: commentID,
+				mediaPath:       item.MediaPath,
+				mediaType:       item.MediaType,
+				mimeType:        item.MimeType,
 			}
 		}
 
@@ -3670,6 +3722,11 @@ type loadContentMsg struct {
 	versionCount    int    // number of versions stored for this content item
 	autoSwitchDiff  bool   // true to auto-switch to preferred diff style
 	selectCommentID string // if set, auto-select and expand this comment after loading
+
+	// Media artifact fields (empty for text/markdown artifacts).
+	mediaPath string
+	mediaType string
+	mimeType  string
 }
 
 // View renders the full TUI layout.

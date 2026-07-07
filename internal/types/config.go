@@ -18,6 +18,7 @@ type Config struct {
 	FullFileDiff   bool              `json:"full_file_diff"`  // show whole file (with diff coloring) instead of compact hunks
 	Editor         string            `json:"editor"`          // external editor command; overrides $VISUAL/$EDITOR when set
 	MarkdownViewer string            `json:"markdown_viewer"` // external rendered-markdown viewer for artifacts / .md files (default: glow)
+	MediaViewer    string            `json:"media_viewer"`    // external viewer for media artifacts / files (default: Google Chrome)
 	// EditorMode controls how Ctrl+g / Ctrl+o open a file: "terminal" (take over
 	// Monocle's screen, the default), "tmux_vertical" (side-by-side split),
 	// "tmux_horizontal" (stacked split), or "tmux_window" (new tmux window/tab).
