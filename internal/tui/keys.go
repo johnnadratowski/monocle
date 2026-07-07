@@ -71,6 +71,7 @@ type KeyMap struct {
 	OpenPathUnderCursor         []string // open the file path referenced on the current diff line
 	OpenPathUnderCursorTakeover []string // same, always taking over the terminal
 	OpenInMarkdownViewer        []string // open the current artifact / .md file in a rendered markdown viewer
+	OpenTerminal                []string // open a terminal at the current file's directory
 	BaseRef                     []string
 	ArtifactVersions            []string
 	CycleLayout                 []string
@@ -147,6 +148,7 @@ func DefaultKeyMap() KeyMap {
 		OpenPathUnderCursor:         []string{"ctrl+o"},
 		OpenPathUnderCursorTakeover: []string{"ctrl+shift+o"},
 		OpenInMarkdownViewer:        []string{"ctrl+p"},
+		OpenTerminal:                []string{"ctrl+t"},
 		BaseRef:                     []string{"b"},
 		ArtifactVersions:            []string{"B"},
 		CycleLayout:                 []string{"T"},
@@ -174,7 +176,7 @@ var actionNames = []string{
 	"comment", "file_comment", "suggest", "visual", "reviewed",
 	"submit", "pause", "clear_review", "dismiss_artifact", "dismiss_outdated", "toggle_focus_mode",
 	"open_in_editor", "open_in_editor_takeover", "open_path_under_cursor", "open_path_under_cursor_takeover",
-	"open_in_markdown_viewer",
+	"open_in_markdown_viewer", "open_terminal",
 	"base_ref", "artifact_versions", "cycle_layout", "refresh", "help", "quit", "command_mode",
 	"wizard_advance", "wizard_back", "wizard_toggle",
 }
@@ -286,6 +288,8 @@ func (km KeyMap) ApplyOverrides(overrides map[string]string) KeyMap {
 			km.OpenPathUnderCursorTakeover = []string{key}
 		case "open_in_markdown_viewer":
 			km.OpenInMarkdownViewer = []string{key}
+		case "open_terminal":
+			km.OpenTerminal = []string{key}
 		case "base_ref":
 			km.BaseRef = []string{key}
 		case "artifact_versions":

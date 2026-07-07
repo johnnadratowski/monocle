@@ -244,6 +244,7 @@ Monocle exposes review operations via **MCP tools** (default for Claude Code, an
 | `Ctrl+o`               | Open the file path referenced on the current diff line in `$EDITOR` (per `editor_mode`) |
 | `Ctrl+Shift+g` / `Ctrl+Shift+o` | Same as `Ctrl+g` / `Ctrl+o` but always take over the screen (ignore `editor_mode`) |
 | `Ctrl+p`               | Open the current artifact/file in an external viewer: markdown/text → `markdown_viewer` (default `glow -p`), media (image/video/audio) → `media_viewer` (default Google Chrome) |
+| `Ctrl+t`               | Open a terminal at the current file's directory (tmux split/window per `editor_mode` when inside tmux, else a native terminal) |
 | `Ctrl+y`               | Copy review to clipboard                                  |
 | `P` / `:pause`         | Pause the agent (wait for your review)                    |
 | `D` / `:clear`         | Clear review (comments, plans, added files, reviewed)     |

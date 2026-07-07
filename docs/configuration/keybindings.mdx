@@ -81,6 +81,7 @@ Each key in the object is an action name; the value is the key string to bind. O
 | `open_in_editor_takeover` | `ctrl+shift+g` | Like `open_in_editor`, but always takes over the screen (ignores `editor_mode`) |
 | `open_path_under_cursor_takeover` | `ctrl+shift+o` | Like `open_path_under_cursor`, but always takes over the screen |
 | `open_in_markdown_viewer` | `ctrl+p` | Open the current artifact/file in an external viewer: markdown/text → `markdown_viewer` (default `glow -p`), media (image/video/audio) → `media_viewer` (default Google Chrome) |
+| `open_terminal` | `ctrl+t` | Open a terminal at the current file's directory (tmux split/window per `editor_mode` when inside tmux, else a native terminal) |
 | `base_ref` | `b` | Change base ref |
 | `artifact_versions` | `B` | Browse artifact version history and diff against a previous version |
 | `cycle_layout` | `T` | Cycle layout (auto / side-by-side / stacked) |

@@ -1164,6 +1164,12 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case openTerminalDoneMsg:
+		if msg.err != nil {
+			m.statusBar.searchInfo = "open terminal failed: " + msg.err.Error()
+		}
+		return m, nil
+
 	case closeHelpMsg:
 		m.overlay = overlayNone
 		return m, nil
@@ -2021,6 +2027,16 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, openInMediaViewer(filePath, m.mediaViewerCommand())
 		}
 		return m, openInMarkdownViewer(filePath, m.markdownViewerCommand())
+
+	case Matches(key, km.OpenTerminal):
+		// Open a terminal at the current file's directory (tmux split/window when
+		// inside tmux, else a native terminal window).
+		dir := m.terminalTargetDir()
+		if dir == "" {
+			m.statusBar.searchInfo = "no directory for terminal"
+			return m, nil
+		}
+		return m, openTerminalCmd(dir, m.editorMode(), m.editorFocus())
 
 	case Matches(key, km.Refresh):
 		return m, m.refreshFiles()
@@ -3184,6 +3200,34 @@ func (m appModel) editorTargetFile() (string, int, bool) {
 		line = 1
 	}
 	return filePath, line, true
+}
+
+// terminalTargetDir resolves the directory a terminal should open in for the
+// current focus/selection: the directory of the selected/shown file, or the repo
+// root for artifacts or when nothing specific is shown.
+func (m appModel) terminalTargetDir() string {
+	dirOf := func(p string) string {
+		if p == "" {
+			return m.repoRoot
+		}
+		return filepath.Dir(p)
+	}
+	if m.focus == focusSidebar {
+		if f := m.sidebar.selectedFile(); f != nil {
+			return dirOf(filepath.Join(m.repoRoot, f.Path))
+		}
+		if af := m.sidebar.selectedAdditionalFile(); af != nil {
+			return dirOf(af.Path)
+		}
+		return m.repoRoot
+	}
+	if m.diffView.additionalFilePath != "" {
+		return dirOf(m.diffView.additionalFilePath)
+	}
+	if !m.diffView.isViewingContentItem() && m.diffView.path != "" {
+		return dirOf(filepath.Join(m.repoRoot, m.diffView.path))
+	}
+	return m.repoRoot
 }
 
 // pathUnderCursor resolves the file path referenced on the current diff line.
