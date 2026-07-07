@@ -26,15 +26,41 @@ type mediaViewerDoneMsg struct {
 }
 
 // openInMediaViewer opens filePath in the configured media viewer (default
-// Google Chrome), taking over Monocle's terminal via tea.ExecProcess. GUI
-// launchers (e.g. `open -a "Google Chrome"`) return immediately.
+// Google Chrome). GUI launchers (e.g. `open -a "Google Chrome"`) run detached so
+// the TUI is not suspended (no flash to the terminal); a terminal viewer would
+// take over the screen.
 func openInMediaViewer(filePath, configured string) tea.Cmd {
 	name, args := resolveMediaViewer(configured)
 	args = append(args, filePath)
+	return runViewer(name, args, func(err error) tea.Msg { return mediaViewerDoneMsg{err: err} })
+}
+
+// runViewer launches a viewer command. GUI launchers that return immediately are
+// run detached (via a plain Cmd goroutine) so Monocle's alt-screen TUI is never
+// suspended — avoiding a visible flash to the terminal and back. Terminal viewers
+// (e.g. glow's pager) take over the screen via tea.ExecProcess.
+func runViewer(name string, args []string, done func(error) tea.Msg) tea.Cmd {
 	cmd := exec.Command(name, args...)
-	return tea.ExecProcess(cmd, func(execErr error) tea.Msg {
-		return mediaViewerDoneMsg{err: execErr}
-	})
+	if isGUILauncher(name, args) {
+		return func() tea.Msg { return done(cmd.Run()) }
+	}
+	return tea.ExecProcess(cmd, func(err error) tea.Msg { return done(err) })
+}
+
+// isGUILauncher reports whether a viewer command opens a separate GUI window and
+// returns immediately (so it must not take over the terminal). Recognizes the
+// platform "open" helpers and app-launch forms (`-a Foo`, `Foo.app`).
+func isGUILauncher(name string, args []string) bool {
+	switch filepath.Base(name) {
+	case "open", "xdg-open", "start", "cmd", "gio":
+		return true
+	}
+	for _, a := range args {
+		if a == "-a" || strings.HasSuffix(strings.ToLower(a), ".app") {
+			return true
+		}
+	}
+	return false
 }
 
 // resolveMediaViewer returns the viewer binary and args. A configured value may

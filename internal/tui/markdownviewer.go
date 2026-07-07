@@ -2,7 +2,6 @@ package tui
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -22,10 +21,7 @@ type markdownViewerDoneMsg struct {
 func openInMarkdownViewer(filePath, configured string) tea.Cmd {
 	name, args := resolveMarkdownViewer(configured)
 	args = append(args, filePath)
-	cmd := exec.Command(name, args...)
-	return tea.ExecProcess(cmd, func(execErr error) tea.Msg {
-		return markdownViewerDoneMsg{err: execErr}
-	})
+	return runViewer(name, args, func(err error) tea.Msg { return markdownViewerDoneMsg{err: err} })
 }
 
 // resolveMarkdownViewer returns the viewer binary and any extra arguments. The
