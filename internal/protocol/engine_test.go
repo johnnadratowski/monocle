@@ -142,6 +142,8 @@ func TestEngineMessagesRoundTrip(t *testing.T) {
 		{"GetQueuedCountResponse", &GetQueuedCountResponse{Type: TypeGetQueuedCountResponse, Count: 3}},
 		{"ReloadPendingFeedback", &ReloadPendingFeedbackMsg{Type: TypeReloadPendingFeedback}},
 		{"ReloadPendingFeedbackResponse", &ReloadPendingFeedbackResponse{Type: TypeReloadPendingFeedbackResponse}},
+		{"DiscardFeedback", &DiscardFeedbackMsg{Type: TypeDiscardFeedback}},
+		{"DiscardFeedbackResponse", &DiscardFeedbackResponse{Type: TypeDiscardFeedbackResponse, Count: 2, Success: true}},
 		{"GetSubscriberCount", &GetSubscriberCountMsg{Type: TypeGetSubscriberCount}},
 		{"GetSubscriberCountResponse", &GetSubscriberCountResponse{Type: TypeGetSubscriberCountResponse, Count: 1}},
 		{"GetSocketPath", &GetSocketPathMsg{Type: TypeGetSocketPath}},

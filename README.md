@@ -255,6 +255,7 @@ Monocle exposes review operations via **MCP tools** (default for Claude Code, an
 | `:mark-all-reviewed`   | Mark all files as reviewed                                |
 | `:mark-all-unreviewed` | Mark all files as unreviewed                              |
 | `:discard`             | Discard all pending comments                              |
+| `:cancel-feedback`     | Cancel submitted feedback still queued for the agent (e.g. accidental double-submit) |
 | `:history`             | View past review submissions                              |
 | `:theme [name]`        | Switch theme live (dark/light/molokai/dracula/nord; no arg cycles) |
 | `:base-artifact-version` | Base artifact version to diff against                           |

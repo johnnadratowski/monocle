@@ -583,6 +583,19 @@ func (d *DB) MarkSubmissionsDelivered(sessionID string) error {
 	return err
 }
 
+// DeleteUndeliveredSubmissions removes undelivered submissions for a session so
+// canceled feedback is not redelivered or reloaded on restart. Returns the count.
+func (d *DB) DeleteUndeliveredSubmissions(sessionID string) (int64, error) {
+	res, err := d.Exec(
+		`DELETE FROM review_submissions WHERE session_id = ? AND delivered_at IS NULL`,
+		sessionID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 // GetUndeliveredSubmissions returns all undelivered submissions for a session, ordered by submission time.
 func (d *DB) GetUndeliveredSubmissions(sessionID string) ([]types.ReviewSubmission, error) {
 	rows, err := d.Query(

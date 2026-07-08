@@ -142,6 +142,7 @@ type EngineAPI interface {
 	GetFeedbackStatus() string
 	GetQueuedCount() int
 	ReloadPendingFeedback()
+	DiscardPendingFeedback() (int, error)
 
 	// Connection status
 	GetSubscriberCount() int

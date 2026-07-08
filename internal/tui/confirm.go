@@ -14,6 +14,7 @@ const (
 	confirmClear
 	confirmDismissArtifact
 	confirmDismissAdditionalFile
+	confirmCancelFeedback
 )
 
 type confirmModel struct {

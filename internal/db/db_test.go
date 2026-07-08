@@ -543,6 +543,39 @@ func TestReplaceChangedFiles(t *testing.T) {
 	}
 }
 
+func TestDeleteUndeliveredSubmissions(t *testing.T) {
+	d := testDB(t)
+	now := time.Now()
+	d.CreateSession(&types.ReviewSession{ID: "sess-1", Agent: "claude", RepoRoot: "/tmp", BaseRef: "abc", ReviewRound: 1, CreatedAt: now, UpdatedAt: now})
+
+	// Two undelivered submissions (an accidental double-submit).
+	for _, id := range []string{"sub-1", "sub-2"} {
+		if err := d.CreateSubmission("sess-1", &types.ReviewSubmission{
+			ID: id, SessionID: "sess-1", Action: types.ActionApprove, FormattedReview: "ok", ReviewRound: 1, SubmittedAt: now,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	n, err := d.DeleteUndeliveredSubmissions("sess-1")
+	if err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if n != 2 {
+		t.Errorf("expected 2 deleted, got %d", n)
+	}
+	subs, _ := d.GetUndeliveredSubmissions("sess-1")
+	if len(subs) != 0 {
+		t.Errorf("expected no undelivered submissions, got %d", len(subs))
+	}
+	// A delivered submission is untouched.
+	d.CreateSubmission("sess-1", &types.ReviewSubmission{ID: "sub-3", SessionID: "sess-1", Action: types.ActionApprove, FormattedReview: "ok", ReviewRound: 1, SubmittedAt: now})
+	_ = d.MarkSubmissionsDelivered("sess-1")
+	if n, _ := d.DeleteUndeliveredSubmissions("sess-1"); n != 0 {
+		t.Errorf("delivered submission should not be deleted, deleted %d", n)
+	}
+}
+
 func TestCreateAndGetSubmissions(t *testing.T) {
 	d := testDB(t)
 	now := time.Now()

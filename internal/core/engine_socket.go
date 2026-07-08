@@ -479,6 +479,19 @@ func (e *Engine) handleReloadPendingFeedback(_ *protocol.ReloadPendingFeedbackMs
 	}
 }
 
+func (e *Engine) handleDiscardFeedback(_ *protocol.DiscardFeedbackMsg) *protocol.DiscardFeedbackResponse {
+	n, err := e.DiscardPendingFeedback()
+	resp := &protocol.DiscardFeedbackResponse{
+		Type:    protocol.TypeDiscardFeedbackResponse,
+		Count:   n,
+		Success: err == nil,
+	}
+	if err != nil {
+		resp.Message = err.Error()
+	}
+	return resp
+}
+
 func (e *Engine) handleGetSubscriberCount(_ *protocol.GetSubscriberCountMsg) *protocol.GetSubscriberCountResponse {
 	return &protocol.GetSubscriberCountResponse{
 		Type:  protocol.TypeGetSubscriberCountResponse,

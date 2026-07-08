@@ -141,6 +141,12 @@ type reviewClearedMsg struct {
 	isAdditionalFile bool
 }
 
+// feedbackDiscardedMsg reports the result of the :cancel-feedback command.
+type feedbackDiscardedMsg struct {
+	count int
+	err   error
+}
+
 type artifactDismissedMsg struct {
 	id  string
 	err error
@@ -1180,6 +1186,18 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The shell may have changed files — refresh.
 		return m, m.refreshFiles()
 
+	case feedbackDiscardedMsg:
+		switch {
+		case msg.err != nil:
+			m.statusBar.searchInfo = "cancel feedback failed: " + msg.err.Error()
+		case msg.count == 0:
+			m.statusBar.searchInfo = "no pending feedback to cancel"
+		default:
+			m.statusBar.searchInfo = fmt.Sprintf("canceled %d pending review(s)", msg.count)
+			m.statusBar.feedbackStatus = ""
+		}
+		return m, nil
+
 	case closeHelpMsg:
 		m.overlay = overlayNone
 		return m, nil
@@ -1431,6 +1449,11 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, func() tea.Msg {
 				_ = engine.ClearReview()
 				return reviewClearedMsg{reloadPath: currentPath, isContent: isContent, isAdditionalFile: isAdditional}
+			}
+		case confirmCancelFeedback:
+			return m, func() tea.Msg {
+				n, err := engine.DiscardPendingFeedback()
+				return feedbackDiscardedMsg{count: n, err: err}
 			}
 		case confirmDismissArtifact:
 			id := m.pendingDismissArtifactID
@@ -2756,6 +2779,18 @@ func (m appModel) executeCommand(cmd string) tea.Cmd {
 				title:   "Clear Review",
 				message: "Clear all comments, plans, added files, reviewed states, the review name, and reset the diff base to the working tree? This cannot be undone.",
 				action:  confirmClear,
+			}
+		}
+
+	case "cancel-feedback":
+		return func() tea.Msg {
+			if engine.GetQueuedCount() == 0 {
+				return feedbackDiscardedMsg{count: 0}
+			}
+			return openConfirmMsg{
+				title:   "Cancel Pending Feedback",
+				message: "Cancel all submitted feedback still waiting for the agent? This cannot be undone.",
+				action:  confirmCancelFeedback,
 			}
 		}
 

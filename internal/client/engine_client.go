@@ -1438,6 +1438,21 @@ func (c *EngineClient) ReloadPendingFeedback() {
 	_, _ = c.request(&protocol.ReloadPendingFeedbackMsg{Type: protocol.TypeReloadPendingFeedback})
 }
 
+func (c *EngineClient) DiscardPendingFeedback() (int, error) {
+	resp, err := c.request(&protocol.DiscardFeedbackMsg{Type: protocol.TypeDiscardFeedback})
+	if err != nil {
+		return 0, err
+	}
+	r, ok := resp.(*protocol.DiscardFeedbackResponse)
+	if !ok {
+		return 0, fmt.Errorf("unexpected response type %T", resp)
+	}
+	if !r.Success {
+		return r.Count, fmt.Errorf("%s", r.Message)
+	}
+	return r.Count, nil
+}
+
 func (c *EngineClient) GetSubscriberCount() int {
 	resp, err := c.request(&protocol.GetSubscriberCountMsg{Type: protocol.TypeGetSubscriberCount})
 	if err != nil {

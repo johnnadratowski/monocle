@@ -44,6 +44,36 @@ func TestSubmitThenPoll(t *testing.T) {
 	}
 }
 
+func TestDiscardPending(t *testing.T) {
+	fq := NewFeedbackQueue()
+
+	// No pending → discards 0.
+	if n := fq.DiscardPending(); n != 0 {
+		t.Errorf("expected 0 discarded, got %d", n)
+	}
+
+	// Two accidental submissions accumulate in queue mode.
+	fq.Submit(&FormattedReview{Formatted: "one", Action: "approve"}, false)
+	fq.Submit(&FormattedReview{Formatted: "two", Action: "approve"}, false)
+	if fq.QueuedCount() != 2 {
+		t.Fatalf("expected 2 queued, got %d", fq.QueuedCount())
+	}
+
+	// Discard cancels both without delivering.
+	if n := fq.DiscardPending(); n != 2 {
+		t.Errorf("expected 2 discarded, got %d", n)
+	}
+	if fq.QueuedCount() != 0 {
+		t.Errorf("expected empty queue, got %d", fq.QueuedCount())
+	}
+	if fq.GetStatus() != "none" {
+		t.Errorf("expected status none, got %q", fq.GetStatus())
+	}
+	if fq.Poll() != nil {
+		t.Error("expected nil after discard — feedback must not be delivered")
+	}
+}
+
 func TestWaitForFeedback(t *testing.T) {
 	fq := NewFeedbackQueue()
 

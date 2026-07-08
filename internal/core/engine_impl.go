@@ -2338,6 +2338,24 @@ func (e *Engine) ReloadPendingFeedback() {
 	}
 }
 
+// DiscardPendingFeedback cancels queued-but-undelivered feedback: it drains the
+// in-memory queue and deletes the undelivered DB submissions so nothing is
+// redelivered or reloaded on restart. Returns the number of reviews canceled.
+func (e *Engine) DiscardPendingFeedback() (int, error) {
+	e.mu.RLock()
+	session := e.current
+	e.mu.RUnlock()
+
+	n := e.feedback.DiscardPending()
+	if session != nil {
+		if _, err := e.database.DeleteUndeliveredSubmissions(session.ID); err != nil {
+			return n, err
+		}
+	}
+	e.emit(EventFeedbackStatusChanged, EventPayload{Kind: EventFeedbackStatusChanged})
+	return n, nil
+}
+
 func (e *Engine) GetSubscriberCount() int {
 	return e.server.SubscriberCount()
 }

@@ -109,6 +109,19 @@ func (fq *FeedbackQueue) Submit(review *FormattedReview, channelDelivered bool) 
 	fq.cond.Broadcast()
 }
 
+// DiscardPending clears any queued-but-undelivered feedback without delivering
+// it, returning how many reviews were discarded. Used to cancel accidental
+// submissions before the agent pulls them.
+func (fq *FeedbackQueue) DiscardPending() int {
+	fq.mu.Lock()
+	defer fq.mu.Unlock()
+	n := len(fq.pending)
+	fq.pending = nil
+	fq.channelDelivered = false
+	fq.status = "none"
+	return n
+}
+
 // Poll returns pending feedback without blocking. Returns nil if none available.
 func (fq *FeedbackQueue) Poll() *FormattedReview {
 	result := fq.PollWithInfo()

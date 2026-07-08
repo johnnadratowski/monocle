@@ -79,6 +79,7 @@ const (
 	TypeGetFeedbackStatus     = "get_feedback_status"
 	TypeGetQueuedCount        = "get_queued_count"
 	TypeReloadPendingFeedback = "reload_pending_feedback"
+	TypeDiscardFeedback       = "discard_feedback"
 	TypeGetSubscriberCount    = "get_subscriber_count"
 	TypeGetSocketPath         = "get_socket_path"
 	TypeGetServerInfo         = "get_server_info"
@@ -161,6 +162,7 @@ const (
 	TypeGetFeedbackStatusResponse     = "get_feedback_status_response"
 	TypeGetQueuedCountResponse        = "get_queued_count_response"
 	TypeReloadPendingFeedbackResponse = "reload_pending_feedback_response"
+	TypeDiscardFeedbackResponse       = "discard_feedback_response"
 	TypeGetSubscriberCountResponse    = "get_subscriber_count_response"
 	TypeGetSocketPathResponse         = "get_socket_path_response"
 	TypeGetServerInfoResponse         = "get_server_info_response"
@@ -699,6 +701,19 @@ type ReloadPendingFeedbackMsg struct {
 
 type ReloadPendingFeedbackResponse struct {
 	Type string `json:"type"`
+}
+
+// DiscardFeedbackMsg cancels queued-but-undelivered feedback so the agent never
+// receives it (e.g. an accidental double-submit).
+type DiscardFeedbackMsg struct {
+	Type string `json:"type"`
+}
+
+type DiscardFeedbackResponse struct {
+	Type    string `json:"type"`
+	Count   int    `json:"count"` // number of pending reviews canceled
+	Success bool   `json:"success"`
+	Message string `json:"message,omitempty"`
 }
 
 type GetSubscriberCountMsg struct {

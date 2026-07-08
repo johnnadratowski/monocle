@@ -179,6 +179,8 @@ func Decode(data []byte) (any, error) {
 		msg = &GetQueuedCountMsg{}
 	case TypeReloadPendingFeedback:
 		msg = &ReloadPendingFeedbackMsg{}
+	case TypeDiscardFeedback:
+		msg = &DiscardFeedbackMsg{}
 	case TypeGetSubscriberCount:
 		msg = &GetSubscriberCountMsg{}
 	case TypeGetSocketPath:
@@ -285,6 +287,8 @@ func Decode(data []byte) (any, error) {
 		msg = &GetQueuedCountResponse{}
 	case TypeReloadPendingFeedbackResponse:
 		msg = &ReloadPendingFeedbackResponse{}
+	case TypeDiscardFeedbackResponse:
+		msg = &DiscardFeedbackResponse{}
 	case TypeGetSubscriberCountResponse:
 		msg = &GetSubscriberCountResponse{}
 	case TypeGetSocketPathResponse:

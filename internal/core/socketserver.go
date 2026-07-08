@@ -731,6 +731,8 @@ func (s *SocketServer) handleMessage(msg any) any {
 		return s.engine.handleGetQueuedCount(m)
 	case *protocol.ReloadPendingFeedbackMsg:
 		return s.engine.handleReloadPendingFeedback(m)
+	case *protocol.DiscardFeedbackMsg:
+		return s.engine.handleDiscardFeedback(m)
 	case *protocol.GetSubscriberCountMsg:
 		return s.engine.handleGetSubscriberCount(m)
 	case *protocol.GetSocketPathMsg:
