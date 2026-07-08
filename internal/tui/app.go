@@ -575,7 +575,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.sidebar.rebuildTree()
 		m.sidebar.rebuildGroups()
 
-		m.sidebar.selectByKey(prevKind, prevID)
+		selectionPreserved := m.sidebar.selectByKey(prevKind, prevID)
 		m.sidebar.clampOffset()
 		recalcStackedLayout(&m)
 		m.statusBar.fileCount = len(msg.files)
@@ -616,16 +616,25 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else if len(msg.files) == 0 && !m.diffView.isViewingContentItem() && m.diffView.path != "" {
 			m.diffView.clearFileState()
 		}
-		// Keep the highlight on the shown item after the refresh/regroup.
-		m.syncSidebarSelectionToShown()
+		// Keep the highlight on the shown item after the refresh/regroup — but
+		// only when the prior selection is gone. When it was preserved (the
+		// common case), snapping to the diff pane would yank an actively-moving
+		// cursor back to the pane's file, which lags behind rapid navigation.
+		if !selectionPreserved {
+			m.syncSidebarSelectionToShown()
+		}
 		return m, diffCmd
 
 	// Engine events
 	case fileChangedMsg:
+		// Capture the selected item before the list changes so an async file
+		// change (e.g. the agent editing files) doesn't move the cursor.
+		prevKind, prevID := m.sidebar.currentItemKey()
 		m.sidebar.files = m.engine.GetChangedFiles()
 		m.sidebar.applyReviewedFilter()
 		m.sidebar.rebuildTree()
 		m.sidebar.rebuildGroups()
+		selectionPreserved := m.sidebar.selectByKey(prevKind, prevID)
 		m.sidebar.clampOffset()
 		recalcStackedLayout(&m)
 		m.statusBar.fileCount = len(m.sidebar.files)
@@ -648,9 +657,15 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Reconcile the sidebar selection with the diff pane after the list changed.
 		if m.diffViewShowsValidFile() {
-			// The shown item still exists — keep it selected and scrolled into view
-			// (the highlight follows the displayed file even after a regroup).
-			m.syncSidebarSelectionToShown()
+			// Keep the highlight on the shown item after the regroup — but only
+			// when the prior selection is gone. When it was preserved, snapping
+			// to the diff pane would yank an actively-moving cursor back to the
+			// pane's file, which lags behind rapid navigation.
+			if !selectionPreserved {
+				m.syncSidebarSelectionToShown()
+			} else {
+				m.sidebar.ensureVisible()
+			}
 			// Reload only a changed-file diff so freshly-pushed annotations/comments
 			// appear (re-anchored so the viewport doesn't jump). Artifacts/added
 			// files aren't git files and must not be reloaded as one.
