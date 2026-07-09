@@ -28,6 +28,7 @@ type statusBarModel struct {
 	socketStarted       bool
 	commandMode         bool
 	commandBuffer       string
+	commandHint         string // tab-completion candidates shown after the command line
 	shellMode           bool
 	shellBuffer         string
 	shellCursor         int
@@ -143,6 +144,9 @@ func (m statusBarModel) View() string {
 
 	if m.commandMode {
 		cmdLine := fmt.Sprintf(":%s█", m.commandBuffer)
+		if m.commandHint != "" {
+			cmdLine += lipgloss.NewStyle().Faint(true).Render("   " + m.commandHint)
+		}
 		return m.theme.StatusBar.Width(m.width).Render(cmdLine)
 	}
 

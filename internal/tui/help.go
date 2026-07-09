@@ -332,9 +332,11 @@ func (m helpModel) buildContent() string {
 	}
 	reviewKeys = append(reviewKeys, []struct{ key, desc string }{
 		{":discard", "Discard all pending comments"},
+		{":cancel-feedback", "Cancel submitted feedback still queued for the agent"},
 		{":history", "View submission history"},
 		{Label(km.ArtifactVersions) + " / :base-artifact-version", "Base artifact version to diff against"},
 		{":base-ref", "Base ref to diff against (same as " + Label(km.BaseRef) + ")"},
+		{": then Tab", "Complete/cycle command names in command mode"},
 	}...)
 
 	sections := []struct {

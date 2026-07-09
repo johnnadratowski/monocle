@@ -223,6 +223,11 @@ type appModel struct {
 	commandMode   bool
 	commandBuffer string
 
+	// Tab-completion cycle state for command mode.
+	cmdCyclePrefix  string
+	cmdCycleMatches []string
+	cmdCycleIdx     int
+
 	// Shell command prompt state (`!`): an editable line pre-filled with the
 	// current file, run in a shell on Enter.
 	shellMode   bool
@@ -2337,6 +2342,8 @@ func (m appModel) handleCommandModeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd)
 		m.commandBuffer = ""
 		m.statusBar.commandMode = false
 		m.statusBar.commandBuffer = ""
+		m.statusBar.commandHint = ""
+		m.resetCommandCycle()
 		return m, nil
 
 	case "enter":
@@ -2345,13 +2352,22 @@ func (m appModel) handleCommandModeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd)
 		m.commandBuffer = ""
 		m.statusBar.commandMode = false
 		m.statusBar.commandBuffer = ""
+		m.statusBar.commandHint = ""
+		m.resetCommandCycle()
 		return m, cmd
+
+	case "tab":
+		// Complete the command word, cycling through matches on repeated Tab.
+		m = m.completeCommand()
+		return m, nil
 
 	case "backspace":
 		if len(m.commandBuffer) > 0 {
 			m.commandBuffer = m.commandBuffer[:len(m.commandBuffer)-1]
 			m.statusBar.commandBuffer = m.commandBuffer
 		}
+		m.statusBar.commandHint = ""
+		m.resetCommandCycle()
 		return m, nil
 
 	default:
@@ -2362,6 +2378,8 @@ func (m appModel) handleCommandModeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd)
 		if len(key) == 1 {
 			m.commandBuffer += key
 			m.statusBar.commandBuffer = m.commandBuffer
+			m.statusBar.commandHint = ""
+			m.resetCommandCycle()
 		}
 		return m, nil
 	}
@@ -2704,6 +2722,92 @@ func (m appModel) persistSidebarStyle() {
 }
 
 // executeCommand runs a named command entered in command mode.
+// commandNames is the canonical list of `:` commands, used for tab completion.
+var commandNames = []string{
+	"submit", "submit!", "discard", "clear", "cancel-feedback",
+	"pause", "unpause", "history",
+	"mark-all-reviewed", "mark-all-unreviewed",
+	"base-artifact-version", "base-ref", "ref", "theme",
+}
+
+// matchingCommands returns the command names that start with prefix, in order.
+func matchingCommands(prefix string) []string {
+	var out []string
+	for _, c := range commandNames {
+		if strings.HasPrefix(c, prefix) {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// longestCommonPrefix returns the longest string that is a prefix of every item.
+func longestCommonPrefix(items []string) string {
+	if len(items) == 0 {
+		return ""
+	}
+	lcp := items[0]
+	for _, s := range items[1:] {
+		i := 0
+		for i < len(lcp) && i < len(s) && lcp[i] == s[i] {
+			i++
+		}
+		lcp = lcp[:i]
+	}
+	return lcp
+}
+
+// completeCommand handles Tab in command mode: it completes the command word to
+// the longest common prefix of the matches, and — on repeated Tab — cycles
+// through the matching commands (remembering the original prefix so completing
+// to a full command doesn't drop the other candidates). It only completes the
+// command word (before any space) and shows the candidate list as a hint.
+func (m appModel) completeCommand() appModel {
+	// Don't complete once the user is typing an argument.
+	if strings.Contains(m.commandBuffer, " ") {
+		return m
+	}
+	// Continue an active cycle when the buffer still matches where we left off.
+	active := len(m.cmdCycleMatches) > 0 &&
+		((m.cmdCycleIdx < 0 && m.commandBuffer == m.cmdCyclePrefix) ||
+			(m.cmdCycleIdx >= 0 && m.commandBuffer == m.cmdCycleMatches[m.cmdCycleIdx]))
+	if active {
+		m.cmdCycleIdx = (m.cmdCycleIdx + 1) % len(m.cmdCycleMatches)
+		m.commandBuffer = m.cmdCycleMatches[m.cmdCycleIdx]
+		m.statusBar.commandBuffer = m.commandBuffer
+		return m
+	}
+
+	m.resetCommandCycle()
+	matches := matchingCommands(m.commandBuffer)
+	switch {
+	case len(matches) == 0:
+		m.statusBar.commandHint = ""
+	case len(matches) == 1:
+		m.commandBuffer = matches[0]
+		m.statusBar.commandHint = ""
+	default:
+		base := m.commandBuffer
+		if lcp := longestCommonPrefix(matches); len(lcp) > len(base) {
+			base = lcp
+		}
+		m.commandBuffer = base
+		m.cmdCyclePrefix = base
+		m.cmdCycleMatches = matches
+		m.cmdCycleIdx = -1
+		m.statusBar.commandHint = strings.Join(matches, "  ")
+	}
+	m.statusBar.commandBuffer = m.commandBuffer
+	return m
+}
+
+// resetCommandCycle clears tab-completion cycle state (on typing or exit).
+func (m *appModel) resetCommandCycle() {
+	m.cmdCyclePrefix = ""
+	m.cmdCycleMatches = nil
+	m.cmdCycleIdx = -1
+}
+
 func (m appModel) executeCommand(cmd string) tea.Cmd {
 	engine := m.engine
 	trimmed := strings.TrimSpace(cmd)
