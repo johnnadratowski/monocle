@@ -36,6 +36,11 @@ type Engine struct {
 
 	current *types.ReviewSession
 
+	// nonGitMode is true when browsing a plain directory (DirClient) rather than
+	// a git repo. In that case there are no diffs — every file is shown as
+	// full content — so changeset-based dedup (see changesetAbsPaths) is off.
+	nonGitMode bool
+
 	// hasUnreviewedActivity is set by handleMarkActivity when Claude fires a
 	// write-tool (PostToolUse hook). Cleared when the reviewer's feedback
 	// queue is next drained. Used by handleAwaitReview to decide whether a
@@ -88,6 +93,7 @@ func NewEngine(cfg *types.Config, database *db.DB, repoRoot string, nonGitMode b
 		feedback:       feedback,
 		sessions:       NewSessionManager(database, git),
 		autoAdvanceRef: !nonGitMode,
+		nonGitMode:     nonGitMode,
 		subscribers:    make(map[EventKind]map[int]EventCallback),
 	}
 	e.cfg.Store(cfg)
@@ -732,13 +738,29 @@ func (e *Engine) applyAdditionalFileMetadata(sessionID string, afs []types.Addit
 	}
 }
 
+// AddAdditionalPaths adds files for review as full-content context items,
+// skipping any path already part of the base-ref changeset (those are shown as
+// diffs). Satisfies EngineAPI; callers wanting the skipped count use the
+// unexported addAdditionalPaths.
 func (e *Engine) AddAdditionalPaths(paths []string) ([]types.AdditionalFile, error) {
+	added, _, err := e.addAdditionalPaths(paths)
+	return added, err
+}
+
+// addAdditionalPaths does the work of AddAdditionalPaths and additionally
+// reports how many resolved files were skipped because they are already in the
+// base-ref changeset (shown to the reviewer as diffs) — adding those as
+// full-content files would shadow their diffs.
+func (e *Engine) addAdditionalPaths(paths []string) ([]types.AdditionalFile, int, error) {
 	e.mu.Lock()
 	if e.current == nil {
 		e.mu.Unlock()
-		return nil, fmt.Errorf("no active session")
+		return nil, 0, fmt.Errorf("no active session")
 	}
 	session := e.current
+
+	// Files already shown as diffs must not be re-added as full-content items.
+	inChangeset := e.changesetAbsPaths(session)
 
 	// Build set of existing paths for dedup
 	existing := make(map[string]bool, len(session.AdditionalFiles))
@@ -747,6 +769,7 @@ func (e *Engine) AddAdditionalPaths(paths []string) ([]types.AdditionalFile, err
 	}
 
 	var added []types.AdditionalFile
+	skipped := 0
 	for _, p := range paths {
 		absPath, err := filepath.Abs(p)
 		if err != nil {
@@ -781,6 +804,10 @@ func (e *Engine) AddAdditionalPaths(paths []string) ([]types.AdditionalFile, err
 				if existing[path] {
 					return nil
 				}
+				if inChangeset[path] {
+					skipped++
+					return nil
+				}
 				relName, _ := filepath.Rel(absPath, path)
 				if relName == "" {
 					relName = filepath.Base(path)
@@ -798,6 +825,10 @@ func (e *Engine) AddAdditionalPaths(paths []string) ([]types.AdditionalFile, err
 			if existing[absPath] {
 				continue
 			}
+			if inChangeset[absPath] {
+				skipped++
+				continue
+			}
 			af := types.AdditionalFile{
 				Path: absPath,
 				Name: filepath.Base(absPath),
@@ -811,7 +842,7 @@ func (e *Engine) AddAdditionalPaths(paths []string) ([]types.AdditionalFile, err
 	for i := range added {
 		if err := e.database.UpsertAdditionalFile(session.ID, &added[i]); err != nil {
 			e.mu.Unlock()
-			return nil, fmt.Errorf("persist additional file %s: %w", added[i].Path, err)
+			return nil, skipped, fmt.Errorf("persist additional file %s: %w", added[i].Path, err)
 		}
 	}
 	e.mu.Unlock()
@@ -823,7 +854,32 @@ func (e *Engine) AddAdditionalPaths(paths []string) ([]types.AdditionalFile, err
 		})
 	}
 
-	return added, nil
+	return added, skipped, nil
+}
+
+// changesetAbsPaths returns the set of absolute file paths that make up the
+// current base-ref changeset (what the reviewer sees as diffs). Best-effort: a
+// git error or empty base yields an empty set (nothing is treated as already in
+// the review). Callers may hold e.mu — it only reads the git working tree.
+func (e *Engine) changesetAbsPaths(session *types.ReviewSession) map[string]bool {
+	set := map[string]bool{}
+	// In non-git mode nothing is a diff — every file is browsed as full
+	// content — so there is no changeset to dedup against; add everything.
+	if e.nonGitMode || session == nil || session.BaseRef == "" || e.git == nil {
+		return set
+	}
+	changed, err := e.git.Diff(session.BaseRef)
+	if err != nil {
+		return set
+	}
+	for _, f := range changed {
+		abs, aerr := filepath.Abs(filepath.Join(session.RepoRoot, f.Path))
+		if aerr != nil {
+			continue
+		}
+		set[abs] = true
+	}
+	return set
 }
 
 func (e *Engine) GetAdditionalFileContent(absPath string) (string, error) {
@@ -851,7 +907,7 @@ func (e *Engine) GetAdditionalFileContent(absPath string) (string, error) {
 }
 
 func (e *Engine) handleAddAdditionalFiles(msg *protocol.AddAdditionalFilesMsg) *protocol.AddAdditionalFilesResponse {
-	added, err := e.AddAdditionalPaths(msg.Paths)
+	added, skipped, err := e.addAdditionalPaths(msg.Paths)
 	if err != nil {
 		return &protocol.AddAdditionalFilesResponse{
 			Type:    protocol.TypeAddAdditionalFilesResponse,
@@ -860,10 +916,18 @@ func (e *Engine) handleAddAdditionalFiles(msg *protocol.AddAdditionalFilesMsg) *
 		}
 	}
 
+	message := fmt.Sprintf("Added %d file(s) for review", len(added))
+	if skipped > 0 {
+		// Guide the agent: these are already reviewable as diffs, so add_files
+		// on them is a no-op. add_files is for extra context files outside the
+		// base-ref range.
+		message += fmt.Sprintf("; skipped %d already in the review as diffs (base-ref changed files show as diffs automatically)", skipped)
+	}
+
 	return &protocol.AddAdditionalFilesResponse{
 		Type:         protocol.TypeAddAdditionalFilesResponse,
 		Success:      true,
-		Message:      fmt.Sprintf("Added %d file(s) for review", len(added)),
+		Message:      message,
 		Count:        len(added),
 		Added:        added,
 		AddedPresent: true,

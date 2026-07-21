@@ -576,6 +576,13 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		prevKind, prevID := m.sidebar.currentItemKey()
 
 		m.sidebar.files = msg.files
+		// Keep the added-file and artifact lists in sync with the engine on
+		// every tick so agent-driven add/remove stays reflected (see the
+		// fileChangedMsg handler for why the event path alone isn't enough).
+		// refreshFiles always populates these authoritatively — assign even when
+		// empty so removing every added file actually clears the sidebar.
+		m.sidebar.additionalFiles = msg.additionalFiles
+		m.sidebar.contentItems = msg.contentItems
 		m.sidebar.applyReviewedFilter()
 		m.sidebar.rebuildTree()
 		m.sidebar.rebuildGroups()
@@ -636,6 +643,12 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// change (e.g. the agent editing files) doesn't move the cursor.
 		prevKind, prevID := m.sidebar.currentItemKey()
 		m.sidebar.files = m.engine.GetChangedFiles()
+		// Reload the added-file and artifact lists too, not just the git
+		// changeset: agent-driven remove_files/add_files and base-ref changes
+		// arrive as EventFileChanged, and without this the sidebar keeps
+		// showing stale added files (which then shadow the real diffs).
+		m.sidebar.additionalFiles = m.engine.GetAdditionalFiles()
+		m.sidebar.contentItems = m.engine.GetContentItems()
 		m.sidebar.applyReviewedFilter()
 		m.sidebar.rebuildTree()
 		m.sidebar.rebuildGroups()
@@ -3944,6 +3957,11 @@ func (m appModel) refreshFiles() tea.Cmd {
 			return nil
 		}
 		session := engine.GetSession()
+		// Backstop the event path: also re-pull the added-file and artifact
+		// lists so agent-driven add_files/remove_files stay reflected even if an
+		// event is missed. Cheap in-memory copies over the socket.
+		additionalFiles := engine.GetAdditionalFiles()
+		contentItems := engine.GetContentItems()
 
 		// Refresh content item if one is currently displayed
 		if isContentItem && contentID != "" {
@@ -3959,11 +3977,13 @@ func (m appModel) refreshFiles() tea.Cmd {
 			if itemErr == nil && item != nil {
 				return refreshResultMsg{
 					files:           files,
+					additionalFiles: additionalFiles,
+					contentItems:    contentItems,
 					contentItem:     item,
 					contentComments: contentComments,
 				}
 			}
-			return refreshResultMsg{files: files}
+			return refreshResultMsg{files: files, additionalFiles: additionalFiles, contentItems: contentItems}
 		}
 
 		// Don't reload diff when viewing an additional file — it's not a git file
@@ -3981,10 +4001,12 @@ func (m appModel) refreshFiles() tea.Cmd {
 		}
 
 		return refreshResultMsg{
-			files:    files,
-			path:     currentPath,
-			result:   result,
-			comments: comments,
+			files:           files,
+			additionalFiles: additionalFiles,
+			contentItems:    contentItems,
+			path:            currentPath,
+			result:          result,
+			comments:        comments,
 		}
 	}
 }
@@ -4040,6 +4062,8 @@ func commentsChanged(next, prev []types.ReviewComment) bool {
 
 type refreshResultMsg struct {
 	files           []types.ChangedFile
+	additionalFiles []types.AdditionalFile
+	contentItems    []types.ContentItem
 	path            string
 	result          *types.DiffResult
 	comments        []types.ReviewComment

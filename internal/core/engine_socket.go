@@ -332,8 +332,12 @@ func (e *Engine) handleSetBaseRef(msg *protocol.SetBaseRefMsg) *protocol.SetBase
 		err = e.SetBaseRef(msg.Ref)
 	}
 	if err == nil {
-		// Nudge any connected reviewer TUI to re-diff against the new base
-		// immediately rather than waiting for its periodic refresh tick.
+		// Recompute the changeset against the new base first so the cached list
+		// read by GetChangedFiles (which the reviewer TUI reads when it handles
+		// the event below) is fresh — otherwise the TUI shows the old base's
+		// files until its next periodic refresh tick. Then nudge it to re-diff
+		// immediately rather than waiting for that tick.
+		_, _ = e.RefreshChangedFiles()
 		e.emit(EventFileChanged, EventPayload{Kind: EventFileChanged})
 	}
 	return &protocol.SetBaseRefResponse{

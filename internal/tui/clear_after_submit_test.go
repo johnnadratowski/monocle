@@ -13,12 +13,13 @@ import (
 // stubEngine is a minimal EngineAPI stub for testing TUI behavior.
 type stubEngine struct {
 	core.EngineAPI // embed to satisfy interface; panics on unimplemented methods
-	cfg            *types.Config
-	session        *types.ReviewSession
-	contentItems   []types.ContentItem
-	changedFiles   []types.ChangedFile
-	cleared        bool
-	dismissCalled  bool
+	cfg             *types.Config
+	session         *types.ReviewSession
+	contentItems    []types.ContentItem
+	changedFiles    []types.ChangedFile
+	additionalFiles []types.AdditionalFile
+	cleared         bool
+	dismissCalled   bool
 }
 
 func (s *stubEngine) ServerVersion() string                        { return "" }
@@ -31,7 +32,7 @@ func (s *stubEngine) ReloadPendingFeedback()                       {}
 func (s *stubEngine) SelectedBaseRef() string                      { return "" }
 func (s *stubEngine) IsAutoAdvanceRef() bool                       { return true }
 func (s *stubEngine) GetChangedFiles() []types.ChangedFile         { return s.changedFiles }
-func (s *stubEngine) GetAdditionalFiles() []types.AdditionalFile   { return nil }
+func (s *stubEngine) GetAdditionalFiles() []types.AdditionalFile   { return s.additionalFiles }
 func (s *stubEngine) MarkContentReviewed(id string) error          { return nil }
 func (s *stubEngine) UnmarkContentReviewed(id string) error        { return nil }
 func (s *stubEngine) GetContentItems() []types.ContentItem         { return s.contentItems }

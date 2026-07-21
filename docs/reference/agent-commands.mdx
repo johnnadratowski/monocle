@@ -133,11 +133,15 @@ When using MCP tools mode, the `send_artifact` tool accepts these parameters:
 
 ## `monocle review add-files`
 
-Add one or more files or directories to the current review session so they appear in the monocle diff viewer.
+Add one or more **extra context files** to the current review session — files you want the reviewer to see as full content that are **not** part of the change (for example an unchanged interface or config the change depends on).
 
 ```bash
 monocle review add-files <paths...> [--json] [--workdir PATH] [--socket PATH]
 ```
+
+<Note>
+  This is not how you choose which changes to review. Uncommitted changes are shown automatically, and committed work is shown by [`set-base-ref`](#monocle-review-set-base-ref), which renders every changed file as a diff. Any path you pass here that is already part of the review (an uncommitted change, or a file in a base-ref range) is **skipped** rather than duplicated as a full-content view — so passing your changed files is a no-op. Use `add-files` only for context files outside the change.
+</Note>
 
 ### Arguments
 

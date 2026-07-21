@@ -13,11 +13,11 @@
   },
   {
     "name": "add_files",
-    "description": "Add file paths to the current Monocle review session."
+    "description": "Add EXTRA context files to the review as full-content views — files you want the reviewer to see that are NOT part of the change (e.g. an unchanged interface, schema, or config the change depends on). Do NOT use this to define the set of files under review: uncommitted changes are shown automatically, and committed work is shown by calling set_base_ref (which renders every changed file as a diff). Files already in the review — whether uncommitted or in a base-ref range — are skipped here rather than duplicated as full-content views, so passing your changed files is a no-op. In short: set_base_ref for the diff, add_files only for surrounding context outside it."
   },
   {
     "name": "remove_files",
-    "description": "Remove previously-added file paths from the current Monocle review session. Pass the same paths used with add_files."
+    "description": "Remove previously-added context files (added via add_files) from the current Monocle review session. Pass the same paths used with add_files. This only affects extra context files; it does not remove base-ref diffs (change the range with set_base_ref instead)."
   },
   {
     "name": "set_file_groups",
