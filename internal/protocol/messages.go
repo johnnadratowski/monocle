@@ -52,6 +52,11 @@ type GetReviewStatusResponse struct {
 	Status       string `json:"status"` // "no_feedback" | "pending" | "pause_requested"
 	CommentCount int    `json:"comment_count,omitempty"`
 	Summary      string `json:"summary,omitempty"`
+	// RepoRoot and ReviewName identify which engine/session answered, so an
+	// agent (especially one that just called set_repo) can confirm it is bound
+	// to the repo it thinks it is instead of silently sharing another lane's row.
+	RepoRoot   string `json:"repo_root,omitempty"`
+	ReviewName string `json:"review_name,omitempty"`
 }
 
 // PollFeedbackMsg requests pending feedback, optionally blocking until available.

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/josephschmitt/monocle/internal/adapters"
 	"github.com/josephschmitt/monocle/internal/client"
 	"github.com/josephschmitt/monocle/internal/protocol"
 	"github.com/josephschmitt/monocle/internal/types"
@@ -90,6 +91,11 @@ func registerTools(s *sdkmcp.Server) {
 		Name:        "set_base_ref",
 		Description: desc["set_base_ref"],
 	}, handleSetBaseRef)
+
+	sdkmcp.AddTool(s, &sdkmcp.Tool{
+		Name:        "set_repo",
+		Description: desc["set_repo"],
+	}, handleSetRepo)
 }
 
 type setReviewNameParams struct {
@@ -98,9 +104,9 @@ type setReviewNameParams struct {
 }
 
 func handleSetReviewName(ctx context.Context, req *sdkmcp.CallToolRequest, params setReviewNameParams) (*sdkmcp.CallToolResult, any, error) {
-	c, err := client.ConnectDefault()
-	if err != nil {
-		return errResult("connect: %v", err), nil, nil
+	c, guard := boundClient()
+	if guard != nil {
+		return guard, nil, nil
 	}
 	defer c.Close()
 
@@ -189,12 +195,18 @@ type setBaseRefParams struct {
 	Reset bool `json:"reset,omitempty"`
 }
 
+type setRepoParams struct {
+	// Path is any path inside the repository/worktree to review. The repo root
+	// is derived from it. Empty means the current working directory.
+	Path string `json:"path,omitempty"`
+}
+
 // -- Tool handlers --
 
 func handleReviewStatus(ctx context.Context, req *sdkmcp.CallToolRequest, _ reviewStatusParams) (*sdkmcp.CallToolResult, any, error) {
-	c, err := client.ConnectDefault()
-	if err != nil {
-		return errResult("connect: %v", err), nil, nil
+	c, guard := boundClient()
+	if guard != nil {
+		return guard, nil, nil
 	}
 	defer c.Close()
 
@@ -211,7 +223,66 @@ func handleReviewStatus(ctx context.Context, req *sdkmcp.CallToolRequest, _ revi
 	if status.Summary != "" {
 		text = status.Summary
 	}
-	return textResult(text + groupingNudge(c)), nil, nil
+	return textResult(bindingLine(status.RepoRoot, status.ReviewName) + text + groupingNudge(c)), nil, nil
+}
+
+// bindingLine renders a one-line header naming the repo (and review, if named)
+// the answering engine is bound to, so an agent can confirm which review row it
+// is talking to. Returns "" when the engine has no session yet (nothing to name).
+func bindingLine(repoRoot, reviewName string) string {
+	if repoRoot == "" {
+		return ""
+	}
+	if reviewName != "" {
+		return fmt.Sprintf("[repo: %s · review: %s]\n", repoRoot, reviewName)
+	}
+	return fmt.Sprintf("[repo: %s]\n", repoRoot)
+}
+
+// handleSetRepo re-points this MCP server at the engine for the repo containing
+// the given path. Claude Code launches the MCP server with the *lead's* roots,
+// so every teammate binds to the lead's per-repo socket and writes the lead's
+// review row; calling set_repo after entering a worktree fixes that with no
+// Claude Code change. It autospawns a headless engine for the repo if the
+// reviewer hasn't opened Monocle on it yet — the same autospawn the TUI and
+// review CLI use, so the human attaches to this very engine when they open
+// `monocle -C <repo>`.
+func handleSetRepo(ctx context.Context, req *sdkmcp.CallToolRequest, params setRepoParams) (*sdkmcp.CallToolResult, any, error) {
+	repoRoot, socket, err := resolveRepoBinding(params.Path)
+	if err != nil {
+		return errResult("set_repo: %v", err), nil, nil
+	}
+
+	if _, _, err := adapters.EnsureServe(adapters.AutoSpawnOptions{RepoRoot: repoRoot, Socket: socket}); err != nil {
+		return errResult("set_repo: start engine for %s: %v", repoRoot, err), nil, nil
+	}
+
+	bindSocket(socket)
+
+	// Confirm by reading status from the now-bound engine so the response names
+	// the repo (and review) the agent now owns.
+	c, err := client.ConnectDefault()
+	if err != nil {
+		return errResult("set_repo: bound to %s but engine unreachable: %v", repoRoot, err), nil, nil
+	}
+	defer c.Close()
+
+	resp, err := c.Request(
+		&protocol.GetReviewStatusMsg{Type: protocol.TypeGetReviewStatus},
+		client.DefaultTimeout,
+	)
+	if err != nil {
+		return textResult(fmt.Sprintf("Monocle is now bound to %s.", repoRoot)), nil, nil
+	}
+	st := resp.(*protocol.GetReviewStatusResponse)
+	name := st.ReviewName
+	if name == "" {
+		name = "(unnamed)"
+	}
+	return textResult(fmt.Sprintf(
+		"Monocle is now bound to %s (review: %s). All review tools now target this repo.",
+		repoRoot, name,
+	)), nil, nil
 }
 
 // groupingNudge returns a reminder to call set_file_groups while changed files
@@ -256,9 +327,9 @@ func groupingNudgeText(files []types.ChangedFile) string {
 }
 
 func handleGetFeedback(ctx context.Context, req *sdkmcp.CallToolRequest, params getFeedbackParams) (*sdkmcp.CallToolResult, any, error) {
-	c, err := client.ConnectDefault()
-	if err != nil {
-		return errResult("connect: %v", err), nil, nil
+	c, guard := boundClient()
+	if guard != nil {
+		return guard, nil, nil
 	}
 	defer c.Close()
 
@@ -313,9 +384,9 @@ func handleSendArtifact(ctx context.Context, req *sdkmcp.CallToolRequest, params
 		return errResult("either content or file_path is required"), nil, nil
 	}
 
-	c, err := client.ConnectDefault()
-	if err != nil {
-		return errResult("connect: %v", err), nil, nil
+	c, guard := boundClient()
+	if guard != nil {
+		return guard, nil, nil
 	}
 	defer c.Close()
 
@@ -350,9 +421,9 @@ func handleSendArtifact(ctx context.Context, req *sdkmcp.CallToolRequest, params
 }
 
 func handleAddFiles(ctx context.Context, req *sdkmcp.CallToolRequest, params addFilesParams) (*sdkmcp.CallToolResult, any, error) {
-	c, err := client.ConnectDefault()
-	if err != nil {
-		return errResult("connect: %v", err), nil, nil
+	c, guard := boundClient()
+	if guard != nil {
+		return guard, nil, nil
 	}
 	defer c.Close()
 
@@ -372,9 +443,9 @@ func handleAddFiles(ctx context.Context, req *sdkmcp.CallToolRequest, params add
 }
 
 func handleRemoveFiles(ctx context.Context, req *sdkmcp.CallToolRequest, params removeFilesParams) (*sdkmcp.CallToolResult, any, error) {
-	c, err := client.ConnectDefault()
-	if err != nil {
-		return errResult("connect: %v", err), nil, nil
+	c, guard := boundClient()
+	if guard != nil {
+		return guard, nil, nil
 	}
 	defer c.Close()
 
@@ -397,9 +468,9 @@ func handleRemoveFiles(ctx context.Context, req *sdkmcp.CallToolRequest, params 
 }
 
 func handleSetFileGroups(ctx context.Context, req *sdkmcp.CallToolRequest, params setFileGroupsParams) (*sdkmcp.CallToolResult, any, error) {
-	c, err := client.ConnectDefault()
-	if err != nil {
-		return errResult("connect: %v", err), nil, nil
+	c, guard := boundClient()
+	if guard != nil {
+		return guard, nil, nil
 	}
 	defer c.Close()
 
@@ -437,9 +508,9 @@ func handleSetFileGroups(ctx context.Context, req *sdkmcp.CallToolRequest, param
 }
 
 func handleAddAnnotations(ctx context.Context, req *sdkmcp.CallToolRequest, params addAnnotationsParams) (*sdkmcp.CallToolResult, any, error) {
-	c, err := client.ConnectDefault()
-	if err != nil {
-		return errResult("connect: %v", err), nil, nil
+	c, guard := boundClient()
+	if guard != nil {
+		return guard, nil, nil
 	}
 	defer c.Close()
 
@@ -493,9 +564,9 @@ func handleSetBaseRef(ctx context.Context, req *sdkmcp.CallToolRequest, params s
 		return errResult("provide exactly one of: ref (commit to diff against), or reset=true"), nil, nil
 	}
 
-	c, err := client.ConnectDefault()
-	if err != nil {
-		return errResult("connect: %v", err), nil, nil
+	c, guard := boundClient()
+	if guard != nil {
+		return guard, nil, nil
 	}
 	defer c.Close()
 

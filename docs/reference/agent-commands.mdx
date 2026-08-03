@@ -417,3 +417,27 @@ monocle review set-base-ref --reset
 <Note>
 The base ref is scoped to one review. After the reviewer submits (approve or request changes), monocle automatically returns to working-tree review against `HEAD`. Re-run the command for the next round if you want committed work reviewed again.
 </Note>
+
+---
+
+## `set_repo` (MCP tool)
+
+Bind this MCP server to the engine for a specific repository or git worktree. Every subsequent review tool (`review_status`, `send_artifact`, `set_base_ref`, `add_files`, `get_feedback`, …) then targets that repo.
+
+The MCP server is a stdio child of your agent session, so its working directory is fixed at whatever directory the agent launched from — it **cannot** detect that you later moved into a worktree. Call `set_repo` once, before your first review action, whenever you are working somewhere other than the launch directory. This is essential in multi-agent setups where several agents launch from a shared directory: without it they all bind to the same engine and silently overwrite one another's review.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `path` | string | No | Any path inside the target repo (usually its root or your current working directory). The repo root is derived from it. Empty means the current working directory. |
+
+The response names the repo it bound to — confirm it matches your worktree. If no engine is running for that repo yet, a headless one is started automatically, so the reviewer attaches to it when they open `monocle -C <repo>`.
+
+`review_status` now prefixes its output with `[repo: <root> · review: <name>]`, so you can re-check the binding at any time.
+
+<Note>
+**CLI equivalent.** Skills-mode agents don't call `set_repo` — each `monocle review …` command already targets a repo via the `-C`/`--workdir` flag (or `MONOCLE_WORKDIR`). `set_repo` is the MCP-tools-mode counterpart: it makes the binding sticky for the whole MCP session instead of per-command.
+</Note>
+
+<Note>
+**Strict binding (opt-in).** Set the environment variable `MONOCLE_REQUIRE_SET_REPO=1` on the MCP server to require an explicit `set_repo` before any review tool will act — a teammate that forgets to bind then gets a hard error instead of silently reading or writing the launch directory's engine. It is off by default, so the single-repo, zero-config flow is unaffected. Fleet staffing tooling is the intended place to enable it.
+</Note>

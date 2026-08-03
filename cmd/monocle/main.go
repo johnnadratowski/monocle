@@ -515,6 +515,13 @@ func (cmd *ReviewStatusCmd) Run() error {
 	if cmd.JSON {
 		return printJSON(status)
 	}
+	if status.RepoRoot != "" {
+		if status.ReviewName != "" {
+			fmt.Printf("[repo: %s · review: %s]\n", status.RepoRoot, status.ReviewName)
+		} else {
+			fmt.Printf("[repo: %s]\n", status.RepoRoot)
+		}
+	}
 	if status.Summary != "" {
 		fmt.Println(status.Summary)
 	} else {

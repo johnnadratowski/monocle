@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"sync/atomic"
 	"time"
 
 	"github.com/josephschmitt/monocle/internal/adapters"
@@ -31,17 +32,50 @@ func newEngineConn(conn mcp.Connection, channelsOnly bool) *engineConn {
 // run connects to the engine and listens for events, forwarding them as
 // channel notifications. It reconnects with backoff on connection loss.
 func (e *engineConn) run(ctx context.Context) {
-	socketPath := adapters.ResolveSocketPath()
-	if socketPath == "" {
-		return
-	}
-
 	const initialDelay = 2 * time.Second
 	delay := initialDelay
 	for {
-		err := e.connectAndListen(ctx, socketPath)
 		if ctx.Err() != nil {
 			return
+		}
+
+		// Re-resolve on every iteration so a set_repo rebind (which updates
+		// MONOCLE_SOCKET) moves the event stream to the new repo's engine
+		// instead of streaming forever from the launch-time socket.
+		socketPath := adapters.ResolveSocketPath()
+		if socketPath == "" {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(delay):
+			}
+			continue
+		}
+
+		// Cancel the current connection when a rebind arrives so the next
+		// iteration re-dials the new socket.
+		connCtx, cancel := context.WithCancel(ctx)
+		var rebound atomic.Bool
+		go func() {
+			select {
+			case <-rebindSignal:
+				rebound.Store(true)
+				cancel()
+			case <-connCtx.Done():
+			}
+		}()
+
+		err := e.connectAndListen(connCtx, socketPath)
+		cancel()
+
+		if ctx.Err() != nil {
+			return
+		}
+		if rebound.Load() {
+			// Deliberate rebind, not a failure — reconnect to the new socket
+			// immediately rather than after a backoff.
+			delay = initialDelay
+			continue
 		}
 		if err == nil {
 			delay = initialDelay // reset after clean disconnect
@@ -64,6 +98,19 @@ func (e *engineConn) connectAndListen(ctx context.Context, socketPath string) er
 		return fmt.Errorf("dial: %w", err)
 	}
 	defer conn.Close()
+
+	// Close the connection when the context is cancelled (server shutdown or a
+	// set_repo rebind) so the scanner.Scan() loop below unblocks promptly
+	// instead of waiting for the next event or the peer to hang up.
+	stop := make(chan struct{})
+	defer close(stop)
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = conn.Close()
+		case <-stop:
+		}
+	}()
 
 	// Send connect message to subscribe to events
 	connectMsg := protocol.ConnectMsg{

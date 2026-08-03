@@ -34,5 +34,9 @@
   {
     "name": "set_base_ref",
     "description": "Review changes you have already committed. Set the commit to diff against (ref) — e.g. the branch you started from, a SHA, or HEAD~N — and Monocle shows everything since it, including your commits, for review. The ref's own changes are excluded. By default Monocle only shows uncommitted working-tree changes, so call this when your work is committed. The base reverts to HEAD automatically once the reviewer submits. Pass reset=true to go back to working-tree review immediately."
+  },
+  {
+    "name": "set_repo",
+    "description": "Point Monocle at the repository/worktree you are actually working in. Pass path — any path inside that repo (usually its root or your current working directory); Monocle finds the enclosing repo root and routes every subsequent review tool (review_status, send_artifact, set_base_ref, add_files, get_feedback, …) to that repo's engine. Empty path means the current working directory. CALL THIS ONCE, before the first review action, whenever your working directory is not where the MCP server was launched — most importantly right after entering a git worktree (e.g. a per-lane worktree in a multi-agent setup). Without it, agents launched from a shared directory all bind to the same engine and silently overwrite one another's review; a running engine is started for the repo automatically if none exists. The response names the repo it bound to — confirm it matches your worktree."
   }
 ]

@@ -53,6 +53,8 @@ type ReviewStatusInfo struct {
 	Status       string // "no_feedback" | "pending" | "pause_requested"
 	CommentCount int
 	Summary      string
+	RepoRoot     string // repo the answering engine is bound to (empty if no session)
+	ReviewName   string // agent-supplied review name, if set
 }
 
 // FeedbackQueue manages the synchronization between user review actions

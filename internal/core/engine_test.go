@@ -66,6 +66,49 @@ func TestGetReviewStatusInfo_PauseRequested(t *testing.T) {
 	}
 }
 
+// TestGetReviewStatusInfo_ReportsRepoAndName covers the fleet-diagnosis fix:
+// every status branch must name the bound repo and review so an agent can
+// confirm which review row answered.
+func TestGetReviewStatusInfo_ReportsRepoAndName(t *testing.T) {
+	newEngine := func() *Engine {
+		e := &Engine{
+			feedback:    NewFeedbackQueue(),
+			subscribers: make(map[EventKind]map[int]EventCallback),
+		}
+		e.current = &types.ReviewSession{
+			RepoRoot:   "/lanes/feature-3",
+			ReviewName: "OAuth login",
+		}
+		return e
+	}
+
+	check := func(t *testing.T, info *ReviewStatusInfo) {
+		t.Helper()
+		if info.RepoRoot != "/lanes/feature-3" {
+			t.Errorf("RepoRoot = %q, want /lanes/feature-3", info.RepoRoot)
+		}
+		if info.ReviewName != "OAuth login" {
+			t.Errorf("ReviewName = %q, want OAuth login", info.ReviewName)
+		}
+	}
+
+	t.Run("no_feedback", func(t *testing.T) {
+		check(t, newEngine().GetReviewStatusInfo())
+	})
+
+	t.Run("pending", func(t *testing.T) {
+		e := newEngine()
+		e.feedback.Submit(&FormattedReview{Formatted: "r", CommentCount: 1}, false)
+		check(t, e.GetReviewStatusInfo())
+	})
+
+	t.Run("pause_requested", func(t *testing.T) {
+		e := newEngine()
+		e.feedback.SetPauseRequested(true)
+		check(t, e.GetReviewStatusInfo())
+	})
+}
+
 func TestSubmitContentForReview(t *testing.T) {
 	database, err := db.Open(":memory:")
 	if err != nil {

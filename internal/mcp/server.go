@@ -141,7 +141,8 @@ func version() string {
 // Version is set by the main package before calling Run.
 var Version string
 
-const toolInstructions = `Use the review_status tool to check if feedback is pending.
+const toolInstructions = `If you are working in a git worktree or any directory other than where this MCP server was launched (for example a per-lane worktree in a multi-agent setup), call the set_repo tool once with that path BEFORE any other review tool — otherwise your review binds to the launch directory's engine and can silently overwrite another agent's review. The response names the repo it bound to; confirm it is yours.
+Use the review_status tool to check if feedback is pending.
 Use the get_feedback tool to retrieve review feedback.
 Use the send_artifact tool to send content for review.
 To review committed work, use the set_base_ref tool to set the commit to diff against — every changed file in that range is then shown to the reviewer as a diff automatically. Uncommitted changes are shown without any call. Use the add_files tool only for EXTRA context files that are NOT part of the change (e.g. an unchanged interface the change depends on); do not add your changed files with it — they are already shown as diffs.

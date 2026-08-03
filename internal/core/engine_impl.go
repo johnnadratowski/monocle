@@ -2208,31 +2208,43 @@ func (e *Engine) WaitForFeedback() *FormattedReview {
 
 // GetReviewStatusInfo returns the current review status for CLI queries.
 func (e *Engine) GetReviewStatusInfo() *ReviewStatusInfo {
+	// Snapshot the bound session's identity up front so every branch reports
+	// which repo/review answered — the fact whose absence made a cross-lane
+	// misbinding take an hour to diagnose.
+	e.mu.RLock()
+	var repoRoot, reviewName string
+	commentCount := 0
+	if e.current != nil {
+		repoRoot = e.current.RepoRoot
+		reviewName = e.current.ReviewName
+		commentCount = len(e.current.Comments)
+	}
+	e.mu.RUnlock()
+
 	if e.feedback.IsPauseRequested() {
 		return &ReviewStatusInfo{
-			Status:  "pause_requested",
-			Summary: "Your reviewer has requested a pause. Use the get_feedback tool with wait=true to receive feedback.",
+			Status:     "pause_requested",
+			Summary:    "Your reviewer has requested a pause. Use the get_feedback tool with wait=true to receive feedback.",
+			RepoRoot:   repoRoot,
+			ReviewName: reviewName,
 		}
 	}
 
 	if e.feedback.HasPending() {
-		e.mu.RLock()
-		commentCount := 0
-		if e.current != nil {
-			commentCount = len(e.current.Comments)
-		}
-		e.mu.RUnlock()
-
 		return &ReviewStatusInfo{
 			Status:       "pending",
 			CommentCount: commentCount,
 			Summary:      fmt.Sprintf("%d comment(s) pending review.", commentCount),
+			RepoRoot:     repoRoot,
+			ReviewName:   reviewName,
 		}
 	}
 
 	return &ReviewStatusInfo{
-		Status:  "no_feedback",
-		Summary: "No feedback pending.",
+		Status:     "no_feedback",
+		Summary:    "No feedback pending.",
+		RepoRoot:   repoRoot,
+		ReviewName: reviewName,
 	}
 }
 
@@ -2524,6 +2536,8 @@ func (e *Engine) handleGetReviewStatus(_ *protocol.GetReviewStatusMsg) *protocol
 		Status:       info.Status,
 		CommentCount: info.CommentCount,
 		Summary:      info.Summary,
+		RepoRoot:     info.RepoRoot,
+		ReviewName:   info.ReviewName,
 	}
 }
 
