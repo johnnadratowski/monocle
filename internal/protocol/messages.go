@@ -22,6 +22,7 @@ const (
 	TypeSetReviewName         = "set_review_name"
 	TypeMarkActivity          = "mark_activity"
 	TypeAwaitReview           = "await_review"
+	TypeAckFeedback           = "ack_feedback"
 )
 
 // Outbound message types (from engine to CLI subcommands)
@@ -39,6 +40,7 @@ const (
 	TypeSetReviewNameResponse         = "set_review_name_response"
 	TypeMarkActivityResponse          = "mark_activity_response"
 	TypeAwaitReviewResponse           = "await_review_response"
+	TypeAckFeedbackResponse           = "ack_feedback_response"
 )
 
 // GetReviewStatusMsg requests the current review state from the engine.
@@ -67,10 +69,19 @@ type GetReviewStatusResponse struct {
 // outlives an active reviewer. Zero means unbounded (the historical
 // behaviour). The bound is ignored while a pause has been explicitly
 // requested — a reviewer who pressed P may take as long as they need.
+// AckRequired opts this client into two-phase delivery: the engine hands the
+// verdict over but does NOT commit delivery (advance the round, clear comments,
+// mark the DB row delivered) until the client sends AckFeedbackMsg with the
+// returned DeliveryID. If no ack arrives before the lease expires, the verdict
+// returns to the queue so it can be redelivered rather than silently lost.
+// Clients that leave it false get the historical commit-on-send behaviour —
+// this is a capability flag, not a timeout heuristic, so an older client is
+// never mistaken for a dead one and never sees the same verdict on a loop.
 type PollFeedbackMsg struct {
-	Type      string `json:"type"`
-	Wait      bool   `json:"wait"`
-	MaxWaitMs int    `json:"max_wait_ms,omitempty"`
+	Type        string `json:"type"`
+	Wait        bool   `json:"wait"`
+	MaxWaitMs   int    `json:"max_wait_ms,omitempty"`
+	AckRequired bool   `json:"ack_required,omitempty"`
 }
 
 // PollFeedbackResponse returns feedback if available.
@@ -80,6 +91,27 @@ type PollFeedbackResponse struct {
 	Feedback     string `json:"feedback,omitempty"`
 	CommentCount int    `json:"comment_count,omitempty"`
 	Action       string `json:"action,omitempty"` // "approve" | "request_changes"
+	// DeliveryID is set only when the request opted into two-phase delivery.
+	// The client must send AckFeedbackMsg with this id once it has the verdict
+	// in hand; until then the delivery is uncommitted and recoverable.
+	DeliveryID string `json:"delivery_id,omitempty"`
+}
+
+// AckFeedbackMsg confirms that a client received a verdict, committing the
+// delivery (round advance, comment clear, DB marked delivered). An unknown or
+// already-committed DeliveryID is a harmless no-op, so a duplicate or late ack
+// is safe.
+type AckFeedbackMsg struct {
+	Type       string `json:"type"`
+	DeliveryID string `json:"delivery_id"`
+}
+
+// AckFeedbackResponse reports whether the ack matched an in-flight delivery.
+// Committed=false means the lease had already expired (the verdict went back to
+// the queue) or the id was unknown — either way nothing was lost.
+type AckFeedbackResponse struct {
+	Type      string `json:"type"`
+	Committed bool   `json:"committed"`
 }
 
 // SubmitContentMsg sends reviewable content (plans, docs) from the agent.
@@ -360,6 +392,8 @@ type AwaitReviewMsg struct {
 	// reviewer. Zero means unbounded (the historical behaviour). The bound is
 	// ignored while a pause has been explicitly requested.
 	MaxWaitMs int `json:"max_wait_ms,omitempty"`
+	// AckRequired opts into two-phase delivery; see PollFeedbackMsg.
+	AckRequired bool `json:"ack_required,omitempty"`
 }
 
 // AwaitReviewResponse reports the outcome of an AwaitReview call.
@@ -372,4 +406,6 @@ type AwaitReviewResponse struct {
 	HasActivity bool   `json:"has_activity"`
 	Action      string `json:"action,omitempty"`
 	Feedback    string `json:"feedback,omitempty"`
+	// DeliveryID is set only when the request opted into two-phase delivery.
+	DeliveryID string `json:"delivery_id,omitempty"`
 }

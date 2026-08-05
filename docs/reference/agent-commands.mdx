@@ -70,6 +70,10 @@ In MCP tools mode, call the `get_feedback` tool:
 |-----------|------|----------|-------------|
 | `wait` | boolean | No | When `true`, blocks until feedback is available. |
 
+<Note>
+**Delivery is at-least-once.** A verdict is only committed — round advanced, comments cleared, submission marked delivered — once the client confirms it received it. If the agent or hook dies mid-handoff, or a blocking `--wait` is abandoned, the verdict returns to the queue and the next `get-feedback` retrieves it instead of it being silently lost. The trade is that a crash at exactly the wrong moment may deliver the same verdict twice, which is harmless to re-read. Acknowledgement is automatic; there is nothing for an agent to call.
+</Note>
+
 ---
 
 ## `monocle review send-artifact`

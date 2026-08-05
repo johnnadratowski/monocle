@@ -612,6 +612,8 @@ func (s *SocketServer) handleMessage(msg any) any {
 		return s.engine.handleGetReviewStatus(m)
 	case *protocol.PollFeedbackMsg:
 		return s.engine.handlePollFeedback(m, nil)
+	case *protocol.AckFeedbackMsg:
+		return s.engine.handleAckFeedback(m)
 	case *protocol.SubmitContentMsg:
 		return s.engine.handleSubmitContent(m)
 	case *protocol.AddAdditionalFilesMsg:

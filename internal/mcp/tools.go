@@ -339,7 +339,14 @@ func handleGetFeedback(ctx context.Context, req *sdkmcp.CallToolRequest, params 
 	// server-side wait WITHOUT consuming the verdict. A plain Request(_, 0) would
 	// ignore ctx, leaving the engine to deliver a later submission into a
 	// response nobody reads and mark it delivered — silently losing it.
-	msg := &protocol.PollFeedbackMsg{Type: protocol.TypePollFeedback, Wait: params.Wait}
+	// AckRequired opts into two-phase delivery: the engine holds the verdict as
+	// recoverable until we confirm below, so a crash between its write and our
+	// read redelivers rather than losing it.
+	msg := &protocol.PollFeedbackMsg{
+		Type:        protocol.TypePollFeedback,
+		Wait:        params.Wait,
+		AckRequired: true,
+	}
 	var resp any
 	var reqErr error
 	if params.Wait {
@@ -355,7 +362,11 @@ func handleGetFeedback(ctx context.Context, req *sdkmcp.CallToolRequest, params 
 	if !feedback.HasFeedback {
 		return textResult("No feedback pending."), nil, nil
 	}
-	return textResult(feedback.Feedback), nil, nil
+	// The verdict is in hand and about to be returned to the agent — commit the
+	// delivery. Done last so any failure above leaves it recoverable.
+	result := textResult(feedback.Feedback)
+	client.AckFeedbackDefault(feedback.DeliveryID)
+	return result, nil, nil
 }
 
 func handleSendArtifact(ctx context.Context, req *sdkmcp.CallToolRequest, params sendArtifactParams) (*sdkmcp.CallToolResult, any, error) {

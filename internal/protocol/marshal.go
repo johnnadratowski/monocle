@@ -53,6 +53,10 @@ func Decode(data []byte) (any, error) {
 		msg = &MarkActivityMsg{}
 	case TypeAwaitReview:
 		msg = &AwaitReviewMsg{}
+	case TypeAckFeedback:
+		msg = &AckFeedbackMsg{}
+	case TypeAckFeedbackResponse:
+		msg = &AckFeedbackResponse{}
 	case TypeGetReviewStatusResponse:
 		msg = &GetReviewStatusResponse{}
 	case TypePollFeedbackResponse:

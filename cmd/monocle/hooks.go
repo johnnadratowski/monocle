@@ -207,6 +207,9 @@ func (cmd *ExitPlanHookCmd) runClaude(in hookInput) error {
 			Type:      protocol.TypePollFeedback,
 			Wait:      true,
 			MaxWaitMs: int(blockingHookMaxWait.Milliseconds()),
+			// Two-phase delivery: keep the verdict recoverable until this hook
+			// has actually emitted its decision.
+			AckRequired: true,
 		},
 		0,
 	)
@@ -222,7 +225,11 @@ func (cmd *ExitPlanHookCmd) runClaude(in hookInput) error {
 	hookDebug("exit-plan/claude: got feedback action=%q has_feedback=%v comment_count=%d body_len=%d",
 		feedback.Action, feedback.HasFeedback, feedback.CommentCount, len(feedback.Feedback))
 
-	return emitClaudePermissionDecision(os.Stdout, feedback)
+	err = emitClaudePermissionDecision(os.Stdout, feedback)
+	if err == nil {
+		client.AckFeedback(socketPath, feedback.DeliveryID)
+	}
+	return err
 }
 
 // emitClaudePermissionDecision writes the Claude Code PermissionRequest hook
@@ -404,6 +411,9 @@ func (cmd *OnStopHookCmd) Run() error {
 			Type:      protocol.TypeAwaitReview,
 			Wait:      true,
 			MaxWaitMs: int(blockingHookMaxWait.Milliseconds()),
+			// Two-phase delivery: keep the verdict recoverable until this hook
+			// has actually acted on it.
+			AckRequired: true,
 		},
 		0,
 	)
@@ -422,9 +432,14 @@ func (cmd *OnStopHookCmd) Run() error {
 		return nil
 	}
 	if review.Action == "request_changes" {
-		return emitClaudeStopBlock(os.Stdout, review.Feedback)
+		err := emitClaudeStopBlock(os.Stdout, review.Feedback)
+		if err == nil {
+			client.AckFeedback(socketPath, review.DeliveryID)
+		}
+		return err
 	}
 	// HasActivity=true but approved (or no explicit action) — turn ends normally.
+	client.AckFeedback(socketPath, review.DeliveryID)
 	return nil
 }
 

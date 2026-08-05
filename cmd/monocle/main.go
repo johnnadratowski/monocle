@@ -551,7 +551,13 @@ func (cmd *ReviewGetFeedbackCmd) Run() error {
 	}
 
 	resp, err := c.Request(
-		&protocol.PollFeedbackMsg{Type: protocol.TypePollFeedback, Wait: cmd.Wait},
+		&protocol.PollFeedbackMsg{
+			Type: protocol.TypePollFeedback,
+			Wait: cmd.Wait,
+			// Two-phase delivery: the engine keeps the verdict recoverable until
+			// we acknowledge it below, so a crash mid-handoff redelivers.
+			AckRequired: true,
+		},
 		timeout,
 	)
 	if err != nil {
@@ -560,13 +566,19 @@ func (cmd *ReviewGetFeedbackCmd) Run() error {
 
 	feedback := resp.(*protocol.PollFeedbackResponse)
 	if cmd.JSON {
-		return printJSON(feedback)
+		if err := printJSON(feedback); err != nil {
+			return err
+		}
+		client.AckFeedback(socketPath, feedback.DeliveryID)
+		return nil
 	}
 	if !feedback.HasFeedback {
 		fmt.Println("No feedback pending.")
 		return nil
 	}
 	fmt.Println(feedback.Feedback)
+	// Printed successfully — commit the delivery.
+	client.AckFeedback(socketPath, feedback.DeliveryID)
 	return nil
 }
 

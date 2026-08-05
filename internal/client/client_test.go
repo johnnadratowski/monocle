@@ -168,6 +168,86 @@ func TestClient_AbortedWaitPreservesVerdict(t *testing.T) {
 	}
 }
 
+// pollFeedback is a small helper for the two-phase delivery tests.
+func pollFeedback(t *testing.T, socketPath string, ackRequired bool) *protocol.PollFeedbackResponse {
+	t.Helper()
+	c, err := client.Connect(socketPath)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer c.Close()
+	resp, err := c.Request(&protocol.PollFeedbackMsg{
+		Type:        protocol.TypePollFeedback,
+		Wait:        false,
+		AckRequired: ackRequired,
+	}, client.DefaultTimeout)
+	if err != nil {
+		t.Fatalf("poll: %v", err)
+	}
+	pfr, ok := resp.(*protocol.PollFeedbackResponse)
+	if !ok {
+		t.Fatalf("expected *PollFeedbackResponse, got %T", resp)
+	}
+	return pfr
+}
+
+// TestClient_TwoPhaseDelivery_SurvivesMissingAck is the end-to-end phase II
+// guarantee: a client that receives a verdict but dies before acknowledging it
+// must not lose it. The engine holds the delivery uncommitted, so the next poll
+// redelivers — and only the ack commits it.
+func TestClient_TwoPhaseDelivery_SurvivesMissingAck(t *testing.T) {
+	engine, socketPath := setupTestEngine(t)
+
+	if err := engine.Submit(types.ActionRequestChanges, "please fix"); err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+
+	// Phase 1: receive the verdict, then "crash" — never ack.
+	first := pollFeedback(t, socketPath, true)
+	if !first.HasFeedback {
+		t.Fatal("expected the verdict on the first poll")
+	}
+	if first.DeliveryID == "" {
+		t.Fatal("expected a DeliveryID when ack_required is set")
+	}
+
+	// The verdict must still be recoverable.
+	second := pollFeedback(t, socketPath, true)
+	if !second.HasFeedback {
+		t.Fatal("verdict lost: an unacknowledged delivery was not redelivered")
+	}
+
+	// Now acknowledge it.
+	client.AckFeedback(socketPath, second.DeliveryID)
+
+	// Committed — no longer redelivered.
+	third := pollFeedback(t, socketPath, true)
+	if third.HasFeedback {
+		t.Error("acknowledged verdict was redelivered")
+	}
+}
+
+// Old clients (no ack_required) must keep the historical commit-on-send
+// behaviour so they never loop on the same verdict.
+func TestClient_OnePhaseDelivery_BackCompat(t *testing.T) {
+	engine, socketPath := setupTestEngine(t)
+
+	if err := engine.Submit(types.ActionRequestChanges, "please fix"); err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+
+	first := pollFeedback(t, socketPath, false)
+	if !first.HasFeedback {
+		t.Fatal("expected the verdict")
+	}
+	if first.DeliveryID != "" {
+		t.Errorf("DeliveryID should be empty without ack_required, got %q", first.DeliveryID)
+	}
+	if second := pollFeedback(t, socketPath, false); second.HasFeedback {
+		t.Error("one-phase delivery must not redeliver")
+	}
+}
+
 func TestClient_SubmitContent(t *testing.T) {
 	_, socketPath := setupTestEngine(t)
 

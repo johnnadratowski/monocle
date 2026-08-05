@@ -2598,6 +2598,7 @@ func (e *Engine) boundedWaitCancel(cancel <-chan struct{}, maxWaitMs int) (<-cha
 // the queue is left intact so the feedback isn't lost to a dead socket.
 func (e *Engine) handlePollFeedback(msg *protocol.PollFeedbackMsg, cancel <-chan struct{}) *protocol.PollFeedbackResponse {
 	var result *PollResult
+	deliveryID := newDeliveryID(msg.AckRequired)
 
 	if msg.Wait {
 		e.emit(EventWaitStatusChanged, EventPayload{
@@ -2606,13 +2607,13 @@ func (e *Engine) handlePollFeedback(msg *protocol.PollFeedbackMsg, cancel <-chan
 		})
 		waitCancel, stop := e.boundedWaitCancel(cancel, msg.MaxWaitMs)
 		defer stop()
-		result = e.feedback.WaitForFeedbackCancellable(waitCancel)
+		result = e.feedback.WaitForFeedbackCancellable(waitCancel, deliveryID)
 		e.emit(EventWaitStatusChanged, EventPayload{
 			Kind:   EventWaitStatusChanged,
 			Status: "",
 		})
 	} else {
-		result = e.feedback.PollWithInfo()
+		result = e.feedback.PollWithInfo(deliveryID)
 	}
 
 	if result == nil || len(result.Reviews) == 0 {
@@ -2624,8 +2625,9 @@ func (e *Engine) handlePollFeedback(msg *protocol.PollFeedbackMsg, cancel <-chan
 
 	// If this feedback was NOT already channel-delivered, perform queue delivery
 	// side effects: advance round, mark delivered, clear comments, emit events.
+	// Under two-phase delivery those are deferred until the client acks.
 	if !result.ChannelDelivered {
-		e.completeQueuedDelivery()
+		e.finishOrDeferDelivery(result)
 	}
 
 	feedback, commentCount, action := result.CombinedFeedback()
@@ -2636,6 +2638,62 @@ func (e *Engine) handlePollFeedback(msg *protocol.PollFeedbackMsg, cancel <-chan
 		Feedback:     feedback,
 		CommentCount: commentCount,
 		Action:       action,
+		DeliveryID:   result.DeliveryID,
+	}
+}
+
+// deliveryLeaseTTL bounds how long an unacknowledged delivery is held before it
+// is returned to the queue for redelivery. It only needs to cover the moment
+// between the engine's write and the client's ack, so it is short; a client that
+// dies in that window gets the verdict back rather than losing it.
+const deliveryLeaseTTL = 30 * time.Second
+
+// newDeliveryID mints an id for a two-phase delivery, or "" when the client
+// didn't opt in (historical commit-on-send behaviour).
+func newDeliveryID(ackRequired bool) string {
+	if !ackRequired {
+		return ""
+	}
+	return uuid.New().String()
+}
+
+// finishOrDeferDelivery commits a delivery immediately for clients using the
+// historical one-phase protocol, or arms a lease for ack-capable clients so the
+// destructive half (round advance, comment clear, DB mark-delivered) only runs
+// once the verdict is known to have landed.
+func (e *Engine) finishOrDeferDelivery(result *PollResult) {
+	if result.DeliveryID == "" {
+		e.completeQueuedDelivery()
+		return
+	}
+	e.armDeliveryLease(result.DeliveryID)
+}
+
+// armDeliveryLease schedules reclamation of an unacknowledged delivery. If the
+// ack arrives first the timer's ReclaimInFlight is a no-op (the id no longer
+// matches), so a committed delivery is never resurrected.
+func (e *Engine) armDeliveryLease(id string) {
+	time.AfterFunc(deliveryLeaseTTL, func() {
+		if e.feedback.ReclaimInFlight(id) {
+			e.emit(EventFeedbackStatusChanged, EventPayload{
+				Kind:   EventFeedbackStatusChanged,
+				Status: e.feedback.GetStatus(),
+			})
+		}
+	})
+}
+
+// handleAckFeedback commits a two-phase delivery. Committed=false means the id
+// was unknown or its lease had already expired — the verdict went back to the
+// queue, so nothing is lost either way.
+func (e *Engine) handleAckFeedback(msg *protocol.AckFeedbackMsg) *protocol.AckFeedbackResponse {
+	committed := e.feedback.AckInFlight(msg.DeliveryID)
+	if committed {
+		e.completeQueuedDelivery()
+	}
+	return &protocol.AckFeedbackResponse{
+		Type:      protocol.TypeAckFeedbackResponse,
+		Committed: committed,
 	}
 }
 
@@ -2667,10 +2725,12 @@ func (e *Engine) handleMarkActivity(_ *protocol.MarkActivityMsg) *protocol.MarkA
 //  3. Dirty with no queued feedback: block until the reviewer submits
 //     (if Wait=true), then return their verdict.
 func (e *Engine) handleAwaitReview(msg *protocol.AwaitReviewMsg, cancel <-chan struct{}) *protocol.AwaitReviewResponse {
+	deliveryID := newDeliveryID(msg.AckRequired)
+
 	// Step 1: drain any already-queued feedback.
-	if result := e.feedback.PollWithInfo(); result != nil && len(result.Reviews) > 0 {
+	if result := e.feedback.PollWithInfo(deliveryID); result != nil && len(result.Reviews) > 0 {
 		if !result.ChannelDelivered {
-			e.completeQueuedDelivery()
+			e.finishOrDeferDelivery(result)
 		}
 		feedback, _, action := result.CombinedFeedback()
 		return &protocol.AwaitReviewResponse{
@@ -2678,6 +2738,7 @@ func (e *Engine) handleAwaitReview(msg *protocol.AwaitReviewMsg, cancel <-chan s
 			HasActivity: true,
 			Action:      action,
 			Feedback:    feedback,
+			DeliveryID:  result.DeliveryID,
 		}
 	}
 
@@ -2705,7 +2766,7 @@ func (e *Engine) handleAwaitReview(msg *protocol.AwaitReviewMsg, cancel <-chan s
 	})
 	waitCancel, stop := e.boundedWaitCancel(cancel, msg.MaxWaitMs)
 	defer stop()
-	result := e.feedback.WaitForFeedbackCancellable(waitCancel)
+	result := e.feedback.WaitForFeedbackCancellable(waitCancel, deliveryID)
 	e.emit(EventWaitStatusChanged, EventPayload{
 		Kind:   EventWaitStatusChanged,
 		Status: "",
@@ -2721,7 +2782,7 @@ func (e *Engine) handleAwaitReview(msg *protocol.AwaitReviewMsg, cancel <-chan s
 		}
 	}
 	if !result.ChannelDelivered {
-		e.completeQueuedDelivery()
+		e.finishOrDeferDelivery(result)
 	}
 	feedback, _, action := result.CombinedFeedback()
 	return &protocol.AwaitReviewResponse{
@@ -2729,6 +2790,7 @@ func (e *Engine) handleAwaitReview(msg *protocol.AwaitReviewMsg, cancel <-chan s
 		HasActivity: true,
 		Action:      action,
 		Feedback:    feedback,
+		DeliveryID:  result.DeliveryID,
 	}
 }
 

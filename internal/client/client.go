@@ -141,6 +141,37 @@ func (c *Client) RequestWithContext(ctx context.Context, msg any) (any, error) {
 	return resp, nil
 }
 
+// AckFeedback confirms receipt of a two-phase delivery so the engine commits it
+// (advances the round, clears comments, marks the submission delivered).
+//
+// It dials a fresh connection because the engine closes a one-shot connection
+// after each response. Best-effort by design: if the ack never lands, the
+// delivery lease expires and the verdict returns to the queue for redelivery —
+// a duplicate, never a loss — so callers have nothing useful to do with an
+// error and it is intentionally swallowed.
+func AckFeedback(socketPath, deliveryID string) {
+	if deliveryID == "" {
+		return
+	}
+	c, err := Connect(socketPath)
+	if err != nil {
+		return
+	}
+	defer c.Close()
+	_, _ = c.Request(
+		&protocol.AckFeedbackMsg{Type: protocol.TypeAckFeedback, DeliveryID: deliveryID},
+		DefaultTimeout,
+	)
+}
+
+// AckFeedbackDefault is AckFeedback against the default-resolved socket.
+func AckFeedbackDefault(deliveryID string) {
+	if deliveryID == "" {
+		return
+	}
+	AckFeedback(adapters.ResolveSocketPath(), deliveryID)
+}
+
 // DefaultTimeout is the read deadline for non-blocking requests.
 const DefaultTimeout = 30 * time.Second
 

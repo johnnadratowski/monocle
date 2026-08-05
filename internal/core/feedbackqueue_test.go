@@ -140,7 +140,7 @@ func TestWaitForFeedbackCancellable_PreservesFeedback(t *testing.T) {
 	cancel := make(chan struct{})
 	got := make(chan *PollResult, 1)
 	go func() {
-		got <- fq.WaitForFeedbackCancellable(cancel)
+		got <- fq.WaitForFeedbackCancellable(cancel, "")
 	}()
 
 	// Let the waiter park, then simulate the client disconnecting.
@@ -175,7 +175,7 @@ func TestWaitForFeedbackCancellable_CancelAfterPending(t *testing.T) {
 	cancel := make(chan struct{})
 	close(cancel)
 
-	if res := fq.WaitForFeedbackCancellable(cancel); res != nil {
+	if res := fq.WaitForFeedbackCancellable(cancel, ""); res != nil {
 		t.Fatalf("pre-cancelled wait should return nil, got %+v", res)
 	}
 	if !fq.HasPending() {
@@ -232,3 +232,128 @@ func TestHasPending(t *testing.T) {
 	}
 }
 
+
+// --- Two-phase delivery ---
+
+func submitOne(fq *FeedbackQueue, text string) {
+	fq.Submit(&FormattedReview{Formatted: text, CommentCount: 1, Action: "request_changes"}, false)
+}
+
+// TestTwoPhase_UnackedIsRedelivered is the core guarantee: a verdict handed to
+// an ack-capable client that never confirms must remain recoverable, so the
+// next poll delivers it again instead of it being silently dropped.
+func TestTwoPhase_UnackedIsRedelivered(t *testing.T) {
+	fq := NewFeedbackQueue()
+	submitOne(fq, "verdict")
+
+	first := fq.PollWithInfo("delivery-1")
+	if first == nil || len(first.Reviews) != 1 {
+		t.Fatal("expected the verdict on first poll")
+	}
+	if first.DeliveryID != "delivery-1" {
+		t.Errorf("DeliveryID = %q, want delivery-1", first.DeliveryID)
+	}
+	// Un-acked delivery is still outstanding.
+	if !fq.HasPending() {
+		t.Error("expected HasPending=true while a delivery is unacknowledged")
+	}
+
+	second := fq.PollWithInfo("delivery-2")
+	if second == nil || len(second.Reviews) != 1 {
+		t.Fatal("verdict was lost: unacknowledged delivery was not redelivered")
+	}
+	if second.Reviews[0].Formatted != "verdict" {
+		t.Errorf("redelivered %q, want verdict", second.Reviews[0].Formatted)
+	}
+}
+
+func TestTwoPhase_AckCommits(t *testing.T) {
+	fq := NewFeedbackQueue()
+	submitOne(fq, "verdict")
+
+	res := fq.PollWithInfo("delivery-1")
+	if res == nil {
+		t.Fatal("expected a verdict")
+	}
+	if !fq.AckInFlight("delivery-1") {
+		t.Fatal("expected ack to match the in-flight delivery")
+	}
+	if fq.HasPending() {
+		t.Error("expected nothing pending after ack")
+	}
+	if fq.PollWithInfo("delivery-2") != nil {
+		t.Error("acked verdict must not be redelivered")
+	}
+}
+
+func TestTwoPhase_AckIsIdempotentAndIgnoresUnknownIDs(t *testing.T) {
+	fq := NewFeedbackQueue()
+	submitOne(fq, "verdict")
+	fq.PollWithInfo("delivery-1")
+
+	if fq.AckInFlight("bogus") {
+		t.Error("unknown delivery id must not commit")
+	}
+	if !fq.AckInFlight("delivery-1") {
+		t.Fatal("expected first ack to succeed")
+	}
+	if fq.AckInFlight("delivery-1") {
+		t.Error("duplicate ack must be a no-op, not a second commit")
+	}
+}
+
+// TestOnePhase_BackCompat: a client that does not opt in keeps the historical
+// commit-on-send behaviour, so an older binary never loops on redelivery.
+func TestOnePhase_BackCompat(t *testing.T) {
+	fq := NewFeedbackQueue()
+	submitOne(fq, "verdict")
+
+	res := fq.PollWithInfo("")
+	if res == nil || res.DeliveryID != "" {
+		t.Fatal("expected a one-phase delivery with no DeliveryID")
+	}
+	if fq.HasPending() {
+		t.Error("one-phase delivery should leave nothing outstanding")
+	}
+	if fq.PollWithInfo("") != nil {
+		t.Error("one-phase delivery must not be redelivered")
+	}
+}
+
+func TestReclaimInFlight_ReturnsVerdictToQueue(t *testing.T) {
+	fq := NewFeedbackQueue()
+	submitOne(fq, "verdict")
+	fq.PollWithInfo("delivery-1")
+
+	if fq.ReclaimInFlight("bogus") {
+		t.Error("reclaim with a stale id must not fire")
+	}
+	if !fq.ReclaimInFlight("delivery-1") {
+		t.Fatal("expected lease expiry to reclaim the delivery")
+	}
+	if fq.GetStatus() != "queued" {
+		t.Errorf("status = %q, want queued after reclaim", fq.GetStatus())
+	}
+	res := fq.PollWithInfo("delivery-2")
+	if res == nil || res.Reviews[0].Formatted != "verdict" {
+		t.Fatal("reclaimed verdict should be deliverable again")
+	}
+}
+
+// DiscardPending (the reviewer's :cancel-feedback) must also drop an
+// unacknowledged delivery, or a lease expiry could resurrect cancelled feedback.
+func TestDiscardPending_DropsInFlight(t *testing.T) {
+	fq := NewFeedbackQueue()
+	submitOne(fq, "verdict")
+	fq.PollWithInfo("delivery-1")
+
+	if n := fq.DiscardPending(); n != 1 {
+		t.Errorf("discarded %d, want 1 (the in-flight delivery)", n)
+	}
+	if fq.ReclaimInFlight("delivery-1") {
+		t.Error("cancelled feedback must not be resurrected by lease expiry")
+	}
+	if fq.PollWithInfo("delivery-2") != nil {
+		t.Error("expected nothing after discard")
+	}
+}
