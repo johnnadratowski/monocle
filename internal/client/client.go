@@ -4,6 +4,7 @@ package client
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -77,6 +78,56 @@ func (c *Client) Request(msg any, timeout time.Duration) (any, error) {
 	}
 
 	if !c.scanner.Scan() {
+		if err := c.scanner.Err(); err != nil {
+			return nil, fmt.Errorf("read: %w", err)
+		}
+		return nil, errors.New("connection closed by server")
+	}
+
+	resp, err := protocol.Decode(c.scanner.Bytes())
+	if err != nil {
+		return nil, fmt.Errorf("decode: %w", err)
+	}
+	return resp, nil
+}
+
+// RequestWithContext sends msg and blocks for the response with no read
+// deadline, but abandons the wait and closes the connection if ctx is cancelled
+// first. Use it for blocking waits (get_feedback --wait) instead of Request with
+// timeout 0.
+//
+// Closing the connection on cancellation is the load-bearing behaviour: it both
+// unblocks this read AND signals the engine's disconnect watcher
+// (watchConnClose) to release its blocking wait WITHOUT consuming feedback. A
+// plain Request(msg, 0) ignores ctx, so an aborted tool call would leave the
+// connection open, the engine would keep waiting, and a later submission would
+// be consumed and marked delivered into a response nobody reads — silently
+// losing the verdict. This makes an aborted wait leave the verdict queued for
+// the next poll.
+func (c *Client) RequestWithContext(ctx context.Context, msg any) (any, error) {
+	data, err := protocol.Encode(msg)
+	if err != nil {
+		return nil, fmt.Errorf("encode: %w", err)
+	}
+	if _, err := c.conn.Write(data); err != nil {
+		return nil, fmt.Errorf("write: %w", err)
+	}
+	c.conn.SetReadDeadline(time.Time{}) // no deadline; ctx governs cancellation
+
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = c.conn.Close()
+		case <-done:
+		}
+	}()
+
+	if !c.scanner.Scan() {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		if err := c.scanner.Err(); err != nil {
 			return nil, fmt.Errorf("read: %w", err)
 		}

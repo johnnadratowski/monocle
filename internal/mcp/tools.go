@@ -333,17 +333,22 @@ func handleGetFeedback(ctx context.Context, req *sdkmcp.CallToolRequest, params 
 	}
 	defer c.Close()
 
-	timeout := client.DefaultTimeout
+	// A blocking wait uses the ctx-aware request so that if the agent aborts the
+	// tool call (client-side timeout/cancellation), we close the engine
+	// connection — which fires the engine's disconnect watcher and releases the
+	// server-side wait WITHOUT consuming the verdict. A plain Request(_, 0) would
+	// ignore ctx, leaving the engine to deliver a later submission into a
+	// response nobody reads and mark it delivered — silently losing it.
+	msg := &protocol.PollFeedbackMsg{Type: protocol.TypePollFeedback, Wait: params.Wait}
+	var resp any
+	var reqErr error
 	if params.Wait {
-		timeout = 0 // no deadline — block until feedback
+		resp, reqErr = c.RequestWithContext(ctx, msg)
+	} else {
+		resp, reqErr = c.Request(msg, client.DefaultTimeout)
 	}
-
-	resp, err := c.Request(
-		&protocol.PollFeedbackMsg{Type: protocol.TypePollFeedback, Wait: params.Wait},
-		timeout,
-	)
-	if err != nil {
-		return errResult("request: %v", err), nil, nil
+	if reqErr != nil {
+		return errResult("request: %v", reqErr), nil, nil
 	}
 
 	feedback := resp.(*protocol.PollFeedbackResponse)
