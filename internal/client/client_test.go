@@ -248,6 +248,53 @@ func TestClient_OnePhaseDelivery_BackCompat(t *testing.T) {
 	}
 }
 
+// End-to-end over the socket: exercises the new message's marshal registration
+// and routing, not just the engine method.
+func TestClient_SubmitDiff(t *testing.T) {
+	engine, socketPath := setupTestEngine(t)
+
+	c, err := client.Connect(socketPath)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer c.Close()
+
+	resp, err := c.Request(&protocol.SubmitDiffMsg{
+		Type:        protocol.TypeSubmitDiff,
+		ID:          "diff-demo",
+		Title:       "pseudocode: minOut fix",
+		Before:      "if x > 0 {\n  return x\n}\n",
+		After:       "if x > minOut {\n  return x\n}\n",
+		ContentType: "go",
+	}, client.DefaultTimeout)
+	if err != nil {
+		t.Fatalf("submit diff: %v", err)
+	}
+	out, ok := resp.(*protocol.SubmitDiffResponse)
+	if !ok {
+		t.Fatalf("expected *SubmitDiffResponse, got %T", resp)
+	}
+	if !out.Success {
+		t.Fatalf("submit failed: %s", out.Message)
+	}
+	if out.ID != "diff-demo" {
+		t.Errorf("ID = %q, want diff-demo", out.ID)
+	}
+
+	// It must arrive as a two-version artifact so the TUI opens the diff view.
+	items := engine.GetContentItems()
+	if len(items) != 1 {
+		t.Fatalf("expected 1 artifact, got %d", len(items))
+	}
+	if items[0].VersionCount < 2 {
+		t.Errorf("VersionCount = %d, want >= 2", items[0].VersionCount)
+	}
+	diff, err := engine.GetContentDiff("diff-demo")
+	if err != nil || diff == nil || len(diff.Hunks) == 0 {
+		t.Fatalf("expected a rendered diff, got %v (err %v)", diff, err)
+	}
+}
+
 func TestClient_SubmitContent(t *testing.T) {
 	_, socketPath := setupTestEngine(t)
 

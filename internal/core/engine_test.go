@@ -3318,3 +3318,158 @@ func TestMarkReviewedOnSubmit_CommentedMode_MarksArtifacts(t *testing.T) {
 		t.Error("expected plan-b (no comment) to stay unreviewed")
 	}
 }
+
+// --- send_diff: agent-supplied before/after comparisons ---
+
+func newDiffPairEngine(t *testing.T) *Engine {
+	t.Helper()
+	database, err := db.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { database.Close() })
+
+	now := time.Now()
+	session := &types.ReviewSession{
+		ID:           "sess-1",
+		Agent:        "test",
+		RepoRoot:     "/tmp/repo",
+		ReviewRound:  1,
+		FileStatuses: make(map[string]bool),
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	// The session row must exist before content versions can reference it.
+	if err := database.CreateSession(session); err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+
+	e := &Engine{
+		feedback:    NewFeedbackQueue(),
+		database:    database,
+		subscribers: make(map[EventKind]map[int]EventCallback),
+	}
+	e.current = session
+	return e
+}
+
+// A diff pair must land as a two-version artifact — that is what makes the TUI
+// open the side-by-side diff automatically instead of showing raw text.
+func TestSubmitDiffPairForReview_CreatesTwoVersions(t *testing.T) {
+	e := newDiffPairEngine(t)
+
+	if err := e.SubmitDiffPairForReview("diff-x", "pseudocode", "one\ntwo\n", "one\nTWO\n", "go"); err != nil {
+		t.Fatalf("SubmitDiffPairForReview: %v", err)
+	}
+
+	e.mu.RLock()
+	items := e.current.ContentItems
+	e.mu.RUnlock()
+	if len(items) != 1 {
+		t.Fatalf("expected 1 artifact, got %d", len(items))
+	}
+	if items[0].VersionCount < 2 {
+		t.Fatalf("VersionCount = %d, want >= 2 (the diff view needs two versions)", items[0].VersionCount)
+	}
+	// The artifact's current content is the "after" side.
+	if items[0].Content != "one\nTWO\n" {
+		t.Errorf("current content = %q, want the after side", items[0].Content)
+	}
+
+	// And the rendered diff is computed from before -> after.
+	res, err := e.GetContentDiff("diff-x")
+	if err != nil {
+		t.Fatalf("GetContentDiff: %v", err)
+	}
+	if res == nil || len(res.Hunks) == 0 {
+		t.Fatal("expected a non-empty diff between the two sides")
+	}
+}
+
+// Acceptance: an empty `before` renders as an all-new file, not an error.
+func TestSubmitDiffPairForReview_EmptyBeforeIsAllAdded(t *testing.T) {
+	e := newDiffPairEngine(t)
+
+	if err := e.SubmitDiffPairForReview("diff-new", "new thing", "", "alpha\nbeta\n", ""); err != nil {
+		t.Fatalf("SubmitDiffPairForReview: %v", err)
+	}
+	res, err := e.GetContentDiff("diff-new")
+	if err != nil {
+		t.Fatalf("GetContentDiff: %v", err)
+	}
+	if res == nil || len(res.Hunks) == 0 {
+		t.Fatal("expected an all-added diff for an empty before side")
+	}
+	added := 0
+	for _, h := range res.Hunks {
+		for _, l := range h.Lines {
+			if l.Kind == types.DiffLineRemoved {
+				t.Errorf("unexpected removed line %q for an empty before side", l.Content)
+			}
+			if l.Kind == types.DiffLineAdded {
+				added++
+			}
+		}
+	}
+	if added != 2 {
+		t.Errorf("added lines = %d, want 2", added)
+	}
+}
+
+// Acceptance: sending a diff must not disturb an in-progress review — the
+// review name and the reviewer's comments survive untouched.
+func TestSubmitDiffPairForReview_LeavesOpenReviewIntact(t *testing.T) {
+	e := newDiffPairEngine(t)
+	e.mu.Lock()
+	e.current.ReviewName = "OAuth login"
+	e.current.Comments = []types.ReviewComment{{ID: "c1", Body: "fix this"}}
+	e.mu.Unlock()
+
+	if err := e.SubmitDiffPairForReview("diff-x", "contrast", "a\n", "b\n", ""); err != nil {
+		t.Fatalf("SubmitDiffPairForReview: %v", err)
+	}
+
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if e.current.ReviewName != "OAuth login" {
+		t.Errorf("ReviewName = %q, want the open review to be untouched", e.current.ReviewName)
+	}
+	if len(e.current.Comments) != 1 {
+		t.Errorf("reviewer comments = %d, want 1 (untouched)", len(e.current.Comments))
+	}
+}
+
+// Re-sending the same id updates in place rather than stacking artifacts, and
+// the diff still reflects the newest pair.
+func TestSubmitDiffPairForReview_ResendUpdatesInPlace(t *testing.T) {
+	e := newDiffPairEngine(t)
+
+	if err := e.SubmitDiffPairForReview("diff-x", "v1", "a\n", "b\n", ""); err != nil {
+		t.Fatalf("first send: %v", err)
+	}
+	if err := e.SubmitDiffPairForReview("diff-x", "v2", "x\n", "y\n", ""); err != nil {
+		t.Fatalf("second send: %v", err)
+	}
+
+	e.mu.RLock()
+	items := e.current.ContentItems
+	e.mu.RUnlock()
+	if len(items) != 1 {
+		t.Fatalf("expected 1 artifact after re-send, got %d", len(items))
+	}
+	if items[0].Content != "y\n" {
+		t.Errorf("content = %q, want the newest after side", items[0].Content)
+	}
+	// The latest two versions are the newest pair, so the diff is x -> y.
+	res, err := e.GetContentDiff("diff-x")
+	if err != nil || res == nil {
+		t.Fatalf("GetContentDiff: %v", err)
+	}
+	for _, h := range res.Hunks {
+		for _, l := range h.Lines {
+			if l.Kind == types.DiffLineAdded && strings.TrimSpace(l.Content) != "y" {
+				t.Errorf("added line %q, want the newest after side", l.Content)
+			}
+		}
+	}
+}

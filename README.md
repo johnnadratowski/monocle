@@ -110,7 +110,7 @@ This configures MCP tools or skills depending on the agent. Claude Code gets an 
 
 If your agent isn't natively supported, you can set up Monocle manually:
 
-- **MCP tools**: If your agent supports MCP servers via stdio, point it at `monocle serve-mcp`. This exposes review tools (`review_status`, `get_feedback`, `send_artifact`, `add_files`, `remove_files`, `set_file_groups`, `add_annotations`, `set_review_name`, `set_base_ref`, `set_repo`) over stdio.
+- **MCP tools**: If your agent supports MCP servers via stdio, point it at `monocle serve-mcp`. This exposes review tools (`review_status`, `get_feedback`, `send_artifact`, `add_files`, `remove_files`, `set_file_groups`, `add_annotations`, `set_review_name`, `set_base_ref`, `set_repo`, `send_diff`) over stdio.
 - **Skills**: Download `skills.tar.gz` from the [latest release](https://github.com/josephschmitt/monocle/releases/latest) and extract the skill files into wherever your agent expects its skills.
 
 ### 2. Start reviewing
@@ -196,6 +196,7 @@ Monocle exposes review operations via **MCP tools** (default for Claude Code, an
 | Annotate code | `add_annotations` | `monocle review annotate` | Attach agent rationale + doc links to code ranges (shown to reviewer, not feedback) |
 | Review committed work | `set_base_ref` | — | Diff against a base commit so already-committed changes are reviewed (reverts to `HEAD` after the review) |
 | Point at a repo/worktree | `set_repo` | `-C`/`--workdir` flag | Bind to the engine for a specific repo — call once after entering a git worktree so review tools target it, not the launch directory |
+| Show a before/after comparison | `send_diff` | — | Render an agent-supplied contrast (pseudocode before/after, competing design options) as a side-by-side diff — reads no files and runs no git |
 
 ## Keybindings
 

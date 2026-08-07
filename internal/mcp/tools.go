@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/josephschmitt/monocle/internal/adapters"
@@ -96,6 +97,11 @@ func registerTools(s *sdkmcp.Server) {
 		Name:        "set_repo",
 		Description: desc["set_repo"],
 	}, handleSetRepo)
+
+	sdkmcp.AddTool(s, &sdkmcp.Tool{
+		Name:        "send_diff",
+		Description: desc["send_diff"],
+	}, handleSendDiff)
 }
 
 type setReviewNameParams struct {
@@ -195,6 +201,21 @@ type setBaseRefParams struct {
 	Reset bool `json:"reset,omitempty"`
 }
 
+type diffPairParam struct {
+	// Label names this pane in the sidebar. It need not exist on disk.
+	Label string `json:"label,omitempty"`
+	// Before is the left side; empty renders the pair as an all-new file.
+	Before string `json:"before,omitempty"`
+	After  string `json:"after"`
+	// Lang is an optional syntax-highlighting hint, e.g. "go", "py".
+	Lang string `json:"lang,omitempty"`
+}
+
+type sendDiffParams struct {
+	Name  string          `json:"name"`
+	Pairs []diffPairParam `json:"pairs"`
+}
+
 type setRepoParams struct {
 	// Path is any path inside the repository/worktree to review. The repo root
 	// is derived from it. Empty means the current working directory.
@@ -237,6 +258,98 @@ func bindingLine(repoRoot, reviewName string) string {
 		return fmt.Sprintf("[repo: %s · review: %s]\n", repoRoot, reviewName)
 	}
 	return fmt.Sprintf("[repo: %s]\n", repoRoot)
+}
+
+// handleSendDiff renders one or more before/after comparisons for the reviewer.
+// Both sides come from the call, so the comparison need not correspond to any
+// file, commit, or working-tree state: nothing on disk is read and no git
+// command runs. Each pair becomes its own artifact, so a multi-pair call gives
+// the reviewer several switchable diffs.
+func handleSendDiff(ctx context.Context, req *sdkmcp.CallToolRequest, params sendDiffParams) (*sdkmcp.CallToolResult, any, error) {
+	if strings.TrimSpace(params.Name) == "" {
+		return errResult("name is required"), nil, nil
+	}
+	if len(params.Pairs) == 0 {
+		return errResult("at least one pair is required"), nil, nil
+	}
+
+	c, guard := boundClient()
+	if guard != nil {
+		return guard, nil, nil
+	}
+	defer c.Close()
+
+	ids := make([]string, 0, len(params.Pairs))
+	for i, p := range params.Pairs {
+		// A stable id derived from the name and pane means re-sending the same
+		// comparison updates it in place instead of stacking duplicates.
+		id := diffPairID(params.Name, p.Label, i)
+		title := params.Name
+		if p.Label != "" {
+			// With several panes the label alone is ambiguous in the sidebar, so
+			// keep the set name alongside it.
+			if len(params.Pairs) > 1 {
+				title = params.Name + " — " + p.Label
+			} else {
+				title = p.Label
+			}
+		}
+
+		resp, err := c.Request(&protocol.SubmitDiffMsg{
+			Type:        protocol.TypeSubmitDiff,
+			ID:          id,
+			Title:       title,
+			Before:      p.Before,
+			After:       p.After,
+			ContentType: p.Lang,
+		}, client.DefaultTimeout)
+		if err != nil {
+			return errResult("request: %v", err), nil, nil
+		}
+		out := resp.(*protocol.SubmitDiffResponse)
+		if !out.Success {
+			return errResult("%s", out.Message), nil, nil
+		}
+		ids = append(ids, out.ID)
+	}
+
+	return textResult(fmt.Sprintf(
+		"Sent %d diff(s) for review under %q. The reviewer sees each as a side-by-side comparison; ids: %s",
+		len(ids), params.Name, strings.Join(ids, ", "),
+	)), nil, nil
+}
+
+// diffPairID builds a stable, readable artifact id for a diff pane so repeat
+// sends replace rather than accumulate.
+func diffPairID(name, label string, index int) string {
+	base := slugify(name)
+	switch {
+	case label != "":
+		return "diff-" + base + "-" + slugify(label)
+	case index > 0:
+		return fmt.Sprintf("diff-%s-%d", base, index+1)
+	default:
+		return "diff-" + base
+	}
+}
+
+// slugify reduces a display string to a compact id-safe token.
+func slugify(s string) string {
+	var b strings.Builder
+	lastDash := false
+	for _, r := range strings.ToLower(strings.TrimSpace(s)) {
+		switch {
+		case (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '.':
+			b.WriteRune(r)
+			lastDash = false
+		default:
+			if !lastDash && b.Len() > 0 {
+				b.WriteByte('-')
+				lastDash = true
+			}
+		}
+	}
+	return strings.Trim(b.String(), "-")
 }
 
 // handleSetRepo re-points this MCP server at the engine for the repo containing

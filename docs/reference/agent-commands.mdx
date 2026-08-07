@@ -424,6 +424,38 @@ The base ref is scoped to one review. After the reviewer submits (approve or req
 
 ---
 
+## `send_diff` (MCP tool)
+
+Show the reviewer a before/after comparison whose contents you supply directly — for *illustrating* a change rather than reviewing one. Typical uses: pseudocode before/after, two competing design options side by side, or any contrast that is not the state of the repository.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | string | Yes | Title for the comparison, shown to the reviewer. |
+| `pairs` | array | Yes | One or more panes: `{ label, before, after, lang }`. |
+
+Each pair is an object:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `after` | string | Yes | The right-hand side. |
+| `before` | string | No | The left-hand side. Empty or omitted renders the pair as an all-new file. |
+| `label` | string | No | Names this pane in the sidebar. It need not exist on disk. |
+| `lang` | string | No | Syntax-highlighting hint, e.g. `go`, `py`. Default: none. |
+
+Send several pairs to give the reviewer multiple switchable diffs — for example one pair per design option, each sharing the same `before`.
+
+The reviewer sees each pair as an artifact that opens directly into the diff view; `t` toggles between side-by-side and unified.
+
+<Note>
+**Nothing on disk is read and no git command runs.** The comparison is built entirely from the text you pass, so `send_diff` is safe with a dirty working tree and does not disturb a review already in progress — the review name, the reviewer's comments, and `git status` are all untouched. Re-sending the same `name`/`label` updates that comparison in place rather than stacking duplicates.
+</Note>
+
+<Note>
+This is **not** how you get your own code changes reviewed. Committed work is shown with [`set-base-ref`](#monocle-review-set-base-ref) and uncommitted work appears automatically. Diffs sent this way are illustrative: they appear alongside your other artifacts, can be dismissed by the reviewer with `x`, and are cleared when the review is approved.
+</Note>
+
+---
+
 ## `set_repo` (MCP tool)
 
 Bind this MCP server to the engine for a specific repository or git worktree. Every subsequent review tool (`review_status`, `send_artifact`, `set_base_ref`, `add_files`, `get_feedback`, …) then targets that repo.

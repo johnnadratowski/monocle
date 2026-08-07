@@ -75,3 +75,35 @@ func TestGroupingNudgeText(t *testing.T) {
 		t.Errorf("nudge text = %q, want it to mention '2 of 3' and set_file_groups", got)
 	}
 }
+
+func TestDiffPairID_StableAndDistinct(t *testing.T) {
+	// Re-sending the same comparison must target the same artifact so it
+	// updates in place instead of stacking duplicates.
+	a := diffPairID("pseudocode: minOut fix", "phase-4.pseudo", 0)
+	b := diffPairID("pseudocode: minOut fix", "phase-4.pseudo", 0)
+	if a != b {
+		t.Errorf("ids not stable: %q vs %q", a, b)
+	}
+	// Distinct panes in the same set must not collide.
+	if c := diffPairID("pseudocode: minOut fix", "option-b", 1); c == a {
+		t.Errorf("distinct labels collided on %q", c)
+	}
+	// Unlabelled panes still get distinct ids by position.
+	if diffPairID("set", "", 0) == diffPairID("set", "", 1) {
+		t.Error("unlabelled panes collided")
+	}
+}
+
+func TestSlugify(t *testing.T) {
+	cases := map[string]string{
+		"pseudocode: minOut fix": "pseudocode-minout-fix",
+		"phase-4.pseudo":         "phase-4.pseudo",
+		"  Spaces  Here  ":       "spaces-here",
+		"!!!":                    "",
+	}
+	for in, want := range cases {
+		if got := slugify(in); got != want {
+			t.Errorf("slugify(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

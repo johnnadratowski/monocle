@@ -2262,6 +2262,41 @@ func (e *Engine) SubmitContentForReview(id, title, content, contentType string, 
 	})
 }
 
+// SubmitDiffPairForReview registers an illustrative before/after comparison as a
+// two-version artifact: `before` is stored as one version and `after` as the
+// next, which is exactly the shape the TUI's existing artifact diff view renders
+// — and, because the item ends up with more than one version, selecting it opens
+// that diff automatically.
+//
+// Both sides come from the caller, so the comparison need not correspond to any
+// file, commit, or working-tree state: no git command runs and nothing on disk
+// is read. An empty `before` renders as an all-new file. Re-sending the same id
+// appends a fresh pair of versions, so the view updates in place (the diff is
+// always computed from the latest two).
+func (e *Engine) SubmitDiffPairForReview(id, title, before, after, contentType string) error {
+	now := time.Now()
+	mk := func(content string) types.ContentItem {
+		return types.ContentItem{
+			ID:          id,
+			Title:       title,
+			Content:     content,
+			ContentType: contentType,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		}
+	}
+	// Two upserts is what mints the two version rows the diff needs; the DB
+	// records a version on every upsert, so this holds even when both sides are
+	// identical (which then simply renders as no changes).
+	if err := e.upsertContentItem(mk(before)); err != nil {
+		return fmt.Errorf("store before side: %w", err)
+	}
+	if err := e.upsertContentItem(mk(after)); err != nil {
+		return fmt.Errorf("store after side: %w", err)
+	}
+	return nil
+}
+
 // SubmitMediaForReview stores a media file (image/video/audio) as a media
 // artifact: it copies the source into managed storage and records a content item
 // carrying the media metadata (no content text). Returns an error for
@@ -2873,6 +2908,26 @@ func (e *Engine) handleSubmitContent(msg *protocol.SubmitContentMsg) *protocol.S
 		Type:    protocol.TypeSubmitContentResponse,
 		Success: true,
 		Message: fmt.Sprintf("Content submitted for review: %s", msg.Title),
+		ID:      id,
+	}
+}
+
+func (e *Engine) handleSubmitDiff(msg *protocol.SubmitDiffMsg) *protocol.SubmitDiffResponse {
+	id := msg.ID
+	if id == "" {
+		id = uuid.New().String()
+	}
+	if err := e.SubmitDiffPairForReview(id, msg.Title, msg.Before, msg.After, msg.ContentType); err != nil {
+		return &protocol.SubmitDiffResponse{
+			Type:    protocol.TypeSubmitDiffResponse,
+			Success: false,
+			Message: err.Error(),
+		}
+	}
+	return &protocol.SubmitDiffResponse{
+		Type:    protocol.TypeSubmitDiffResponse,
+		Success: true,
+		Message: fmt.Sprintf("Diff sent for review: %s", msg.Title),
 		ID:      id,
 	}
 }

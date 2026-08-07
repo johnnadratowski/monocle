@@ -23,6 +23,7 @@ const (
 	TypeMarkActivity          = "mark_activity"
 	TypeAwaitReview           = "await_review"
 	TypeAckFeedback           = "ack_feedback"
+	TypeSubmitDiff            = "submit_diff"
 )
 
 // Outbound message types (from engine to CLI subcommands)
@@ -41,6 +42,7 @@ const (
 	TypeMarkActivityResponse          = "mark_activity_response"
 	TypeAwaitReviewResponse           = "await_review_response"
 	TypeAckFeedbackResponse           = "ack_feedback_response"
+	TypeSubmitDiffResponse            = "submit_diff_response"
 )
 
 // GetReviewStatusMsg requests the current review state from the engine.
@@ -112,6 +114,30 @@ type AckFeedbackMsg struct {
 type AckFeedbackResponse struct {
 	Type      string `json:"type"`
 	Committed bool   `json:"committed"`
+}
+
+// SubmitDiffMsg sends an illustrative before/after comparison whose contents
+// come entirely from the agent — not from any file, commit, or working tree.
+// The engine stores the two sides as consecutive versions of one artifact so the
+// reviewer sees a normal side-by-side diff. Before may be empty (renders as an
+// all-new file).
+type SubmitDiffMsg struct {
+	Type   string `json:"type"`
+	ID     string `json:"id"`
+	Title  string `json:"title"`
+	Before string `json:"before,omitempty"`
+	After  string `json:"after"`
+	// ContentType is an optional language hint for syntax highlighting, e.g.
+	// "go" or "py". Empty means no highlighting.
+	ContentType string `json:"content_type,omitempty"`
+}
+
+// SubmitDiffResponse reports the outcome of a SubmitDiff call.
+type SubmitDiffResponse struct {
+	Type    string `json:"type"`
+	Success bool   `json:"success"`
+	ID      string `json:"id,omitempty"`
+	Message string `json:"message,omitempty"`
 }
 
 // SubmitContentMsg sends reviewable content (plans, docs) from the agent.

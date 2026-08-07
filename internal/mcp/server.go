@@ -145,6 +145,7 @@ const toolInstructions = `If you are working in a git worktree or any directory 
 Use the review_status tool to check if feedback is pending.
 Use the get_feedback tool to retrieve review feedback.
 Use the send_artifact tool to send content for review.
+Use the send_diff tool to show a before/after comparison you supply yourself (pseudocode before/after, competing design options) — it reads nothing from disk or git, so it is safe alongside an in-progress review.
 To review committed work, use the set_base_ref tool to set the commit to diff against — every changed file in that range is then shown to the reviewer as a diff automatically. Uncommitted changes are shown without any call. Use the add_files tool only for EXTRA context files that are NOT part of the change (e.g. an unchanged interface the change depends on); do not add your changed files with it — they are already shown as diffs.
 Use the remove_files tool to remove previously-added context files from the review.
 Once the set of files for review is ready, use the set_file_groups tool to organize them into a top-down reading order (e.g. UI -> backend -> database) so the reviewer can follow the change as a story. Group the files by stack layer or feature area, ordered from entry point to dependency.`

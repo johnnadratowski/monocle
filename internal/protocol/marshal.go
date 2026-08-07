@@ -57,6 +57,10 @@ func Decode(data []byte) (any, error) {
 		msg = &AckFeedbackMsg{}
 	case TypeAckFeedbackResponse:
 		msg = &AckFeedbackResponse{}
+	case TypeSubmitDiff:
+		msg = &SubmitDiffMsg{}
+	case TypeSubmitDiffResponse:
+		msg = &SubmitDiffResponse{}
 	case TypeGetReviewStatusResponse:
 		msg = &GetReviewStatusResponse{}
 	case TypePollFeedbackResponse:
