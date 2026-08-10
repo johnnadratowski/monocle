@@ -1953,6 +1953,39 @@ func (m *diffViewModel) ToggleWrap() {
 	m.ensureVisible()
 }
 
+// modeLabel names the active view mode for the pane header. It returns "" for
+// the default compact diff, where a badge would be noise — so a badge appearing
+// always means "you are not in the default view", which is the whole point of
+// showing it.
+func (m diffViewModel) modeLabel() string {
+	// Raw artifact text: the artifact's own title already says what it is.
+	if m.contentMode {
+		return ""
+	}
+	if m.contentID != "" {
+		base := "DIFF"
+		if m.style == diffStyleSplit {
+			base = "SPLIT"
+		}
+		if m.diffBaseVersion > 0 {
+			return fmt.Sprintf("v%d→v%d %s", m.diffBaseVersion, m.diffToVersion, base)
+		}
+		return base
+	}
+	if m.style == diffStyleFile {
+		return "FILE"
+	}
+	// Whole-file and split are independent modifiers, so both can apply at once.
+	var parts []string
+	if m.fullFile {
+		parts = append(parts, "ALL")
+	}
+	if m.style == diffStyleSplit {
+		parts = append(parts, "SPLIT")
+	}
+	return strings.Join(parts, " · ")
+}
+
 // ToggleFullFile flips the full-file diff modifier and re-fetches the diff with
 // the new amount of context. It applies to regular file diffs shown in unified
 // or split style; it is a no-op for content items, raw file view (already the

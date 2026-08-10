@@ -4229,13 +4229,16 @@ func (m appModel) View() tea.View {
 	}
 
 	// diffBox renders the diff into its bordered pane and embeds the current file
-	// path in the bottom border so the file is identifiable with the sidebar hidden.
+	// path and view mode in the TOP border, so the file stays identifiable with the
+	// sidebar hidden and a non-default mode (whole-file, split, raw) is visible
+	// without hunting for it in the status bar.
 	paneLabel := m.currentPaneLabel()
+	paneMode := m.diffView.modeLabel()
 	paneBorderColor := mainStyle.GetBorderBottomForeground()
 	diffBox := func(outerW, outerH int) string {
-		return withPathFooter(
+		return withPathHeader(
 			mainStyle.Width(outerW).Height(outerH).Render(m.diffView.View()),
-			paneLabel, paneBorderColor,
+			paneLabel, paneMode, paneBorderColor,
 		)
 	}
 

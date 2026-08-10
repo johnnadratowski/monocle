@@ -194,19 +194,9 @@ func (m statusBarModel) View() string {
 		parts = append(parts, lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true).Render("✎ agent working"))
 	}
 
-	if m.contentID != "" && !m.contentMode {
-		// Viewing a content item diff
-		diffLabel := "DIFF"
-		if m.diffStyle == diffStyleSplit {
-			diffLabel = "SPLIT"
-		}
-		if m.diffBaseVersion > 0 {
-			diffLabel = fmt.Sprintf("v%d\u2192v%d %s", m.diffBaseVersion, m.diffToVersion, diffLabel)
-		}
-		parts = append(parts, lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Bold(true).Render("["+diffLabel+"]"))
-	} else if m.diffStyle == diffStyleFile {
-		parts = append(parts, lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Bold(true).Render("[FILE]"))
-	}
+	// The view-mode badge (ALL / SPLIT / FILE / version range) now lives in the
+	// diff pane's top border next to the file name, so the two facts are read
+	// together instead of split across the screen. See withPathHeader.
 
 	if m.fileCount > 0 {
 		reviewedStyle := lipgloss.NewStyle()
