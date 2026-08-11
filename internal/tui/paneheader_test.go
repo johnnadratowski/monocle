@@ -1,8 +1,11 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"charm.land/lipgloss/v2"
 )
@@ -21,7 +24,7 @@ func TestWithPathHeader(t *testing.T) {
 	firstRaw := func(out string) string { return strings.Split(out, "\n")[0] }
 
 	t.Run("embeds the path and preserves width", func(t *testing.T) {
-		out := withPathHeader(box, "pkg/util.go", "", lipgloss.Color("8"))
+		out := withPathHeader(box, "pkg/util.go", "", "", lipgloss.Color("8"))
 		if !strings.Contains(first(out), "pkg/util.go") {
 			t.Errorf("header should contain the path, got %q", first(out))
 		}
@@ -31,7 +34,7 @@ func TestWithPathHeader(t *testing.T) {
 	})
 
 	t.Run("shows the mode badge next to the path", func(t *testing.T) {
-		out := withPathHeader(box, "pkg/util.go", "ALL", lipgloss.Color("8"))
+		out := withPathHeader(box, "pkg/util.go", "", "ALL", lipgloss.Color("8"))
 		got := first(out)
 		if !strings.Contains(got, "pkg/util.go") || !strings.Contains(got, "[ALL]") {
 			t.Errorf("expected path and [ALL] badge, got %q", got)
@@ -45,20 +48,20 @@ func TestWithPathHeader(t *testing.T) {
 	})
 
 	t.Run("bottom border is left untouched", func(t *testing.T) {
-		out := withPathHeader(box, "pkg/util.go", "ALL", lipgloss.Color("8"))
+		out := withPathHeader(box, "pkg/util.go", "", "ALL", lipgloss.Color("8"))
 		if got, want := strings.Split(out, "\n")[2], strings.Split(box, "\n")[2]; got != want {
 			t.Errorf("bottom border changed: %q", got)
 		}
 	})
 
 	t.Run("empty label is a no-op", func(t *testing.T) {
-		if withPathHeader(box, "", "ALL", lipgloss.Color("8")) != box {
+		if withPathHeader(box, "", "", "ALL", lipgloss.Color("8")) != box {
 			t.Error("empty label should leave the box unchanged")
 		}
 	})
 
 	t.Run("long path is left-truncated keeping the filename", func(t *testing.T) {
-		out := withPathHeader(box, "very/long/path/to/some/deep/nested/file.go", "", lipgloss.Color("8"))
+		out := withPathHeader(box, "very/long/path/to/some/deep/nested/file.go", "", "", lipgloss.Color("8"))
 		got := first(out)
 		if !strings.Contains(got, "file.go") || !strings.Contains(got, "…") {
 			t.Errorf("expected left-truncated path keeping the filename, got %q", got)
@@ -71,7 +74,7 @@ func TestWithPathHeader(t *testing.T) {
 	t.Run("narrow pane drops the badge before the path", func(t *testing.T) {
 		narrow := makeBox(18)
 		narrowW := lipgloss.Width(strings.Split(narrow, "\n")[0])
-		out := withPathHeader(narrow, "some/deep/file.go", "v3→v5 SPLIT", lipgloss.Color("8"))
+		out := withPathHeader(narrow, "some/deep/file.go", "", "v3→v5 SPLIT", lipgloss.Color("8"))
 		got := first(out)
 		if strings.Contains(got, "SPLIT") {
 			t.Errorf("badge should be dropped when it cannot fit, got %q", got)
@@ -112,4 +115,97 @@ func TestDiffViewModeLabel(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestWithPathHeader_Age(t *testing.T) {
+	box := makeBox(48)
+	boxW := lipgloss.Width(strings.Split(box, "\n")[0])
+	first := func(out string) string { return stripANSISeq(strings.Split(out, "\n")[0]) }
+
+	t.Run("age sits next to the file name", func(t *testing.T) {
+		out := withPathHeader(box, "pkg/util.go", "5m", "ALL", lipgloss.Color("8"))
+		got := first(out)
+		for _, want := range []string{"pkg/util.go", "· 5m", "[ALL]"} {
+			if !strings.Contains(got, want) {
+				t.Errorf("expected %q in header, got %q", want, got)
+			}
+		}
+		// Order: path, then age, then mode.
+		p, a, b := strings.Index(got, "pkg/util.go"), strings.Index(got, "· 5m"), strings.Index(got, "[ALL]")
+		if !(p < a && a < b) {
+			t.Errorf("expected path < age < mode ordering, got %q", got)
+		}
+		if w := lipgloss.Width(strings.Split(out, "\n")[0]); w != boxW {
+			t.Errorf("header width %d != box width %d", w, boxW)
+		}
+	})
+
+	t.Run("age is omitted when unknown", func(t *testing.T) {
+		if got := first(withPathHeader(box, "pkg/util.go", "", "ALL", lipgloss.Color("8"))); strings.Contains(got, "·") {
+			t.Errorf("no age should mean no separator, got %q", got)
+		}
+	})
+
+	t.Run("age is shed before the mode when narrow", func(t *testing.T) {
+		narrow := makeBox(28)
+		got := first(withPathHeader(narrow, "some/deep/nested/file.go", "12d", "ALL", lipgloss.Color("8")))
+		if strings.Contains(got, "12d") {
+			t.Errorf("age should be dropped first, got %q", got)
+		}
+		if !strings.Contains(got, "[ALL]") {
+			t.Errorf("mode should outlive the age, got %q", got)
+		}
+	})
+}
+
+func TestHumanizeAge(t *testing.T) {
+	now := time.Now()
+	tests := []struct {
+		name string
+		d    time.Duration
+		want string
+	}{
+		{"seconds read as now", 30 * time.Second, "now"},
+		{"minutes", 5 * time.Minute, "5m"},
+		{"hours", 3 * time.Hour, "3h"},
+		{"days", 50 * time.Hour, "2d"},
+		{"weeks", 21 * 24 * time.Hour, "3w"},
+		{"future clamps to now", -time.Hour, "now"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := humanizeAge(tt.d, now); got != tt.want {
+				t.Errorf("humanizeAge(%v) = %q, want %q", tt.d, got, tt.want)
+			}
+		})
+	}
+
+	t.Run("zero time is unknown", func(t *testing.T) {
+		if got := humanizeAge(time.Hour, time.Time{}); got != "" {
+			t.Errorf("zero timestamp should render nothing, got %q", got)
+		}
+	})
+}
+
+func TestFileModTime(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "f.go"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("resolves a repo-relative path against the root", func(t *testing.T) {
+		if got := fileModTime(dir, "f.go"); got.IsZero() {
+			t.Error("expected a mod time for a repo-relative path")
+		}
+	})
+	t.Run("accepts an absolute path with no root", func(t *testing.T) {
+		if got := fileModTime("", filepath.Join(dir, "f.go")); got.IsZero() {
+			t.Error("expected a mod time for an absolute path")
+		}
+	})
+	t.Run("missing file is unknown, not an error", func(t *testing.T) {
+		if got := fileModTime(dir, "gone.go"); !got.IsZero() {
+			t.Error("a missing file should report an unknown (zero) time")
+		}
+	})
 }

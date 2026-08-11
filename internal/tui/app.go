@@ -3701,6 +3701,7 @@ func (m appModel) handleSidebarSelect(msg sidebarSelectMsg) tea.Cmd {
 				comments:       comments,
 				versionCount:   item.VersionCount,
 				autoSwitchDiff: item.VersionCount > 1,
+				updatedAt:      item.UpdatedAt,
 				mediaPath:      item.MediaPath,
 				mediaType:      item.MediaType,
 				mimeType:       item.MimeType,
@@ -4082,6 +4083,10 @@ type loadContentMsg struct {
 	autoSwitchDiff  bool   // true to auto-switch to preferred diff style
 	selectCommentID string // if set, auto-select and expand this comment after loading
 
+	// updatedAt is when the agent last sent this artifact, shown as an age in
+	// the pane header so the reviewer can tell current work from leftovers.
+	updatedAt time.Time
+
 	// Media artifact fields (empty for text/markdown artifacts).
 	mediaPath string
 	mediaType string
@@ -4234,11 +4239,12 @@ func (m appModel) View() tea.View {
 	// without hunting for it in the status bar.
 	paneLabel := m.currentPaneLabel()
 	paneMode := m.diffView.modeLabel()
+	paneAge := m.diffView.ageLabel()
 	paneBorderColor := mainStyle.GetBorderBottomForeground()
 	diffBox := func(outerW, outerH int) string {
 		return withPathHeader(
 			mainStyle.Width(outerW).Height(outerH).Render(m.diffView.View()),
-			paneLabel, paneMode, paneBorderColor,
+			paneLabel, paneAge, paneMode, paneBorderColor,
 		)
 	}
 

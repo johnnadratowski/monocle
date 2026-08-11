@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"image/color"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -139,6 +140,14 @@ type diffViewModel struct {
 	// repoRoot lets the binary-diff path resolve a changed media file on disk so
 	// it can render a media card instead of the "binary file" placeholder.
 	repoRoot string
+
+	// shownAt is when the thing on screen last changed: an artifact's UpdatedAt
+	// (when the agent last sent it) or a file's mtime. It answers "is what I'm
+	// looking at current, or left over from an hour ago" — for artifacts there
+	// was previously no way to tell. Captured once per load rather than per
+	// frame, so the header costs no repeated stat calls; the elapsed time is
+	// derived at render, so the label keeps ticking without a reload.
+	shownAt time.Time
 
 	keys *KeyMap
 }
@@ -292,6 +301,7 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 			m.hunks = nil
 		}
 		m.path = msg.path
+		m.shownAt = fileModTime(m.repoRoot, msg.path)
 		m.comments = msg.comments
 		m.annotations = msg.annotations
 		m.isBinary = isBinaryContent(m.hunks)
@@ -356,6 +366,7 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 			m.annotations = nil
 			m.contentHasDiff = false
 			m.contentVersionCount = 0
+			m.shownAt = msg.updatedAt
 			m.mediaItem = types.ContentItem{
 				ID:        msg.id,
 				Title:     msg.title,
@@ -377,6 +388,9 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 		m.contentTitle = msg.title
 		m.contentVersionCount = msg.versionCount
 		m.contentHasDiff = msg.versionCount > 1
+		// When the agent last sent this artifact — the fact that tells the
+		// reviewer whether it reflects current work or is left over.
+		m.shownAt = msg.updatedAt
 		m.diffBaseVersion = 0
 		m.diffToVersion = 0
 		m.contentDiffContent = msg.content
@@ -487,6 +501,8 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 		m.contentTitle = ""
 		m.additionalFilePath = msg.path
 		m.path = msg.path
+		// Already absolute for additional files, so repoRoot isn't needed.
+		m.shownAt = fileModTime("", msg.path)
 		m.hunks = nil
 		m.comments = msg.comments
 		m.annotations = nil
@@ -1951,6 +1967,56 @@ func (m *diffViewModel) ToggleWrap() {
 		m.hOffset = 0
 	}
 	m.ensureVisible()
+}
+
+// fileModTime returns the on-disk modification time of path, resolving a
+// repo-relative path against root. A zero time means "unknown" (missing file,
+// deleted since the diff was computed, or an unreadable path) and simply
+// suppresses the age label rather than surfacing an error.
+func fileModTime(root, path string) time.Time {
+	if path == "" {
+		return time.Time{}
+	}
+	if !filepath.IsAbs(path) && root != "" {
+		path = filepath.Join(root, path)
+	}
+	fi, err := os.Stat(path)
+	if err != nil {
+		return time.Time{}
+	}
+	return fi.ModTime()
+}
+
+// ageLabel renders how long ago the thing on screen last changed — an
+// artifact's send time, or a file's mtime — as a compact "5m", "3h", "2d".
+// Empty when unknown, so the header simply omits it.
+func (m diffViewModel) ageLabel() string {
+	return humanizeAge(time.Since(m.shownAt), m.shownAt)
+}
+
+// humanizeAge formats an elapsed duration compactly. Anything under a minute is
+// "now"; beyond a week it falls back to weeks, which is precise enough for
+// judging staleness and never grows the header.
+func humanizeAge(d time.Duration, at time.Time) string {
+	if at.IsZero() {
+		return ""
+	}
+	// A clock skew or a file dated in the future shouldn't render "-3m".
+	if d < 0 {
+		d = 0
+	}
+	switch {
+	case d < time.Minute:
+		return "now"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh", int(d.Hours()))
+	case d < 7*24*time.Hour:
+		return fmt.Sprintf("%dd", int(d.Hours()/24))
+	default:
+		return fmt.Sprintf("%dw", int(d.Hours()/(24*7)))
+	}
 }
 
 // modeLabel names the active view mode for the pane header. It returns "" for
