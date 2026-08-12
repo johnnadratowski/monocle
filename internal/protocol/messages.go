@@ -61,6 +61,10 @@ type GetReviewStatusResponse struct {
 	// to the repo it thinks it is instead of silently sharing another lane's row.
 	RepoRoot   string `json:"repo_root,omitempty"`
 	ReviewName string `json:"review_name,omitempty"`
+	// ReviewLoaded is false when this engine holds no review at all, which
+	// reads identically to "nothing pending" but usually means the caller is
+	// bound to the wrong engine. See ReviewStatusInfo.ReviewLoaded.
+	ReviewLoaded bool `json:"review_loaded"`
 }
 
 // PollFeedbackMsg requests pending feedback, optionally blocking until available.
@@ -97,6 +101,12 @@ type PollFeedbackResponse struct {
 	// The client must send AckFeedbackMsg with this id once it has the verdict
 	// in hand; until then the delivery is uncommitted and recoverable.
 	DeliveryID string `json:"delivery_id,omitempty"`
+	// RepoRoot, ReviewName and ReviewLoaded let an empty result say WHICH engine
+	// answered and whether it holds a review at all, so "no feedback" from a
+	// misbound engine can't pass for an all-clear.
+	RepoRoot     string `json:"repo_root,omitempty"`
+	ReviewName   string `json:"review_name,omitempty"`
+	ReviewLoaded bool   `json:"review_loaded"`
 }
 
 // AckFeedbackMsg confirms that a client received a verdict, committing the

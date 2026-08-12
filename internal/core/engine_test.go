@@ -12,16 +12,52 @@ import (
 )
 
 func TestGetReviewStatusInfo_NoFeedback(t *testing.T) {
-	e := &Engine{
-		feedback:    NewFeedbackQueue(),
-		subscribers: make(map[EventKind]map[int]EventCallback),
+	newEngine := func(session *types.ReviewSession) *Engine {
+		e := &Engine{
+			feedback:    NewFeedbackQueue(),
+			subscribers: make(map[EventKind]map[int]EventCallback),
+		}
+		e.current = session
+		return e
 	}
-	e.current = &types.ReviewSession{}
 
-	info := e.GetReviewStatusInfo()
-	if info.Status != "no_feedback" {
-		t.Errorf("expected no_feedback, got %q", info.Status)
-	}
+	// "Nothing pending" and "nothing here to review" must not read the same:
+	// the second is usually a misbinding, and treating it as an all-clear is
+	// how a dead engine passes for an approval.
+	t.Run("an engine holding nothing reports no_review", func(t *testing.T) {
+		info := newEngine(&types.ReviewSession{RepoRoot: "/tmp/repo"}).GetReviewStatusInfo()
+		if info.Status != "no_review" {
+			t.Errorf("expected no_review, got %q", info.Status)
+		}
+		if info.ReviewLoaded {
+			t.Error("ReviewLoaded should be false when nothing has been sent")
+		}
+		if !strings.Contains(info.Summary, "/tmp/repo") {
+			t.Errorf("the summary should name the engine that answered, got %q", info.Summary)
+		}
+	})
+
+	t.Run("an engine holding a diff reports no_feedback", func(t *testing.T) {
+		info := newEngine(&types.ReviewSession{
+			RepoRoot:     "/tmp/repo",
+			ChangedFiles: []types.ChangedFile{{Path: "a.go"}},
+		}).GetReviewStatusInfo()
+		if info.Status != "no_feedback" {
+			t.Errorf("expected no_feedback, got %q", info.Status)
+		}
+		if !info.ReviewLoaded {
+			t.Error("ReviewLoaded should be true when the engine holds a diff")
+		}
+	})
+
+	// An approved review whose work then got committed empties the diff. Calling
+	// that "NOT an approval" would contradict the verdict just delivered.
+	t.Run("a delivered round still counts as loaded", func(t *testing.T) {
+		info := newEngine(&types.ReviewSession{RepoRoot: "/tmp/repo", ReviewRound: 2}).GetReviewStatusInfo()
+		if info.Status != "no_feedback" {
+			t.Errorf("expected no_feedback after a completed round, got %q", info.Status)
+		}
+	})
 }
 
 func TestGetReviewStatusInfo_Pending(t *testing.T) {
@@ -2543,7 +2579,7 @@ func TestSnapshotFileDiff_ModifiedFile(t *testing.T) {
 		},
 	}
 
-	e := &Engine{git: stub,}
+	e := &Engine{git: stub}
 	e.cfg.Store(&types.Config{ReviewTracking: true})
 
 	snapshot := &types.ReviewSnapshot{
@@ -2569,7 +2605,7 @@ func TestSnapshotFileDiff_NewFile(t *testing.T) {
 		},
 	}
 
-	e := &Engine{git: stub,}
+	e := &Engine{git: stub}
 	e.cfg.Store(&types.Config{ReviewTracking: true})
 
 	snapshot := &types.ReviewSnapshot{
@@ -2594,7 +2630,7 @@ func TestSnapshotFileDiff_DeletedFile(t *testing.T) {
 		// No fileContents entry for "gone.go" → FileContent returns error
 	}
 
-	e := &Engine{git: stub,}
+	e := &Engine{git: stub}
 	e.cfg.Store(&types.Config{ReviewTracking: true})
 
 	snapshot := &types.ReviewSnapshot{
@@ -2624,7 +2660,7 @@ func TestSnapshotFileDiff_NoChange(t *testing.T) {
 		},
 	}
 
-	e := &Engine{git: stub,}
+	e := &Engine{git: stub}
 	e.cfg.Store(&types.Config{ReviewTracking: true})
 
 	snapshot := &types.ReviewSnapshot{
@@ -2849,7 +2885,7 @@ func TestFilesRelativeToSnapshot_RevertedFilesAppear(t *testing.T) {
 		repoRoot: "/tmp/repo",
 		// HashObjectDry for reverted files returns the base SHA (differs from snapshot)
 		hashObjectDrys: map[string]string{
-			"reverted.go": "base_sha",
+			"reverted.go":      "base_sha",
 			"still_changed.go": "new_sha",
 		},
 	}

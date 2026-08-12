@@ -250,6 +250,25 @@ func handleReviewStatus(ctx context.Context, req *sdkmcp.CallToolRequest, _ revi
 // bindingLine renders a one-line header naming the repo (and review, if named)
 // the answering engine is bound to, so an agent can confirm which review row it
 // is talking to. Returns "" when the engine has no session yet (nothing to name).
+// emptyFeedbackMessage says WHICH engine answered and whether it holds a review
+// at all. "No feedback pending" from an engine that was never given the work is
+// indistinguishable from a genuine all-clear, and reading it as approval is the
+// failure mode a cross-lane misbinding produces.
+func emptyFeedbackMessage(r *protocol.PollFeedbackResponse) string {
+	if !r.ReviewLoaded {
+		where := r.RepoRoot
+		if where == "" {
+			where = "this engine (no repo bound)"
+		}
+		return fmt.Sprintf(
+			"No review loaded for %s.\n\nNothing has been sent to this engine for review — this is NOT an approval. "+
+				"If you are working in a git worktree or any directory other than where this server was launched, "+
+				"call set_repo with that path and try again.",
+			where)
+	}
+	return "No feedback pending." + bindingLine(r.RepoRoot, r.ReviewName)
+}
+
 func bindingLine(repoRoot, reviewName string) string {
 	if repoRoot == "" {
 		return ""
@@ -473,7 +492,7 @@ func handleGetFeedback(ctx context.Context, req *sdkmcp.CallToolRequest, params 
 
 	feedback := resp.(*protocol.PollFeedbackResponse)
 	if !feedback.HasFeedback {
-		return textResult("No feedback pending."), nil, nil
+		return textResult(emptyFeedbackMessage(feedback)), nil, nil
 	}
 	// The verdict is in hand and about to be returned to the agent — commit the
 	// delivery. Done last so any failure above leaves it recoverable.

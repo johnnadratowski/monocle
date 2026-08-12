@@ -2214,25 +2214,29 @@ func (e *Engine) GetReviewStatusInfo() *ReviewStatusInfo {
 	e.mu.RLock()
 	var repoRoot, reviewName string
 	commentCount := 0
+	loaded := false
 	if e.current != nil {
 		repoRoot = e.current.RepoRoot
 		reviewName = e.current.ReviewName
 		commentCount = len(e.current.Comments)
+		loaded = e.reviewLoadedLocked()
 	}
 	e.mu.RUnlock()
 
 	if e.feedback.IsPauseRequested() {
 		return &ReviewStatusInfo{
-			Status:     "pause_requested",
-			Summary:    "Your reviewer has requested a pause. Use the get_feedback tool with wait=true to receive feedback.",
-			RepoRoot:   repoRoot,
-			ReviewName: reviewName,
+			Status:       "pause_requested",
+			ReviewLoaded: loaded,
+			Summary:      "Your reviewer has requested a pause. Use the get_feedback tool with wait=true to receive feedback.",
+			RepoRoot:     repoRoot,
+			ReviewName:   reviewName,
 		}
 	}
 
 	if e.feedback.HasPending() {
 		return &ReviewStatusInfo{
 			Status:       "pending",
+			ReviewLoaded: loaded,
 			CommentCount: commentCount,
 			Summary:      fmt.Sprintf("%d comment(s) pending review.", commentCount),
 			RepoRoot:     repoRoot,
@@ -2240,12 +2244,58 @@ func (e *Engine) GetReviewStatusInfo() *ReviewStatusInfo {
 		}
 	}
 
-	return &ReviewStatusInfo{
-		Status:     "no_feedback",
-		Summary:    "No feedback pending.",
-		RepoRoot:   repoRoot,
-		ReviewName: reviewName,
+	// "Nothing pending" and "nothing here to review" look identical to an agent
+	// but mean opposite things: the first is a genuine all-clear, the second
+	// means this engine was never given the work — most often because the agent
+	// bound to another lane's engine and should call set_repo. Reporting them
+	// with the same words turns a misbinding into a false approval, so they get
+	// distinct statuses and distinct wording.
+	if !loaded {
+		return &ReviewStatusInfo{
+			Status:       "no_review",
+			ReviewLoaded: false,
+			Summary: fmt.Sprintf(
+				"No review loaded for %s. Nothing has been sent to this engine — if you are working in a different worktree, call set_repo with its path first.",
+				repoRootOrUnbound(repoRoot)),
+			RepoRoot:   repoRoot,
+			ReviewName: reviewName,
+		}
 	}
+
+	return &ReviewStatusInfo{
+		Status:       "no_feedback",
+		ReviewLoaded: true,
+		Summary:      "No feedback pending.",
+		RepoRoot:     repoRoot,
+		ReviewName:   reviewName,
+	}
+}
+
+// reviewLoadedLocked reports whether this engine actually holds a review: any
+// changed file, artifact, added context file, annotation or comment.
+//
+// A completed round also counts, even once nothing is left to look at. A review
+// that was approved and then committed empties the diff, and calling that "no
+// review loaded — NOT an approval" would contradict the approval the agent had
+// just received. Round > 1 means a verdict has already been delivered here, so
+// this engine demonstrably held the work.
+//
+// Callers must hold e.mu.
+func (e *Engine) reviewLoadedLocked() bool {
+	s := e.current
+	return len(s.ChangedFiles) > 0 ||
+		len(s.ContentItems) > 0 ||
+		len(s.AdditionalFiles) > 0 ||
+		len(s.Annotations) > 0 ||
+		len(s.Comments) > 0 ||
+		s.ReviewRound > 1
+}
+
+func repoRootOrUnbound(repoRoot string) string {
+	if repoRoot == "" {
+		return "this engine (no repo bound)"
+	}
+	return repoRoot
 }
 
 // SubmitContentForReview adds or updates a content item (plan, doc) for review.
@@ -2573,6 +2623,7 @@ func (e *Engine) handleGetReviewStatus(_ *protocol.GetReviewStatusMsg) *protocol
 		Summary:      info.Summary,
 		RepoRoot:     info.RepoRoot,
 		ReviewName:   info.ReviewName,
+		ReviewLoaded: info.ReviewLoaded,
 	}
 }
 
@@ -2652,9 +2703,15 @@ func (e *Engine) handlePollFeedback(msg *protocol.PollFeedbackMsg, cancel <-chan
 	}
 
 	if result == nil || len(result.Reviews) == 0 {
+		// An empty answer names the engine that gave it. Without this, an agent
+		// bound to another lane's engine reads "no feedback" as approval.
+		info := e.GetReviewStatusInfo()
 		return &protocol.PollFeedbackResponse{
-			Type:        protocol.TypePollFeedbackResponse,
-			HasFeedback: false,
+			Type:         protocol.TypePollFeedbackResponse,
+			HasFeedback:  false,
+			RepoRoot:     info.RepoRoot,
+			ReviewName:   info.ReviewName,
+			ReviewLoaded: info.ReviewLoaded,
 		}
 	}
 

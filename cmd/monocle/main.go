@@ -573,6 +573,15 @@ func (cmd *ReviewGetFeedbackCmd) Run() error {
 		return nil
 	}
 	if !feedback.HasFeedback {
+		if !feedback.ReviewLoaded {
+			where := feedback.RepoRoot
+			if where == "" {
+				where = "this engine (no repo bound)"
+			}
+			// Not an approval: this engine was never given the work.
+			fmt.Printf("No review loaded for %s.\nNothing has been sent to this engine for review — this is NOT an approval.\n", where)
+			return nil
+		}
 		fmt.Println("No feedback pending.")
 		return nil
 	}

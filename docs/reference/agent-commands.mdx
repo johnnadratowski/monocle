@@ -477,3 +477,7 @@ The response names the repo it bound to — confirm it matches your worktree. If
 <Note>
 **Strict binding (opt-in).** Set the environment variable `MONOCLE_REQUIRE_SET_REPO=1` on the MCP server to require an explicit `set_repo` before any review tool will act — a teammate that forgets to bind then gets a hard error instead of silently reading or writing the launch directory's engine. It is off by default, so the single-repo, zero-config flow is unaffected. Fleet staffing tooling is the intended place to enable it.
 </Note>
+
+<Warning>
+  **"No review loaded" is not an approval.** `get_feedback` distinguishes two empty answers. `No feedback pending` means this engine holds a review and none of it is waiting for you — a genuine all-clear. `No review loaded for <repo>` means the engine was never given the work at all, which almost always means you are bound to another lane's engine: call `set_repo` with your worktree path and try again. Both answers name the repo that replied.
+</Warning>

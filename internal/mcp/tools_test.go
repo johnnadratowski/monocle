@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/josephschmitt/monocle/internal/protocol"
 	"github.com/josephschmitt/monocle/internal/types"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -106,4 +107,44 @@ func TestSlugify(t *testing.T) {
 			t.Errorf("slugify(%q) = %q, want %q", in, got, want)
 		}
 	}
+}
+
+func TestEmptyFeedbackMessage(t *testing.T) {
+	// The wording is the whole point: an agent that reads "no feedback" from an
+	// engine it was never bound to will treat it as an approval and ship.
+	t.Run("an unloaded engine says so, and says it is not an approval", func(t *testing.T) {
+		got := emptyFeedbackMessage(&protocol.PollFeedbackResponse{
+			RepoRoot: "/repos/lane-3", ReviewLoaded: false,
+		})
+		for _, want := range []string{"No review loaded", "/repos/lane-3", "NOT an approval", "set_repo"} {
+			if !strings.Contains(got, want) {
+				t.Errorf("expected %q in:\n%s", want, got)
+			}
+		}
+	})
+
+	t.Run("a loaded engine reports a genuine all-clear", func(t *testing.T) {
+		got := emptyFeedbackMessage(&protocol.PollFeedbackResponse{
+			RepoRoot: "/repos/lane-3", ReviewName: "Auth rework", ReviewLoaded: true,
+		})
+		if !strings.Contains(got, "No feedback pending") {
+			t.Errorf("expected the all-clear wording, got %q", got)
+		}
+		if strings.Contains(got, "NOT an approval") {
+			t.Errorf("a loaded engine must not warn about approval, got %q", got)
+		}
+		// It still names the engine, so a wrong binding is visible either way.
+		for _, want := range []string{"/repos/lane-3", "Auth rework"} {
+			if !strings.Contains(got, want) {
+				t.Errorf("expected %q in %q", want, got)
+			}
+		}
+	})
+
+	t.Run("an unbound engine is named as such rather than blank", func(t *testing.T) {
+		got := emptyFeedbackMessage(&protocol.PollFeedbackResponse{ReviewLoaded: false})
+		if !strings.Contains(got, "no repo bound") {
+			t.Errorf("expected the unbound wording, got %q", got)
+		}
+	})
 }

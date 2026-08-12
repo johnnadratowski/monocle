@@ -53,11 +53,16 @@ func (r *PollResult) CombinedFeedback() (string, int, string) {
 
 // ReviewStatusInfo holds the current review status for MCP channel queries.
 type ReviewStatusInfo struct {
-	Status       string // "no_feedback" | "pending" | "pause_requested"
+	Status       string // "no_review" | "no_feedback" | "pending" | "pause_requested"
 	CommentCount int
 	Summary      string
 	RepoRoot     string // repo the answering engine is bound to (empty if no session)
 	ReviewName   string // agent-supplied review name, if set
+	// ReviewLoaded distinguishes "this engine holds a review and none of it is
+	// pending" from "this engine holds no review at all". They read the same to
+	// an agent but mean opposite things — the second is usually a misbinding,
+	// and reporting it as an all-clear is how a dead engine passes for approval.
+	ReviewLoaded bool
 }
 
 // FeedbackQueue manages the synchronization between user review actions

@@ -68,8 +68,14 @@ func TestClient_ReviewStatus(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected *GetReviewStatusResponse, got %T", resp)
 	}
-	if status.Status != "no_feedback" {
-		t.Errorf("status = %q, want %q", status.Status, "no_feedback")
+	// The test engine holds no review, which is deliberately distinguished from
+	// "a review with nothing pending" so a misbound engine can't read as an
+	// all-clear.
+	if status.Status != "no_review" {
+		t.Errorf("status = %q, want %q", status.Status, "no_review")
+	}
+	if status.ReviewLoaded {
+		t.Error("ReviewLoaded should be false for an engine holding no review")
 	}
 }
 
