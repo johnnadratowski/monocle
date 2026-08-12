@@ -78,10 +78,10 @@ Each key in the object is an action name; the value is the key string to bind. O
 | `clear_review` | `D` | Clear all comments, plans, added files, and reviewed states |
 | `dismiss_artifact` | `x` | Dismiss the focused artifact, or remove the focused added file, from the sidebar (confirm required) |
 | `toggle_focus_mode` | `F` | Toggle focus mode (hide sidebar, enable wrap) |
+| `jump_back` | `ctrl+o` | Back to the position you jumped from (vim `ctrl+o`) |
+| `jump_forward` | `ctrl+i` | Forward again through the jump list (vim `ctrl+i`) |
 | `open_in_editor` | `ctrl+g` | Open current text in `$VISUAL`/`$EDITOR` |
-| `open_path_under_cursor` | `ctrl+o` | Open the file path referenced on the current diff line in `$VISUAL`/`$EDITOR` |
 | `open_in_editor_takeover` | `ctrl+shift+g` | Like `open_in_editor`, but always takes over the screen (ignores `editor_mode`) |
-| `open_path_under_cursor_takeover` | `ctrl+shift+o` | Like `open_path_under_cursor`, but always takes over the screen |
 | `open_in_markdown_viewer` | `ctrl+p` | Open the current artifact/file in an external viewer: markdown/text → `markdown_viewer` (default `glow -p`), media (image/video/audio) → `media_viewer` (default Google Chrome) |
 | `open_terminal` | `ctrl+t` | Open a terminal at the current file's directory — takes over Monocle's screen by default, or a tmux split/window when `editor_mode` is a `tmux_*` mode |
 | `open_terminal_takeover` | `ctrl+shift+t` | Like `open_terminal`, but always takes over the screen (ignores `editor_mode`) |

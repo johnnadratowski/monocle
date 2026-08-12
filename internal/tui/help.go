@@ -291,6 +291,8 @@ func (m helpModel) buildContent() string {
 			{Label(km.ScrollEnd), "Scroll to line end (any pane)"},
 		},
 		secJump: {
+			{Label(km.JumpBack), "Back to where you jumped from (vim ctrl+o)"},
+			{Label(km.JumpForward), "Forward again (vim ctrl+i)"},
 			{Label(km.PrevFile) + "/" + Label(km.NextFile), "Previous/next diff chunk in the diff pane, else previous/next file"},
 			{Label(km.PrevSection) + "/" + Label(km.NextSection), "Previous/next file (any pane)"},
 			{Label(km.PrevMark) + "/" + Label(km.NextMark), "Previous/next comment or annotation"},
@@ -338,10 +340,8 @@ func (m helpModel) buildContent() string {
 		secOpen: {
 			{Label(km.OpenDocRef), "Open/cycle an annotation's doc links in the doc pane"},
 			{Label(km.ShellCommand), "Run a shell command on the current file"},
-			{Label(km.OpenInEditor), "Open the file in your editor (per editor_mode)"},
-			{Label(km.OpenInEditorTakeover), "Open the file in your editor, always taking over the screen"},
-			{Label(km.OpenPathUnderCursor), "Open the file path referenced on the current line"},
-			{Label(km.OpenPathUnderCursorTakeover), "Open the path under the cursor, always taking over the screen"},
+			{Label(km.OpenInEditor), "Open in your editor — the path on this line, else the file under review"},
+			{Label(km.OpenInEditorTakeover), "Same, always taking over the screen"},
 			{Label(km.OpenInMarkdownViewer), "Open the artifact/file in an external viewer (markdown or media)"},
 			{Label(km.OpenTerminal), "Open a terminal at the current file's directory"},
 			{Label(km.OpenTerminalTakeover), "Open a terminal, always taking over the screen"},

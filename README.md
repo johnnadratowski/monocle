@@ -228,6 +228,8 @@ Bindings are grouped by the task they serve, and within a group ordered by key: 
 | `<` / `>` | Previous/next comment or annotation |
 | `[` / `]` | Previous/next diff chunk in the diff pane, else previous/next file |
 | `{` / `}` | Previous/next file (any pane) |
+| `ctrl+i` | Forward again (vim ctrl+i) |
+| `ctrl+o` | Back to where you jumped from (vim ctrl+o) |
 
 #### View & panes
 
@@ -281,10 +283,8 @@ Bindings are grouped by the task they serve, and within a group ordered by key: 
 |-----|--------|
 | `o` | Open/cycle an annotation's doc links in the doc pane |
 | `!` | Run a shell command on the current file |
-| `ctrl+g` | Open the file in your editor (per editor_mode) |
-| `ctrl+shift+g` | Open the file in your editor, always taking over the screen |
-| `ctrl+o` | Open the file path referenced on the current line |
-| `ctrl+shift+o` | Open the path under the cursor, always taking over the screen |
+| `ctrl+g` | Open in your editor — the path on this line, else the file under review |
+| `ctrl+shift+g` | Same, always taking over the screen |
 | `ctrl+p` | Open the artifact/file in an external viewer (markdown or media) |
 | `ctrl+t` | Open a terminal at the current file's directory |
 | `ctrl+shift+t` | Open a terminal, always taking over the screen |
@@ -490,7 +490,7 @@ Override any action key by mapping the action name to a new key string:
 }
 ```
 
-Available action names: `artifact_versions`, `base_ref`, `block_match`, `block_top`, `block_up`, `bottom`, `clear_review`, `collapse_all`, `command_mode`, `comment`, `cycle_layout`, `dismiss_artifact`, `down`, `expand_all`, `file_comment`, `filter_reviewed`, `focus_swap`, `half_down`, `half_up`, `help`, `hide_comments`, `next_file`, `next_mark`, `next_section`, `open_doc_ref`, `open_in_editor`, `open_in_editor_takeover`, `open_in_markdown_viewer`, `open_path_under_cursor`, `open_path_under_cursor_takeover`, `open_terminal`, `open_terminal_takeover`, `pause`, `prev_file`, `prev_mark`, `prev_section`, `quit`, `refresh`, `reviewed`, `scroll_down`, `scroll_end`, `scroll_first_char`, `scroll_home`, `scroll_left`, `scroll_right`, `scroll_up`, `search_backward`, `search_next`, `search_prev`, `select`, `shell_command`, `submit`, `suggest`, `toggle_diff`, `toggle_focus_mode`, `toggle_full_diff`, `toggle_overlays`, `toggle_sidebar`, `top`, `tree_mode`, `up`, `visual`, `wizard_advance`, `wizard_back`, `wizard_toggle`, `wrap`, `yank_line`.
+Available action names: `artifact_versions`, `base_ref`, `block_match`, `block_top`, `block_up`, `bottom`, `clear_review`, `collapse_all`, `command_mode`, `comment`, `cycle_layout`, `dismiss_artifact`, `down`, `expand_all`, `file_comment`, `filter_reviewed`, `focus_swap`, `half_down`, `half_up`, `help`, `hide_comments`, `jump_back`, `jump_forward`, `next_file`, `next_mark`, `next_section`, `open_doc_ref`, `open_in_editor`, `open_in_editor_takeover`, `open_in_markdown_viewer`, `open_terminal`, `open_terminal_takeover`, `pause`, `prev_file`, `prev_mark`, `prev_section`, `quit`, `refresh`, `reviewed`, `scroll_down`, `scroll_end`, `scroll_first_char`, `scroll_home`, `scroll_left`, `scroll_right`, `scroll_up`, `search_backward`, `search_next`, `search_prev`, `select`, `shell_command`, `submit`, `suggest`, `toggle_diff`, `toggle_focus_mode`, `toggle_full_diff`, `toggle_overlays`, `toggle_sidebar`, `top`, `tree_mode`, `up`, `visual`, `wizard_advance`, `wizard_back`, `wizard_toggle`, `wrap`, `yank_line`.
 
 The help overlay (`H`) dynamically reflects your custom bindings. Modal keys (Enter, Esc, Tab in overlays) are not configurable.
 

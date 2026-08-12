@@ -36,6 +36,8 @@ Bindings are grouped by the task they serve, and within a group ordered by key: 
 | `<` / `>` | Previous/next comment or annotation |
 | `[` / `]` | Previous/next diff chunk in the diff pane, else previous/next file |
 | `{` / `}` | Previous/next file (any pane) |
+| `ctrl+i` | Forward again (vim ctrl+i) |
+| `ctrl+o` | Back to where you jumped from (vim ctrl+o) |
 
 `%`, `(` and `)` navigate code structure. From inside a nested `if`, `(` goes out to the `if`, and `(` again — or `)` in one press — goes out to the enclosing `func`. `%` toggles between a block's opening line and its closing one.
 
@@ -72,6 +74,25 @@ Both borders show how much content runs off that edge, on the edge it runs off �
 
 When the agent sends groupings (`set_file_groups`), the sidebar switches to grouped view on its own the first time they arrive, so the reading order the agent chose is visible without hunting for it. It happens once per session — after that `f` is yours and a refresh won't drag you back.
 
+## View & panes
+
+| Key | Action |
+|-----|--------|
+| `a` | Toggle full-file diff (whole file vs. changed lines) |
+| `f` | Cycle sidebar view (flat/tree/grouped) |
+| `t` | Cycle diff style (unified/split/file) (any pane) |
+| `w` | Toggle line wrapping (any pane) |
+| `z` / `e` | Collapse/expand all (tree view) |
+| `F` | Toggle focus mode (hide sidebar, wrap lines) |
+| `O` | Hide/show inline comments + annotations |
+| `T` | Cycle layout (auto/side-by-side/stacked) |
+| `1` / `2` | Jump straight to a pane |
+| `#` | Cycle source-code comments: dim → hide → show |
+| `/` | Sidebar: cycle the reviewed filter |
+| `;` | Show/hide the sidebar |
+| `enter` | Focus the diff pane / toggle a directory open |
+| `tab` / `shift+tab` | Switch pane focus (sidebar/diff/doc) |
+
 ## Comment
 
 | Key | Action |
@@ -105,10 +126,8 @@ When the agent sends groupings (`set_file_groups`), the sidebar switches to grou
 |-----|--------|
 | `o` | Open/cycle an annotation's doc links in the doc pane |
 | `!` | Run a shell command on the current file |
-| `ctrl+g` | Open the file in your editor (per editor_mode) |
-| `ctrl+shift+g` | Open the file in your editor, always taking over the screen |
-| `ctrl+o` | Open the file path referenced on the current line |
-| `ctrl+shift+o` | Open the path under the cursor, always taking over the screen |
+| `ctrl+g` | Open in your editor — the path on this line, else the file under review |
+| `ctrl+shift+g` | Same, always taking over the screen |
 | `ctrl+p` | Open the artifact/file in an external viewer (markdown or media) |
 | `ctrl+t` | Open a terminal at the current file's directory |
 | `ctrl+shift+t` | Open a terminal, always taking over the screen |

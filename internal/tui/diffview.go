@@ -3760,3 +3760,42 @@ func formatExpandedComment(c *types.ReviewComment, width int, originalCode strin
 	lines = append(lines, fmt.Sprintf("  ╚═══%s", strings.Repeat("═", footerDashes)))
 	return strings.Join(lines, "\n")
 }
+
+// GoToLine moves the cursor to the model line showing new-file line n and
+// centres it. Returns false when that line isn't in the current view — a
+// compact diff may not include it, or the file may have changed since the
+// position was recorded, and silently landing somewhere else would be worse
+// than not moving.
+func (m *diffViewModel) GoToLine(n int) bool {
+	if n <= 0 || len(m.lines) == 0 {
+		return false
+	}
+	// Exact match first; otherwise the nearest line at or past n, so a jump
+	// into a shifted file still lands in the right neighbourhood.
+	best, bestDelta := -1, 0
+	for i := range m.lines {
+		ln := m.lineNumAt(i)
+		if ln <= 0 {
+			continue
+		}
+		if ln == n {
+			best = i
+			break
+		}
+		if d := ln - n; d > 0 && (best < 0 || d < bestDelta) {
+			best, bestDelta = i, d
+		}
+	}
+	if best < 0 {
+		return false
+	}
+	if !m.isSelectable(best) {
+		best = m.nearestSelectable(best, 1)
+	}
+	if !m.isSelectable(best) {
+		return false
+	}
+	m.cursor = best
+	m.centerCursor()
+	return true
+}

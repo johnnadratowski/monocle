@@ -262,6 +262,9 @@ type appModel struct {
 	// pendingChunkLanding is set when [ / ] crosses into an adjacent file from the
 	// diff pane: +1 = land on the new file's first chunk, -1 = its last chunk.
 	pendingChunkLanding int
+	jumps               jumpList
+	// pendingJumpLine is the line to land on once an async file load finishes.
+	pendingJumpLine int
 
 	pendingDismissAdditionalFilePath string // set while the remove-added-file confirm modal is open
 
@@ -974,6 +977,12 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.diffView.LandOnChunkEdge(m.pendingChunkLanding)
 			m.pendingChunkLanding = 0
 		}
+		// A ctrl+o / ctrl+i landing: the file has finished loading, so the
+		// recorded line can finally be resolved against the new line list.
+		if m.pendingJumpLine != 0 {
+			m.diffView.GoToLine(m.pendingJumpLine)
+			m.pendingJumpLine = 0
+		}
 		return m, cmd
 
 	// Content item loading (plans, docs)
@@ -1076,6 +1085,12 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.pendingChunkLanding != 0 {
 			m.diffView.LandOnChunkEdge(m.pendingChunkLanding)
 			m.pendingChunkLanding = 0
+		}
+		// A ctrl+o / ctrl+i landing: the file has finished loading, so the
+		// recorded line can finally be resolved against the new line list.
+		if m.pendingJumpLine != 0 {
+			m.diffView.GoToLine(m.pendingJumpLine)
+			m.pendingJumpLine = 0
 		}
 		return m, cmd
 
@@ -1964,13 +1979,27 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	case Matches(key, km.NextMark):
 		if m.focus == focusMain {
+			m.recordJump()
 			m.diffView.JumpToMark(1)
 		}
 		return m, nil
 
 	case Matches(key, km.PrevMark):
 		if m.focus == focusMain {
+			m.recordJump()
 			m.diffView.JumpToMark(-1)
+		}
+		return m, nil
+
+	case Matches(key, km.JumpBack):
+		if pos, ok := m.jumps.back(m.currentJumpPos()); ok {
+			return m.goToJump(pos)
+		}
+		return m, nil
+
+	case Matches(key, km.JumpForward):
+		if pos, ok := m.jumps.forward(); ok {
+			return m.goToJump(pos)
 		}
 		return m, nil
 
@@ -1978,18 +2007,21 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// nowhere to go is a silent no-op rather than a bounce to the file's edge.
 	case Matches(key, km.BlockMatch):
 		if m.focus == focusMain {
+			m.recordJump()
 			m.diffView.JumpToBlockMatch()
 		}
 		return m, nil
 
 	case Matches(key, km.BlockUp):
 		if m.focus == focusMain {
+			m.recordJump()
 			m.diffView.JumpToEnclosingBlock()
 		}
 		return m, nil
 
 	case Matches(key, km.BlockTop):
 		if m.focus == focusMain {
+			m.recordJump()
 			m.diffView.JumpToTopLevelBlock()
 		}
 		return m, nil
@@ -2086,25 +2118,21 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case Matches(key, km.OpenInEditor), Matches(key, km.OpenInEditorTakeover):
-		// Open the file under review in the editor. Ctrl+g honors the configured
-		// editor_mode (tmux split/window); Ctrl+Shift+g always takes over.
-		filePath, line, ok := m.editorTargetFile()
+		// Open in the editor. A path referenced on the cursor line wins over the
+		// file being reviewed: naming a path is the more specific intent, and
+		// when the line has none this is exactly the old behaviour.
+		//
+		// One key rather than two because ctrl+o is now jump-back, and because
+		// "open what I'm pointing at" was never really two intentions.
+		filePath, line, ok := m.pathUnderCursor()
+		if !ok {
+			filePath, line, ok = m.editorTargetFile()
+		}
 		if !ok {
 			break
 		}
 		takeover := Matches(key, km.OpenInEditorTakeover)
 		return m, m.openFileCmd(filePath, line, takeover)
-
-	case Matches(key, km.OpenPathUnderCursor), Matches(key, km.OpenPathUnderCursorTakeover):
-		// Open the file path referenced on the current diff line (gf-style).
-		// Ctrl+o honors editor_mode; Ctrl+Shift+o always takes over.
-		path, line, ok := m.pathUnderCursor()
-		if !ok {
-			m.statusBar.searchInfo = "no file path under cursor"
-			return m, nil
-		}
-		takeover := Matches(key, km.OpenPathUnderCursorTakeover)
-		return m, m.openFileCmd(path, line, takeover)
 
 	case Matches(key, km.OpenInMarkdownViewer):
 		// Open the current artifact/file in the appropriate external viewer:
@@ -2305,6 +2333,7 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case Matches(key, km.PrevFile):
 		// In the diff pane, jump to the previous change block; at the first chunk
 		// cross into the previous file and land on its LAST chunk.
+		m.recordJump()
 		if m.focus == focusMain && m.diffView.JumpToChange(-1) {
 			return m, nil
 		}
@@ -2317,6 +2346,7 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case Matches(key, km.NextFile):
 		// In the diff pane, jump to the next change block; at the last chunk cross
 		// into the next file and land on its FIRST chunk.
+		m.recordJump()
 		if m.focus == focusMain && m.diffView.JumpToChange(+1) {
 			return m, nil
 		}
@@ -2328,10 +2358,12 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	case Matches(key, km.PrevSection):
 		// { always moves to the previous file (from any pane).
+		m.recordJump()
 		return m, m.sidebar.navigateFile(-1)
 
 	case Matches(key, km.NextSection):
 		// } always moves to the next file (from any pane).
+		m.recordJump()
 		return m, m.sidebar.navigateFile(+1)
 
 	case Matches(key, km.Select):
@@ -4538,4 +4570,41 @@ func BridgeEngineEvents(engine core.EngineAPI, p *tea.Program) {
 	engine.On(core.EventActivityChanged, func(e core.EventPayload) {
 		p.Send(activityPulseMsg{})
 	})
+}
+
+// currentJumpPos describes where the cursor is now, for the jump list.
+func (m appModel) currentJumpPos() jumpPos {
+	if m.diffView.isViewingContentItem() {
+		return jumpPos{contentID: m.diffView.contentID, line: m.diffView.cursor + 1}
+	}
+	if m.diffView.path == "" {
+		return jumpPos{}
+	}
+	line := m.diffView.lineNumAt(m.diffView.cursor)
+	return jumpPos{path: m.diffView.path, line: line}
+}
+
+// recordJump remembers the position being left, so ctrl+o can return to it.
+// Call it BEFORE the cursor moves — the list holds departures, not arrivals.
+func (m *appModel) recordJump() {
+	m.jumps.push(m.currentJumpPos())
+}
+
+// goToJump navigates to a recorded position. Landing in the file the position
+// names is the part that must work; landing on the exact line is best-effort,
+// because the diff may have been recomputed since and that line may no longer
+// exist.
+func (m appModel) goToJump(pos jumpPos) (appModel, tea.Cmd) {
+	m.pendingJumpLine = pos.line
+	if pos.contentID != "" {
+		return m, m.handleSidebarSelect(sidebarSelectMsg{isContent: true, contentID: pos.contentID})
+	}
+	if pos.path == m.diffView.path {
+		// Already in the right file: just move the cursor.
+		m.diffView.GoToLine(pos.line)
+		m.pendingJumpLine = 0
+		return m, nil
+	}
+	m.sidebar.selectPath(pos.path)
+	return m, m.handleSidebarSelect(sidebarSelectMsg{path: pos.path})
 }

@@ -47,6 +47,10 @@ type KeyMap struct {
 	PrevMark []string
 	NextMark []string
 
+	// Jump list: return to where you were, vim's ctrl+o / ctrl+i
+	JumpBack    []string
+	JumpForward []string
+
 	// Code-structure navigation in the diff (vim %, [{ and [[)
 	BlockMatch []string // block start <-> end
 	BlockUp    []string // out one level
@@ -73,21 +77,19 @@ type KeyMap struct {
 	ToggleFocusMode []string
 
 	// General
-	OpenInEditor                []string
-	OpenInEditorTakeover        []string // always take over the terminal (ignore editor_mode)
-	OpenPathUnderCursor         []string // open the file path referenced on the current diff line
-	OpenPathUnderCursorTakeover []string // same, always taking over the terminal
-	OpenInMarkdownViewer        []string // open the current artifact / .md file in a rendered markdown viewer
-	OpenTerminal                []string // open a terminal at the current file's directory
-	OpenTerminalTakeover        []string // same, always taking over the screen (ignore editor_mode)
-	ShellCommand                []string // prompt for a shell command to run on the current file
-	BaseRef                     []string
-	ArtifactVersions            []string
-	CycleLayout                 []string
-	Refresh                     []string
-	Help                        []string
-	Quit                        []string
-	CommandMode                 []string
+	OpenInEditor         []string
+	OpenInEditorTakeover []string // always take over the terminal (ignore editor_mode)
+	OpenInMarkdownViewer []string // open the current artifact / .md file in a rendered markdown viewer
+	OpenTerminal         []string // open a terminal at the current file's directory
+	OpenTerminalTakeover []string // same, always taking over the screen (ignore editor_mode)
+	ShellCommand         []string // prompt for a shell command to run on the current file
+	BaseRef              []string
+	ArtifactVersions     []string
+	CycleLayout          []string
+	Refresh              []string
+	Help                 []string
+	Quit                 []string
+	CommandMode          []string
 
 	// Wizard (register TUI)
 	WizardAdvance []string
@@ -156,21 +158,22 @@ func DefaultKeyMap() KeyMap {
 		DismissArtifact: []string{"x"},
 		ToggleFocusMode: []string{"F"},
 
-		OpenInEditor:                []string{"ctrl+g"},
-		OpenInEditorTakeover:        []string{"ctrl+shift+g"},
-		OpenPathUnderCursor:         []string{"ctrl+o"},
-		OpenPathUnderCursorTakeover: []string{"ctrl+shift+o"},
-		OpenInMarkdownViewer:        []string{"ctrl+p"},
-		OpenTerminal:                []string{"ctrl+t"},
-		OpenTerminalTakeover:        []string{"ctrl+shift+t"},
-		ShellCommand:                []string{"!"},
-		BaseRef:                     []string{"b"},
-		ArtifactVersions:            []string{"B"},
-		CycleLayout:                 []string{"T"},
-		Refresh:                     []string{"R"},
-		Help:                        []string{"H"},
-		Quit:                        []string{"q"},
-		CommandMode:                 []string{":"},
+		OpenInEditor:         []string{"ctrl+g"},
+		OpenInEditorTakeover: []string{"ctrl+shift+g"},
+
+		JumpBack:             []string{"ctrl+o"},
+		JumpForward:          []string{"ctrl+i"},
+		OpenInMarkdownViewer: []string{"ctrl+p"},
+		OpenTerminal:         []string{"ctrl+t"},
+		OpenTerminalTakeover: []string{"ctrl+shift+t"},
+		ShellCommand:         []string{"!"},
+		BaseRef:              []string{"b"},
+		ArtifactVersions:     []string{"B"},
+		CycleLayout:          []string{"T"},
+		Refresh:              []string{"R"},
+		Help:                 []string{"H"},
+		Quit:                 []string{"q"},
+		CommandMode:          []string{":"},
 
 		WizardAdvance: []string{"enter"},
 		WizardBack:    []string{"shift+tab", "backspace"},
@@ -185,73 +188,73 @@ func DefaultKeyMap() KeyMap {
 // TestDocsListEveryKeyAction. A separate hand-maintained list of names drifted
 // out of sync with the code and the docs, which is what this replaces.
 var keyActions = map[string]func(*KeyMap) *[]string{
-	"up":                              func(km *KeyMap) *[]string { return &km.Up },
-	"down":                            func(km *KeyMap) *[]string { return &km.Down },
-	"top":                             func(km *KeyMap) *[]string { return &km.Top },
-	"bottom":                          func(km *KeyMap) *[]string { return &km.Bottom },
-	"half_up":                         func(km *KeyMap) *[]string { return &km.HalfUp },
-	"half_down":                       func(km *KeyMap) *[]string { return &km.HalfDown },
-	"prev_file":                       func(km *KeyMap) *[]string { return &km.PrevFile },
-	"next_file":                       func(km *KeyMap) *[]string { return &km.NextFile },
-	"select":                          func(km *KeyMap) *[]string { return &km.Select },
-	"focus_swap":                      func(km *KeyMap) *[]string { return &km.FocusSwap },
-	"toggle_sidebar":                  func(km *KeyMap) *[]string { return &km.ToggleSidebar },
-	"scroll_down":                     func(km *KeyMap) *[]string { return &km.ScrollDown },
-	"scroll_up":                       func(km *KeyMap) *[]string { return &km.ScrollUp },
-	"scroll_left":                     func(km *KeyMap) *[]string { return &km.ScrollLeft },
-	"scroll_right":                    func(km *KeyMap) *[]string { return &km.ScrollRight },
-	"scroll_home":                     func(km *KeyMap) *[]string { return &km.ScrollHome },
-	"scroll_first_char":               func(km *KeyMap) *[]string { return &km.ScrollFirstChar },
-	"scroll_end":                      func(km *KeyMap) *[]string { return &km.ScrollEnd },
-	"wrap":                            func(km *KeyMap) *[]string { return &km.Wrap },
-	"toggle_diff":                     func(km *KeyMap) *[]string { return &km.ToggleDiff },
-	"toggle_full_diff":                func(km *KeyMap) *[]string { return &km.ToggleFullDiff },
-	"toggle_overlays":                 func(km *KeyMap) *[]string { return &km.ToggleOverlays },
-	"hide_comments":                   func(km *KeyMap) *[]string { return &km.HideComments },
-	"open_doc_ref":                    func(km *KeyMap) *[]string { return &km.OpenDocRef },
-	"yank_line":                       func(km *KeyMap) *[]string { return &km.YankLine },
-	"search_backward":                 func(km *KeyMap) *[]string { return &km.SearchBackward },
-	"search_next":                     func(km *KeyMap) *[]string { return &km.SearchNext },
-	"search_prev":                     func(km *KeyMap) *[]string { return &km.SearchPrev },
-	"prev_mark":                       func(km *KeyMap) *[]string { return &km.PrevMark },
-	"next_mark":                       func(km *KeyMap) *[]string { return &km.NextMark },
-	"block_match":                     func(km *KeyMap) *[]string { return &km.BlockMatch },
-	"block_up":                        func(km *KeyMap) *[]string { return &km.BlockUp },
-	"block_top":                       func(km *KeyMap) *[]string { return &km.BlockTop },
-	"tree_mode":                       func(km *KeyMap) *[]string { return &km.TreeMode },
-	"collapse_all":                    func(km *KeyMap) *[]string { return &km.CollapseAll },
-	"expand_all":                      func(km *KeyMap) *[]string { return &km.ExpandAll },
-	"prev_section":                    func(km *KeyMap) *[]string { return &km.PrevSection },
-	"next_section":                    func(km *KeyMap) *[]string { return &km.NextSection },
-	"filter_reviewed":                 func(km *KeyMap) *[]string { return &km.FilterReviewed },
-	"comment":                         func(km *KeyMap) *[]string { return &km.Comment },
-	"file_comment":                    func(km *KeyMap) *[]string { return &km.FileComment },
-	"suggest":                         func(km *KeyMap) *[]string { return &km.Suggest },
-	"visual":                          func(km *KeyMap) *[]string { return &km.Visual },
-	"reviewed":                        func(km *KeyMap) *[]string { return &km.Reviewed },
-	"submit":                          func(km *KeyMap) *[]string { return &km.Submit },
-	"pause":                           func(km *KeyMap) *[]string { return &km.Pause },
-	"clear_review":                    func(km *KeyMap) *[]string { return &km.ClearReview },
-	"dismiss_artifact":                func(km *KeyMap) *[]string { return &km.DismissArtifact },
-	"toggle_focus_mode":               func(km *KeyMap) *[]string { return &km.ToggleFocusMode },
-	"open_in_editor":                  func(km *KeyMap) *[]string { return &km.OpenInEditor },
-	"open_in_editor_takeover":         func(km *KeyMap) *[]string { return &km.OpenInEditorTakeover },
-	"open_path_under_cursor":          func(km *KeyMap) *[]string { return &km.OpenPathUnderCursor },
-	"open_path_under_cursor_takeover": func(km *KeyMap) *[]string { return &km.OpenPathUnderCursorTakeover },
-	"open_in_markdown_viewer":         func(km *KeyMap) *[]string { return &km.OpenInMarkdownViewer },
-	"open_terminal":                   func(km *KeyMap) *[]string { return &km.OpenTerminal },
-	"open_terminal_takeover":          func(km *KeyMap) *[]string { return &km.OpenTerminalTakeover },
-	"shell_command":                   func(km *KeyMap) *[]string { return &km.ShellCommand },
-	"base_ref":                        func(km *KeyMap) *[]string { return &km.BaseRef },
-	"artifact_versions":               func(km *KeyMap) *[]string { return &km.ArtifactVersions },
-	"cycle_layout":                    func(km *KeyMap) *[]string { return &km.CycleLayout },
-	"refresh":                         func(km *KeyMap) *[]string { return &km.Refresh },
-	"help":                            func(km *KeyMap) *[]string { return &km.Help },
-	"quit":                            func(km *KeyMap) *[]string { return &km.Quit },
-	"command_mode":                    func(km *KeyMap) *[]string { return &km.CommandMode },
-	"wizard_advance":                  func(km *KeyMap) *[]string { return &km.WizardAdvance },
-	"wizard_back":                     func(km *KeyMap) *[]string { return &km.WizardBack },
-	"wizard_toggle":                   func(km *KeyMap) *[]string { return &km.WizardToggle },
+	"up":                      func(km *KeyMap) *[]string { return &km.Up },
+	"down":                    func(km *KeyMap) *[]string { return &km.Down },
+	"top":                     func(km *KeyMap) *[]string { return &km.Top },
+	"bottom":                  func(km *KeyMap) *[]string { return &km.Bottom },
+	"half_up":                 func(km *KeyMap) *[]string { return &km.HalfUp },
+	"half_down":               func(km *KeyMap) *[]string { return &km.HalfDown },
+	"prev_file":               func(km *KeyMap) *[]string { return &km.PrevFile },
+	"next_file":               func(km *KeyMap) *[]string { return &km.NextFile },
+	"select":                  func(km *KeyMap) *[]string { return &km.Select },
+	"focus_swap":              func(km *KeyMap) *[]string { return &km.FocusSwap },
+	"toggle_sidebar":          func(km *KeyMap) *[]string { return &km.ToggleSidebar },
+	"scroll_down":             func(km *KeyMap) *[]string { return &km.ScrollDown },
+	"scroll_up":               func(km *KeyMap) *[]string { return &km.ScrollUp },
+	"scroll_left":             func(km *KeyMap) *[]string { return &km.ScrollLeft },
+	"scroll_right":            func(km *KeyMap) *[]string { return &km.ScrollRight },
+	"scroll_home":             func(km *KeyMap) *[]string { return &km.ScrollHome },
+	"scroll_first_char":       func(km *KeyMap) *[]string { return &km.ScrollFirstChar },
+	"scroll_end":              func(km *KeyMap) *[]string { return &km.ScrollEnd },
+	"wrap":                    func(km *KeyMap) *[]string { return &km.Wrap },
+	"toggle_diff":             func(km *KeyMap) *[]string { return &km.ToggleDiff },
+	"toggle_full_diff":        func(km *KeyMap) *[]string { return &km.ToggleFullDiff },
+	"toggle_overlays":         func(km *KeyMap) *[]string { return &km.ToggleOverlays },
+	"hide_comments":           func(km *KeyMap) *[]string { return &km.HideComments },
+	"open_doc_ref":            func(km *KeyMap) *[]string { return &km.OpenDocRef },
+	"yank_line":               func(km *KeyMap) *[]string { return &km.YankLine },
+	"search_backward":         func(km *KeyMap) *[]string { return &km.SearchBackward },
+	"search_next":             func(km *KeyMap) *[]string { return &km.SearchNext },
+	"search_prev":             func(km *KeyMap) *[]string { return &km.SearchPrev },
+	"prev_mark":               func(km *KeyMap) *[]string { return &km.PrevMark },
+	"next_mark":               func(km *KeyMap) *[]string { return &km.NextMark },
+	"block_match":             func(km *KeyMap) *[]string { return &km.BlockMatch },
+	"block_up":                func(km *KeyMap) *[]string { return &km.BlockUp },
+	"block_top":               func(km *KeyMap) *[]string { return &km.BlockTop },
+	"tree_mode":               func(km *KeyMap) *[]string { return &km.TreeMode },
+	"collapse_all":            func(km *KeyMap) *[]string { return &km.CollapseAll },
+	"expand_all":              func(km *KeyMap) *[]string { return &km.ExpandAll },
+	"prev_section":            func(km *KeyMap) *[]string { return &km.PrevSection },
+	"next_section":            func(km *KeyMap) *[]string { return &km.NextSection },
+	"filter_reviewed":         func(km *KeyMap) *[]string { return &km.FilterReviewed },
+	"comment":                 func(km *KeyMap) *[]string { return &km.Comment },
+	"file_comment":            func(km *KeyMap) *[]string { return &km.FileComment },
+	"suggest":                 func(km *KeyMap) *[]string { return &km.Suggest },
+	"visual":                  func(km *KeyMap) *[]string { return &km.Visual },
+	"reviewed":                func(km *KeyMap) *[]string { return &km.Reviewed },
+	"submit":                  func(km *KeyMap) *[]string { return &km.Submit },
+	"pause":                   func(km *KeyMap) *[]string { return &km.Pause },
+	"clear_review":            func(km *KeyMap) *[]string { return &km.ClearReview },
+	"dismiss_artifact":        func(km *KeyMap) *[]string { return &km.DismissArtifact },
+	"toggle_focus_mode":       func(km *KeyMap) *[]string { return &km.ToggleFocusMode },
+	"open_in_editor":          func(km *KeyMap) *[]string { return &km.OpenInEditor },
+	"open_in_editor_takeover": func(km *KeyMap) *[]string { return &km.OpenInEditorTakeover },
+	"jump_back":               func(km *KeyMap) *[]string { return &km.JumpBack },
+	"jump_forward":            func(km *KeyMap) *[]string { return &km.JumpForward },
+	"open_in_markdown_viewer": func(km *KeyMap) *[]string { return &km.OpenInMarkdownViewer },
+	"open_terminal":           func(km *KeyMap) *[]string { return &km.OpenTerminal },
+	"open_terminal_takeover":  func(km *KeyMap) *[]string { return &km.OpenTerminalTakeover },
+	"shell_command":           func(km *KeyMap) *[]string { return &km.ShellCommand },
+	"base_ref":                func(km *KeyMap) *[]string { return &km.BaseRef },
+	"artifact_versions":       func(km *KeyMap) *[]string { return &km.ArtifactVersions },
+	"cycle_layout":            func(km *KeyMap) *[]string { return &km.CycleLayout },
+	"refresh":                 func(km *KeyMap) *[]string { return &km.Refresh },
+	"help":                    func(km *KeyMap) *[]string { return &km.Help },
+	"quit":                    func(km *KeyMap) *[]string { return &km.Quit },
+	"command_mode":            func(km *KeyMap) *[]string { return &km.CommandMode },
+	"wizard_advance":          func(km *KeyMap) *[]string { return &km.WizardAdvance },
+	"wizard_back":             func(km *KeyMap) *[]string { return &km.WizardBack },
+	"wizard_toggle":           func(km *KeyMap) *[]string { return &km.WizardToggle },
 }
 
 // ActionNames returns every configurable action name, sorted.
