@@ -12,10 +12,10 @@ import (
 )
 
 type reviewSummaryModel struct {
-	active         bool
-	summary        *types.ReviewSummary
-	agentConnected bool
-	action         types.SubmitAction
+	active          bool
+	summary         *types.ReviewSummary
+	agentConnected  bool
+	action          types.SubmitAction
 	body            string
 	copyToClipboard bool
 	width           int

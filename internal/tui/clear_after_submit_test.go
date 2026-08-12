@@ -12,7 +12,7 @@ import (
 
 // stubEngine is a minimal EngineAPI stub for testing TUI behavior.
 type stubEngine struct {
-	core.EngineAPI // embed to satisfy interface; panics on unimplemented methods
+	core.EngineAPI  // embed to satisfy interface; panics on unimplemented methods
 	cfg             *types.Config
 	session         *types.ReviewSession
 	contentItems    []types.ContentItem

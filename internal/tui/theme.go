@@ -15,11 +15,11 @@ type Theme struct {
 	MainPaneFocused      lipgloss.Style
 
 	// Diff colors
-	Added          lipgloss.Style
-	Removed        lipgloss.Style
-	Context        lipgloss.Style
-	HunkHeader     lipgloss.Style
-	LineNumber     lipgloss.Style
+	Added      lipgloss.Style
+	Removed    lipgloss.Style
+	Context    lipgloss.Style
+	HunkHeader lipgloss.Style
+	LineNumber lipgloss.Style
 
 	// Diff backgrounds (true color for syntax highlighting overlay)
 	AddedBg         color.Color
@@ -42,8 +42,8 @@ type Theme struct {
 	StatusBar lipgloss.Style
 
 	// Modal
-	ModalOverlay   lipgloss.Style
-	ModalBorder    lipgloss.Style
+	ModalOverlay lipgloss.Style
+	ModalBorder  lipgloss.Style
 
 	// Markdown
 	MarkdownH1         lipgloss.Style
@@ -64,11 +64,11 @@ func DefaultTheme() Theme {
 		MainPane:             lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("8")),
 		MainPaneFocused:      lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("4")),
 
-		Added:          lipgloss.NewStyle().Foreground(lipgloss.Color("2")),
-		Removed:        lipgloss.NewStyle().Foreground(lipgloss.Color("1")),
-		Context:        lipgloss.NewStyle(),
-		HunkHeader:     lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Faint(true),
-		LineNumber:     lipgloss.NewStyle().Foreground(lipgloss.Color("8")),
+		Added:      lipgloss.NewStyle().Foreground(lipgloss.Color("2")),
+		Removed:    lipgloss.NewStyle().Foreground(lipgloss.Color("1")),
+		Context:    lipgloss.NewStyle(),
+		HunkHeader: lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Faint(true),
+		LineNumber: lipgloss.NewStyle().Foreground(lipgloss.Color("8")),
 
 		CommentBorder:  lipgloss.NewStyle().Foreground(lipgloss.Color("3")),
 		CommentIssue:   lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Bold(true),
@@ -78,8 +78,8 @@ func DefaultTheme() Theme {
 
 		StatusBar: lipgloss.NewStyle().Background(lipgloss.Color("0")).Foreground(lipgloss.Color("7")),
 
-		ModalOverlay:   lipgloss.NewStyle().Background(lipgloss.Color("0")),
-		ModalBorder:    lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("4")).Padding(1, 2),
+		ModalOverlay: lipgloss.NewStyle().Background(lipgloss.Color("0")),
+		ModalBorder:  lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("4")).Padding(1, 2),
 
 		MarkdownH1:         lipgloss.NewStyle().Foreground(lipgloss.Color("4")).Bold(true),
 		MarkdownH2:         lipgloss.NewStyle().Foreground(lipgloss.Color("4")).Bold(true),

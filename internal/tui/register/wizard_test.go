@@ -13,22 +13,22 @@ import (
 // fakeAdapter lets tests drive the wizard without touching real settings.json
 // files. Register/Unregister are no-ops; HasConfig is toggleable.
 type fakeAdapter struct {
-	name      string
-	label     string
-	mode      adapters.IntegrationMode
-	paths     []string
-	hasConfig bool
-	registered bool
+	name         string
+	label        string
+	mode         adapters.IntegrationMode
+	paths        []string
+	hasConfig    bool
+	registered   bool
 	unregistered bool
 }
 
-func (f *fakeAdapter) Name() string                   { return f.name }
-func (f *fakeAdapter) Label() string                  { return f.label }
+func (f *fakeAdapter) Name() string                       { return f.name }
+func (f *fakeAdapter) Label() string                      { return f.label }
 func (f *fakeAdapter) SetMode(m adapters.IntegrationMode) { f.mode = m }
-func (f *fakeAdapter) ConfigPaths(bool) []string      { return f.paths }
-func (f *fakeAdapter) HasConfig(bool) bool            { return f.hasConfig }
-func (f *fakeAdapter) Register(bool) error            { f.registered = true; return nil }
-func (f *fakeAdapter) Unregister(bool) error          { f.unregistered = true; return nil }
+func (f *fakeAdapter) ConfigPaths(bool) []string          { return f.paths }
+func (f *fakeAdapter) HasConfig(bool) bool                { return f.hasConfig }
+func (f *fakeAdapter) Register(bool) error                { f.registered = true; return nil }
+func (f *fakeAdapter) Unregister(bool) error              { f.unregistered = true; return nil }
 
 func defaultOptsRegister() Options {
 	return Options{

@@ -155,9 +155,9 @@ func TestIsMarkdownFile(t *testing.T) {
 		{"docs/guide.markdown", true},
 		{"CHANGELOG.MD", true},
 		{"src/main.go", false},
-		{"Makefile", false},      // extensionless — must NOT match
-		{"LICENSE", false},       // extensionless — must NOT match
-		{"some-uuid-id", false},  // unlike isMarkdownContent, this is false
+		{"Makefile", false},     // extensionless — must NOT match
+		{"LICENSE", false},      // extensionless — must NOT match
+		{"some-uuid-id", false}, // unlike isMarkdownContent, this is false
 		{"Dockerfile", false},
 		{"notes.txt", false},
 	}

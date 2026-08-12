@@ -4,11 +4,11 @@ import "testing"
 
 func TestComputeChangeRanges(t *testing.T) {
 	tests := []struct {
-		name      string
-		oldLine   string
-		newLine   string
-		wantOld   []changeRange
-		wantNew   []changeRange
+		name    string
+		oldLine string
+		newLine string
+		wantOld []changeRange
+		wantNew []changeRange
 	}{
 		{
 			name:    "identical lines",

@@ -65,13 +65,13 @@ func TestTmuxOpenArgs_FallsBack(t *testing.T) {
 
 func TestShellQuote(t *testing.T) {
 	cases := map[string]string{
-		"plain.go":          "plain.go",
-		"pkg/util.go":       "pkg/util.go",
-		"+42":               "+42",
-		"a file.go":         `'a file.go'`,
-		"it's.go":           `'it'\''s.go'`,
-		"":                  "''",
-		"weird;rm -rf.go":   `'weird;rm -rf.go'`,
+		"plain.go":        "plain.go",
+		"pkg/util.go":     "pkg/util.go",
+		"+42":             "+42",
+		"a file.go":       `'a file.go'`,
+		"it's.go":         `'it'\''s.go'`,
+		"":                "''",
+		"weird;rm -rf.go": `'weird;rm -rf.go'`,
 	}
 	for in, want := range cases {
 		if got := shellQuote(in); got != want {

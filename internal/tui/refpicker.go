@@ -14,19 +14,19 @@ import (
 const refPickerPageSize = 20
 
 type refPickerModel struct {
-	entries        []core.LogEntry
-	snapshots      []types.ReviewSnapshot
-	cursor         int
-	offset         int // scroll offset for visible entries
-	width          int
-	height         int
-	active         bool
-	autoActive     bool // whether auto-advance is currently on
+	entries          []core.LogEntry
+	snapshots        []types.ReviewSnapshot
+	cursor           int
+	offset           int // scroll offset for visible entries
+	width            int
+	height           int
+	active           bool
+	autoActive       bool // whether auto-advance is currently on
 	snapshotActive   bool // whether a snapshot is the current diff base
 	activeSnapshotID int  // ID of the active snapshot (for checkmark)
-	hasMore        bool // true if last fetch returned a full page
-	loading        bool // true while loading more entries
-	theme          Theme
+	hasMore          bool // true if last fetch returned a full page
+	loading          bool // true while loading more entries
+	theme            Theme
 }
 
 func newRefPickerModel(theme Theme) refPickerModel {

@@ -10,10 +10,10 @@ import (
 // fileTreeNode represents a node in the file tree hierarchy.
 // Directory nodes have Children and nil File; file nodes have File and nil Children.
 type fileTreeNode struct {
-	Name     string              // Display name (may be compressed path like "internal/tui")
-	Path     string              // Full path from repo root
-	File     *types.ChangedFile  // Non-nil for file nodes
-	Children []*fileTreeNode     // Non-nil for directory nodes
+	Name     string             // Display name (may be compressed path like "internal/tui")
+	Path     string             // Full path from repo root
+	File     *types.ChangedFile // Non-nil for file nodes
+	Children []*fileTreeNode    // Non-nil for directory nodes
 }
 
 // visibleItem represents a single item in the flattened visible list.
