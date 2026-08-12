@@ -200,90 +200,137 @@ Monocle exposes review operations via **MCP tools** (default for Claude Code, an
 
 ## Keybindings
 
-| Key                    | Action                                                    |
-|------------------------|-----------------------------------------------------------|
-| `j`/`k`                | Move up/down                                              |
-| `J`/`K`                | Scroll diff up/down (any pane)                            |
-| `Ctrl+d`/`u`           | Scroll diff half page (any pane)                          |
-| `g`/`G`                | Top/bottom                                                |
-| `h`/`l` or `←`/`→`     | Scroll diff left/right                                    |
-| `L`                    | Scroll diff right (any pane)                              |
-| `0`                    | Scroll to column 0 (any pane)                             |
-| `^`                    | Scroll to first non-space (any pane)                      |
-| `$`                    | Scroll to line end (any pane)                             |
-| `[`/`]`                | Previous/next diff chunk (in the diff pane); previous/next file otherwise |
-| `{`/`}`                | Previous/next file (any pane)                            |
-| `Enter`                | Focus diff pane / toggle dir                              |
-| `Space`                | Toggle expand/collapse on a comment under the cursor      |
-| `Tab` / `Shift+Tab`    | Switch pane focus forward / backward                      |
-| `;`                    | Toggle sidebar visibility                                 |
-| `1`/`2`                | Jump to pane                                              |
-| `w`                    | Toggle line wrapping (any pane)                           |
-| `f`                    | Cycle flat/tree/grouped view                                     |
-| `z`/`e`                | Collapse/expand all (tree)                                |
-| `b`                    | Change base ref                                           |
-| `B`                    | Base artifact version to diff against                             |
-| `c`                    | Add comment at cursor (edit if on a comment)              |
-| `s`                    | Suggest edit at cursor (pre-fills suggestion block)       |
-| `C`                    | Add file-level comment                                    |
-| `v`                    | Visual select (multi-line comments)                       |
-| `y`                    | Yank current line (or visual selection) to clipboard      |
-| `x`                    | Toggle comment resolved (on a comment line)               |
-| `d`                    | Delete comment (on a comment line)                        |
-| `r`                    | Toggle file reviewed (auto-advances to next unreviewed)   |
-| `/`                    | Sidebar: cycle filter / Diff: search forward              |
-| `?`                    | Diff: search backward (when diff pane focused)            |
-| `n`/`N`                | Next/previous search match                                |
-| `<`/`>`                | Jump to previous/next comment or annotation               |
-| `%`                    | Jump between the current block's start and end (vim `%`)  |
-| `(`                    | Jump out one level, to the enclosing block's opening line — vim's `[{` |
-| `)`                    | Jump out to the outermost enclosing block (func/class/type) — vim's `99[{` |
-| `t`                    | Cycle diff style (unified/split/file) (any pane)          |
-| `a`                    | Toggle full-file diff (whole file vs. changed lines) — shows `[ALL]` in the pane header |
-| `O`                    | Hide / show inline comments + annotations                 |
-| `#`                    | Cycle source-code comments: dim → hide → show             |
-| `o`                    | Open / cycle annotation doc links (closes after the last) |
-| `T`                    | Cycle layout (auto/side-by-side/stacked)                  |
-| `R`                    | Force reload files                                        |
-| `S` / `:submit`        | Submit review                                             |
-| `Ctrl+g`               | Open the file under review in `$EDITOR` (per `editor_mode`); also opens external editor in comment/submit modals |
-| `Ctrl+o`               | Open the file path referenced on the current diff line in `$EDITOR` (per `editor_mode`) |
-| `Ctrl+Shift+g` / `Ctrl+Shift+o` | Same as `Ctrl+g` / `Ctrl+o` but always take over the screen (ignore `editor_mode`) |
-| `Ctrl+p`               | Open the current artifact/file in an external viewer: markdown/text → `markdown_viewer` (default `glow -p`), media (image/video/audio) → `media_viewer` (default Google Chrome) |
-| `Ctrl+t`               | Open a terminal at the current file's directory — takes over Monocle's screen by default, or opens a tmux split/window when `editor_mode` is a `tmux_*` mode |
-| `Ctrl+Shift+t`         | Like `Ctrl+t`, but always takes over the screen (ignores `editor_mode`) |
-| `!`                    | Run a shell command on the current file: opens a prompt pre-filled with the file path (cursor at the start) — type a command and press Enter |
-| `Ctrl+y`               | Copy review to clipboard                                  |
-| `P` / `:pause`         | Pause the agent (wait for your review)                    |
-| `D` / `:clear`         | Clear review (comments, plans, added files, reviewed)     |
-| `x`                    | Dismiss artifact / remove added file (sidebar, confirm)   |
-| `F`                    | Toggle focus mode (hide sidebar, enable wrap)             |
-| `:mark-all-reviewed`   | Mark all files as reviewed                                |
-| `:mark-all-unreviewed` | Mark all files as unreviewed                              |
-| `:discard`             | Discard all pending comments                              |
-| `:cancel-feedback`     | Cancel submitted feedback still queued for the agent (e.g. accidental double-submit) |
-| `:submit!`             | Submit immediately, no modal (approve, or request changes if there are issues/suggestions) |
-| `:unpause`             | Cancel a pending pause request                            |
-| `:ref <rev>`           | Set the base ref directly (`:ref auto` follows new commits) |
-| `:history`             | View past review submissions                              |
-| `:theme [name]`        | Switch theme live (dark/light/molokai/dracula/nord; no arg cycles) |
-| `:base-artifact-version` | Base artifact version to diff against                           |
-| `:base-ref`              | Base ref to diff against (same as `b`)                  |
-| `I`                    | Connection info (socket path, subscriber count)           |
-| `H`                    | Show all keybindings                                      |
-| `:`                    | Enter command mode (`Tab` completes/cycles command names) |
-| `q`                    | Quit                                                      |
-| `Esc`                  | Close the current modal / leave visual or search mode     |
+Bindings are grouped by the task they serve, and within a group ordered by key: lowercase, uppercase, digits, punctuation, modified keys, then `:` commands. Press `H` in monocle for this same list with your own overrides applied, and `/` inside it to search. The arrow keys mirror `h`/`j`/`k`/`l` throughout.
 
-#### What the diff pane's borders tell you
+#### Move
 
-```
-┌─ internal/core/engine_impl.go · 12m [ALL] ────── ↑ 128 lines · 3 chunks ─┐
-│                                                                          │
-└──────────────────────────────────────────────── ↓ 940 lines · 12 chunks ─┘
-```
+| Key | Action |
+|-----|--------|
+| `g` / `G` | Jump to top/bottom |
+| `h` / `l` | Scroll diff left/right |
+| `j` / `k` | Move up/down (arrow keys too) |
+| `J` / `K` | Scroll diff up/down (any pane) |
+| `L` | Scroll diff right (any pane) |
+| `0` | Scroll to column 0 (any pane) |
+| `$` | Scroll to line end (any pane) |
+| `^` | Scroll to first non-space (any pane) |
+| `ctrl+d` / `ctrl+u` | Scroll diff half page (any pane) |
 
-The top border names what you're looking at, how long ago it last changed (an artifact's send time, a file's mtime), and the active view mode. Both borders show how much content runs off that edge, on the edge it runs off — a "chunk" being the same unit `[` and `]` jump between. No marker means that end is already on screen. On a narrow pane the age drops first, then the scroll markers (shortening to `↑128 ·3` first), then the mode badge, so the file name always survives.
+#### Jump
+
+| Key | Action |
+|-----|--------|
+| `n` / `N` | Next/previous search match |
+| `%` | Between the current block's start and end (vim %) |
+| `(` | Out one level, to the enclosing block's opening line (vim [{) |
+| `)` | Out to the outermost enclosing block (vim 99[{) |
+| `/` / `?` | Search the diff forward/backward (diff focused) |
+| `<` / `>` | Previous/next comment or annotation |
+| `[` / `]` | Previous/next diff chunk in the diff pane, else previous/next file |
+| `{` / `}` | Previous/next file (any pane) |
+
+#### View & panes
+
+| Key | Action |
+|-----|--------|
+| `a` | Toggle full-file diff (whole file vs. changed lines) |
+| `f` | Cycle sidebar view (flat/tree/grouped) |
+| `t` | Cycle diff style (unified/split/file) (any pane) |
+| `w` | Toggle line wrapping (any pane) |
+| `z` / `e` | Collapse/expand all (tree view) |
+| `F` | Toggle focus mode (hide sidebar, wrap lines) |
+| `O` | Hide/show inline comments + annotations |
+| `T` | Cycle layout (auto/side-by-side/stacked) |
+| `1` / `2` | Jump straight to a pane |
+| `#` | Cycle source-code comments: dim → hide → show |
+| `/` | Sidebar: cycle the reviewed filter |
+| `;` | Show/hide the sidebar |
+| `enter` | Focus the diff pane / toggle a directory open |
+| `tab` / `shift+tab` | Switch pane focus (sidebar/diff/doc) |
+
+#### Comment
+
+| Key | Action |
+|-----|--------|
+| `c` | Add a comment at the cursor |
+| `d` | Delete a comment (on a comment) |
+| `s` | Suggest an edit at the cursor |
+| `v` | Visual select mode (multi-line comments) |
+| `x` | Toggle a comment resolved (on a comment) |
+| `y` | Yank the line / selection to the clipboard |
+| `C` | Add a file-level comment |
+| `space` | Expand/collapse a comment under the cursor |
+
+#### Review
+
+| Key | Action |
+|-----|--------|
+| `b` | Change the base ref |
+| `r` | Toggle the file reviewed (advances to the next unreviewed) |
+| `x` | Dismiss an artifact / remove an added file (in the sidebar) |
+| `B` / `:base-artifact-version` | Base artifact version to diff against |
+| `D` / `:clear` | Clear the review (comments, plans, added files, reviewed) |
+| `P` / `:pause` | Toggle pause (ask the agent to wait) |
+| `R` | Force reload files |
+| `S` / `:submit` | Submit the review |
+| `ctrl+y` | Copy the review to the clipboard without submitting |
+
+#### Open elsewhere
+
+| Key | Action |
+|-----|--------|
+| `o` | Open/cycle an annotation's doc links in the doc pane |
+| `!` | Run a shell command on the current file |
+| `ctrl+g` | Open the file in your editor (per editor_mode) |
+| `ctrl+shift+g` | Open the file in your editor, always taking over the screen |
+| `ctrl+o` | Open the file path referenced on the current line |
+| `ctrl+shift+o` | Open the path under the cursor, always taking over the screen |
+| `ctrl+p` | Open the artifact/file in an external viewer (markdown or media) |
+| `ctrl+t` | Open a terminal at the current file's directory |
+| `ctrl+shift+t` | Open a terminal, always taking over the screen |
+
+#### Commands
+
+| Key | Action |
+|-----|--------|
+| `:` | Enter command mode (Tab completes and cycles names) |
+| `:base-ref` | Base ref to diff against (same as b) |
+| `:cancel-feedback` | Cancel submitted feedback still queued for the agent |
+| `:discard` | Discard all pending comments |
+| `:history` | View submission history |
+| `:mark-all-reviewed` | Mark all files as reviewed |
+| `:mark-all-unreviewed` | Mark all files as unreviewed |
+| `:ref <rev>` | Set the base ref directly (:ref auto follows new commits) |
+| `:submit!` | Submit immediately, no modal (approve, or request changes) |
+| `:theme [name]` | Switch theme live (dark/light/molokai/dracula/nord; no arg cycles) |
+| `:unpause` | Cancel a pending pause request |
+
+#### App
+
+| Key | Action |
+|-----|--------|
+| `q` | Quit |
+| `H` | Show this help |
+| `I` | Connection info (socket path, subscriber count) |
+| `esc` | Close the current modal / leave visual or search mode |
+
+#### Text editing (comment/submit modals)
+
+| Key | Action |
+|-----|--------|
+| `←` / `→ or ctrl+b` / `f` | Move cursor left/right |
+| `↑` / `↓ or ctrl+p` / `n` | Move cursor up/down |
+| `home` / `ctrl+a` | Line start (smart toggle) |
+| `end` / `ctrl+e` | Line end |
+| `alt+← or alt+b` | Move back one word |
+| `alt+→ or alt+f` | Move forward one word |
+| `ctrl+d` / `delete` | Delete char at cursor |
+| `ctrl+k` | Kill to end of line |
+| `ctrl+u` | Kill to start of line |
+| `ctrl+w` / `alt+bksp` | Delete word before cursor |
+| `alt+d` | Delete word after cursor |
+| `shift+enter` | Insert a newline |
+| `ctrl+g` | Open in your external editor |
 
 ### Comment editor
 

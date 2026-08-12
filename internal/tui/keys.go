@@ -286,6 +286,15 @@ func Matches(key string, bindings []string) bool {
 	return false
 }
 
+// PrimaryLabel returns just the first key of a binding, for surfaces where
+// listing every alias (j AND down, k AND up) is noise rather than information.
+func PrimaryLabel(bindings []string) string {
+	if len(bindings) == 0 {
+		return ""
+	}
+	return bindings[0]
+}
+
 // Label returns the display label for a keybinding (first key, or joined with /).
 func Label(bindings []string) string {
 	if len(bindings) == 0 {

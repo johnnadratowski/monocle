@@ -140,9 +140,10 @@ func TestDocsMentionEveryDefaultKey(t *testing.T) {
 	for _, k := range hardcodedKeys {
 		want[normalizeKey(k)] = true
 	}
-	// Aliases the docs deliberately fold into their primary key: the arrow
-	// equivalents of j/k, and the raw " " spelling of the space bar.
-	for _, skip := range []string{"up", "down", " "} {
+	// Aliases the docs deliberately fold into their primary key: the four arrow
+	// equivalents of hjkl, and the raw " " spelling of the space bar. The docs
+	// say so once in prose rather than doubling every motion row.
+	for _, skip := range []string{"up", "down", "left", "right", " "} {
 		delete(want, skip)
 	}
 

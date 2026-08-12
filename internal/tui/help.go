@@ -274,120 +274,132 @@ func (m helpModel) buildContent() string {
 
 	km := m.keys
 
-	navKeys := []struct{ key, desc string }{
-		{Label(km.Down) + "/" + Label(km.Up), "Move up/down"},
-		{Label(km.HalfDown) + "/" + Label(km.HalfUp), "Scroll diff half page (any pane)"},
-		{Label(km.Top) + "/" + Label(km.Bottom), "Top/bottom"},
-		{Label(km.ScrollDown) + "/" + Label(km.ScrollUp), "Scroll diff up/down (any pane)"},
-		{"h/l", "Scroll diff left/right"},
-		{Label(km.ScrollRight), "Scroll diff right (any pane)"},
-		{"/  " + Label(km.SearchBackward), "Search diff fwd/back (diff focused)"},
-		{Label(km.SearchNext) + "/" + Label(km.SearchPrev), "Next/previous search match"},
-		{Label(km.PrevMark) + "/" + Label(km.NextMark), "Prev/next comment or annotation"},
-		{Label(km.BlockMatch), "Jump between the current block's start and end (vim %)"},
-		{Label(km.BlockUp), "Out one level, to the enclosing block's opening line (vim [{)"},
-		{Label(km.BlockTop), "Out to the outermost enclosing block (vim 99[{)"},
-		{Label(km.ScrollHome), "Scroll to column 0 (any pane)"},
-		{Label(km.ScrollFirstChar), "Scroll to first non-space (any pane)"},
-		{Label(km.ScrollEnd), "Scroll to line end (any pane)"},
-		{Label(km.Wrap), "Toggle line wrapping (any pane)"},
-		{Label(km.PrevFile) + "/" + Label(km.NextFile), "Previous/next diff chunk in the diff pane, else previous/next file"},
-		{Label(km.PrevSection) + "/" + Label(km.NextSection), "Previous/next file (any pane)"},
-		{Label(km.Select), "Focus diff pane / toggle dir"},
-		{"space", "Expand/collapse a comment under the cursor"},
-		{Label(km.FocusSwap) + "/shift+tab", "Switch pane focus (sidebar/diff/doc)"},
-		{Label(km.OpenDocRef), "Open/cycle annotation doc links; closes after the last"},
-		{Label(km.ToggleSidebar), "Toggle sidebar"},
-		{"1/2", "Jump to pane"},
-		{Label(km.BaseRef), "Change base ref"},
-		{Label(km.TreeMode), "Cycle flat/tree/grouped view"},
-		{Label(km.CollapseAll) + "/" + Label(km.ExpandAll), "Collapse/expand all (tree)"},
-	}
-	if m.reviewTracking {
-		navKeys = append(navKeys, struct{ key, desc string }{Label(km.FilterReviewed), "Hide/show reviewed files"})
-	}
-
-	reviewKeys := []struct{ key, desc string }{
-		{Label(km.Comment), "Add comment at cursor"},
-		{Label(km.Suggest), "Suggest edit at cursor"},
-		{Label(km.FileComment), "Add file comment"},
-		{Label(km.Visual), "Visual select mode"},
-		{Label(km.YankLine), "Yank line / selection to clipboard"},
-		{"x", "Toggle comment resolved (on comment)"},
-		{Label(km.DismissArtifact), "Dismiss artifact / remove added file (in sidebar)"},
-		{"d", "Delete comment (on comment)"},
-	}
-	if m.reviewTracking {
-		reviewKeys = append(reviewKeys, struct{ key, desc string }{Label(km.Reviewed), "Toggle file reviewed"})
-	}
-	reviewKeys = append(reviewKeys, []struct{ key, desc string }{
-		{Label(km.Submit) + " / :submit", "Submit review"},
-		{"Ctrl+g", "Open external editor (comment/submit modal)"},
-		{"Ctrl+y", "Copy review to clipboard"},
-		{Label(km.Pause) + " / :pause", "Toggle pause (ask Claude Code to wait)"},
-		{Label(km.ClearReview) + " / :clear", "Clear review (comments, plans, added files, reviewed)"},
-		{Label(km.ToggleFocusMode), "Toggle focus mode"},
-	}...)
-	if m.reviewTracking {
-		reviewKeys = append(reviewKeys, []struct{ key, desc string }{
-			{":mark-all-reviewed", "Mark all files as reviewed"},
-			{":mark-all-unreviewed", "Mark all files as unreviewed"},
-		}...)
-	}
-	reviewKeys = append(reviewKeys, []struct{ key, desc string }{
-		{":discard", "Discard all pending comments"},
-		{":cancel-feedback", "Cancel submitted feedback still queued for the agent"},
-		{":submit!", "Submit immediately, no modal (approve, or request changes)"},
-		{":unpause", "Cancel a pending pause request"},
-		{":ref <rev>", "Set the base ref directly (:ref auto follows new commits)"},
-		{":history", "View submission history"},
-		{Label(km.ArtifactVersions) + " / :base-artifact-version", "Base artifact version to diff against"},
-		{":base-ref", "Base ref to diff against (same as " + Label(km.BaseRef) + ")"},
-		{Label(km.CommandMode), "Enter command mode"},
-		{Label(km.CommandMode) + " then Tab", "Complete/cycle command names in command mode"},
-	}...)
-
-	sections := []struct {
-		title string
-		keys  []struct{ key, desc string }
-	}{
-		{"Navigation", navKeys},
-		{"Review", reviewKeys},
-		{"Text Editing (comment/submit)", []struct{ key, desc string }{
-			{"←/→ or Ctrl+B/F", "Move cursor left/right"},
-			{"↑/↓ or Ctrl+P/N", "Move cursor up/down"},
-			{"Home/Ctrl+A", "Line start (smart toggle)"},
-			{"End/Ctrl+E", "Line end"},
-			{"Alt+← or Alt+B", "Move back one word"},
-			{"Alt+→ or Alt+F", "Move forward one word"},
-			{"Ctrl+D / Delete", "Delete char at cursor"},
-			{"Ctrl+K", "Kill to end of line"},
-			{"Ctrl+U", "Kill to start of line"},
-			{"Ctrl+W / Alt+Bksp", "Delete word before cursor"},
-			{"Alt+D", "Delete word after cursor"},
-			{"Shift+Enter", "Insert newline"},
-			{"Ctrl+G", "Open in external editor"},
-		}},
-		{"General", []struct{ key, desc string }{
-			{Label(km.OpenInEditor), "Open file in editor at cursor (per editor_mode)"},
-			{Label(km.OpenInEditorTakeover), "Open file in editor, always taking over the screen"},
-			{Label(km.OpenPathUnderCursor), "Open the file path referenced on the current line"},
-			{Label(km.OpenPathUnderCursorTakeover), "Open the path under cursor, always taking over the screen"},
-			{Label(km.OpenInMarkdownViewer), "Open artifact/file in external viewer (markdown → markdown_viewer, media → media_viewer)"},
-			{Label(km.OpenTerminal), "Open a terminal at the current file's directory (over Monocle, or tmux split per editor_mode)"},
-			{Label(km.OpenTerminalTakeover), "Open a terminal, always taking over the screen"},
-			{Label(km.ShellCommand), "Run a shell command on the current file (prompt pre-filled with the file)"},
+	// Every binding, filed under the one task it serves. Rows are written in
+	// whatever order reads well here; sortHelpRows puts them in the documented
+	// key order at render time, so adding one never means finding its slot.
+	// See helpsections.go for the methodology.
+	rows := map[string][]helpRow{
+		secMove: {
+			{PrimaryLabel(km.Down) + "/" + PrimaryLabel(km.Up), "Move up/down (arrow keys too)"},
+			{Label(km.Top) + "/" + Label(km.Bottom), "Jump to top/bottom"},
+			{"h/l", "Scroll diff left/right"},
+			{Label(km.ScrollRight), "Scroll diff right (any pane)"},
+			{Label(km.ScrollDown) + "/" + Label(km.ScrollUp), "Scroll diff up/down (any pane)"},
+			{Label(km.HalfDown) + "/" + Label(km.HalfUp), "Scroll diff half page (any pane)"},
+			{Label(km.ScrollHome), "Scroll to column 0 (any pane)"},
+			{Label(km.ScrollFirstChar), "Scroll to first non-space (any pane)"},
+			{Label(km.ScrollEnd), "Scroll to line end (any pane)"},
+		},
+		secJump: {
+			{Label(km.PrevFile) + "/" + Label(km.NextFile), "Previous/next diff chunk in the diff pane, else previous/next file"},
+			{Label(km.PrevSection) + "/" + Label(km.NextSection), "Previous/next file (any pane)"},
+			{Label(km.PrevMark) + "/" + Label(km.NextMark), "Previous/next comment or annotation"},
+			{Label(km.BlockMatch), "Between the current block's start and end (vim %)"},
+			{Label(km.BlockUp), "Out one level, to the enclosing block's opening line (vim [{)"},
+			{Label(km.BlockTop), "Out to the outermost enclosing block (vim 99[{)"},
+			{Label(km.FilterReviewed) + " / " + Label(km.SearchBackward), "Search the diff forward/backward (diff focused)"},
+			{Label(km.SearchNext) + "/" + Label(km.SearchPrev), "Next/previous search match"},
+		},
+		secView: {
+			{Label(km.FocusSwap) + "/shift+tab", "Switch pane focus (sidebar/diff/doc)"},
+			{"1/2", "Jump straight to a pane"},
+			{Label(km.Select), "Focus the diff pane / toggle a directory open"},
+			{Label(km.ToggleSidebar), "Show/hide the sidebar"},
+			{Label(km.CycleLayout), "Cycle layout (auto/side-by-side/stacked)"},
+			{Label(km.ToggleFocusMode), "Toggle focus mode (hide sidebar, wrap lines)"},
+			{Label(km.Wrap), "Toggle line wrapping (any pane)"},
 			{Label(km.ToggleDiff), "Cycle diff style (unified/split/file) (any pane)"},
 			{Label(km.ToggleFullDiff), "Toggle full-file diff (whole file vs. changed lines)"},
 			{Label(km.ToggleOverlays), "Hide/show inline comments + annotations"},
 			{Label(km.HideComments), "Cycle source-code comments: dim → hide → show"},
-			{Label(km.CycleLayout), "Cycle layout (auto/side-by-side/stacked)"},
+			{Label(km.TreeMode), "Cycle sidebar view (flat/tree/grouped)"},
+			{Label(km.CollapseAll) + "/" + Label(km.ExpandAll), "Collapse/expand all (tree view)"},
+		},
+		secComment: {
+			{Label(km.Comment), "Add a comment at the cursor"},
+			{Label(km.FileComment), "Add a file-level comment"},
+			{Label(km.Suggest), "Suggest an edit at the cursor"},
+			{Label(km.Visual), "Visual select mode (multi-line comments)"},
+			{Label(km.YankLine), "Yank the line / selection to the clipboard"},
+			{"x", "Toggle a comment resolved (on a comment)"},
+			{"d", "Delete a comment (on a comment)"},
+			{"space", "Expand/collapse a comment under the cursor"},
+		},
+		secReview: {
+			{Label(km.Submit) + " / :submit", "Submit the review"},
+			{Label(km.Pause) + " / :pause", "Toggle pause (ask the agent to wait)"},
+			{Label(km.ClearReview) + " / :clear", "Clear the review (comments, plans, added files, reviewed)"},
+			{Label(km.BaseRef), "Change the base ref"},
+			{Label(km.ArtifactVersions) + " / :base-artifact-version", "Base artifact version to diff against"},
 			{Label(km.Refresh), "Force reload files"},
-			{"I", "Connection info"},
+			{Label(km.DismissArtifact), "Dismiss an artifact / remove an added file (in the sidebar)"},
+			{"ctrl+y", "Copy the review to the clipboard without submitting"},
+		},
+		secOpen: {
+			{Label(km.OpenDocRef), "Open/cycle an annotation's doc links in the doc pane"},
+			{Label(km.ShellCommand), "Run a shell command on the current file"},
+			{Label(km.OpenInEditor), "Open the file in your editor (per editor_mode)"},
+			{Label(km.OpenInEditorTakeover), "Open the file in your editor, always taking over the screen"},
+			{Label(km.OpenPathUnderCursor), "Open the file path referenced on the current line"},
+			{Label(km.OpenPathUnderCursorTakeover), "Open the path under the cursor, always taking over the screen"},
+			{Label(km.OpenInMarkdownViewer), "Open the artifact/file in an external viewer (markdown or media)"},
+			{Label(km.OpenTerminal), "Open a terminal at the current file's directory"},
+			{Label(km.OpenTerminalTakeover), "Open a terminal, always taking over the screen"},
+		},
+		secCommand: {
+			{Label(km.CommandMode), "Enter command mode (Tab completes and cycles names)"},
+			{":submit!", "Submit immediately, no modal (approve, or request changes)"},
+			{":discard", "Discard all pending comments"},
+			{":cancel-feedback", "Cancel submitted feedback still queued for the agent"},
+			{":unpause", "Cancel a pending pause request"},
+			{":ref <rev>", "Set the base ref directly (:ref auto follows new commits)"},
+			{":base-ref", "Base ref to diff against (same as " + Label(km.BaseRef) + ")"},
+			{":history", "View submission history"},
+			{":theme [name]", "Switch theme live (dark/light/molokai/dracula/nord; no arg cycles)"},
+		},
+		secApp: {
+			{"I", "Connection info (socket path, subscriber count)"},
 			{Label(km.Help), "Show this help"},
-			{"esc", "Close the current modal / leave visual or search mode"},
 			{Label(km.Quit), "Quit"},
-		}},
+			{"esc", "Close the current modal / leave visual or search mode"},
+		},
+		secEditor: {
+			{"←/→ or ctrl+b/f", "Move cursor left/right"},
+			{"↑/↓ or ctrl+p/n", "Move cursor up/down"},
+			{"home/ctrl+a", "Line start (smart toggle)"},
+			{"end/ctrl+e", "Line end"},
+			{"alt+← or alt+b", "Move back one word"},
+			{"alt+→ or alt+f", "Move forward one word"},
+			{"ctrl+d / delete", "Delete char at cursor"},
+			{"ctrl+k", "Kill to end of line"},
+			{"ctrl+u", "Kill to start of line"},
+			{"ctrl+w / alt+bksp", "Delete word before cursor"},
+			{"alt+d", "Delete word after cursor"},
+			{"shift+enter", "Insert a newline"},
+			{"ctrl+g", "Open in your external editor"},
+		},
+	}
+
+	// Review tracking is optional; its bindings only exist when it's on.
+	if m.reviewTracking {
+		rows[secReview] = append(rows[secReview],
+			helpRow{Label(km.Reviewed), "Toggle the file reviewed (advances to the next unreviewed)"})
+		rows[secView] = append(rows[secView],
+			helpRow{Label(km.FilterReviewed), "Sidebar: cycle the reviewed filter"})
+		rows[secCommand] = append(rows[secCommand],
+			helpRow{":mark-all-reviewed", "Mark all files as reviewed"},
+			helpRow{":mark-all-unreviewed", "Mark all files as unreviewed"})
+	}
+
+	sections := make([]struct {
+		title string
+		keys  []helpRow
+	}, 0, len(helpSectionOrder))
+	for _, title := range helpSectionOrder {
+		sections = append(sections, struct {
+			title string
+			keys  []helpRow
+		}{title, orderHelpRows(title, rows[title])})
 	}
 
 	// Size the key column to the widest key label (plus a gap) so long command
