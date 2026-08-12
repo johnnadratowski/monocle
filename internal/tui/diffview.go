@@ -1651,12 +1651,29 @@ func (m diffViewModel) renderDiffLine(line diffViewLine, _, contentWidth int, se
 	return renderedGutter + renderedContent
 }
 
+// splitSideChunks breaks one side of a split row into the rows it occupies.
+// An empty side is a single blank row, so the two sides stay aligned.
+func (m diffViewModel) splitSideChunks(content string, empty bool, contentW int) []string {
+	if empty || contentW < 1 {
+		return []string{""}
+	}
+	return wrapContent(content, contentW)
+}
+
 func (m diffViewModel) renderSplitLine(line diffViewLine, selected, inVisual bool) string {
 	halfW := (m.width - 1) / 2 // subtract divider, then halve
 	gutterW := 5               // "NNNN "
 	contentW := halfW - gutterW
 	if contentW < 1 {
 		contentW = 1
+	}
+
+	// Wrapped split rows are built by a separate path: each half wraps on its
+	// own and the halves are zipped back together row by row, so the divider
+	// stays in one column and a long line on one side doesn't drag the other
+	// out of alignment.
+	if m.wrap {
+		return m.renderWrappedSplitLine(line, selected, inVisual, gutterW, contentW)
 	}
 
 	// Prepare left side raw content
@@ -1744,6 +1761,65 @@ func (m diffViewModel) renderSplitLine(line diffViewLine, selected, inVisual boo
 	divStyled := lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(divider)
 
 	return leftStyled + divStyled + rightStyled
+}
+
+// renderWrappedSplitLine draws a split row across as many screen rows as its
+// taller half needs. It must agree with screenLinesFor exactly, or the cursor
+// and the viewport bottom drift apart.
+//
+// Two things the unwrapped path does are dropped here, both following what
+// unified wrap mode already does: horizontal scrolling (meaningless once the
+// text is wrapped) and intra-line change ranges (their offsets are into the
+// unwrapped string, so re-deriving them per chunk would be a second, subtler
+// diff). The line-level added/removed background still shows which side
+// changed.
+func (m diffViewModel) renderWrappedSplitLine(line diffViewLine, selected, inVisual bool, gutterW, contentW int) string {
+	leftChunks := m.splitSideChunks(line.content, line.leftEmpty, contentW)
+	rightChunks := m.splitSideChunks(line.rightContent, line.rightEmpty, contentW)
+	rows := max(len(leftChunks), len(rightChunks))
+
+	blankGutter := strings.Repeat(" ", gutterW)
+	gutterFor := func(num int, empty bool, row int) string {
+		// The number belongs to the logical line, so only its first row carries
+		// one; continuation rows keep the column but stay blank.
+		if row > 0 || empty || num <= 0 {
+			return blankGutter
+		}
+		return fmt.Sprintf("%4d ", num)
+	}
+	chunkAt := func(chunks []string, row int) string {
+		if row < len(chunks) {
+			return chunks[row]
+		}
+		return "" // this side ran out first; pad it so the divider holds
+	}
+
+	sideW := gutterW + contentW
+	divider := lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render("│")
+	dimmed := m.isDimmedComment(line)
+
+	var out []string
+	for row := 0; row < rows; row++ {
+		lc, rc := chunkAt(leftChunks, row), chunkAt(rightChunks, row)
+		lg := gutterFor(line.oldLineNum, line.leftEmpty, row)
+		rg := gutterFor(line.rightLineNum, line.rightEmpty, row)
+
+		if (selected || inVisual) && m.focused {
+			plain := lg + padToWidth(lc, contentW) + "│" + rg + padToWidth(rc, contentW)
+			out = append(out, lipgloss.NewStyle().Reverse(true).Render(plain))
+			continue
+		}
+
+		// Emptiness is a property of the side, not of the row: a side that has
+		// merely run out of chunks keeps its added/removed background, while a
+		// genuinely absent side stays faint filler on every row.
+		left := fitToWidth(m.renderSplitSide(lg, lc, line.kind, line.leftEmpty, nil, gutterW, contentW,
+			line, false, dimmed && line.kind == types.DiffLineContext), sideW)
+		right := fitToWidth(m.renderSplitSide(rg, rc, line.rightKind, line.rightEmpty, nil, gutterW, contentW,
+			line, line.annotated, dimmed), sideW)
+		out = append(out, left+divider+right)
+	}
+	return strings.Join(out, "\n")
 }
 
 func (m diffViewModel) renderSplitSide(gutter, content string, kind types.DiffLineKind, empty bool, changes []changeRange, gutterW, contentW int, line diffViewLine, annotated, dimmed bool) string {
@@ -2248,12 +2324,18 @@ func (m diffViewModel) screenLinesFor(idx int) int {
 	if !m.wrap {
 		return 1
 	}
-	if line.isHunk || line.isSplit {
+	if line.isHunk {
 		return 1
 	}
 	cw := m.contentWidthFor(line)
 	if cw <= 0 {
 		return 1
+	}
+	// A split row is as tall as its taller side: the two halves wrap
+	// independently but share the row, so the shorter one is padded out.
+	if line.isSplit {
+		return max(len(m.splitSideChunks(line.content, line.leftEmpty, cw)),
+			len(m.splitSideChunks(line.rightContent, line.rightEmpty, cw)))
 	}
 	return len(wrapContent(line.content, cw))
 }

@@ -68,6 +68,8 @@ The diff pane's top border shows what you're looking at, how long ago it last ch
 
 Both borders show how much content runs off that edge, on the edge it runs off — `↑ 128 lines · 3 chunks` in the top border, `↓ 940 lines · 12 chunks` in the bottom. A "chunk" is the same unit `[` and `]` jump between, so the count tells you how many more presses there are that way. A missing marker means that end of the file is already on screen. On a narrow pane the age is dropped first, then the scroll markers (which shorten to `↑128 ·3` before disappearing), then the mode badge — so the file name always stays visible.
 
+`w` wraps in split view too. Each half wraps on its own and the halves are zipped back row by row, so the divider stays in one column and a long line on one side never drags the other out of alignment. Wrapping turns off horizontal scrolling and intra-line change highlighting for the wrapped row — the line-level added/removed background still shows which side changed.
+
 ## Comment
 
 | Key | Action |
