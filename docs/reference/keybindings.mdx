@@ -43,7 +43,9 @@ description: "Complete keyboard shortcut reference for monocle."
 | `t` | Cycle diff style: unified → split → file (any pane) |
 | `a` | Toggle full-file diff: whole file with diff coloring vs. changed lines only. While active, the diff pane's top border shows an `[ALL]` badge next to the file name |
 
-The diff pane's top border also shows how long ago the open item last changed, next to its name — for an artifact, when the agent last sent it; for a file, its modification time. Ages read as `now`, `5m`, `3h`, `2d`, `3w`. On a narrow pane the age is dropped first, then the mode badge, so the file name always stays visible.
+The diff pane's top border also shows how long ago the open item last changed, next to its name — for an artifact, when the agent last sent it; for a file, its modification time. Ages read as `now`, `5m`, `3h`, `2d`, `3w`.
+
+Both borders show how much content runs off that edge, on the edge it runs off — `↑ 128 lines · 3 chunks` in the top border, `↓ 940 lines · 12 chunks` in the bottom. A "chunk" is the same unit `[` and `]` jump between, so the count tells you how many more presses there are that way. A missing marker means that end of the file is already on screen. On a narrow pane the age is dropped first, then the scroll markers (which shorten to `↑128 ·3` before disappearing), then the mode badge — so the file name always stays visible.
 | `T` | Cycle layout: auto → side-by-side → stacked |
 | `F` | Toggle focus mode (hides sidebar and enables line wrapping) |
 | `R` | Force reload files |

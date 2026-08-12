@@ -265,6 +265,16 @@ Monocle exposes review operations via **MCP tools** (default for Claude Code, an
 | `I`                    | Connection info (socket path, subscriber count)           |
 | `H`                    | Show all keybindings                                      |
 
+#### What the diff pane's borders tell you
+
+```
+┌─ internal/core/engine_impl.go · 12m [ALL] ────── ↑ 128 lines · 3 chunks ─┐
+│                                                                          │
+└──────────────────────────────────────────────── ↓ 940 lines · 12 chunks ─┘
+```
+
+The top border names what you're looking at, how long ago it last changed (an artifact's send time, a file's mtime), and the active view mode. Both borders show how much content runs off that edge, on the edge it runs off — a "chunk" being the same unit `[` and `]` jump between. No marker means that end is already on screen. On a narrow pane the age drops first, then the scroll markers (shortening to `↑128 ·3` first), then the mode badge, so the file name always survives.
+
 ### Comment editor
 
 The comment editor supports standard emacs-style shortcuts:

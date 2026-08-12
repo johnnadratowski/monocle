@@ -4234,17 +4234,21 @@ func (m appModel) View() tea.View {
 	}
 
 	// diffBox renders the diff into its bordered pane and embeds the current file
-	// path and view mode in the TOP border, so the file stays identifiable with the
-	// sidebar hidden and a non-default mode (whole-file, split, raw) is visible
-	// without hunting for it in the status bar.
-	paneLabel := m.currentPaneLabel()
-	paneMode := m.diffView.modeLabel()
-	paneAge := m.diffView.ageLabel()
+	// path, age and view mode in the TOP border — so the file stays identifiable
+	// with the sidebar hidden and a non-default mode (whole-file, split, raw) is
+	// visible without hunting for it in the status bar — plus how much content
+	// runs off each edge, on the edge it runs off.
+	chrome := paneChrome{
+		label:  m.currentPaneLabel(),
+		mode:   m.diffView.modeLabel(),
+		age:    m.diffView.ageLabel(),
+		extent: m.diffView.scrollExtent(),
+	}
 	paneBorderColor := mainStyle.GetBorderBottomForeground()
 	diffBox := func(outerW, outerH int) string {
-		return withPathHeader(
+		return withPaneChrome(
 			mainStyle.Width(outerW).Height(outerH).Render(m.diffView.View()),
-			paneLabel, paneAge, paneMode, paneBorderColor,
+			chrome, paneBorderColor,
 		)
 	}
 

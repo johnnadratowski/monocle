@@ -2484,6 +2484,47 @@ func (m diffViewModel) isChangeBlockStart(i int) bool {
 	return m.lineHasChange(i) && !m.lineHasChange(i-1)
 }
 
+// scrollExtent describes how much of the document sits outside the viewport,
+// counted both in rendered lines and in change blocks — the same "chunk" unit
+// that [ and ] jump between, so the count answers "how many more presses is
+// there in this direction".
+type scrollExtent struct {
+	linesAbove, linesBelow   int
+	chunksAbove, chunksBelow int
+}
+
+// scrollExtent measures the off-screen content above and below the viewport.
+// Zero in a direction means that end is already on screen, which is what lets
+// the pane borders show nothing at all when the whole file fits.
+func (m diffViewModel) scrollExtent() scrollExtent {
+	var e scrollExtent
+	if len(m.lines) == 0 || m.height <= 0 {
+		return e
+	}
+	last := m.lastVisibleLine()
+	for i := range m.lines {
+		if i >= m.offset && i <= last {
+			continue
+		}
+		// Filtered-out comments occupy no rows, so they aren't scrollable content.
+		if m.isHiddenComment(m.lines[i]) {
+			continue
+		}
+		if i < m.offset {
+			e.linesAbove++
+			if m.isChangeBlockStart(i) {
+				e.chunksAbove++
+			}
+			continue
+		}
+		e.linesBelow++
+		if m.isChangeBlockStart(i) {
+			e.chunksBelow++
+		}
+	}
+	return e
+}
+
 // selectableForChange returns the line the cursor should land on for a change
 // block that starts at i. Block-start lines are often removed lines (not
 // selectable), so it picks the nearest selectable line, preferring forward into

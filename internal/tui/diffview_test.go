@@ -1462,3 +1462,74 @@ func TestCommentFilterCycle(t *testing.T) {
 		t.Error("comment line should occupy a row again when shown")
 	}
 }
+
+func TestScrollExtent(t *testing.T) {
+	// 30 lines with change blocks at 2-3, 12-13 and 25. With height 10 and the
+	// viewport at 10..19, one block sits above and one below.
+	ctx := func(n int) diffViewLine { return diffViewLine{kind: types.DiffLineContext, newLineNum: n} }
+	add := func(n int) diffViewLine { return diffViewLine{kind: types.DiffLineAdded, newLineNum: n} }
+
+	lines := make([]diffViewLine, 30)
+	for i := range lines {
+		lines[i] = ctx(i + 1)
+	}
+	for _, i := range []int{2, 3, 12, 13, 25} {
+		lines[i] = add(i + 1)
+	}
+
+	m := diffViewModel{lines: lines, height: 10, offset: 10, width: 80}
+
+	t.Run("counts lines and change blocks on each side", func(t *testing.T) {
+		e := m.scrollExtent()
+		if e.linesAbove != 10 || e.linesBelow != 10 {
+			t.Errorf("lines above/below = %d/%d, want 10/10", e.linesAbove, e.linesBelow)
+		}
+		// Block at 2 is above; block at 12 starts inside the viewport; 25 is below.
+		if e.chunksAbove != 1 || e.chunksBelow != 1 {
+			t.Errorf("chunks above/below = %d/%d, want 1/1", e.chunksAbove, e.chunksBelow)
+		}
+	})
+
+	t.Run("top of the document reports nothing above", func(t *testing.T) {
+		top := m
+		top.offset = 0
+		e := top.scrollExtent()
+		if e.linesAbove != 0 || e.chunksAbove != 0 {
+			t.Errorf("at the top nothing should be above, got %d lines / %d chunks", e.linesAbove, e.chunksAbove)
+		}
+		if e.linesBelow != 20 {
+			t.Errorf("lines below = %d, want 20", e.linesBelow)
+		}
+	})
+
+	t.Run("a document that fits reports nothing at all", func(t *testing.T) {
+		fits := m
+		fits.offset = 0
+		fits.height = 100
+		if e := fits.scrollExtent(); e != (scrollExtent{}) {
+			t.Errorf("a fully visible document should have no extent, got %+v", e)
+		}
+	})
+
+	t.Run("empty and unmeasured views are safe", func(t *testing.T) {
+		if e := (diffViewModel{}).scrollExtent(); e != (scrollExtent{}) {
+			t.Errorf("empty view should have no extent, got %+v", e)
+		}
+		unsized := m
+		unsized.height = 0
+		if e := unsized.scrollExtent(); e != (scrollExtent{}) {
+			t.Errorf("unmeasured view should have no extent, got %+v", e)
+		}
+	})
+
+	t.Run("filtered-out comment lines are not scrollable content", func(t *testing.T) {
+		// Lines 1 and 2 (above the viewport) are comment-only source lines and the
+		// filter is hiding them, so they occupy no rows and shouldn't be counted.
+		hidden := m
+		hidden.commentFilter = commentsHidden
+		hidden.commentLines = map[int]bool{1: true, 2: true}
+		if e := hidden.scrollExtent(); e.linesAbove != 8 {
+			t.Errorf("hidden comments should not count, lines above = %d, want 8", e.linesAbove)
+		}
+	})
+}
