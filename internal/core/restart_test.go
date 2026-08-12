@@ -1,0 +1,112 @@
+package core
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/josephschmitt/monocle/internal/db"
+	"github.com/josephschmitt/monocle/internal/types"
+)
+
+// TestStagedStateSurvivesRestart exercises what actually happens when the serve
+// process dies and comes back: a real on-disk database, the engine torn down
+// and rebuilt from scratch, and the same "continue the latest session for this
+// repo" resolution that cmd/monocle/serve.go performs at boot.
+//
+// The existing resume tests all share one process and one session manager, so
+// they prove ResumeSession reads the rows — not that a restart reaches it.
+func TestStagedStateSurvivesRestart(t *testing.T) {
+	repo, _ := setupTestRepo(t)
+	dbPath := filepath.Join(t.TempDir(), "monocle.db")
+
+	// Stage some work in the repo so there is a diff to review.
+	if err := os.WriteFile(filepath.Join(repo, "hello.go"), []byte("package main\n\nfunc main() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	open := func() (*db.DB, *Engine) {
+		t.Helper()
+		database, err := db.Open(dbPath)
+		if err != nil {
+			t.Fatalf("open db: %v", err)
+		}
+		// DefaultConfig, not a zero Config: review tracking defaults on, and a
+		// zero value makes MarkReviewed a silent no-op.
+		e, err := NewEngine(DefaultConfig(), database, repo, false)
+		if err != nil {
+			t.Fatalf("new engine: %v", err)
+		}
+		return database, e
+	}
+
+	// --- First run: start a session, stage a comment, mark a file reviewed.
+	database, engine := open()
+	session, err := engine.StartSession(SessionOptions{Agent: "claude", RepoRoot: repo})
+	if err != nil {
+		t.Fatalf("start session: %v", err)
+	}
+	files := engine.GetChangedFiles()
+	if len(files) == 0 {
+		t.Fatal("expected the staged file to show as changed")
+	}
+	target := files[0].Path
+
+	comment, err := engine.AddComment(
+		CommentTarget{TargetType: types.TargetFile, TargetRef: target, LineStart: 1, LineEnd: 1},
+		types.CommentIssue, "needs a doc comment")
+	if err != nil {
+		t.Fatalf("add comment: %v", err)
+	}
+	if err := engine.MarkReviewed(target); err != nil {
+		t.Fatalf("mark reviewed: %v", err)
+	}
+	firstID := session.ID
+	database.Close() // the serve process exits
+
+	// --- Second run: exactly what serve.go does at boot.
+	database2, engine2 := open()
+	defer database2.Close()
+
+	sessions, err := engine2.ListSessions(ListSessionsOptions{RepoRoot: repo, Limit: 1})
+	if err != nil {
+		t.Fatalf("list sessions: %v", err)
+	}
+	if len(sessions) == 0 {
+		t.Fatal("no session found for the repo after restart — nothing would be resumed")
+	}
+	if sessions[0].ID != firstID {
+		t.Fatalf("restart picked session %s, want the one just used (%s)", sessions[0].ID, firstID)
+	}
+	if _, err := engine2.ResumeSession(sessions[0].ID); err != nil {
+		t.Fatalf("resume: %v", err)
+	}
+
+	t.Run("the staged comment comes back", func(t *testing.T) {
+		got := engine2.GetSession().Comments
+		if len(got) != 1 {
+			t.Fatalf("expected 1 comment after restart, got %d", len(got))
+		}
+		if got[0].ID != comment.ID || got[0].Body != "needs a doc comment" {
+			t.Errorf("comment did not survive intact: %+v", got[0])
+		}
+	})
+
+	t.Run("the reviewed mark comes back", func(t *testing.T) {
+		for _, f := range engine2.GetChangedFiles() {
+			if f.Path == target {
+				if !f.Reviewed {
+					t.Error("the file lost its reviewed mark across the restart")
+				}
+				return
+			}
+		}
+		t.Errorf("%s missing from the changed files after restart", target)
+	})
+
+	t.Run("the base ref comes back", func(t *testing.T) {
+		if got, want := engine2.GetSession().BaseRef, session.BaseRef; got != want {
+			t.Errorf("base ref = %q, want %q", got, want)
+		}
+	})
+}
