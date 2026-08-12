@@ -285,8 +285,8 @@ func (m helpModel) buildContent() string {
 		{Label(km.SearchNext) + "/" + Label(km.SearchPrev), "Next/previous search match"},
 		{Label(km.PrevMark) + "/" + Label(km.NextMark), "Prev/next comment or annotation"},
 		{Label(km.BlockMatch), "Jump between the current block's start and end (vim %)"},
-		{Label(km.BlockUp), "Out one level, to the enclosing block's opening line"},
-		{Label(km.BlockTop), "Out to the outermost enclosing block (the func/type)"},
+		{Label(km.BlockUp), "Out one level, to the enclosing block's opening line (vim [{)"},
+		{Label(km.BlockTop), "Out to the outermost enclosing block (vim 99[{)"},
 		{Label(km.ScrollHome), "Scroll to column 0 (any pane)"},
 		{Label(km.ScrollFirstChar), "Scroll to first non-space (any pane)"},
 		{Label(km.ScrollEnd), "Scroll to line end (any pane)"},
@@ -294,6 +294,7 @@ func (m helpModel) buildContent() string {
 		{Label(km.PrevFile) + "/" + Label(km.NextFile), "Previous/next diff chunk in the diff pane, else previous/next file"},
 		{Label(km.PrevSection) + "/" + Label(km.NextSection), "Previous/next file (any pane)"},
 		{Label(km.Select), "Focus diff pane / toggle dir"},
+		{"space", "Expand/collapse a comment under the cursor"},
 		{Label(km.FocusSwap) + "/shift+tab", "Switch pane focus (sidebar/diff/doc)"},
 		{Label(km.OpenDocRef), "Open/cycle annotation doc links; closes after the last"},
 		{Label(km.ToggleSidebar), "Toggle sidebar"},
@@ -336,10 +337,14 @@ func (m helpModel) buildContent() string {
 	reviewKeys = append(reviewKeys, []struct{ key, desc string }{
 		{":discard", "Discard all pending comments"},
 		{":cancel-feedback", "Cancel submitted feedback still queued for the agent"},
+		{":submit!", "Submit immediately, no modal (approve, or request changes)"},
+		{":unpause", "Cancel a pending pause request"},
+		{":ref <rev>", "Set the base ref directly (:ref auto follows new commits)"},
 		{":history", "View submission history"},
 		{Label(km.ArtifactVersions) + " / :base-artifact-version", "Base artifact version to diff against"},
 		{":base-ref", "Base ref to diff against (same as " + Label(km.BaseRef) + ")"},
-		{": then Tab", "Complete/cycle command names in command mode"},
+		{Label(km.CommandMode), "Enter command mode"},
+		{Label(km.CommandMode) + " then Tab", "Complete/cycle command names in command mode"},
 	}...)
 
 	sections := []struct {
@@ -380,6 +385,7 @@ func (m helpModel) buildContent() string {
 			{Label(km.Refresh), "Force reload files"},
 			{"I", "Connection info"},
 			{Label(km.Help), "Show this help"},
+			{"esc", "Close the current modal / leave visual or search mode"},
 			{Label(km.Quit), "Quit"},
 		}},
 	}

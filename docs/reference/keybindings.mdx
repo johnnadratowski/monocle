@@ -15,7 +15,7 @@ description: "Complete keyboard shortcut reference for monocle."
 | `J` / `K` | Scroll diff up / down (any pane) |
 | `Ctrl+d` / `Ctrl+u` | Scroll diff half page (any pane) |
 | `g` / `G` | Jump to top / bottom |
-| `h` / `l` | Scroll diff left / right |
+| `h` / `l` or `←` / `→` | Scroll diff left / right |
 | `L` | Scroll diff right (any pane) |
 | `0` | Scroll to column 0 (any pane) |
 | `^` | Scroll to first non-space character (any pane) |
@@ -26,12 +26,16 @@ description: "Complete keyboard shortcut reference for monocle."
 | `n` / `N` | Jump to next / previous search match |
 | `<` / `>` | Jump to previous / next comment or annotation |
 | `%` | Jump between the current block's start and end |
-| `-` | Jump out one level, to the enclosing block's opening line |
-| `_` | Jump out to the outermost enclosing block (the enclosing func, class or type) |
+| `(` | Jump out one level, to the enclosing block's opening line |
+| `)` | Jump out to the outermost enclosing block (the enclosing func, class or type) |
 
-`%`, `-` and `_` navigate code structure. From inside a nested `if`, `-` goes out to the `if`, and `-` again — or `_` in one press — goes out to the enclosing `func`. `%` toggles between a block's opening line and its closing one.
+`%`, `(` and `)` navigate code structure. From inside a nested `if`, `(` goes out to the `if`, and `(` again — or `)` in one press — goes out to the enclosing `func`. `%` toggles between a block's opening line and its closing one.
 
-These are vim's `%`, `[{` and `[[`. Only `%` keeps its real key: `[` and `]` are diff-chunk navigation in monocle, so the two-key `[{` sequences are remapped onto `-` and `_`. Rebind them with the `block_match`, `block_up` and `block_top` [config actions](/configuration/keybindings).
+These are vim's `%`, `[{` and `99[{`. Only `%` keeps its vim key, because `[` and `]` are diff-chunk navigation in monocle. Rebind any of them with the `block_match`, `block_up` and `block_top` [config actions](/configuration/keybindings).
+
+<Note>
+  Vim has no reliable motion to the top of the enclosing function. `[[` looks like one, but `:h [[` defines it as the previous `{` **in the first column** — K&R C layout. In Go, JavaScript, Rust or Python it finds nothing and lands at the top of the file instead. The bracket-aware `[{` is the one that works, and a count climbs several levels: `99[{`. To get the same two motions in vim, add `nnoremap ( [{` and `nnoremap ) 99[{`.
+</Note>
 
 Structure is read from brackets where a language has them and from indentation otherwise, so Python, YAML and markdown artifacts work too. Only the lines the pane has actually rendered are searched — in a compact diff a target inside a skipped region isn't found and the motion does nothing, so press `a` for the whole file when you want to navigate past the hunks.
 
@@ -40,7 +44,7 @@ Structure is read from brackets where a language has them and from indentation o
 | Key | Action |
 |-----|--------|
 | `Enter` | Focus the diff pane / toggle directory open |
-| `Tab` | Switch pane focus |
+| `Tab` / `Shift+Tab` | Switch pane focus forward / backward |
 | `;` | Toggle sidebar visibility |
 | `1` / `2` | Jump directly to pane 1 or 2 |
 | `w` | Toggle line wrapping (any pane) |
@@ -103,12 +107,18 @@ Enter command mode with `:`. Press `Tab` to complete the command name — it fil
 | `:mark-all-unreviewed` | Mark every file in the session as unreviewed |
 | `:discard` | Discard all pending (unsaved) comments |
 | `:cancel-feedback` | Cancel submitted feedback still queued for the agent (e.g. an accidental double-submit) before it's pulled |
+| `:submit!` | Submit immediately without the modal — approves, or requests changes when there are issues or suggestions |
+| `:unpause` | Cancel a pending pause request |
+| `:ref <rev>` | Set the base ref directly; `:ref auto` follows new commits as they land |
 | `:history` | View past review submissions |
 | `:theme [name]` | Switch theme live: `dark`, `light`, `molokai`, `dracula`, `nord` (no arg cycles to the next) |
 | `:base-artifact-version` | Browse artifact version history (same as `B`) |
 | `:base-ref` | Change the base ref (same as `b`) |
 | `I` | Show connection info: socket path and subscriber count |
 | `H` | Show all keybindings |
+| `:` | Enter command mode (`Tab` completes and cycles command names) |
+| `q` | Quit monocle |
+| `Esc` | Close the current modal, or leave visual / search mode |
 
 ## Register wizard
 

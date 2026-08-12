@@ -56,8 +56,8 @@ Each key in the object is an action name; the value is the key string to bind. O
 | `prev_mark` | `<` | Jump to the previous comment or annotation |
 | `next_mark` | `>` | Jump to the next comment or annotation |
 | `block_match` | `%` | Jump between the current block's start and end |
-| `block_up` | `-` | Jump out one level, to the enclosing block's opening line |
-| `block_top` | `_` | Jump out to the outermost enclosing block |
+| `block_up` | `(` | Jump out one level, to the enclosing block's opening line |
+| `block_top` | `)` | Jump out to the outermost enclosing block |
 | `toggle_overlays` | `O` | Hide / show inline comments + annotations |
 | `hide_comments` | `#` | Cycle source-code comment-only lines: dim → hide → show |
 | `open_doc_ref` | `o` | Open / cycle an annotation's doc links in the doc pane (closes after the last) |
@@ -77,7 +77,6 @@ Each key in the object is an action name; the value is the key string to bind. O
 | `pause` | `P` | Pause the agent |
 | `clear_review` | `D` | Clear all comments, plans, added files, and reviewed states |
 | `dismiss_artifact` | `x` | Dismiss the focused artifact, or remove the focused added file, from the sidebar (confirm required) |
-| `dismiss_outdated` | — | Dismiss outdated comments |
 | `toggle_focus_mode` | `F` | Toggle focus mode (hide sidebar, enable wrap) |
 | `open_in_editor` | `ctrl+g` | Open current text in `$VISUAL`/`$EDITOR` |
 | `open_path_under_cursor` | `ctrl+o` | Open the file path referenced on the current diff line in `$VISUAL`/`$EDITOR` |

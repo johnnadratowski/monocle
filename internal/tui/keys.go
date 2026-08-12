@@ -1,5 +1,7 @@
 package tui
 
+import "sort"
+
 // KeyMap defines all configurable keybindings. Each field holds one or more
 // key strings that trigger that action. Users override individual actions
 // via Config.Keybindings (map action name → key string).
@@ -136,8 +138,8 @@ func DefaultKeyMap() KeyMap {
 		NextMark: []string{">"},
 
 		BlockMatch: []string{"%"},
-		BlockUp:    []string{"-"},
-		BlockTop:   []string{"_"},
+		BlockUp:    []string{"("},
+		BlockTop:   []string{")"},
 
 		PrevSection:    []string{"{"},
 		NextSection:    []string{"}"},
@@ -176,164 +178,99 @@ func DefaultKeyMap() KeyMap {
 	}
 }
 
-// actionBindings maps config action names to pointers into the KeyMap.
-// This is used by ApplyOverrides to find which field to update.
-var actionNames = []string{
-	"up", "down", "top", "bottom", "half_up", "half_down",
-	"prev_file", "next_file", "select",
-	"focus_swap", "toggle_sidebar",
-	"scroll_down", "scroll_up", "scroll_left", "scroll_right", "scroll_home", "scroll_first_char", "scroll_end",
-	"wrap", "toggle_diff", "toggle_full_diff", "toggle_overlays", "hide_comments", "open_doc_ref", "yank_line",
-	"search_backward", "search_next", "search_prev", "prev_mark", "next_mark",
-	"block_match", "block_up", "block_top",
-	"tree_mode", "collapse_all", "expand_all", "prev_section", "next_section", "filter_reviewed",
-	"comment", "file_comment", "suggest", "visual", "reviewed",
-	"submit", "pause", "clear_review", "dismiss_artifact", "dismiss_outdated", "toggle_focus_mode",
-	"open_in_editor", "open_in_editor_takeover", "open_path_under_cursor", "open_path_under_cursor_takeover",
-	"open_in_markdown_viewer", "open_terminal", "open_terminal_takeover", "shell_command",
-	"base_ref", "artifact_versions", "cycle_layout", "refresh", "help", "quit", "command_mode",
-	"wizard_advance", "wizard_back", "wizard_toggle",
+// keyActions is the canonical registry of configurable actions: the config
+// name a user writes in `keybindings`, and the KeyMap field it sets. It is the
+// single place an action is registered — ApplyOverrides applies through it,
+// ActionNames derives from it, and the docs are checked against it by
+// TestDocsListEveryKeyAction. A separate hand-maintained list of names drifted
+// out of sync with the code and the docs, which is what this replaces.
+var keyActions = map[string]func(*KeyMap) *[]string{
+	"up":                              func(km *KeyMap) *[]string { return &km.Up },
+	"down":                            func(km *KeyMap) *[]string { return &km.Down },
+	"top":                             func(km *KeyMap) *[]string { return &km.Top },
+	"bottom":                          func(km *KeyMap) *[]string { return &km.Bottom },
+	"half_up":                         func(km *KeyMap) *[]string { return &km.HalfUp },
+	"half_down":                       func(km *KeyMap) *[]string { return &km.HalfDown },
+	"prev_file":                       func(km *KeyMap) *[]string { return &km.PrevFile },
+	"next_file":                       func(km *KeyMap) *[]string { return &km.NextFile },
+	"select":                          func(km *KeyMap) *[]string { return &km.Select },
+	"focus_swap":                      func(km *KeyMap) *[]string { return &km.FocusSwap },
+	"toggle_sidebar":                  func(km *KeyMap) *[]string { return &km.ToggleSidebar },
+	"scroll_down":                     func(km *KeyMap) *[]string { return &km.ScrollDown },
+	"scroll_up":                       func(km *KeyMap) *[]string { return &km.ScrollUp },
+	"scroll_left":                     func(km *KeyMap) *[]string { return &km.ScrollLeft },
+	"scroll_right":                    func(km *KeyMap) *[]string { return &km.ScrollRight },
+	"scroll_home":                     func(km *KeyMap) *[]string { return &km.ScrollHome },
+	"scroll_first_char":               func(km *KeyMap) *[]string { return &km.ScrollFirstChar },
+	"scroll_end":                      func(km *KeyMap) *[]string { return &km.ScrollEnd },
+	"wrap":                            func(km *KeyMap) *[]string { return &km.Wrap },
+	"toggle_diff":                     func(km *KeyMap) *[]string { return &km.ToggleDiff },
+	"toggle_full_diff":                func(km *KeyMap) *[]string { return &km.ToggleFullDiff },
+	"toggle_overlays":                 func(km *KeyMap) *[]string { return &km.ToggleOverlays },
+	"hide_comments":                   func(km *KeyMap) *[]string { return &km.HideComments },
+	"open_doc_ref":                    func(km *KeyMap) *[]string { return &km.OpenDocRef },
+	"yank_line":                       func(km *KeyMap) *[]string { return &km.YankLine },
+	"search_backward":                 func(km *KeyMap) *[]string { return &km.SearchBackward },
+	"search_next":                     func(km *KeyMap) *[]string { return &km.SearchNext },
+	"search_prev":                     func(km *KeyMap) *[]string { return &km.SearchPrev },
+	"prev_mark":                       func(km *KeyMap) *[]string { return &km.PrevMark },
+	"next_mark":                       func(km *KeyMap) *[]string { return &km.NextMark },
+	"block_match":                     func(km *KeyMap) *[]string { return &km.BlockMatch },
+	"block_up":                        func(km *KeyMap) *[]string { return &km.BlockUp },
+	"block_top":                       func(km *KeyMap) *[]string { return &km.BlockTop },
+	"tree_mode":                       func(km *KeyMap) *[]string { return &km.TreeMode },
+	"collapse_all":                    func(km *KeyMap) *[]string { return &km.CollapseAll },
+	"expand_all":                      func(km *KeyMap) *[]string { return &km.ExpandAll },
+	"prev_section":                    func(km *KeyMap) *[]string { return &km.PrevSection },
+	"next_section":                    func(km *KeyMap) *[]string { return &km.NextSection },
+	"filter_reviewed":                 func(km *KeyMap) *[]string { return &km.FilterReviewed },
+	"comment":                         func(km *KeyMap) *[]string { return &km.Comment },
+	"file_comment":                    func(km *KeyMap) *[]string { return &km.FileComment },
+	"suggest":                         func(km *KeyMap) *[]string { return &km.Suggest },
+	"visual":                          func(km *KeyMap) *[]string { return &km.Visual },
+	"reviewed":                        func(km *KeyMap) *[]string { return &km.Reviewed },
+	"submit":                          func(km *KeyMap) *[]string { return &km.Submit },
+	"pause":                           func(km *KeyMap) *[]string { return &km.Pause },
+	"clear_review":                    func(km *KeyMap) *[]string { return &km.ClearReview },
+	"dismiss_artifact":                func(km *KeyMap) *[]string { return &km.DismissArtifact },
+	"toggle_focus_mode":               func(km *KeyMap) *[]string { return &km.ToggleFocusMode },
+	"open_in_editor":                  func(km *KeyMap) *[]string { return &km.OpenInEditor },
+	"open_in_editor_takeover":         func(km *KeyMap) *[]string { return &km.OpenInEditorTakeover },
+	"open_path_under_cursor":          func(km *KeyMap) *[]string { return &km.OpenPathUnderCursor },
+	"open_path_under_cursor_takeover": func(km *KeyMap) *[]string { return &km.OpenPathUnderCursorTakeover },
+	"open_in_markdown_viewer":         func(km *KeyMap) *[]string { return &km.OpenInMarkdownViewer },
+	"open_terminal":                   func(km *KeyMap) *[]string { return &km.OpenTerminal },
+	"open_terminal_takeover":          func(km *KeyMap) *[]string { return &km.OpenTerminalTakeover },
+	"shell_command":                   func(km *KeyMap) *[]string { return &km.ShellCommand },
+	"base_ref":                        func(km *KeyMap) *[]string { return &km.BaseRef },
+	"artifact_versions":               func(km *KeyMap) *[]string { return &km.ArtifactVersions },
+	"cycle_layout":                    func(km *KeyMap) *[]string { return &km.CycleLayout },
+	"refresh":                         func(km *KeyMap) *[]string { return &km.Refresh },
+	"help":                            func(km *KeyMap) *[]string { return &km.Help },
+	"quit":                            func(km *KeyMap) *[]string { return &km.Quit },
+	"command_mode":                    func(km *KeyMap) *[]string { return &km.CommandMode },
+	"wizard_advance":                  func(km *KeyMap) *[]string { return &km.WizardAdvance },
+	"wizard_back":                     func(km *KeyMap) *[]string { return &km.WizardBack },
+	"wizard_toggle":                   func(km *KeyMap) *[]string { return &km.WizardToggle },
+}
+
+// ActionNames returns every configurable action name, sorted.
+func ActionNames() []string {
+	names := make([]string, 0, len(keyActions))
+	for name := range keyActions {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // ApplyOverrides merges user-configured keybinding overrides into the keymap.
-// Each key in overrides is an action name (e.g. "quit"), value is the key string.
+// Each key in overrides is an action name (e.g. "quit"), value is the key
+// string. Unknown action names are ignored.
 func (km KeyMap) ApplyOverrides(overrides map[string]string) KeyMap {
 	for action, key := range overrides {
-		switch action {
-		case "up":
-			km.Up = []string{key}
-		case "down":
-			km.Down = []string{key}
-		case "top":
-			km.Top = []string{key}
-		case "bottom":
-			km.Bottom = []string{key}
-		case "half_up":
-			km.HalfUp = []string{key}
-		case "half_down":
-			km.HalfDown = []string{key}
-		case "prev_file":
-			km.PrevFile = []string{key}
-		case "next_file":
-			km.NextFile = []string{key}
-		case "select":
-			km.Select = []string{key}
-		case "focus_swap":
-			km.FocusSwap = []string{key}
-		case "toggle_sidebar":
-			km.ToggleSidebar = []string{key}
-		case "scroll_down":
-			km.ScrollDown = []string{key}
-		case "scroll_up":
-			km.ScrollUp = []string{key}
-		case "scroll_left":
-			km.ScrollLeft = []string{key}
-		case "scroll_right":
-			km.ScrollRight = []string{key}
-		case "scroll_home":
-			km.ScrollHome = []string{key}
-		case "scroll_first_char":
-			km.ScrollFirstChar = []string{key}
-		case "scroll_end":
-			km.ScrollEnd = []string{key}
-		case "wrap":
-			km.Wrap = []string{key}
-		case "toggle_diff":
-			km.ToggleDiff = []string{key}
-		case "toggle_full_diff":
-			km.ToggleFullDiff = []string{key}
-		case "toggle_overlays":
-			km.ToggleOverlays = []string{key}
-		case "hide_comments":
-			km.HideComments = []string{key}
-		case "open_doc_ref":
-			km.OpenDocRef = []string{key}
-		case "yank_line":
-			km.YankLine = []string{key}
-		case "search_backward":
-			km.SearchBackward = []string{key}
-		case "search_next":
-			km.SearchNext = []string{key}
-		case "search_prev":
-			km.SearchPrev = []string{key}
-		case "prev_mark":
-			km.PrevMark = []string{key}
-		case "next_mark":
-			km.NextMark = []string{key}
-		case "block_match":
-			km.BlockMatch = []string{key}
-		case "block_up":
-			km.BlockUp = []string{key}
-		case "block_top":
-			km.BlockTop = []string{key}
-		case "tree_mode":
-			km.TreeMode = []string{key}
-		case "collapse_all":
-			km.CollapseAll = []string{key}
-		case "expand_all":
-			km.ExpandAll = []string{key}
-		case "prev_section":
-			km.PrevSection = []string{key}
-		case "next_section":
-			km.NextSection = []string{key}
-		case "filter_reviewed":
-			km.FilterReviewed = []string{key}
-		case "comment":
-			km.Comment = []string{key}
-		case "file_comment":
-			km.FileComment = []string{key}
-		case "suggest":
-			km.Suggest = []string{key}
-		case "visual":
-			km.Visual = []string{key}
-		case "reviewed":
-			km.Reviewed = []string{key}
-		case "submit":
-			km.Submit = []string{key}
-		case "pause":
-			km.Pause = []string{key}
-		case "clear_review":
-			km.ClearReview = []string{key}
-		case "dismiss_artifact":
-			km.DismissArtifact = []string{key}
-		case "toggle_focus_mode":
-			km.ToggleFocusMode = []string{key}
-		case "open_in_editor":
-			km.OpenInEditor = []string{key}
-		case "open_in_editor_takeover":
-			km.OpenInEditorTakeover = []string{key}
-		case "open_path_under_cursor":
-			km.OpenPathUnderCursor = []string{key}
-		case "open_path_under_cursor_takeover":
-			km.OpenPathUnderCursorTakeover = []string{key}
-		case "open_in_markdown_viewer":
-			km.OpenInMarkdownViewer = []string{key}
-		case "open_terminal":
-			km.OpenTerminal = []string{key}
-		case "open_terminal_takeover":
-			km.OpenTerminalTakeover = []string{key}
-		case "shell_command":
-			km.ShellCommand = []string{key}
-		case "base_ref":
-			km.BaseRef = []string{key}
-		case "artifact_versions":
-			km.ArtifactVersions = []string{key}
-		case "cycle_layout":
-			km.CycleLayout = []string{key}
-		case "refresh":
-			km.Refresh = []string{key}
-		case "help":
-			km.Help = []string{key}
-		case "quit":
-			km.Quit = []string{key}
-		case "command_mode":
-			km.CommandMode = []string{key}
-		case "wizard_advance":
-			km.WizardAdvance = []string{key}
-		case "wizard_back":
-			km.WizardBack = []string{key}
-		case "wizard_toggle":
-			km.WizardToggle = []string{key}
+		if field, ok := keyActions[action]; ok {
+			*field(&km) = []string{key}
 		}
 	}
 	return km

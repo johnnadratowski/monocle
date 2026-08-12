@@ -206,7 +206,7 @@ Monocle exposes review operations via **MCP tools** (default for Claude Code, an
 | `J`/`K`                | Scroll diff up/down (any pane)                            |
 | `Ctrl+d`/`u`           | Scroll diff half page (any pane)                          |
 | `g`/`G`                | Top/bottom                                                |
-| `h`/`l`                | Scroll diff left/right                                    |
+| `h`/`l` or `←`/`→`     | Scroll diff left/right                                    |
 | `L`                    | Scroll diff right (any pane)                              |
 | `0`                    | Scroll to column 0 (any pane)                             |
 | `^`                    | Scroll to first non-space (any pane)                      |
@@ -214,7 +214,8 @@ Monocle exposes review operations via **MCP tools** (default for Claude Code, an
 | `[`/`]`                | Previous/next diff chunk (in the diff pane); previous/next file otherwise |
 | `{`/`}`                | Previous/next file (any pane)                            |
 | `Enter`                | Focus diff pane / toggle dir                              |
-| `Tab`                  | Switch pane focus                                         |
+| `Space`                | Toggle expand/collapse on a comment under the cursor      |
+| `Tab` / `Shift+Tab`    | Switch pane focus forward / backward                      |
 | `;`                    | Toggle sidebar visibility                                 |
 | `1`/`2`                | Jump to pane                                              |
 | `w`                    | Toggle line wrapping (any pane)                           |
@@ -235,8 +236,8 @@ Monocle exposes review operations via **MCP tools** (default for Claude Code, an
 | `n`/`N`                | Next/previous search match                                |
 | `<`/`>`                | Jump to previous/next comment or annotation               |
 | `%`                    | Jump between the current block's start and end (vim `%`)  |
-| `-`                    | Jump out one level, to the enclosing block's opening line — vim's `[{` |
-| `_`                    | Jump out to the outermost enclosing block (func/class/type) — vim's `[[` |
+| `(`                    | Jump out one level, to the enclosing block's opening line — vim's `[{` |
+| `)`                    | Jump out to the outermost enclosing block (func/class/type) — vim's `99[{` |
 | `t`                    | Cycle diff style (unified/split/file) (any pane)          |
 | `a`                    | Toggle full-file diff (whole file vs. changed lines) — shows `[ALL]` in the pane header |
 | `O`                    | Hide / show inline comments + annotations                 |
@@ -261,12 +262,18 @@ Monocle exposes review operations via **MCP tools** (default for Claude Code, an
 | `:mark-all-unreviewed` | Mark all files as unreviewed                              |
 | `:discard`             | Discard all pending comments                              |
 | `:cancel-feedback`     | Cancel submitted feedback still queued for the agent (e.g. accidental double-submit) |
+| `:submit!`             | Submit immediately, no modal (approve, or request changes if there are issues/suggestions) |
+| `:unpause`             | Cancel a pending pause request                            |
+| `:ref <rev>`           | Set the base ref directly (`:ref auto` follows new commits) |
 | `:history`             | View past review submissions                              |
 | `:theme [name]`        | Switch theme live (dark/light/molokai/dracula/nord; no arg cycles) |
 | `:base-artifact-version` | Base artifact version to diff against                           |
 | `:base-ref`              | Base ref to diff against (same as `b`)                  |
 | `I`                    | Connection info (socket path, subscriber count)           |
 | `H`                    | Show all keybindings                                      |
+| `:`                    | Enter command mode (`Tab` completes/cycles command names) |
+| `q`                    | Quit                                                      |
+| `Esc`                  | Close the current modal / leave visual or search mode     |
 
 #### What the diff pane's borders tell you
 
@@ -436,7 +443,7 @@ Override any action key by mapping the action name to a new key string:
 }
 ```
 
-Available action names: `up`, `down`, `top`, `bottom`, `half_up`, `half_down`, `prev_file`, `next_file`, `select`, `focus_swap`, `toggle_sidebar`, `scroll_down`, `scroll_up`, `scroll_left`, `scroll_right`, `scroll_home`, `scroll_first_char`, `scroll_end`, `wrap`, `toggle_diff`, `toggle_full_diff`, `yank_line`, `search_backward`, `search_next`, `search_prev`, `tree_mode`, `collapse_all`, `expand_all`, `prev_section`, `next_section`, `comment`, `file_comment`, `suggest`, `visual`, `reviewed`, `submit`, `pause`, `dismiss_outdated`, `base_ref`, `cycle_layout`, `refresh`, `help`, `quit`, `command_mode`.
+Available action names: `artifact_versions`, `base_ref`, `block_match`, `block_top`, `block_up`, `bottom`, `clear_review`, `collapse_all`, `command_mode`, `comment`, `cycle_layout`, `dismiss_artifact`, `down`, `expand_all`, `file_comment`, `filter_reviewed`, `focus_swap`, `half_down`, `half_up`, `help`, `hide_comments`, `next_file`, `next_mark`, `next_section`, `open_doc_ref`, `open_in_editor`, `open_in_editor_takeover`, `open_in_markdown_viewer`, `open_path_under_cursor`, `open_path_under_cursor_takeover`, `open_terminal`, `open_terminal_takeover`, `pause`, `prev_file`, `prev_mark`, `prev_section`, `quit`, `refresh`, `reviewed`, `scroll_down`, `scroll_end`, `scroll_first_char`, `scroll_home`, `scroll_left`, `scroll_right`, `scroll_up`, `search_backward`, `search_next`, `search_prev`, `select`, `shell_command`, `submit`, `suggest`, `toggle_diff`, `toggle_focus_mode`, `toggle_full_diff`, `toggle_overlays`, `toggle_sidebar`, `top`, `tree_mode`, `up`, `visual`, `wizard_advance`, `wizard_back`, `wizard_toggle`, `wrap`, `yank_line`.
 
 The help overlay (`H`) dynamically reflects your custom bindings. Modal keys (Enter, Esc, Tab in overlays) are not configurable.
 

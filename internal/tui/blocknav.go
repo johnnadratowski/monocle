@@ -6,15 +6,19 @@ import (
 	"github.com/josephschmitt/monocle/internal/types"
 )
 
-// Code-structure navigation in the diff pane: vim's `%`, `[{` and `[[` motions,
-// approximated without a parser.
+// Code-structure navigation in the diff pane: vim's `%`, `[{` and `99[{`
+// motions, approximated without a parser.
 //
-// Vim's own bindings are `%` (matching pair), `[{` / `]}` (start / end of the
-// enclosing brace block) and `[[` (previous top-level section). Only `%` is
-// reproduced under its real key here: `[` and `]` already navigate diff chunks,
-// so the two-key `[{` sequences are remapped onto `-` (up one level) and `_`
-// (up to the outermost level), keeping the shift-escalates convention `g`/`G`
-// already sets.
+// The vim originals are `%` (matching pair) and `[{` (previous UNMATCHED `{`),
+// with a count on `[{` climbing several levels at once — `99[{` for the
+// outermost. Vim has no reliable motion to the top of the enclosing function:
+// `[[` looks like one but is a section motion, defined as the previous `{` in
+// the FIRST column, so it only lands on a function in K&R C layout and falls
+// through to the top of the file in Go, JS, Rust or Python. Vim's own `:h [[`
+// recommends mapping it to `?{<CR>w99[{` for exactly that reason.
+//
+// Only `%` keeps its vim key here, since `[` and `]` already navigate diff
+// chunks: `[{` becomes `(` and `99[{` becomes `)`.
 //
 // Two mechanisms back these motions. Bracket matching is exact and used first;
 // indentation is the fallback, which is what makes the motions work at all in
@@ -234,15 +238,15 @@ func (m *diffViewModel) JumpToBlockMatch() bool {
 	return m.landOnLine(m.enclosingBlockStart(m.cursor))
 }
 
-// JumpToEnclosingBlock is `-` (vim's `[{`): out one level, to the line that
+// JumpToEnclosingBlock is `(` (vim's `[{`): out one level, to the line that
 // opens the block the cursor sits in.
 func (m *diffViewModel) JumpToEnclosingBlock() bool {
 	return m.landOnLine(m.enclosingBlockStart(m.cursor))
 }
 
-// JumpToTopLevelBlock is `_` (vim's `[[`): out as far as the structure goes, to
-// the outermost line enclosing the cursor — the func or type declaration, from
-// wherever inside it you happen to be.
+// JumpToTopLevelBlock is `)` (vim's `99[{`): out as far as the structure goes,
+// to the outermost line enclosing the cursor — the func or type declaration,
+// from wherever inside it you happen to be.
 func (m *diffViewModel) JumpToTopLevelBlock() bool {
 	target := -1
 	for cur := m.cursor; ; {
