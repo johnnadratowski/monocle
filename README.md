@@ -234,6 +234,9 @@ Monocle exposes review operations via **MCP tools** (default for Claude Code, an
 | `?`                    | Diff: search backward (when diff pane focused)            |
 | `n`/`N`                | Next/previous search match                                |
 | `<`/`>`                | Jump to previous/next comment or annotation               |
+| `%`                    | Jump between the current block's start and end (vim `%`)  |
+| `-`                    | Jump out one level, to the enclosing block's opening line — vim's `[{` |
+| `_`                    | Jump out to the outermost enclosing block (func/class/type) — vim's `[[` |
 | `t`                    | Cycle diff style (unified/split/file) (any pane)          |
 | `a`                    | Toggle full-file diff (whole file vs. changed lines) — shows `[ALL]` in the pane header |
 | `O`                    | Hide / show inline comments + annotations                 |

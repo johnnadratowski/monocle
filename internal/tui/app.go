@@ -1974,6 +1974,26 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	// Code-structure motions. Like vim's `%` / `[{` / `[[`, a motion with
+	// nowhere to go is a silent no-op rather than a bounce to the file's edge.
+	case Matches(key, km.BlockMatch):
+		if m.focus == focusMain {
+			m.diffView.JumpToBlockMatch()
+		}
+		return m, nil
+
+	case Matches(key, km.BlockUp):
+		if m.focus == focusMain {
+			m.diffView.JumpToEnclosingBlock()
+		}
+		return m, nil
+
+	case Matches(key, km.BlockTop):
+		if m.focus == focusMain {
+			m.diffView.JumpToTopLevelBlock()
+		}
+		return m, nil
+
 	case Matches(key, km.FilterReviewed):
 		// When the diff/content pane is focused, `/` starts a forward search.
 		// In the sidebar it keeps cycling the reviewed filter.

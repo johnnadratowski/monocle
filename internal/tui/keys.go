@@ -45,6 +45,11 @@ type KeyMap struct {
 	PrevMark []string
 	NextMark []string
 
+	// Code-structure navigation in the diff (vim %, [{ and [[)
+	BlockMatch []string // block start <-> end
+	BlockUp    []string // out one level
+	BlockTop   []string // out to the outermost enclosing block
+
 	// Sidebar
 	TreeMode       []string
 	CollapseAll    []string
@@ -130,6 +135,10 @@ func DefaultKeyMap() KeyMap {
 		PrevMark: []string{"<"},
 		NextMark: []string{">"},
 
+		BlockMatch: []string{"%"},
+		BlockUp:    []string{"-"},
+		BlockTop:   []string{"_"},
+
 		PrevSection:    []string{"{"},
 		NextSection:    []string{"}"},
 		FilterReviewed: []string{"/"},
@@ -176,6 +185,7 @@ var actionNames = []string{
 	"scroll_down", "scroll_up", "scroll_left", "scroll_right", "scroll_home", "scroll_first_char", "scroll_end",
 	"wrap", "toggle_diff", "toggle_full_diff", "toggle_overlays", "hide_comments", "open_doc_ref", "yank_line",
 	"search_backward", "search_next", "search_prev", "prev_mark", "next_mark",
+	"block_match", "block_up", "block_top",
 	"tree_mode", "collapse_all", "expand_all", "prev_section", "next_section", "filter_reviewed",
 	"comment", "file_comment", "suggest", "visual", "reviewed",
 	"submit", "pause", "clear_review", "dismiss_artifact", "dismiss_outdated", "toggle_focus_mode",
@@ -250,6 +260,12 @@ func (km KeyMap) ApplyOverrides(overrides map[string]string) KeyMap {
 			km.PrevMark = []string{key}
 		case "next_mark":
 			km.NextMark = []string{key}
+		case "block_match":
+			km.BlockMatch = []string{key}
+		case "block_up":
+			km.BlockUp = []string{key}
+		case "block_top":
+			km.BlockTop = []string{key}
 		case "tree_mode":
 			km.TreeMode = []string{key}
 		case "collapse_all":

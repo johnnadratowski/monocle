@@ -25,6 +25,15 @@ description: "Complete keyboard shortcut reference for monocle."
 | `/` / `?` | Search the diff forward / backward (when the diff pane is focused) |
 | `n` / `N` | Jump to next / previous search match |
 | `<` / `>` | Jump to previous / next comment or annotation |
+| `%` | Jump between the current block's start and end |
+| `-` | Jump out one level, to the enclosing block's opening line |
+| `_` | Jump out to the outermost enclosing block (the enclosing func, class or type) |
+
+`%`, `-` and `_` navigate code structure. From inside a nested `if`, `-` goes out to the `if`, and `-` again — or `_` in one press — goes out to the enclosing `func`. `%` toggles between a block's opening line and its closing one.
+
+These are vim's `%`, `[{` and `[[`. Only `%` keeps its real key: `[` and `]` are diff-chunk navigation in monocle, so the two-key `[{` sequences are remapped onto `-` and `_`. Rebind them with the `block_match`, `block_up` and `block_top` [config actions](/configuration/keybindings).
+
+Structure is read from brackets where a language has them and from indentation otherwise, so Python, YAML and markdown artifacts work too. Only the lines the pane has actually rendered are searched — in a compact diff a target inside a skipped region isn't found and the motion does nothing, so press `a` for the whole file when you want to navigate past the hunks.
 
 ## View and layout
 
@@ -42,13 +51,13 @@ description: "Complete keyboard shortcut reference for monocle."
 | `z` / `e` | Collapse all / expand all (tree view) |
 | `t` | Cycle diff style: unified → split → file (any pane) |
 | `a` | Toggle full-file diff: whole file with diff coloring vs. changed lines only. While active, the diff pane's top border shows an `[ALL]` badge next to the file name |
+| `T` | Cycle layout: auto → side-by-side → stacked |
+| `F` | Toggle focus mode (hides sidebar and enables line wrapping) |
+| `R` | Force reload files |
 
 The diff pane's top border also shows how long ago the open item last changed, next to its name — for an artifact, when the agent last sent it; for a file, its modification time. Ages read as `now`, `5m`, `3h`, `2d`, `3w`.
 
 Both borders show how much content runs off that edge, on the edge it runs off — `↑ 128 lines · 3 chunks` in the top border, `↓ 940 lines · 12 chunks` in the bottom. A "chunk" is the same unit `[` and `]` jump between, so the count tells you how many more presses there are that way. A missing marker means that end of the file is already on screen. On a narrow pane the age is dropped first, then the scroll markers (which shorten to `↑128 ·3` before disappearing), then the mode badge — so the file name always stays visible.
-| `T` | Cycle layout: auto → side-by-side → stacked |
-| `F` | Toggle focus mode (hides sidebar and enables line wrapping) |
-| `R` | Force reload files |
 
 ## Commenting
 
