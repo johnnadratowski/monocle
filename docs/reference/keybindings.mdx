@@ -70,6 +70,8 @@ Both borders show how much content runs off that edge, on the edge it runs off �
 
 `w` wraps in split view too. Each half wraps on its own and the halves are zipped back row by row, so the divider stays in one column and a long line on one side never drags the other out of alignment. Wrapping turns off horizontal scrolling and intra-line change highlighting for the wrapped row — the line-level added/removed background still shows which side changed.
 
+When the agent sends groupings (`set_file_groups`), the sidebar switches to grouped view on its own the first time they arrive, so the reading order the agent chose is visible without hunting for it. It happens once per session — after that `f` is yours and a refresh won't drag you back.
+
 ## Comment
 
 | Key | Action |

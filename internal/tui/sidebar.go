@@ -32,7 +32,10 @@ type sidebarModel struct {
 	// category groups (groupedFiles) with a header drawn before the first file of
 	// each group (groupHeaderAt: display index -> header label). The item-index
 	// model is unchanged from flat mode — headers are decorations, not items.
-	groupMode     bool
+	groupMode bool
+	// autoGrouped records that grouped view has already been switched on for
+	// the agent, so the reader's later `f` presses stick. See autoEnableGrouping.
+	autoGrouped   bool
 	groupedFiles  []types.ChangedFile
 	groupHeaderAt map[int][]groupHeaderLine
 	// Grouped order + headers for the additional-files section (agent-attached
@@ -774,7 +777,43 @@ func (m sidebarModel) displayAdditionalFiles() []types.AdditionalFile {
 
 // rebuildGroups recomputes the grouped display order and header positions from
 // the current files. Safe to call when groupMode is false (no-op).
+// hasAgentGroups reports whether the agent has supplied grouping metadata.
+// Workstream and GroupLabel are only ever populated from set_file_groups, so
+// either being set means the agent deliberately arranged this review — unlike
+// Category, which monocle infers for every file on its own.
+func (m sidebarModel) hasAgentGroups() bool {
+	for _, f := range m.files {
+		if f.Workstream != "" || f.GroupLabel != "" {
+			return true
+		}
+	}
+	for _, f := range m.additionalFiles {
+		if f.Workstream != "" || f.GroupLabel != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// autoEnableGrouping switches to the grouped view the first time the agent
+// sends groupings. The agent groups files to give the review a reading order —
+// UI, then backend, then schema — and that ordering is worth nothing if the
+// reader never sees it, so arriving groups reveal themselves rather than
+// waiting to be found behind `f`.
+//
+// It fires at most once per session. After that `f` is the reader's, and a
+// later refresh won't drag them back to grouped when they've chosen otherwise.
+func (m *sidebarModel) autoEnableGrouping() {
+	if m.autoGrouped || !m.hasAgentGroups() {
+		return
+	}
+	m.autoGrouped = true
+	m.groupMode = true
+	m.treeMode = false
+}
+
 func (m *sidebarModel) rebuildGroups() {
+	m.autoEnableGrouping()
 	if !m.groupMode {
 		return
 	}
