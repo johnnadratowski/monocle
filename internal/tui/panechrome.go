@@ -19,6 +19,7 @@ const minHeaderLabel = 16
 type paneChrome struct {
 	label  string // file path or artifact title
 	age    string // "5m", "3h" — "" when unknown
+	status string // "added", "modified", "deleted", "renamed" — "" when not a diffed file
 	mode   string // "ALL", "SPLIT", "v1→v2 DIFF" — "" for the default view
 	extent scrollExtent
 }
@@ -55,13 +56,18 @@ func withPaneChrome(box string, c paneChrome, borderColor color.Color) string {
 	return strings.Join(lines, "\n")
 }
 
-// topBorder renders "┌─ label · age [MODE] ─── ↑ chip ─┐".
+// topBorder renders "┌─ label · age · status ──── [MODE] ↑ chip ─┐".
+//
+// Identity sits left, where the eye starts: what the file is, how old it is,
+// and what kind of change it carries. State sits right: which view mode is on
+// and how much runs off the top. Splitting them that way stops the two kinds of
+// fact from interleaving as the path length changes.
 func topBorder(orig string, w int, c paneChrome, borderColor color.Color) string {
 	if c.label == "" {
 		return orig
 	}
 
-	age, mode := c.age, c.mode
+	age, status, mode := c.age, c.status, c.mode
 	chipFull := scrollChip("↑", c.extent.linesAbove, c.extent.chunksAbove, false)
 	chipShort := scrollChip("↑", c.extent.linesAbove, c.extent.chunksAbove, true)
 	chip := chipFull
@@ -75,13 +81,17 @@ func topBorder(orig string, w int, c paneChrome, borderColor color.Color) string
 	// fit" — otherwise the chips survive by squeezing the path down to an ellipsis
 	// and a couple of characters, which defeats the point of showing it.
 	//
-	// Shed order: age (most static), then the scroll chip down to its short form
-	// and away, then the mode badge. The path is the fact that identifies what
-	// you're reading, so it is the last thing surrendered.
+	// Shed order runs from most re-derivable elsewhere to least: the age (a
+	// staleness check you make once), the status (the sidebar shows it as A/M/D
+	// too), the scroll marker down to its short form and away (you can find out
+	// by scrolling), then the mode badge, which nothing else in the UI reports.
+	// The path identifies what you're reading, so it is surrendered last.
 	shed := func() bool {
 		switch {
 		case age != "":
 			age = ""
+		case status != "":
+			status = ""
 		case chip != "" && chip != chipShort:
 			chip = chipShort
 		case chip != "":
@@ -95,21 +105,23 @@ func topBorder(orig string, w int, c paneChrome, borderColor color.Color) string
 	}
 
 	var maxLabel int
-	var ageChip, badge string
+	var ageChip, statusChip, badge string
 	for {
-		ageChip, badge = "", ""
+		ageChip, statusChip, badge = "", "", ""
 		if age != "" {
 			ageChip = "· " + age
+		}
+		if status != "" {
+			statusChip = "· " + status
 		}
 		if mode != "" {
 			badge = "[" + mode + "]"
 		}
 		maxLabel = w - 6
-		if ageChip != "" {
-			maxLabel -= 1 + lipgloss.Width(ageChip)
-		}
-		if badge != "" {
-			maxLabel -= 1 + lipgloss.Width(badge)
+		for _, seg := range []string{ageChip, statusChip, badge} {
+			if seg != "" {
+				maxLabel -= 1 + lipgloss.Width(seg)
+			}
 		}
 		if chip != "" {
 			maxLabel -= 3 + lipgloss.Width(chip)
@@ -125,36 +137,52 @@ func topBorder(orig string, w int, c paneChrome, borderColor color.Color) string
 		return orig
 	}
 
-	lbl := truncateLabelLeft(c.label, maxLabel)
-
 	borderStyle := lipgloss.NewStyle().Foreground(borderColor)
 
+	// Left: what you are looking at.
+	lbl := truncateLabelLeft(c.label, maxLabel)
 	used := lipgloss.Width(lbl)
-	rendered := pathChipStyle().Render(lbl)
+	left := pathChipStyle().Render(lbl)
 	if ageChip != "" {
 		used += 1 + lipgloss.Width(ageChip)
-		rendered += " " + ageChipStyle().Render(ageChip)
+		left += " " + ageChipStyle().Render(ageChip)
 	}
-	if badge != "" {
-		used += 1 + lipgloss.Width(badge)
-		rendered += " " + modeChipStyle().Render(badge)
+	if statusChip != "" {
+		used += 1 + lipgloss.Width(statusChip)
+		left += " " + statusChipStyle(c.status).Render(statusChip)
 	}
 
-	if chip == "" {
+	// Right: what state it is in.
+	var right string
+	rightW := 0
+	if badge != "" {
+		right = modeChipStyle().Render(badge)
+		rightW = lipgloss.Width(badge)
+	}
+	if chip != "" {
+		if right != "" {
+			right += " "
+			rightW++
+		}
+		right += scrollChipStyle().Render(chip)
+		rightW += lipgloss.Width(chip)
+	}
+
+	if right == "" {
 		fill := w - 5 - used
 		if fill < 1 {
 			fill = 1
 		}
-		return borderStyle.Render("┌─ ") + rendered +
+		return borderStyle.Render("┌─ ") + left +
 			borderStyle.Render(" "+strings.Repeat("─", fill)+"┐")
 	}
-	fill := w - 8 - used - lipgloss.Width(chip)
+	fill := w - 8 - used - rightW
 	if fill < 1 {
 		fill = 1
 	}
-	return borderStyle.Render("┌─ ") + rendered +
+	return borderStyle.Render("┌─ ") + left +
 		borderStyle.Render(" "+strings.Repeat("─", fill)+" ") +
-		scrollChipStyle().Render(chip) +
+		right +
 		borderStyle.Render(" ─┐")
 }
 
@@ -200,6 +228,23 @@ func scrollChip(arrow string, lines, chunks int, short bool) string {
 		s += fmt.Sprintf(" · %d chunk%s", chunks, plural(chunks))
 	}
 	return s
+}
+
+// statusChipStyle colours the status word the same as the sidebar's A/M/D/R
+// letter, so the two places a file's change kind appears never disagree.
+func statusChipStyle(status string) lipgloss.Style {
+	color := "7"
+	switch status {
+	case "added":
+		color = "#2ea043"
+	case "modified":
+		color = "#d29922"
+	case "deleted":
+		color = "#f85149"
+	case "renamed":
+		color = "#a371f7"
+	}
+	return lipgloss.NewStyle().Foreground(lipgloss.Color(color))
 }
 
 func pathChipStyle() lipgloss.Style { return lipgloss.NewStyle().Foreground(lipgloss.Color("7")) }

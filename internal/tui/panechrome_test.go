@@ -353,3 +353,89 @@ func TestWithPaneChrome_ScrollMarkers(t *testing.T) {
 		}
 	})
 }
+
+func TestWithPaneChrome_StatusAndSides(t *testing.T) {
+	box := makeBox(92)
+	first := func(out string) string { return stripANSISeq(strings.Split(out, "\n")[0]) }
+	full := paneChrome{
+		label: "internal/core/engine_impl.go", age: "12m", status: "modified", mode: "ALL",
+		extent: scrollExtent{linesAbove: 128, chunksAbove: 3},
+	}
+
+	t.Run("identity is left, state is right", func(t *testing.T) {
+		got := first(withPaneChrome(box, full, lipgloss.Color("8")))
+		iPath := strings.Index(got, "engine_impl.go")
+		iAge := strings.Index(got, "· 12m")
+		iStatus := strings.Index(got, "· modified")
+		iMode := strings.Index(got, "[ALL]")
+		iScroll := strings.Index(got, "↑")
+		for name, idx := range map[string]int{"path": iPath, "age": iAge, "status": iStatus, "mode": iMode, "scroll": iScroll} {
+			if idx < 0 {
+				t.Fatalf("%s missing from header: %q", name, got)
+			}
+		}
+		if !(iPath < iAge && iAge < iStatus) {
+			t.Errorf("expected path < age < status on the left, got %q", got)
+		}
+		if !(iStatus < iMode && iMode < iScroll) {
+			t.Errorf("expected mode and scroll right of the identity, got %q", got)
+		}
+		// The mode badge must sit against the right edge, not beside the path.
+		if gap := strings.Index(got, "[ALL]") - strings.Index(got, "· modified"); gap < 10 {
+			t.Errorf("mode should be right-anchored, not adjacent to the label: %q", got)
+		}
+	})
+
+	t.Run("width is preserved with every chip present", func(t *testing.T) {
+		out := strings.Split(withPaneChrome(box, full, lipgloss.Color("8")), "\n")[0]
+		if got, want := lipgloss.Width(out), lipgloss.Width(strings.Split(box, "\n")[0]); got != want {
+			t.Errorf("header width %d != box width %d", got, want)
+		}
+	})
+
+	t.Run("mode alone still right-anchors", func(t *testing.T) {
+		got := first(withPaneChrome(box, paneChrome{label: "a.go", mode: "SPLIT"}, lipgloss.Color("8")))
+		if !strings.HasSuffix(strings.TrimRight(got, "─┐ "), "[SPLIT]") {
+			t.Errorf("expected the badge against the right edge, got %q", got)
+		}
+	})
+
+	t.Run("status is omitted for artifacts", func(t *testing.T) {
+		got := first(withPaneChrome(box, paneChrome{label: "plan: OAuth", age: "now"}, lipgloss.Color("8")))
+		for _, s := range []string{"modified", "added", "deleted"} {
+			if strings.Contains(got, s) {
+				t.Errorf("an artifact has no change kind, got %q", got)
+			}
+		}
+	})
+
+	t.Run("age sheds before status, status before mode", func(t *testing.T) {
+		got := first(withPaneChrome(makeBox(58), full, lipgloss.Color("8")))
+		if strings.Contains(got, "12m") {
+			t.Errorf("age should shed first, got %q", got)
+		}
+		if !strings.Contains(got, "[ALL]") {
+			t.Errorf("mode should outlive the age, got %q", got)
+		}
+		narrower := first(withPaneChrome(makeBox(48), full, lipgloss.Color("8")))
+		if strings.Contains(narrower, "modified") {
+			t.Errorf("status should shed before the mode, got %q", narrower)
+		}
+		if !strings.Contains(narrower, "[ALL]") {
+			t.Errorf("mode should outlive the status, got %q", narrower)
+		}
+	})
+}
+
+func TestStatusChipStyleTracksSidebar(t *testing.T) {
+	// The sidebar's A/M/D/R letters and this word must never disagree about a
+	// file's change kind, so they share the same palette.
+	for status, want := range map[string]string{
+		"added": "#2ea043", "modified": "#d29922", "deleted": "#f85149", "renamed": "#a371f7",
+	} {
+		got := statusChipStyle(status).GetForeground()
+		if got != lipgloss.Color(want) {
+			t.Errorf("%s colour = %v, want %s", status, got, want)
+		}
+	}
+}

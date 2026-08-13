@@ -4294,6 +4294,7 @@ func (m appModel) View() tea.View {
 		label:  m.currentPaneLabel(),
 		mode:   m.diffView.modeLabel(),
 		age:    m.diffView.ageLabel(),
+		status: m.currentFileStatus(),
 		extent: m.diffView.scrollExtent(),
 	}
 	paneBorderColor := mainStyle.GetBorderBottomForeground()
@@ -4607,4 +4608,30 @@ func (m appModel) goToJump(pos jumpPos) (appModel, tea.Cmd) {
 	}
 	m.sidebar.selectPath(pos.path)
 	return m, m.handleSidebarSelect(sidebarSelectMsg{path: pos.path})
+}
+
+// currentFileStatus names the change kind of the file on screen — added,
+// modified, deleted, renamed — so "why is this whole file green" is answered
+// where you are reading rather than by glancing back at the sidebar, which
+// focus mode hides anyway.
+//
+// Empty for artifacts and for added context files: neither is part of the
+// diff, so no change kind applies and inventing one would be a lie.
+func (m appModel) currentFileStatus() string {
+	if m.diffView.isViewingContentItem() || m.diffView.additionalFilePath != "" {
+		return ""
+	}
+	path := m.diffView.path
+	if path == "" {
+		return ""
+	}
+	for _, f := range m.sidebar.files {
+		if f.Path == path {
+			if f.Status == types.FileNone {
+				return ""
+			}
+			return string(f.Status)
+		}
+	}
+	return ""
 }

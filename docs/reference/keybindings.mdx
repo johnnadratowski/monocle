@@ -66,9 +66,19 @@ Structure is read from brackets where a language has them and from indentation o
 | `enter` | Focus the diff pane / toggle a directory open |
 | `tab` / `shift+tab` | Switch pane focus (sidebar/diff/doc) |
 
-The diff pane's top border shows what you're looking at, how long ago it last changed (an artifact's send time, a file's mtime) and the active view mode. Ages read as `now`, `5m`, `3h`, `2d`, `3w`.
+The diff pane's borders carry two kinds of fact, split by side.
 
-Both borders show how much content runs off that edge, on the edge it runs off — `↑ 128 lines · 3 chunks` in the top border, `↓ 940 lines · 12 chunks` in the bottom. A "chunk" is the same unit `[` and `]` jump between, so the count tells you how many more presses there are that way. A missing marker means that end of the file is already on screen. On a narrow pane the age is dropped first, then the scroll markers (which shorten to `↑128 ·3` before disappearing), then the mode badge — so the file name always stays visible.
+**Left — what you are looking at.** The file path or artifact title, then how long ago it last changed (an artifact's send time, a file's mtime) as `now` / `5m` / `3h` / `2d` / `3w`, then its change kind — `added`, `modified`, `deleted`, `renamed` — coloured to match the sidebar's `A`/`M`/`D`/`R` letter. Artifacts and added context files show no change kind, since neither is part of the diff.
+
+**Right — what state it is in.** The view-mode badge (`[ALL]`, `[SPLIT]`, `[v1→v2 DIFF]`), and how much content runs off that edge: `↑ 128 lines · 3 chunks` in the top border, `↓ 940 lines · 12 chunks` in the bottom. A "chunk" is the same unit `[` and `]` jump between, so the count tells you how many more presses there are that way. A missing marker means that end is already on screen.
+
+```
+┌─ internal/core/engine_impl.go · 12m · modified ────── [ALL] ↑ 128 lines · 3 chunks ─┐
+│                                                                                     │
+└─────────────────────────────────────────────────────────── ↓ 940 lines · 12 chunks ─┘
+```
+
+On a narrow pane, chips shed from most re-derivable elsewhere to least: the age first, then the status (the sidebar shows it too), then the scroll marker — shortening to `↑128 ·3` before disappearing — then the mode badge, which nothing else in the UI reports. The file name is surrendered last.
 
 `w` wraps in split view too. Each half wraps on its own and the halves are zipped back row by row, so the divider stays in one column and a long line on one side never drags the other out of alignment. Wrapping turns off horizontal scrolling and intra-line change highlighting for the wrapped row — the line-level added/removed background still shows which side changed.
 
