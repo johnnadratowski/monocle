@@ -1493,8 +1493,8 @@ func (m diffViewModel) renderContentLine(line diffViewLine, _, contentWidth int,
 	gutter := fmt.Sprintf("%-3d ", line.newLineNum)
 	isMd := (m.contentMode || m.style == diffStyleFile) && isMarkdownContent(m.path)
 
-	// Wrap mode
-	if m.wrap {
+	// Wrap mode, or the cursor's own line running off the side.
+	if m.wrap || (selected && m.autoWrapsCursorLine(line, contentWidth)) {
 		return m.renderWrappedLine(gutter, line.content, gutterWidth, contentWidth,
 			nil, nil, selected || inVisual, &line)
 	}
@@ -1574,8 +1574,8 @@ func (m diffViewModel) renderDiffLine(line diffViewLine, _, contentWidth int, se
 		changeBg = m.theme.RemovedChangeBg
 	}
 
-	// Wrap mode: render line as multiple screen lines
-	if m.wrap {
+	// Wrap mode, or the cursor's own line running off the side.
+	if m.wrap || (selected && m.autoWrapsCursorLine(line, contentWidth)) {
 		return m.renderWrappedLine(gutter, line.content, gutterWidth, contentWidth,
 			lineBg, changeBg, selected || inVisual, &line)
 	}
@@ -1672,7 +1672,7 @@ func (m diffViewModel) renderSplitLine(line diffViewLine, selected, inVisual boo
 	// own and the halves are zipped back together row by row, so the divider
 	// stays in one column and a long line on one side doesn't drag the other
 	// out of alignment.
-	if m.wrap {
+	if m.wrap || (selected && m.autoWrapsCursorLine(line, contentW)) {
 		return m.renderWrappedSplitLine(line, selected, inVisual, gutterW, contentW)
 	}
 
@@ -2366,7 +2366,11 @@ func (m diffViewModel) contentWidthFor(line diffViewLine) int {
 	if line.isSplit {
 		return (m.width-1)/2 - 5 // subtract divider, then halve, minus gutter
 	}
-	if m.contentMode {
+	// renderContentLine draws both the artifact view and the raw file view, and
+	// both use a 4-wide gutter. Counting the raw file view against the diff's
+	// 10-wide gutter made screenLinesFor disagree with the renderer, drifting
+	// the cursor from the viewport once a line wrapped.
+	if m.contentMode || m.style == diffStyleFile {
 		return m.width - 4 // gutterWidth=4
 	}
 	return m.width - 10 // gutterWidth=10
@@ -2399,14 +2403,17 @@ func (m diffViewModel) screenLinesFor(idx int) int {
 	if line.isAnnotation {
 		return len(m.annotationBoxRows(line.content))
 	}
-	if !m.wrap {
-		return 1
-	}
 	if line.isHunk {
 		return 1
 	}
 	cw := m.contentWidthFor(line)
 	if cw <= 0 {
+		return 1
+	}
+	// With wrap off, only the cursor's own line expands — and only when it
+	// actually overflows. This must agree exactly with what the renderers do,
+	// which is why both ask the same predicate.
+	if !m.wrap && !(idx == m.cursor && m.autoWrapsCursorLine(line, cw)) {
 		return 1
 	}
 	// A split row is as tall as its taller side: the two halves wrap
@@ -2416,6 +2423,31 @@ func (m diffViewModel) screenLinesFor(idx int) int {
 			len(m.splitSideChunks(line.rightContent, line.rightEmpty, cw)))
 	}
 	return len(wrapContent(line.content, cw))
+}
+
+// autoWrapsCursorLine reports whether the line under the cursor should wrap
+// even with wrap mode off, because it runs past the right edge.
+//
+// Reading a line you cannot see the end of is the one case where horizontal
+// scrolling is pure friction: you already know where you want to look, and `0`
+// / `$` / `h` / `l` are four keys spent getting back. Only the cursor line
+// expands, so the rest of the diff keeps its one-row-per-line shape and the
+// column of line numbers stays scannable.
+//
+// Structural rows are excluded: hunk headers, comment and annotation boxes and
+// the media card either have no overflow or do their own layout.
+func (m diffViewModel) autoWrapsCursorLine(line diffViewLine, contentW int) bool {
+	if m.wrap || contentW <= 0 {
+		return false
+	}
+	if line.isHunk || line.isComment || line.isAnnotation || line.verbatim {
+		return false
+	}
+	if line.isSplit {
+		return lipgloss.Width(line.content) > contentW ||
+			lipgloss.Width(line.rightContent) > contentW
+	}
+	return lipgloss.Width(line.content) > contentW
 }
 
 // applyHOffset slices content at the horizontal offset (visual-width-aware).

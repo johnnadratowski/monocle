@@ -58,6 +58,9 @@ func renderedRows(m diffViewModel) []string {
 func TestSplitWrap(t *testing.T) {
 	t.Run("without wrap a long side is truncated to one row", func(t *testing.T) {
 		m := newSplitModel(t, false)
+		// Park the cursor on the short line: with wrap off the cursor's own row
+		// expands on purpose, so leaving it on line 0 would measure that instead.
+		m.cursor = 1
 		if got := len(renderedRows(m)); got != len(m.lines) {
 			t.Errorf("expected one row per line, got %d rows for %d lines", got, len(m.lines))
 		}
