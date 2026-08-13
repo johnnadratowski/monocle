@@ -1774,8 +1774,18 @@ func (m diffViewModel) renderSplitLine(line diffViewLine, selected, inVisual boo
 // diff). The line-level added/removed background still shows which side
 // changed.
 func (m diffViewModel) renderWrappedSplitLine(line diffViewLine, selected, inVisual bool, gutterW, contentW int) string {
+	// Style each side whole, then split the styled text. Highlighting a wrapped
+	// fragment loses the colouring, since the lexer cannot see that the fragment
+	// begins inside a string, a comment or an identifier.
+	//
+	// The plain text is what screenLinesFor counts, and wrapContent measures
+	// printable width only, so styled and plain break at the same points.
 	leftChunks := m.splitSideChunks(line.content, line.leftEmpty, contentW)
 	rightChunks := m.splitSideChunks(line.rightContent, line.rightEmpty, contentW)
+	leftStyled := m.splitSideChunks(
+		m.styleSplitContent(line.content, line.kind, nil, 0, line), line.leftEmpty, contentW)
+	rightStyled := m.splitSideChunks(
+		m.styleSplitContent(line.rightContent, line.rightKind, nil, 0, line), line.rightEmpty, contentW)
 	rows := max(len(leftChunks), len(rightChunks))
 
 	blankGutter := strings.Repeat(" ", gutterW)
@@ -1813,13 +1823,42 @@ func (m diffViewModel) renderWrappedSplitLine(line diffViewLine, selected, inVis
 		// Emptiness is a property of the side, not of the row: a side that has
 		// merely run out of chunks keeps its added/removed background, while a
 		// genuinely absent side stays faint filler on every row.
-		left := fitToWidth(m.renderSplitSide(lg, lc, line.kind, line.leftEmpty, nil, gutterW, contentW,
-			line, false, dimmed && line.kind == types.DiffLineContext), sideW)
-		right := fitToWidth(m.renderSplitSide(rg, rc, line.rightKind, line.rightEmpty, nil, gutterW, contentW,
-			line, line.annotated, dimmed), sideW)
+		left := fitToWidth(m.splitRow(lg, chunkAt(leftStyled, row), line.kind, line.leftEmpty,
+			gutterW, contentW, line, false, dimmed && line.kind == types.DiffLineContext), sideW)
+		right := fitToWidth(m.splitRow(rg, chunkAt(rightStyled, row), line.rightKind, line.rightEmpty,
+			gutterW, contentW, line, line.annotated, dimmed), sideW)
 		out = append(out, left+divider+right)
 	}
 	return strings.Join(out, "\n")
+}
+
+// splitRow composes one already-styled row of a split side with its gutter.
+// The text arrives styled because the whole side was highlighted before being
+// wrapped; only the background padding is applied here.
+func (m diffViewModel) splitRow(gutter, styled string, kind types.DiffLineKind, empty bool,
+	gutterW, contentW int, line diffViewLine, annotated, dimmed bool) string {
+	if empty {
+		return lipgloss.NewStyle().Faint(true).Render(strings.Repeat(" ", gutterW+contentW))
+	}
+	var lineBg color.Color
+	switch kind {
+	case types.DiffLineAdded:
+		lineBg = m.theme.AddedBg
+	case types.DiffLineRemoved:
+		lineBg = m.theme.RemovedBg
+	}
+	gutterStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	if lineBg != nil {
+		gutterStyle = gutterStyle.Background(lineBg)
+	}
+	if len(gutter) < gutterW {
+		gutter = fmt.Sprintf("%-*s", gutterW, gutter)
+	}
+	renderedGutter := gutterWithRangeBar(gutter, gutterStyle, annotated, lineBg)
+	if dimmed {
+		return renderedGutter + renderDimmedComment(styled, lineBg, contentW)
+	}
+	return renderedGutter + applyBgAndPad(styled, lineBg, contentW)
 }
 
 func (m diffViewModel) renderSplitSide(gutter, content string, kind types.DiffLineKind, empty bool, changes []changeRange, gutterW, contentW int, line diffViewLine, annotated, dimmed bool) string {
@@ -1828,15 +1867,14 @@ func (m diffViewModel) renderSplitSide(gutter, content string, kind types.DiffLi
 		return lipgloss.NewStyle().Faint(true).Render(full)
 	}
 
-	// Determine backgrounds
-	var lineBg, changeBg color.Color
+	// The gutter carries the line's background; styleSplitContent derives the
+	// same backgrounds for the text itself.
+	var lineBg color.Color
 	switch kind {
 	case types.DiffLineAdded:
 		lineBg = m.theme.AddedBg
-		changeBg = m.theme.AddedChangeBg
 	case types.DiffLineRemoved:
 		lineBg = m.theme.RemovedBg
-		changeBg = m.theme.RemovedChangeBg
 	}
 
 	// Render gutter
@@ -1854,28 +1892,43 @@ func (m diffViewModel) renderSplitSide(gutter, content string, kind types.DiffLi
 		return renderedGutter + renderDimmedComment(content, lineBg, contentW)
 	}
 
-	// Render content: markdown styling or syntax highlighting
-	isMd := isMarkdownFile(m.path)
-	var renderedContent string
+	return renderedGutter + m.styleSplitContent(content, kind, changes, contentW, line)
+}
 
-	if isMd && line.mdIsFence {
-		rule := m.mdStyler.theme.MarkdownRule.Render(strings.Repeat("─", min(40, contentW)))
-		renderedContent = applyBgAndPad(rule, lineBg, contentW)
-	} else if isMd && line.mdInCodeBlock && line.mdCodeLang != "" {
-		fakePath := "code." + line.mdCodeLang
-		renderedContent = m.hl.highlightLine(fakePath, content, lineBg, changeBg, nil, contentW)
-	} else if isMd && line.mdInCodeBlock {
-		styled := m.mdStyler.theme.MarkdownCodeBlock.Render(content)
-		renderedContent = applyBgAndPad(styled, lineBg, contentW)
-	} else if isMd {
-		styled := m.mdStyler.StyleLine(content)
-		renderedContent = applyBgAndPad(styled, lineBg, contentW)
-	} else {
-		sc, sbg := m.applySearchHighlight(content, changes, changeBg)
-		renderedContent = m.hl.highlightLine(m.path, content, lineBg, sbg, sc, contentW)
+// styleSplitContent applies markdown styling or syntax highlighting to one
+// side's text, padded to contentW. Split out from renderSplitSide so the
+// wrapped path can style a whole side before breaking it into rows: handing
+// the lexer a wrapped fragment loses the highlighting, because it cannot see
+// that the fragment starts inside a string, comment or identifier.
+//
+// Pass contentW = 0 to skip the padding, which is what the wrapped path wants:
+// it pads each row itself, after the split.
+func (m diffViewModel) styleSplitContent(content string, kind types.DiffLineKind, changes []changeRange, contentW int, line diffViewLine) string {
+	var lineBg, changeBg color.Color
+	switch kind {
+	case types.DiffLineAdded:
+		lineBg = m.theme.AddedBg
+		changeBg = m.theme.AddedChangeBg
+	case types.DiffLineRemoved:
+		lineBg = m.theme.RemovedBg
+		changeBg = m.theme.RemovedChangeBg
 	}
 
-	return renderedGutter + renderedContent
+	isMd := isMarkdownFile(m.path)
+	switch {
+	case isMd && line.mdIsFence:
+		rule := m.mdStyler.theme.MarkdownRule.Render(strings.Repeat("─", min(40, max(contentW, 1))))
+		return applyBgAndPad(rule, lineBg, contentW)
+	case isMd && line.mdInCodeBlock && line.mdCodeLang != "":
+		return m.hl.highlightLine("code."+line.mdCodeLang, content, lineBg, changeBg, nil, contentW)
+	case isMd && line.mdInCodeBlock:
+		return applyBgAndPad(m.mdStyler.theme.MarkdownCodeBlock.Render(content), lineBg, contentW)
+	case isMd:
+		return applyBgAndPad(m.mdStyler.StyleLine(content), lineBg, contentW)
+	default:
+		sc, sbg := m.applySearchHighlight(content, changes, changeBg)
+		return m.hl.highlightLine(m.path, content, lineBg, sbg, sc, contentW)
+	}
 }
 
 // padToWidth pads a string with spaces to reach the target visual width,
@@ -1905,55 +1958,69 @@ func fitToWidth(s string, width int) string {
 func (m diffViewModel) renderWrappedLine(gutter, content string, gutterWidth, contentWidth int,
 	lineBg, changeBg color.Color, highlight bool, mdLine *diffViewLine) string {
 
-	chunks := wrapContent(content, contentWidth)
 	blankGutter := strings.Repeat(" ", gutterWidth)
 	isMd := mdLine != nil && (isMarkdownFile(m.path) || (m.contentMode && isMarkdownContent(m.path)))
 
-	var parts []string
-	for ci, chunk := range chunks {
-		chunkGutter := gutter
-		if ci > 0 {
-			chunkGutter = blankGutter
-		}
-
-		if highlight && m.focused {
-			full := chunkGutter + fmt.Sprintf("%-*s", contentWidth, chunk)
+	// The selected row is reverse-video over plain text, so it needs no styling.
+	if highlight && m.focused {
+		var parts []string
+		for ci, chunk := range wrapContent(content, contentWidth) {
+			g := gutter
+			if ci > 0 {
+				g = blankGutter
+			}
+			full := g + fmt.Sprintf("%-*s", contentWidth, chunk)
 			parts = append(parts, lipgloss.NewStyle().Reverse(true).Render(full))
-			continue
 		}
+		return strings.Join(parts, "\n")
+	}
 
-		// Render gutter
-		gutterStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-		if lineBg != nil {
-			gutterStyle = gutterStyle.Background(lineBg)
-		}
-		if len(chunkGutter) < gutterWidth {
-			chunkGutter = fmt.Sprintf("%-*s", gutterWidth, chunkGutter)
-		}
-		// Annotated lines keep the cyan range rail on every wrapped row.
-		annotated := mdLine != nil && mdLine.annotated
-		renderedGutter := gutterWithRangeBar(chunkGutter, gutterStyle, annotated, lineBg)
+	// Style the WHOLE logical line, then split the styled result into rows.
+	//
+	// Styling each wrapped chunk separately handed the lexer a fragment, which
+	// it cannot tokenise correctly: a chunk may begin inside a string, a comment
+	// or an identifier, and chroma has no way to know. Continuation rows came
+	// out mis-coloured, or plain when the fragment failed to lex at all. Doing
+	// it in this order also guarantees a wrapped line is coloured identically to
+	// the same line unwrapped.
+	//
+	// wrapContent is ANSI-aware and measures printable width only, so the styled
+	// text breaks at exactly the points the plain text does — which is what lets
+	// screenLinesFor count rows off the plain content and still agree.
+	var styled string
+	switch {
+	case isMd && mdLine.mdIsFence:
+		rule := m.mdStyler.theme.MarkdownRule.Render(strings.Repeat("─", min(40, contentWidth)))
+		styled = applyBgAndPad(rule, lineBg, contentWidth)
+	case isMd && mdLine.mdInCodeBlock && mdLine.mdCodeLang != "":
+		styled = m.hl.highlightLine("code."+mdLine.mdCodeLang, content, lineBg, changeBg, nil, 0)
+	case isMd && mdLine.mdInCodeBlock:
+		styled = applyBgAndPad(m.mdStyler.theme.MarkdownCodeBlock.Render(content), lineBg, 0)
+	case isMd:
+		styled = applyBgAndPad(m.mdStyler.StyleLine(content), lineBg, 0)
+	default:
+		sc, sbg := m.applySearchHighlight(content, nil, changeBg)
+		styled = m.hl.highlightLine(m.path, content, lineBg, sbg, sc, 0)
+	}
 
-		// Render content: markdown styling or syntax highlighting
-		var renderedContent string
-		if isMd && mdLine.mdIsFence {
-			rule := m.mdStyler.theme.MarkdownRule.Render(strings.Repeat("─", min(40, contentWidth)))
-			renderedContent = applyBgAndPad(rule, lineBg, contentWidth)
-		} else if isMd && mdLine.mdInCodeBlock && mdLine.mdCodeLang != "" {
-			fakePath := "code." + mdLine.mdCodeLang
-			renderedContent = m.hl.highlightLine(fakePath, chunk, lineBg, changeBg, nil, contentWidth)
-		} else if isMd && mdLine.mdInCodeBlock {
-			styled := m.mdStyler.theme.MarkdownCodeBlock.Render(chunk)
-			renderedContent = applyBgAndPad(styled, lineBg, contentWidth)
-		} else if isMd {
-			styled := m.mdStyler.StyleLine(chunk)
-			renderedContent = applyBgAndPad(styled, lineBg, contentWidth)
-		} else {
-			sc, sbg := m.applySearchHighlight(chunk, nil, changeBg)
-			renderedContent = m.hl.highlightLine(m.path, chunk, lineBg, sbg, sc, contentWidth)
-		}
+	gutterStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	if lineBg != nil {
+		gutterStyle = gutterStyle.Background(lineBg)
+	}
+	// Annotated lines keep the cyan range rail on every wrapped row.
+	annotated := mdLine != nil && mdLine.annotated
 
-		parts = append(parts, renderedGutter+renderedContent)
+	var parts []string
+	for ci, row := range wrapContent(styled, contentWidth) {
+		g := gutter
+		if ci > 0 {
+			g = blankGutter
+		}
+		if len(g) < gutterWidth {
+			g = fmt.Sprintf("%-*s", gutterWidth, g)
+		}
+		parts = append(parts, gutterWithRangeBar(g, gutterStyle, annotated, lineBg)+
+			applyBgAndPad(row, lineBg, contentWidth))
 	}
 	return strings.Join(parts, "\n")
 }
@@ -2402,43 +2469,10 @@ func wrapContent(content string, width int) []string {
 	if width <= 0 {
 		return []string{content}
 	}
-	runes := []rune(content)
-	if len(runes) <= width {
+	if lipgloss.Width(content) <= width {
 		return []string{content}
 	}
-
-	var chunks []string
-	lineStart := 0
-	lastSpace := -1 // index of last space seen on the current line
-
-	for i := 0; i < len(runes); i++ {
-		if runes[i] == ' ' {
-			lastSpace = i
-		}
-
-		lineLen := i - lineStart + 1
-		if lineLen > width {
-			if lastSpace > lineStart {
-				// Break after the last space (space stays at end of current line)
-				chunks = append(chunks, string(runes[lineStart:lastSpace+1]))
-				lineStart = lastSpace + 1
-				lastSpace = -1
-			} else {
-				// No space on this line — force break at width (character fallback)
-				chunks = append(chunks, string(runes[lineStart:lineStart+width]))
-				lineStart = lineStart + width
-				lastSpace = -1
-				i = lineStart - 1 // will be incremented by loop
-			}
-		}
-	}
-
-	// Emit remaining content
-	if lineStart < len(runes) {
-		chunks = append(chunks, string(runes[lineStart:]))
-	}
-
-	return chunks
+	return strings.Split(ansi.Wrap(content, width, ""), "\n")
 }
 
 // ScrollDown scrolls the diff viewport down by one line.

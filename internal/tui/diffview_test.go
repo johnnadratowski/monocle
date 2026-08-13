@@ -96,6 +96,9 @@ func TestIsBinaryContent(t *testing.T) {
 	}
 }
 
+// The break consumes the space at the boundary rather than parking it at the
+// end of the row. Rows are padded to the pane width when drawn, so this is
+// invisible — and it stops a run of spaces from starting the next row with one.
 func TestWrapContent(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -113,7 +116,7 @@ func TestWrapContent(t *testing.T) {
 			name:    "wraps at space boundary",
 			content: "hello world foo",
 			width:   12,
-			want:    []string{"hello world ", "foo"},
+			want:    []string{"hello world", "foo"},
 		},
 		{
 			name:    "long word falls back to char wrap",
@@ -125,7 +128,7 @@ func TestWrapContent(t *testing.T) {
 			name:    "mixed word wrap and char fallback",
 			content: "hi abcdefghijklmno",
 			width:   10,
-			want:    []string{"hi ", "abcdefghij", "klmno"},
+			want:    []string{"hi", "abcdefghij", "klmno"},
 		},
 		{
 			name:    "empty string",
@@ -155,19 +158,19 @@ func TestWrapContent(t *testing.T) {
 			name:    "break at last possible space",
 			content: "aaa bbb ccc",
 			width:   8,
-			want:    []string{"aaa bbb ", "ccc"},
+			want:    []string{"aaa bbb", "ccc"},
 		},
 		{
 			name:    "leading indentation preserved",
 			content: "    return nil",
 			width:   10,
-			want:    []string{"    return ", "nil"},
+			want:    []string{"    return", "nil"},
 		},
 		{
 			name:    "multiple consecutive spaces",
 			content: "a  b  c",
 			width:   4,
-			want:    []string{"a  b ", " c"},
+			want:    []string{"a  b", "c"},
 		},
 		{
 			name:    "single character width",
@@ -179,13 +182,13 @@ func TestWrapContent(t *testing.T) {
 			name:    "space at exact boundary",
 			content: "abcd efgh",
 			width:   5,
-			want:    []string{"abcd ", "efgh"},
+			want:    []string{"abcd", "efgh"},
 		},
 		{
 			name:    "multiple wraps at word boundaries",
 			content: "the quick brown fox jumps",
 			width:   10,
-			want:    []string{"the quick ", "brown fox ", "jumps"},
+			want:    []string{"the quick", "brown fox", "jumps"},
 		},
 	}
 
