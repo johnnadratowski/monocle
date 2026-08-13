@@ -97,9 +97,10 @@ func TestDiffViewModeLabel(t *testing.T) {
 		want string
 	}{
 		{"compact unified diff has no badge", diffViewModel{}, ""},
-		{"full file", diffViewModel{fullFile: true}, "ALL"},
+		{"full file names its layout", diffViewModel{fullFile: true}, "ALL · UNIFIED"},
 		{"split", diffViewModel{style: diffStyleSplit}, "SPLIT"},
 		{"full file and split combine", diffViewModel{fullFile: true, style: diffStyleSplit}, "ALL · SPLIT"},
+		{"the all-defaults view stays badge-free", diffViewModel{}, ""},
 		{"raw file view", diffViewModel{style: diffStyleFile}, "FILE"},
 		{"artifact raw text has no badge", diffViewModel{contentID: "a", contentMode: true}, ""},
 		{"artifact diff", diffViewModel{contentID: "a"}, "DIFF"},

@@ -2117,15 +2117,26 @@ func (m diffViewModel) modeLabel() string {
 	if m.style == diffStyleFile {
 		return "FILE"
 	}
-	// Whole-file and split are independent modifiers, so both can apply at once.
-	var parts []string
+	// Two independent dimensions: how much of the file is shown (hunks, or ALL
+	// of it) and how it is laid out (UNIFIED or SPLIT).
+	//
+	// The layout is named whenever ALL is, because "ALL" on its own reads as if
+	// it had replaced the layout rather than sitting alongside it — the question
+	// it leaves open is exactly "unified or split?". With the extent at its
+	// default there is no such ambiguity, so a plain SPLIT stays plain, and the
+	// all-defaults view stays badge-free: a badge appearing still means "you are
+	// not in the default view".
+	layout := "UNIFIED"
+	if m.style == diffStyleSplit {
+		layout = "SPLIT"
+	}
 	if m.fullFile {
-		parts = append(parts, "ALL")
+		return "ALL · " + layout
 	}
 	if m.style == diffStyleSplit {
-		parts = append(parts, "SPLIT")
+		return "SPLIT"
 	}
-	return strings.Join(parts, " · ")
+	return ""
 }
 
 // ToggleFullFile flips the full-file diff modifier and re-fetches the diff with

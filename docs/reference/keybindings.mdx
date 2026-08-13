@@ -70,7 +70,9 @@ The diff pane's borders carry two kinds of fact, split by side.
 
 **Left — what you are looking at.** The file path or artifact title, then how long ago it last changed (an artifact's send time, a file's mtime) as `now` / `5m` / `3h` / `2d` / `3w`, then its change kind — `added`, `modified`, `deleted`, `renamed` — coloured to match the sidebar's `A`/`M`/`D`/`R` letter. Artifacts and added context files show no change kind, since neither is part of the diff.
 
-**Right — what state it is in.** The view-mode badge (`[ALL]`, `[SPLIT]`, `[v1→v2 DIFF]`), and how much content runs off that edge: `↑ 128 lines · 3 chunks` in the top border, `↓ 940 lines · 12 chunks` in the bottom. A "chunk" is the same unit `[` and `]` jump between, so the count tells you how many more presses there are that way. A missing marker means that end is already on screen.
+**Right — what state it is in.** The view-mode badge and how much content runs off that edge: `↑ 128 lines · 3 chunks` in the top border, `↓ 940 lines · 12 chunks` in the bottom. A "chunk" is the same unit `[` and `]` jump between, so the count tells you how many more presses there are that way. A missing marker means that end is already on screen.
+
+The badge names each dimension that is not at its default: how much of the file is shown (hunks, or `ALL` of it) and how it is laid out (`UNIFIED` or `SPLIT`). The layout is spelled out whenever `ALL` is, because `ALL` on its own reads as though it replaced the layout — `[ALL · UNIFIED]`, `[ALL · SPLIT]`. A plain `[SPLIT]` needs no such qualifier, and the all-defaults view carries no badge at all, so a badge appearing always means you are not in the default view.
 
 ```
 ┌─ internal/core/engine_impl.go · 12m · modified ────── [ALL] ↑ 128 lines · 3 chunks ─┐
