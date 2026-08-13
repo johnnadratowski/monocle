@@ -15,20 +15,20 @@ package tui
 
 // jumpPos is a place in the review worth returning to. Content artifacts have
 // no path, so contentID distinguishes them from files.
+//
+// It carries the view the position was recorded in, because a line number only
+// means something inside a particular view. A line recorded in whole-file mode
+// often does not exist in the compact diff — it is an unchanged line the hunks
+// omit — so returning to it without also returning to the view lands nowhere
+// and reads as "ctrl+o is broken".
 type jumpPos struct {
 	path      string // repo-relative file path ("" for an artifact)
 	contentID string // artifact id ("" for a file)
 	line      int    // 1-based new-file line number, 0 when unknown
+	fullFile  bool   // whole-file diff was on
 }
 
 func (p jumpPos) empty() bool { return p.path == "" && p.contentID == "" }
-
-// sameTarget reports whether two positions are the same file or artifact,
-// ignoring the line. Used to collapse repeated jumps within one file into a
-// single entry rather than letting a run of `[` presses fill the list.
-func (p jumpPos) sameTarget(q jumpPos) bool {
-	return p.path == q.path && p.contentID == q.contentID
-}
 
 // maxJumpList bounds the history. Deep enough to cover a review's worth of
 // wandering, shallow enough that ctrl+o never becomes an archaeology dig.
@@ -54,22 +54,34 @@ type jumpList struct {
 // A new jump truncates the forward history, the same as vim and as every
 // undo/redo stack: once you branch, the abandoned future is gone rather than
 // silently reachable from a place it never followed.
+//
+// Duplicates are removed by EXACT position, which is vim's rule. An earlier
+// version collapsed every entry for the same file into one, which quietly made
+// ctrl+o a single-step operation: three `]` presses inside a file left one
+// entry, so the first ctrl+o worked and the rest had nowhere to go.
 func (j *jumpList) push(from jumpPos) {
 	if from.empty() {
 		return
 	}
-	// Walking within one file is not a jump worth recording twice; keep the
-	// most recent line so ctrl+o returns to where you actually left off.
-	if n := len(j.entries); n > 0 && j.entries[n-1].sameTarget(from) {
-		j.entries[n-1] = from
-		j.idx = len(j.entries)
-		return
+	j.entries = j.entries[:min(j.idx, len(j.entries))]
+	for i, e := range j.entries {
+		if e.samePlace(from) {
+			j.entries = append(j.entries[:i], j.entries[i+1:]...)
+			break
+		}
 	}
-	j.entries = append(j.entries[:min(j.idx, len(j.entries))], from)
+	j.entries = append(j.entries, from)
 	if len(j.entries) > maxJumpList {
 		j.entries = j.entries[len(j.entries)-maxJumpList:]
 	}
 	j.idx = len(j.entries)
+}
+
+// samePlace compares where a position is, ignoring the view it was seen in, so
+// revisiting a line in a different mode moves the existing entry rather than
+// adding a near-duplicate one line apart.
+func (p jumpPos) samePlace(q jumpPos) bool {
+	return p.path == q.path && p.contentID == q.contentID && p.line == q.line
 }
 
 // back returns the previous position, or false at the oldest entry. The
@@ -80,8 +92,12 @@ func (j *jumpList) back(current jumpPos) (jumpPos, bool) {
 	}
 	if j.idx == len(j.entries) && !current.empty() {
 		// First step back from the present: park the present on the forward
-		// side so ctrl+i can undo the whole excursion.
-		j.entries = append(j.entries, current)
+		// side so ctrl+i can undo the whole excursion. Skip it when the present
+		// is already the newest entry, which would otherwise make the first
+		// ctrl+i a no-op that appears to do nothing.
+		if n := len(j.entries); n == 0 || !j.entries[n-1].samePlace(current) {
+			j.entries = append(j.entries, current)
+		}
 	}
 	j.idx--
 	return j.entries[j.idx], true

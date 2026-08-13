@@ -4581,8 +4581,11 @@ func (m appModel) currentJumpPos() jumpPos {
 	if m.diffView.path == "" {
 		return jumpPos{}
 	}
-	line := m.diffView.lineNumAt(m.diffView.cursor)
-	return jumpPos{path: m.diffView.path, line: line}
+	return jumpPos{
+		path:     m.diffView.path,
+		line:     m.diffView.lineNumAt(m.diffView.cursor),
+		fullFile: m.diffView.fullFile,
+	}
 }
 
 // recordJump remembers the position being left, so ctrl+o can return to it.
@@ -4596,18 +4599,30 @@ func (m *appModel) recordJump() {
 // because the diff may have been recomputed since and that line may no longer
 // exist.
 func (m appModel) goToJump(pos jumpPos) (appModel, tea.Cmd) {
-	m.pendingJumpLine = pos.line
 	if pos.contentID != "" {
+		m.pendingJumpLine = pos.line
 		return m, m.handleSidebarSelect(sidebarSelectMsg{isContent: true, contentID: pos.contentID})
 	}
-	if pos.path == m.diffView.path {
-		// Already in the right file: just move the cursor.
-		m.diffView.GoToLine(pos.line)
-		m.pendingJumpLine = 0
-		return m, nil
-	}
+
 	m.sidebar.selectPath(pos.path)
-	return m, m.handleSidebarSelect(sidebarSelectMsg{path: pos.path})
+
+	// A line number only means something inside the view it was recorded in, so
+	// restore that view and let the reload land on the line. requestFileDiffMsg
+	// already carries both, which is the same path `a` uses to keep your place
+	// across a whole-file toggle.
+	if pos.fullFile != m.diffView.fullFile || pos.path != m.diffView.path {
+		m.diffView.fullFile = pos.fullFile
+		path, full, line := pos.path, pos.fullFile, pos.line
+		m.pendingJumpLine = line
+		return m, func() tea.Msg {
+			return requestFileDiffMsg{path: path, full: full, anchorLine: line}
+		}
+	}
+
+	// Same file, same view: nothing to reload, just move.
+	m.diffView.GoToLine(pos.line)
+	m.pendingJumpLine = 0
+	return m, nil
 }
 
 // currentFileStatus names the change kind of the file on screen — added,

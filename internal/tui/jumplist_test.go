@@ -54,16 +54,45 @@ func TestJumpList(t *testing.T) {
 		}
 	})
 
-	t.Run("repeat jumps in one file collapse to the latest line", func(t *testing.T) {
+	// The reported bug: collapsing every entry for a file into one quietly made
+	// ctrl+o single-step, so three `]` presses inside a file left one entry and
+	// only the first press could be undone.
+	t.Run("each jump within a file is individually reachable", func(t *testing.T) {
 		var j jumpList
 		j.push(jumpPos{path: "a.go", line: 1})
 		j.push(jumpPos{path: "a.go", line: 5})
 		j.push(jumpPos{path: "a.go", line: 9})
-		if len(j.entries) != 1 {
-			t.Fatalf("expected one entry per file, got %d: %v", len(j.entries), j.entries)
+		want := []int{9, 5, 1}
+		for i, wantLine := range want {
+			got, ok := j.back(jumpPos{path: "a.go", line: 40})
+			if !ok {
+				t.Fatalf("step %d: ran out of history after %d of %d steps", i, i, len(want))
+			}
+			if got.line != wantLine {
+				t.Errorf("step %d: line = %d, want %d", i, got.line, wantLine)
+			}
 		}
-		if got, _ := j.back(b); got.line != 9 {
-			t.Errorf("should return to the line actually left (9), got %d", got.line)
+	})
+
+	t.Run("revisiting a line moves it rather than duplicating it", func(t *testing.T) {
+		var j jumpList
+		j.push(jumpPos{path: "a.go", line: 1})
+		j.push(jumpPos{path: "b.go", line: 2})
+		j.push(jumpPos{path: "a.go", line: 1})
+		if len(j.entries) != 2 {
+			t.Fatalf("expected the repeat to move, not duplicate: %v", j.entries)
+		}
+		if got, _ := j.back(c); got.path != "a.go" {
+			t.Errorf("the most recent departure should be a.go, got %v", got)
+		}
+	})
+
+	t.Run("the view is carried with the position", func(t *testing.T) {
+		var j jumpList
+		j.push(jumpPos{path: "a.go", line: 12, fullFile: true})
+		got, ok := j.back(jumpPos{path: "b.go", line: 1})
+		if !ok || !got.fullFile {
+			t.Errorf("whole-file mode should travel with the position, got %+v", got)
 		}
 	})
 
