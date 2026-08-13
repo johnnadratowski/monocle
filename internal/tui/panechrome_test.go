@@ -60,11 +60,11 @@ func TestWithPaneChrome(t *testing.T) {
 		}
 	})
 
-	t.Run("long path is left-truncated keeping the filename", func(t *testing.T) {
+	t.Run("long path is truncated in the middle keeping both ends", func(t *testing.T) {
 		out := withPaneChrome(box, paneChrome{label: "very/long/path/to/some/deep/nested/file.go"}, lipgloss.Color("8"))
 		got := first(out)
-		if !strings.Contains(got, "file.go") || !strings.Contains(got, "…") {
-			t.Errorf("expected left-truncated path keeping the filename, got %q", got)
+		if !strings.Contains(got, "very/") || !strings.Contains(got, "file.go") || !strings.Contains(got, "…") {
+			t.Errorf("expected head and tail to survive with an ellipsis between, got %q", got)
 		}
 		if w := lipgloss.Width(firstRaw(out)); w != boxW {
 			t.Errorf("truncated header width %d != box width %d", w, boxW)
@@ -79,8 +79,10 @@ func TestWithPaneChrome(t *testing.T) {
 		if strings.Contains(got, "SPLIT") {
 			t.Errorf("badge should be dropped when it cannot fit, got %q", got)
 		}
-		if !strings.Contains(got, "file.go") {
-			t.Errorf("path should survive, got %q", got)
+		// Middle truncation: both ends of the name survive, so the label still
+		// says what kind of file it is and roughly where it lives.
+		if !strings.Contains(got, "…") || !strings.Contains(got, "some") || !strings.Contains(got, "file.go") {
+			t.Errorf("expected both ends of the path to survive, got %q", got)
 		}
 		if w := lipgloss.Width(firstRaw(out)); w != narrowW {
 			t.Errorf("narrow header width %d != box width %d", w, narrowW)
@@ -334,8 +336,8 @@ func TestWithPaneChrome_ScrollMarkers(t *testing.T) {
 			extent: scrollExtent{linesAbove: 128, chunksAbove: 3},
 		}, lipgloss.Color("8"))
 		got := line(out, 0)
-		if !strings.Contains(got, "diffview.go") {
-			t.Errorf("path should be the last thing surrendered, got %q", got)
+		if !strings.Contains(got, "…") || !strings.Contains(got, "intern") || !strings.Contains(got, ".go") {
+			t.Errorf("path should be the last thing surrendered, and keep both ends: %q", got)
 		}
 		if w := lipgloss.Width(rawLine(out, 0)); w != lipgloss.Width(strings.Split(narrow, "\n")[0]) {
 			t.Errorf("narrow header width drifted: %q", got)

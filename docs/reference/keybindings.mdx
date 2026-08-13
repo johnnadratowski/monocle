@@ -78,7 +78,7 @@ The diff pane's borders carry two kinds of fact, split by side.
 └─────────────────────────────────────────────────────────── ↓ 940 lines · 12 chunks ─┘
 ```
 
-On a narrow pane, chips shed from most re-derivable elsewhere to least: the age first, then the status (the sidebar shows it too), then the scroll marker — shortening to `↑128 ·3` before disappearing — then the mode badge, which nothing else in the UI reports. The file name is surrendered last.
+On a narrow pane, chips shed from most re-derivable elsewhere to least: the age first, then the status (the sidebar shows it too), then the scroll marker — shortening to `↑128 ·3` before disappearing — then the mode badge, which nothing else in the UI reports. The file name is surrendered last, and when it has to be shortened it keeps both ends — `internal/…engine_impl.go`, `pseudocode: … in the swap path` — rather than only the tail, since an artifact's subject is at the front. The cut snaps to a path separator where one is near, so a filename stays whole.
 
 `w` wraps in split view too. Each half wraps on its own and the halves are zipped back row by row, so the divider stays in one column and a long line on one side never drags the other out of alignment. Wrapping turns off horizontal scrolling and intra-line change highlighting for the wrapped row — the line-level added/removed background still shows which side changed.
 

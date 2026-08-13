@@ -140,7 +140,7 @@ func topBorder(orig string, w int, c paneChrome, borderColor color.Color) string
 	borderStyle := lipgloss.NewStyle().Foreground(borderColor)
 
 	// Left: what you are looking at.
-	lbl := truncateLabelLeft(c.label, maxLabel)
+	lbl := truncateMiddle(c.label, maxLabel)
 	used := lipgloss.Width(lbl)
 	left := pathChipStyle().Render(lbl)
 	if ageChip != "" {
@@ -257,17 +257,4 @@ func scrollChipStyle() lipgloss.Style { return lipgloss.NewStyle().Foreground(li
 // reads as the same kind of information after the move.
 func modeChipStyle() lipgloss.Style {
 	return lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Bold(true)
-}
-
-// truncateLabelLeft keeps the tail of s (the filename is most identifying),
-// prefixing "…" when it doesn't fit in max cells.
-func truncateLabelLeft(s string, max int) string {
-	r := []rune(s)
-	if len(r) <= max {
-		return s
-	}
-	if max <= 1 {
-		return string(r[len(r)-max:])
-	}
-	return "…" + string(r[len(r)-(max-1):])
 }
