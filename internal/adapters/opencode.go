@@ -12,8 +12,8 @@ type OpenCodeAdapter struct {
 	Mode IntegrationMode
 }
 
-func (a *OpenCodeAdapter) Name() string             { return "opencode" }
-func (a *OpenCodeAdapter) Label() string            { return "OpenCode" }
+func (a *OpenCodeAdapter) Name() string              { return "opencode" }
+func (a *OpenCodeAdapter) Label() string             { return "OpenCode" }
 func (a *OpenCodeAdapter) SetMode(m IntegrationMode) { a.Mode = m }
 
 func (a *OpenCodeAdapter) effectiveMode() IntegrationMode {

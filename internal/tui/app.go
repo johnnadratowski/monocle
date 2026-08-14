@@ -1109,7 +1109,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.prefillBody != "" {
 			m.commentEditor.openSuggest(msg.path, msg.lineStart, msg.lineEnd, msg.targetType, msg.prefillBody, msg.prefillType)
 		} else {
-			m.commentEditor.open(msg.path, msg.lineStart, msg.lineEnd, msg.targetType)
+			m.commentEditor.open(msg.path, msg.lineStart, msg.lineEnd, msg.targetType, msg.prefillType)
 		}
 		m.overlay = overlayComment
 		return m, nil

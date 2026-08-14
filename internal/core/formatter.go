@@ -82,7 +82,7 @@ func (rf *ReviewFormatter) Format(session *types.ReviewSession, comments []types
 	}
 
 	// Count by type
-	issueCt, suggestionCt, noteCt, praiseCt := countByType(comments)
+	issueCt, suggestionCt, questionCt, noteCt, praiseCt := countByType(comments)
 
 	// Group comments by target
 	fileComments := map[string][]types.ReviewComment{}
@@ -242,6 +242,9 @@ func (rf *ReviewFormatter) Format(session *types.ReviewSession, comments []types
 		if suggestionCt > 0 {
 			parts = append(parts, fmt.Sprintf("%d suggestion(s) to consider", suggestionCt))
 		}
+		if questionCt > 0 {
+			parts = append(parts, fmt.Sprintf("%d question(s) to answer", questionCt))
+		}
 		if noteCt > 0 {
 			parts = append(parts, fmt.Sprintf("%d note(s)", noteCt))
 		}
@@ -253,6 +256,10 @@ func (rf *ReviewFormatter) Format(session *types.ReviewSession, comments []types
 
 		if issueCt > 0 {
 			b.WriteString("Please address the issues and re-present your changes.\n")
+		}
+		if questionCt > 0 {
+			b.WriteString("Please answer the questions before continuing; " +
+				"change code only where an answer turns out to require it.\n")
 		}
 	}
 
@@ -309,7 +316,7 @@ func truncateSnippet(snippet string, maxLines int) string {
 	return result
 }
 
-func countByType(comments []types.ReviewComment) (issue, suggestion, note, praise int) {
+func countByType(comments []types.ReviewComment) (issue, suggestion, question, note, praise int) {
 	for _, c := range comments {
 		if c.Resolved {
 			continue
@@ -319,6 +326,8 @@ func countByType(comments []types.ReviewComment) (issue, suggestion, note, prais
 			issue++
 		case types.CommentSuggestion:
 			suggestion++
+		case types.CommentQuestion:
+			question++
 		case types.CommentNote:
 			note++
 		case types.CommentPraise:

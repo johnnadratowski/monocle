@@ -112,7 +112,6 @@ func TestFormatMixedTypes(t *testing.T) {
 	}
 }
 
-
 func TestFormatContentItemWithProvider(t *testing.T) {
 	f := NewReviewFormatter(nil, defaultFormatCfg())
 	f.SetContentItemProvider(func(id string) string {

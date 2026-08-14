@@ -232,7 +232,6 @@ func TestHasPending(t *testing.T) {
 	}
 }
 
-
 // --- Two-phase delivery ---
 
 func submitOne(fq *FeedbackQueue, text string) {

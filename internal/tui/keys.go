@@ -68,6 +68,7 @@ type KeyMap struct {
 	Comment         []string
 	FileComment     []string
 	Suggest         []string
+	Question        []string // add a comment already typed as a question
 	Visual          []string
 	Reviewed        []string
 	Submit          []string
@@ -150,6 +151,7 @@ func DefaultKeyMap() KeyMap {
 		Comment:         []string{"c"},
 		FileComment:     []string{"C"},
 		Suggest:         []string{"s"},
+		Question:        []string{"Q"},
 		Visual:          []string{"v"},
 		Reviewed:        []string{"r"},
 		Submit:          []string{"S"},
@@ -230,6 +232,7 @@ var keyActions = map[string]func(*KeyMap) *[]string{
 	"comment":                 func(km *KeyMap) *[]string { return &km.Comment },
 	"file_comment":            func(km *KeyMap) *[]string { return &km.FileComment },
 	"suggest":                 func(km *KeyMap) *[]string { return &km.Suggest },
+	"question":                func(km *KeyMap) *[]string { return &km.Question },
 	"visual":                  func(km *KeyMap) *[]string { return &km.Visual },
 	"reviewed":                func(km *KeyMap) *[]string { return &km.Reviewed },
 	"submit":                  func(km *KeyMap) *[]string { return &km.Submit },

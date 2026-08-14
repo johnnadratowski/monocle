@@ -1496,6 +1496,8 @@ func (e *Engine) GetReviewSummary() (*types.ReviewSummary, error) {
 			summary.SuggestionCt++
 		case types.CommentNote:
 			summary.NoteCt++
+		case types.CommentQuestion:
+			summary.QuestionCt++
 		case types.CommentPraise:
 			summary.PraiseCt++
 		}
@@ -1600,7 +1602,7 @@ func (e *Engine) Submit(action types.SubmitAction, body string) error {
 
 // buildFeedbackSummary creates a human-readable one-liner for channel notifications.
 func buildFeedbackSummary(action string, comments []types.ReviewComment) string {
-	issues, suggestions, notes, _ := countByType(comments)
+	issues, suggestions, questions, notes, _ := countByType(comments)
 
 	// Build counts portion (skip praise — not actionable)
 	var parts []string
@@ -1623,6 +1625,13 @@ func buildFeedbackSummary(action string, comments []types.ReviewComment) string 
 			parts = append(parts, "1 note")
 		} else {
 			parts = append(parts, fmt.Sprintf("%d notes", notes))
+		}
+	}
+	if questions > 0 {
+		if questions == 1 {
+			parts = append(parts, "1 question")
+		} else {
+			parts = append(parts, fmt.Sprintf("%d questions", questions))
 		}
 	}
 	counts := strings.Join(parts, ", ")

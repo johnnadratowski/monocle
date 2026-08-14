@@ -569,6 +569,14 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 			m.ScrollLeft()
 		case key == "l" || key == "right":
 			m.ScrollRight()
+		case Matches(key, m.keys.Question):
+			if m.mediaMode {
+				break // media artifacts have no line-level targets
+			}
+			if ref, start, end, tt, ok := m.commentTarget(); ok {
+				return m, openTypedCommentCmd(ref, start, end, tt, types.CommentQuestion)
+			}
+
 		case Matches(key, m.keys.Comment):
 			if m.mediaMode {
 				break // media artifacts have no line-level targets
@@ -1291,6 +1299,8 @@ func (m diffViewModel) renderCommentLine(line diffViewLine, selected bool) strin
 			clr = lipgloss.Color("1")
 		case types.CommentSuggestion:
 			clr = lipgloss.Color("3")
+		case types.CommentQuestion:
+			clr = lipgloss.Color("6")
 		case types.CommentNote:
 			clr = lipgloss.Color("4")
 		case types.CommentPraise:
@@ -3320,6 +3330,38 @@ type openCommentMsg struct {
 	targetType  types.TargetType
 	prefillBody string            // pre-filled body text (for suggestions)
 	prefillType types.CommentType // pre-set comment type (zero value = default)
+}
+
+// commentTarget resolves what the cursor is pointing at for a new comment: the
+// visual selection when one is active, otherwise the cursor's own line. Shared
+// by `c` and `Q` so the two can never disagree about what is being commented on.
+func (m diffViewModel) commentTarget() (string, int, int, types.TargetType, bool) {
+	targetType := types.TargetFile
+	targetRef := m.path
+	if m.contentMode {
+		targetType, targetRef = types.TargetContent, m.contentID
+	} else if m.additionalFilePath != "" {
+		targetType, targetRef = types.TargetAdditionalFile, m.additionalFilePath
+	}
+	if m.visualMode {
+		start, end := m.visualRange()
+		return targetRef, start, end, targetType, true
+	}
+	if line := m.currentDiffLine(); line > 0 {
+		return targetRef, line, line, targetType, true
+	}
+	return "", 0, 0, targetType, false
+}
+
+// openTypedCommentCmd opens the editor with the comment type already chosen, so
+// a question does not have to be Tab-cycled to on every use.
+func openTypedCommentCmd(path string, start, end int, targetType types.TargetType, ctype types.CommentType) tea.Cmd {
+	return func() tea.Msg {
+		return openCommentMsg{
+			path: path, lineStart: start, lineEnd: end,
+			targetType: targetType, prefillType: ctype,
+		}
+	}
 }
 
 func openCommentCmd(path string, start, end int, targetType types.TargetType) tea.Cmd {

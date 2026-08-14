@@ -17,9 +17,20 @@ type CommentType string
 const (
 	CommentIssue      CommentType = "issue"
 	CommentSuggestion CommentType = "suggestion"
-	CommentNote       CommentType = "note"
-	CommentPraise     CommentType = "praise"
+	// CommentQuestion is a comment that wants an answer rather than an edit.
+	// Marking one as a note buried it among observations the agent could skip;
+	// marking it as an issue demanded a change that may not be needed.
+	CommentQuestion CommentType = "question"
+	CommentNote     CommentType = "note"
+	CommentPraise   CommentType = "praise"
 )
+
+// WantsResponse reports whether a comment type obliges the agent to come back:
+// an issue or suggestion asks for an edit, a question asks for an answer. Notes
+// and praise ask for nothing.
+func (t CommentType) WantsResponse() bool {
+	return t == CommentIssue || t == CommentSuggestion || t == CommentQuestion
+}
 
 type TargetType string
 
@@ -243,6 +254,7 @@ type ReviewSummary struct {
 	AdditionalFileComments map[string][]ReviewComment // additional file path -> comments
 	IssueCt                int
 	SuggestionCt           int
+	QuestionCt             int
 	NoteCt                 int
 	PraiseCt               int
 }

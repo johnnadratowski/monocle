@@ -12,8 +12,8 @@ type GeminiAdapter struct {
 	Mode IntegrationMode
 }
 
-func (a *GeminiAdapter) Name() string             { return "gemini" }
-func (a *GeminiAdapter) Label() string            { return "Gemini CLI" }
+func (a *GeminiAdapter) Name() string              { return "gemini" }
+func (a *GeminiAdapter) Label() string             { return "Gemini CLI" }
 func (a *GeminiAdapter) SetMode(m IntegrationMode) { a.Mode = m }
 
 func (a *GeminiAdapter) effectiveMode() IntegrationMode {

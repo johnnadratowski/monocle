@@ -13,8 +13,8 @@ type CodexAdapter struct {
 	Mode IntegrationMode
 }
 
-func (a *CodexAdapter) Name() string             { return "codex" }
-func (a *CodexAdapter) Label() string            { return "Codex CLI" }
+func (a *CodexAdapter) Name() string              { return "codex" }
+func (a *CodexAdapter) Label() string             { return "Codex CLI" }
 func (a *CodexAdapter) SetMode(m IntegrationMode) { a.Mode = m }
 
 func (a *CodexAdapter) effectiveMode() IntegrationMode {

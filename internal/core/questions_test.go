@@ -65,3 +65,56 @@ func TestQuestionsAction(t *testing.T) {
 		}
 	})
 }
+
+func TestQuestionCommentType(t *testing.T) {
+	now := time.Now()
+	mixed := []types.ReviewComment{
+		{ID: "q", TargetType: types.TargetFile, TargetRef: "a.go", LineStart: 1, LineEnd: 1,
+			Type: types.CommentQuestion, Body: "why a mutex here?", CreatedAt: now, UpdatedAt: now},
+		{ID: "p", TargetType: types.TargetFile, TargetRef: "a.go", LineStart: 2, LineEnd: 2,
+			Type: types.CommentPraise, Body: "nice", CreatedAt: now, UpdatedAt: now},
+	}
+
+	t.Run("questions are counted separately", func(t *testing.T) {
+		issue, suggestion, question, note, praise := countByType(mixed)
+		if question != 1 {
+			t.Errorf("question count = %d, want 1", question)
+		}
+		if issue+suggestion+note != 0 || praise != 1 {
+			t.Errorf("other counts wrong: issue=%d suggestion=%d note=%d praise=%d",
+				issue, suggestion, note, praise)
+		}
+	})
+
+	t.Run("the summary asks for answers, not changes", func(t *testing.T) {
+		got := NewReviewFormatter(nil, defaultFormatCfg()).
+			Format(&types.ReviewSession{}, mixed, types.ActionQuestions, "").Formatted
+		if !strings.Contains(got, "question(s) to answer") {
+			t.Errorf("expected the question count in the summary:\n%s", got)
+		}
+		if strings.Contains(got, "address the issues") {
+			t.Errorf("a review with no issues must not demand fixes:\n%s", got)
+		}
+	})
+
+	// Notes and praise ask nothing of the agent; the other three do.
+	t.Run("WantsResponse separates the actionable types", func(t *testing.T) {
+		for _, ct := range []types.CommentType{types.CommentIssue, types.CommentSuggestion, types.CommentQuestion} {
+			if !ct.WantsResponse() {
+				t.Errorf("%s should want a response", ct)
+			}
+		}
+		for _, ct := range []types.CommentType{types.CommentNote, types.CommentPraise} {
+			if ct.WantsResponse() {
+				t.Errorf("%s should not want a response", ct)
+			}
+		}
+	})
+
+	t.Run("the notification counts questions", func(t *testing.T) {
+		got := buildFeedbackSummary(string(types.ActionQuestions), mixed)
+		if !strings.Contains(got, "1 question") {
+			t.Errorf("expected the question count, got %q", got)
+		}
+	})
+}

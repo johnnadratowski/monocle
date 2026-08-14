@@ -321,6 +321,7 @@ func (m helpModel) buildContent() string {
 			{Label(km.Comment), "Add a comment at the cursor"},
 			{Label(km.FileComment), "Add a file-level comment"},
 			{Label(km.Suggest), "Suggest an edit at the cursor"},
+			{Label(km.Question), "Ask a question at the cursor (a comment that wants an answer)"},
 			{Label(km.Visual), "Visual select mode (multi-line comments)"},
 			{Label(km.YankLine), "Yank the line / selection to the clipboard"},
 			{"x", "Toggle a comment resolved (on a comment)"},

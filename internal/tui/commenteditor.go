@@ -83,6 +83,8 @@ func (m commentEditorModel) Update(msg tea.Msg) (commentEditorModel, tea.Cmd) {
 			case types.CommentIssue:
 				m.commentType = types.CommentSuggestion
 			case types.CommentSuggestion:
+				m.commentType = types.CommentQuestion
+			case types.CommentQuestion:
 				m.commentType = types.CommentNote
 			case types.CommentNote:
 				m.commentType = types.CommentPraise
@@ -446,13 +448,18 @@ func (m commentEditorModel) View() string {
 	return m.theme.ModalBorder.Width(modalWidth).Render(b.String())
 }
 
-func (m *commentEditorModel) open(path string, lineStart, lineEnd int, targetType types.TargetType) {
+// open starts a new comment. A zero ctype means "the default", which is issue —
+// the type most comments turn out to be.
+func (m *commentEditorModel) open(path string, lineStart, lineEnd int, targetType types.TargetType, ctype types.CommentType) {
 	m.active = true
 	m.path = path
 	m.lineStart = lineStart
 	m.lineEnd = lineEnd
 	m.targetType = targetType
-	m.commentType = types.CommentIssue
+	m.commentType = ctype
+	if m.commentType == "" {
+		m.commentType = types.CommentIssue
+	}
 	m.body = ""
 	m.cursor = 0
 	m.editingID = ""

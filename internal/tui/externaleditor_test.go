@@ -118,7 +118,7 @@ func TestResolveEditor(t *testing.T) {
 
 func TestExternalEditorResultMsg_Comment(t *testing.T) {
 	m := newCommentEditorModel(DefaultTheme())
-	m.open("test.go", 10, 15, types.TargetFile)
+	m.open("test.go", 10, 15, types.TargetFile, "")
 	m.body = "original"
 	m.cursor = 3
 
@@ -144,7 +144,7 @@ func TestExternalEditorResultMsg_Comment(t *testing.T) {
 
 func TestExternalEditorResultMsg_Error(t *testing.T) {
 	m := newCommentEditorModel(DefaultTheme())
-	m.open("test.go", 10, 15, types.TargetFile)
+	m.open("test.go", 10, 15, types.TargetFile, "")
 	m.body = "original"
 	m.cursor = 3
 

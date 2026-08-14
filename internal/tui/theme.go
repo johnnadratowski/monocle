@@ -32,11 +32,12 @@ type Theme struct {
 	SyntaxStyle string
 
 	// Comment styles
-	CommentBorder  lipgloss.Style
-	CommentIssue   lipgloss.Style
-	CommentSuggest lipgloss.Style
-	CommentNote    lipgloss.Style
-	CommentPraise  lipgloss.Style
+	CommentBorder   lipgloss.Style
+	CommentIssue    lipgloss.Style
+	CommentSuggest  lipgloss.Style
+	CommentNote     lipgloss.Style
+	CommentQuestion lipgloss.Style
+	CommentPraise   lipgloss.Style
 
 	// Status
 	StatusBar lipgloss.Style
@@ -70,11 +71,12 @@ func DefaultTheme() Theme {
 		HunkHeader: lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Faint(true),
 		LineNumber: lipgloss.NewStyle().Foreground(lipgloss.Color("8")),
 
-		CommentBorder:  lipgloss.NewStyle().Foreground(lipgloss.Color("3")),
-		CommentIssue:   lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Bold(true),
-		CommentSuggest: lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Bold(true),
-		CommentNote:    lipgloss.NewStyle().Foreground(lipgloss.Color("4")).Bold(true),
-		CommentPraise:  lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true),
+		CommentBorder:   lipgloss.NewStyle().Foreground(lipgloss.Color("3")),
+		CommentIssue:    lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Bold(true),
+		CommentSuggest:  lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Bold(true),
+		CommentNote:     lipgloss.NewStyle().Foreground(lipgloss.Color("4")).Bold(true),
+		CommentQuestion: lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true),
+		CommentPraise:   lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true),
 
 		StatusBar: lipgloss.NewStyle().Background(lipgloss.Color("0")).Foreground(lipgloss.Color("7")),
 
@@ -113,11 +115,12 @@ func LightTheme() Theme {
 		HunkHeader: lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Faint(true),
 		LineNumber: lipgloss.NewStyle().Foreground(lipgloss.Color("7")),
 
-		CommentBorder:  lipgloss.NewStyle().Foreground(lipgloss.Color("3")),
-		CommentIssue:   lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Bold(true),
-		CommentSuggest: lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Bold(true),
-		CommentNote:    lipgloss.NewStyle().Foreground(lipgloss.Color("4")).Bold(true),
-		CommentPraise:  lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true),
+		CommentBorder:   lipgloss.NewStyle().Foreground(lipgloss.Color("3")),
+		CommentIssue:    lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Bold(true),
+		CommentSuggest:  lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Bold(true),
+		CommentNote:     lipgloss.NewStyle().Foreground(lipgloss.Color("4")).Bold(true),
+		CommentQuestion: lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true),
+		CommentPraise:   lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true),
 
 		StatusBar: lipgloss.NewStyle().Background(lipgloss.Color("7")).Foreground(lipgloss.Color("0")),
 
@@ -171,11 +174,12 @@ func MolokaiTheme() Theme {
 		HunkHeader: lipgloss.NewStyle().Foreground(lipgloss.Color(blue)).Faint(true),
 		LineNumber: lipgloss.NewStyle().Foreground(lipgloss.Color(lineNr)),
 
-		CommentBorder:  lipgloss.NewStyle().Foreground(lipgloss.Color(yellow)),
-		CommentIssue:   lipgloss.NewStyle().Foreground(lipgloss.Color(pink)).Bold(true),
-		CommentSuggest: lipgloss.NewStyle().Foreground(lipgloss.Color(yellow)).Bold(true),
-		CommentNote:    lipgloss.NewStyle().Foreground(lipgloss.Color(blue)).Bold(true),
-		CommentPraise:  lipgloss.NewStyle().Foreground(lipgloss.Color(green)).Bold(true),
+		CommentBorder:   lipgloss.NewStyle().Foreground(lipgloss.Color(yellow)),
+		CommentIssue:    lipgloss.NewStyle().Foreground(lipgloss.Color(pink)).Bold(true),
+		CommentSuggest:  lipgloss.NewStyle().Foreground(lipgloss.Color(yellow)).Bold(true),
+		CommentNote:     lipgloss.NewStyle().Foreground(lipgloss.Color(blue)).Bold(true),
+		CommentQuestion: lipgloss.NewStyle().Foreground(lipgloss.Color(orange)).Bold(true),
+		CommentPraise:   lipgloss.NewStyle().Foreground(lipgloss.Color(green)).Bold(true),
 
 		StatusBar: lipgloss.NewStyle().Background(lipgloss.Color(panel)).Foreground(lipgloss.Color(fg)),
 
@@ -227,11 +231,12 @@ func DraculaTheme() Theme {
 		HunkHeader: lipgloss.NewStyle().Foreground(lipgloss.Color(cyan)).Faint(true),
 		LineNumber: lipgloss.NewStyle().Foreground(lipgloss.Color(comment)),
 
-		CommentBorder:  lipgloss.NewStyle().Foreground(lipgloss.Color(yellow)),
-		CommentIssue:   lipgloss.NewStyle().Foreground(lipgloss.Color(red)).Bold(true),
-		CommentSuggest: lipgloss.NewStyle().Foreground(lipgloss.Color(yellow)).Bold(true),
-		CommentNote:    lipgloss.NewStyle().Foreground(lipgloss.Color(cyan)).Bold(true),
-		CommentPraise:  lipgloss.NewStyle().Foreground(lipgloss.Color(green)).Bold(true),
+		CommentBorder:   lipgloss.NewStyle().Foreground(lipgloss.Color(yellow)),
+		CommentIssue:    lipgloss.NewStyle().Foreground(lipgloss.Color(red)).Bold(true),
+		CommentSuggest:  lipgloss.NewStyle().Foreground(lipgloss.Color(yellow)).Bold(true),
+		CommentNote:     lipgloss.NewStyle().Foreground(lipgloss.Color(cyan)).Bold(true),
+		CommentQuestion: lipgloss.NewStyle().Foreground(lipgloss.Color(cyan)).Bold(true),
+		CommentPraise:   lipgloss.NewStyle().Foreground(lipgloss.Color(green)).Bold(true),
 
 		StatusBar: lipgloss.NewStyle().Background(lipgloss.Color(panel)).Foreground(lipgloss.Color(fg)),
 
@@ -283,11 +288,12 @@ func NordTheme() Theme {
 		HunkHeader: lipgloss.NewStyle().Foreground(lipgloss.Color(frost2)).Faint(true),
 		LineNumber: lipgloss.NewStyle().Foreground(lipgloss.Color(border)),
 
-		CommentBorder:  lipgloss.NewStyle().Foreground(lipgloss.Color(yellow)),
-		CommentIssue:   lipgloss.NewStyle().Foreground(lipgloss.Color(red)).Bold(true),
-		CommentSuggest: lipgloss.NewStyle().Foreground(lipgloss.Color(yellow)).Bold(true),
-		CommentNote:    lipgloss.NewStyle().Foreground(lipgloss.Color(frost2)).Bold(true),
-		CommentPraise:  lipgloss.NewStyle().Foreground(lipgloss.Color(green)).Bold(true),
+		CommentBorder:   lipgloss.NewStyle().Foreground(lipgloss.Color(yellow)),
+		CommentIssue:    lipgloss.NewStyle().Foreground(lipgloss.Color(red)).Bold(true),
+		CommentSuggest:  lipgloss.NewStyle().Foreground(lipgloss.Color(yellow)).Bold(true),
+		CommentNote:     lipgloss.NewStyle().Foreground(lipgloss.Color(frost2)).Bold(true),
+		CommentQuestion: lipgloss.NewStyle().Foreground(lipgloss.Color(frost1)).Bold(true),
+		CommentPraise:   lipgloss.NewStyle().Foreground(lipgloss.Color(green)).Bold(true),
 
 		StatusBar: lipgloss.NewStyle().Background(lipgloss.Color(panel)).Foreground(lipgloss.Color(fg)),
 

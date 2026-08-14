@@ -978,4 +978,3 @@ func TestNeedsRegister_PluginRegistered(t *testing.T) {
 		t.Fatal("should not need register when plugin is installed")
 	}
 }
-

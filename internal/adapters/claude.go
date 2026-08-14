@@ -128,8 +128,8 @@ var claudeHooks = []claudeHookEntry{
 	},
 }
 
-func (a *ClaudeAdapter) Name() string          { return "claude" }
-func (a *ClaudeAdapter) Label() string         { return "Claude Code" }
+func (a *ClaudeAdapter) Name() string              { return "claude" }
+func (a *ClaudeAdapter) Label() string             { return "Claude Code" }
 func (a *ClaudeAdapter) SetMode(m IntegrationMode) { a.Mode = m }
 
 // ConfigPaths returns the files written by Register.
@@ -703,4 +703,3 @@ func mcpJSONPath(global bool) string {
 	}
 	return ".mcp.json"
 }
-
