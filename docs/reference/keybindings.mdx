@@ -187,6 +187,18 @@ When the agent sends groupings (`set_file_groups`), the sidebar switches to grou
 | `shift+enter` | Insert a newline |
 | `ctrl+g` | Open in your external editor |
 
+## Review verdicts
+
+When you submit (`S`), `Tab` cycles the verdict. All three are delivered the same way; they differ in what they tell the agent and in what happens to the review.
+
+| Verdict | Tells the agent | Review state |
+|---------|-----------------|--------------|
+| `APPROVE` | Done — ship it | Closed. Artifacts, added files and the review name are cleared, and the base ref returns to `HEAD` |
+| `QUESTIONS` | Answer these before continuing; change code only where an answer turns out to require it | Stays open, exactly as for changes requested |
+| `REQUEST CHANGES` | Address the comments and resubmit | Stays open; a snapshot is taken so the next round diffs against it |
+
+`QUESTIONS` exists for the case where a comment is genuinely a question. Approving closes the review and reads as "ship it"; requesting changes tells the agent to edit code it may not need to touch. Both verdicts that keep the review open require at least one comment or some body text — blocking the agent with nothing to act on is never what you want.
+
 ## Register wizard
 
 These keys are active inside the `monocle register` / `monocle unregister` TUI wizard.

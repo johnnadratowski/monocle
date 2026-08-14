@@ -481,3 +481,13 @@ The response names the repo it bound to — confirm it matches your worktree. If
 <Warning>
   **"No review loaded" is not an approval.** `get_feedback` distinguishes two empty answers. `No feedback pending` means this engine holds a review and none of it is waiting for you — a genuine all-clear. `No review loaded for <repo>` means the engine was never given the work at all, which almost always means you are bound to another lane's engine: call `set_repo` with your worktree path and try again. Both answers name the repo that replied.
 </Warning>
+
+## Review verdicts
+
+A retrieved review carries an `action`, and its heading says the same thing:
+
+- `approve` — `## Review — Approved`. The review is closed.
+- `questions` — `## Review — Questions`. The reviewer wants answers, **not** changes. Answer them and continue; edit code only where an answer turns out to require it. The review stays open, so submit again when you are done.
+- `request_changes` — `## Review — Changes Requested`. Address the comments and resubmit.
+
+Treat `questions` as blocking in the same way `request_changes` is — the reviewer is waiting — but do not rewrite code merely to have something to show.

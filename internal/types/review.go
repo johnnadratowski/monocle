@@ -34,7 +34,20 @@ type SubmitAction string
 const (
 	ActionRequestChanges SubmitAction = "request_changes"
 	ActionApprove        SubmitAction = "approve"
+	// ActionQuestions asks the agent to answer before going further, without
+	// asking for changes. A reviewer who only wants something explained had to
+	// choose between approving (which closes the review and reads as "ship it")
+	// and requesting changes (which tells the agent to edit code it may not need
+	// to touch). This is the third answer: the review stays open exactly as it
+	// does for request_changes, and only the message to the agent differs.
+	ActionQuestions SubmitAction = "questions"
 )
+
+// ClosesReview reports whether an action ends the review. Only approval does;
+// everything else leaves the review open for another round, so lifecycle code
+// should ask this rather than testing for one specific action and silently
+// treating any new one as an approval.
+func (a SubmitAction) ClosesReview() bool { return a == ActionApprove }
 
 type ReviewSession struct {
 	ID              string

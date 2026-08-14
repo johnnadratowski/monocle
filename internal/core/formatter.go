@@ -45,8 +45,11 @@ func (rf *ReviewFormatter) Format(session *types.ReviewSession, comments []types
 
 	if !hasComments && strings.TrimSpace(body) == "" {
 		header := "## Review — Approved"
-		if action == types.ActionRequestChanges {
+		switch action {
+		case types.ActionRequestChanges:
 			header = "## Review — Changes Requested"
+		case types.ActionQuestions:
+			header = "## Review — Questions"
 		}
 		return &FormattedReview{
 			Formatted:    header,
@@ -61,6 +64,10 @@ func (rf *ReviewFormatter) Format(session *types.ReviewSession, comments []types
 	switch action {
 	case types.ActionRequestChanges:
 		b.WriteString("## Review — Changes Requested\n\n")
+	case types.ActionQuestions:
+		b.WriteString("## Review — Questions\n\n")
+		b.WriteString("_The reviewer has questions rather than change requests. " +
+			"Answer them before continuing; change code only where an answer turns out to require it._\n\n")
 	default:
 		b.WriteString("## Review — Feedback\n\n")
 	}

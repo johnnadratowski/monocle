@@ -123,10 +123,7 @@ func (m historyModel) View() string {
 			b.WriteString(lipgloss.NewStyle().Faint(true).Render("No submissions yet."))
 		} else {
 			actionStyle := func(action types.SubmitAction) lipgloss.Style {
-				if action == types.ActionApprove {
-					return lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
-				}
-				return lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
+				return lipgloss.NewStyle().Foreground(submitActionColor(action))
 			}
 
 			for i, sub := range m.submissions {

@@ -497,25 +497,18 @@ func TestCommentEditorClickTypeLabel(t *testing.T) {
 }
 
 func TestReviewSummaryClickActionLabel(t *testing.T) {
-	m := &reviewSummaryModel{
-		active: true,
-		action: types.ActionApprove,
-	}
-
-	// Click on REQUEST CHANGES label (starts at x=10: APPROVE(9) + sep(1))
-	if !m.handleClick(10, 2) {
-		t.Error("click on REQUEST CHANGES label should return true")
-	}
-	if m.action != types.ActionRequestChanges {
-		t.Errorf("action = %v, want ActionRequestChanges", m.action)
-	}
-
-	// Click back on APPROVE (starts at x=0)
-	if !m.handleClick(0, 2) {
-		t.Error("click on APPROVE label should return true")
-	}
-	if m.action != types.ActionApprove {
-		t.Errorf("action = %v, want ActionApprove", m.action)
+	// Derive each label's column from the same table the renderer uses, so
+	// adding a verdict can't silently leave this test clicking the wrong one.
+	x := 0
+	for _, want := range submitActions {
+		m := &reviewSummaryModel{active: true, action: types.ActionApprove}
+		if !m.handleClick(x, 2) {
+			t.Errorf("click on %s at x=%d should be handled", want.label, x)
+		}
+		if m.action != want.action {
+			t.Errorf("click at x=%d selected %v, want %v", x, m.action, want.action)
+		}
+		x += len(want.label) + 2 + 1 // padding(0,1) + separator
 	}
 }
 

@@ -1513,8 +1513,10 @@ func (e *Engine) Submit(action types.SubmitAction, body string) error {
 		return fmt.Errorf("no active session")
 	}
 
-	// Validate: request_changes must include at least one unresolved comment or body text
-	if action == types.ActionRequestChanges {
+	// Validate: anything that keeps the review open must say something — a
+	// request for changes with no comments, or a question with no question,
+	// leaves the agent nothing to act on.
+	if !action.ClosesReview() {
 		hasBody := strings.TrimSpace(body) != ""
 		hasUnresolved := false
 		for _, c := range session.Comments {
@@ -1554,7 +1556,7 @@ func (e *Engine) Submit(action types.SubmitAction, body string) error {
 	// so snapshot operations that access e.current/e.reviewBase must
 	// run under a separate lock scope.
 	if e.IsReviewTrackingEnabled() {
-		if action == types.ActionRequestChanges {
+		if !action.ClosesReview() {
 			e.markReviewedOnSubmit(session)
 			e.mu.Lock()
 			_ = e.createSnapshot(session, sub.ID)
@@ -1625,11 +1627,19 @@ func buildFeedbackSummary(action string, comments []types.ReviewComment) string 
 	}
 	counts := strings.Join(parts, ", ")
 
-	if action == string(types.ActionRequestChanges) {
+	switch types.SubmitAction(action) {
+	case types.ActionRequestChanges:
 		if counts != "" {
 			return fmt.Sprintf("Your reviewer requested changes (%s). Call get_feedback to retrieve the full review and address their comments.", counts)
 		}
 		return "Your reviewer requested changes. Call get_feedback to retrieve the full review and address their comments."
+	case types.ActionQuestions:
+		// Deliberately not "requested changes": the point of this action is that
+		// the agent should answer first and edit only if an answer calls for it.
+		if counts != "" {
+			return fmt.Sprintf("Your reviewer has questions (%s), not change requests. Call get_feedback to read them and answer before continuing.", counts)
+		}
+		return "Your reviewer has questions, not change requests. Call get_feedback to read them and answer before continuing."
 	}
 
 	// Approved

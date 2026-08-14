@@ -59,14 +59,51 @@ func (m *reviewSummaryModel) open(summary *types.ReviewSummary, agentConnected b
 	}
 }
 
+// submitActions is the single ordered list of review verdicts: it drives the
+// Tab cycle, the rendered labels, their colours and the click targets. They
+// used to be three separate literals, which is how a new action gets added to
+// some of them and missed in the others.
+var submitActions = []struct {
+	action types.SubmitAction
+	label  string
+	color  color.Color
+}{
+	{types.ActionApprove, "APPROVE", lipgloss.Color("2")},
+	{types.ActionQuestions, "QUESTIONS", lipgloss.Color("4")},
+	{types.ActionRequestChanges, "REQUEST CHANGES", lipgloss.Color("1")},
+}
+
+// submitActionColor is the colour a verdict is drawn in, shared by the submit
+// modal and the history list so the same verdict never appears in two colours.
+func submitActionColor(a types.SubmitAction) color.Color {
+	for _, sa := range submitActions {
+		if sa.action == a {
+			return sa.color
+		}
+	}
+	return lipgloss.Color("7")
+}
+
+// nextSubmitAction advances the Tab cycle, wrapping at the end.
+func nextSubmitAction(a types.SubmitAction) types.SubmitAction {
+	for i, sa := range submitActions {
+		if sa.action == a {
+			return submitActions[(i+1)%len(submitActions)].action
+		}
+	}
+	return submitActions[0].action
+}
+
 func (m reviewSummaryModel) Init() tea.Cmd {
 	return nil
 }
 
 // canSubmit returns true if the current state is valid for submission.
-// Request changes requires at least one unresolved comment or body text.
+// Anything that keeps the review open — changes requested, or questions —
+// needs at least one comment or some body text, since otherwise the agent is
+// blocked with nothing to act on.
 func (m reviewSummaryModel) canSubmit() bool {
-	if m.action != types.ActionRequestChanges {
+	if m.action.ClosesReview() {
 		return true
 	}
 	if strings.TrimSpace(m.body) != "" {
@@ -101,12 +138,7 @@ func (m reviewSummaryModel) Update(msg tea.Msg) (reviewSummaryModel, tea.Cmd) {
 			m.active = false
 			return m, func() tea.Msg { return cancelSubmitMsg{} }
 		case "tab":
-			// Cycle review action
-			if m.action == types.ActionApprove {
-				m.action = types.ActionRequestChanges
-			} else {
-				m.action = types.ActionApprove
-			}
+			m.action = nextSubmitAction(m.action)
 		case "ctrl+y":
 			if !m.canSubmit() {
 				return m, nil
@@ -166,18 +198,11 @@ func (m *reviewSummaryModel) deleteLastWord() {
 func (m *reviewSummaryModel) handleClick(contentX, contentY int) bool {
 	// Action labels are on line 2: title(0), blank(1), labels(2)
 	if contentY == 2 {
-		labels := []struct {
-			a     types.SubmitAction
-			label string
-		}{
-			{types.ActionApprove, "APPROVE"},
-			{types.ActionRequestChanges, "REQUEST CHANGES"},
-		}
 		x := 0
-		for _, l := range labels {
+		for _, l := range submitActions {
 			labelW := len(l.label) + 2 // padding(0,1)
 			if contentX >= x && contentX < x+labelW {
-				m.action = l.a
+				m.action = l.action
 				return true
 			}
 			x += labelW + 1
@@ -257,17 +282,9 @@ func (m reviewSummaryModel) View() string {
 	b.WriteString("\n\n")
 
 	// Action selector (Tab to cycle)
-	actionLabels := []struct {
-		a     types.SubmitAction
-		label string
-		color color.Color
-	}{
-		{types.ActionApprove, "APPROVE", lipgloss.Color("2")},
-		{types.ActionRequestChanges, "REQUEST CHANGES", lipgloss.Color("1")},
-	}
-	for i, al := range actionLabels {
+	for i, al := range submitActions {
 		var style lipgloss.Style
-		if al.a == m.action {
+		if al.action == m.action {
 			style = lipgloss.NewStyle().
 				Background(al.color).
 				Foreground(lipgloss.Color("0")).
@@ -279,7 +296,7 @@ func (m reviewSummaryModel) View() string {
 				Padding(0, 1)
 		}
 		b.WriteString(style.Render(al.label))
-		if i < len(actionLabels)-1 {
+		if i < len(submitActions)-1 {
 			b.WriteString(" ")
 		}
 	}
