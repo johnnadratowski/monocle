@@ -124,6 +124,25 @@ When the agent sends groupings (`set_file_groups`), the sidebar switches to grou
 | `enter` | Focus the diff pane / toggle a directory open |
 | `tab` / `shift+tab` | Switch pane focus (sidebar/diff/doc) |
 
+## View & panes
+
+| Key | Action |
+|-----|--------|
+| `a` | Toggle full-file diff (whole file vs. changed lines) |
+| `f` | Cycle sidebar view (flat/tree/grouped) |
+| `t` | Cycle diff style (unified/split/file) (any pane) |
+| `w` | Toggle line wrapping (any pane) |
+| `z` / `e` | Collapse/expand all (tree view) |
+| `F` | Toggle focus mode (hide sidebar, wrap lines) |
+| `O` | Hide/show inline comments + annotations |
+| `T` | Cycle layout (auto/side-by-side/stacked) |
+| `1` / `2` | Jump straight to a pane |
+| `#` | Cycle source-code comments: dim → hide → show |
+| `/` | Sidebar: cycle the reviewed filter |
+| `;` | Show/hide the sidebar |
+| `enter` | Focus the diff pane / toggle a directory open |
+| `tab` / `shift+tab` | Switch pane focus (sidebar/diff/doc) |
+
 ## Comment
 
 | Key | Action |
@@ -134,6 +153,7 @@ When the agent sends groupings (`set_file_groups`), the sidebar switches to grou
 | `v` | Visual select mode (multi-line comments) |
 | `x` | Toggle a comment resolved (on a comment) |
 | `y` | Yank the line / selection to the clipboard |
+| `A` | Answer at the cursor (replies to the agent; asks nothing back) |
 | `C` | Add a file-level comment |
 | `Q` | Ask a question at the cursor (a comment that wants an answer) |
 | `space` | Expand/collapse a comment under the cursor |
@@ -217,7 +237,7 @@ When you submit (`S`), `Tab` cycles the verdict. All three are delivered the sam
 | `QUESTIONS` | Answer these before continuing; change code only where an answer turns out to require it | Stays open, exactly as for changes requested |
 | `REQUEST CHANGES` | Address the comments and resubmit | Stays open; a snapshot is taken so the next round diffs against it |
 
-Individual comments can be typed as questions too — `Q` at the cursor, or `Tab` in the comment editor, which cycles issue → suggestion → question → note → praise. Leave only questions and the submit modal defaults to the `QUESTIONS` verdict; add an issue or a suggestion and it defaults to `REQUEST CHANGES`, because the agent has to change code either way.
+Individual comments carry a type too — `Q` asks a question at the cursor and `A` answers one, or `Tab` in the comment editor cycles issue → suggestion → question → answer → note → praise. An **answer** replies to something the agent raised and asks nothing back, so a review of nothing but answers defaults to `APPROVE`: you have told the agent what it needed and you are done. Leave only questions and the submit modal defaults to the `QUESTIONS` verdict; add an issue or a suggestion and it defaults to `REQUEST CHANGES`, because the agent has to change code either way.
 
 `QUESTIONS` exists for the case where a comment is genuinely a question. Approving closes the review and reads as "ship it"; requesting changes tells the agent to edit code it may not need to touch. Both verdicts that keep the review open require at least one comment or some body text — blocking the agent with nothing to act on is never what you want.
 

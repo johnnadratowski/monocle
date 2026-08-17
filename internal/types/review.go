@@ -21,13 +21,19 @@ const (
 	// Marking one as a note buried it among observations the agent could skip;
 	// marking it as an issue demanded a change that may not be needed.
 	CommentQuestion CommentType = "question"
-	CommentNote     CommentType = "note"
-	CommentPraise   CommentType = "praise"
+	// CommentAnswer answers a question the agent raised — in an annotation, or
+	// in an artifact it sent for review. It is the reply half of a question and
+	// asks nothing further, so a review made only of answers is an approval:
+	// the reviewer has told the agent what it needed and is done.
+	CommentAnswer CommentType = "answer"
+	CommentNote   CommentType = "note"
+	CommentPraise CommentType = "praise"
 )
 
 // WantsResponse reports whether a comment type obliges the agent to come back:
-// an issue or suggestion asks for an edit, a question asks for an answer. Notes
-// and praise ask for nothing.
+// an issue or suggestion asks for an edit, a question asks for an answer.
+// Answers, notes and praise ask for nothing — an answer is the reviewer
+// discharging a request, not making one.
 func (t CommentType) WantsResponse() bool {
 	return t == CommentIssue || t == CommentSuggestion || t == CommentQuestion
 }
@@ -255,6 +261,7 @@ type ReviewSummary struct {
 	IssueCt                int
 	SuggestionCt           int
 	QuestionCt             int
+	AnswerCt               int
 	NoteCt                 int
 	PraiseCt               int
 }

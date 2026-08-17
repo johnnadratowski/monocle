@@ -82,7 +82,7 @@ func (rf *ReviewFormatter) Format(session *types.ReviewSession, comments []types
 	}
 
 	// Count by type
-	issueCt, suggestionCt, questionCt, noteCt, praiseCt := countByType(comments)
+	ct := countByType(comments)
 
 	// Group comments by target
 	fileComments := map[string][]types.ReviewComment{}
@@ -236,28 +236,31 @@ func (rf *ReviewFormatter) Format(session *types.ReviewSession, comments []types
 	if hasComments && rf.formatCfg.IncludeSummary {
 		b.WriteString("**Summary:** ")
 		parts := []string{}
-		if issueCt > 0 {
-			parts = append(parts, fmt.Sprintf("%d issue(s) to fix", issueCt))
+		if ct[types.CommentIssue] > 0 {
+			parts = append(parts, fmt.Sprintf("%d issue(s) to fix", ct[types.CommentIssue]))
 		}
-		if suggestionCt > 0 {
-			parts = append(parts, fmt.Sprintf("%d suggestion(s) to consider", suggestionCt))
+		if ct[types.CommentSuggestion] > 0 {
+			parts = append(parts, fmt.Sprintf("%d suggestion(s) to consider", ct[types.CommentSuggestion]))
 		}
-		if questionCt > 0 {
-			parts = append(parts, fmt.Sprintf("%d question(s) to answer", questionCt))
+		if ct[types.CommentQuestion] > 0 {
+			parts = append(parts, fmt.Sprintf("%d question(s) to answer", ct[types.CommentQuestion]))
 		}
-		if noteCt > 0 {
-			parts = append(parts, fmt.Sprintf("%d note(s)", noteCt))
+		if ct[types.CommentAnswer] > 0 {
+			parts = append(parts, fmt.Sprintf("%d answer(s)", ct[types.CommentAnswer]))
 		}
-		if praiseCt > 0 {
-			parts = append(parts, fmt.Sprintf("%d praise", praiseCt))
+		if ct[types.CommentNote] > 0 {
+			parts = append(parts, fmt.Sprintf("%d note(s)", ct[types.CommentNote]))
+		}
+		if ct[types.CommentPraise] > 0 {
+			parts = append(parts, fmt.Sprintf("%d praise", ct[types.CommentPraise]))
 		}
 		b.WriteString(strings.Join(parts, ", "))
 		b.WriteString(".\n")
 
-		if issueCt > 0 {
+		if ct[types.CommentIssue] > 0 {
 			b.WriteString("Please address the issues and re-present your changes.\n")
 		}
-		if questionCt > 0 {
+		if ct[types.CommentQuestion] > 0 {
 			b.WriteString("Please answer the questions before continuing; " +
 				"change code only where an answer turns out to require it.\n")
 		}
@@ -316,23 +319,16 @@ func truncateSnippet(snippet string, maxLines int) string {
 	return result
 }
 
-func countByType(comments []types.ReviewComment) (issue, suggestion, question, note, praise int) {
+// countByType tallies unresolved comments by type. It returns a map rather
+// than a positional tuple: five return values were already easy to mis-order at
+// a call site, and every new comment type made that worse.
+func countByType(comments []types.ReviewComment) map[types.CommentType]int {
+	counts := map[types.CommentType]int{}
 	for _, c := range comments {
 		if c.Resolved {
 			continue
 		}
-		switch c.Type {
-		case types.CommentIssue:
-			issue++
-		case types.CommentSuggestion:
-			suggestion++
-		case types.CommentQuestion:
-			question++
-		case types.CommentNote:
-			note++
-		case types.CommentPraise:
-			praise++
-		}
+		counts[c.Type]++
 	}
-	return
+	return counts
 }

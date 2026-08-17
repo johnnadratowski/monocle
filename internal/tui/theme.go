@@ -37,6 +37,7 @@ type Theme struct {
 	CommentSuggest  lipgloss.Style
 	CommentNote     lipgloss.Style
 	CommentQuestion lipgloss.Style
+	CommentAnswer   lipgloss.Style
 	CommentPraise   lipgloss.Style
 
 	// Status
@@ -76,6 +77,7 @@ func DefaultTheme() Theme {
 		CommentSuggest:  lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Bold(true),
 		CommentNote:     lipgloss.NewStyle().Foreground(lipgloss.Color("4")).Bold(true),
 		CommentQuestion: lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true),
+		CommentAnswer:   lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
 		CommentPraise:   lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true),
 
 		StatusBar: lipgloss.NewStyle().Background(lipgloss.Color("0")).Foreground(lipgloss.Color("7")),
@@ -120,6 +122,7 @@ func LightTheme() Theme {
 		CommentSuggest:  lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Bold(true),
 		CommentNote:     lipgloss.NewStyle().Foreground(lipgloss.Color("4")).Bold(true),
 		CommentQuestion: lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true),
+		CommentAnswer:   lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
 		CommentPraise:   lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true),
 
 		StatusBar: lipgloss.NewStyle().Background(lipgloss.Color("7")).Foreground(lipgloss.Color("0")),
@@ -179,6 +182,7 @@ func MolokaiTheme() Theme {
 		CommentSuggest:  lipgloss.NewStyle().Foreground(lipgloss.Color(yellow)).Bold(true),
 		CommentNote:     lipgloss.NewStyle().Foreground(lipgloss.Color(blue)).Bold(true),
 		CommentQuestion: lipgloss.NewStyle().Foreground(lipgloss.Color(orange)).Bold(true),
+		CommentAnswer:   lipgloss.NewStyle().Foreground(lipgloss.Color(orange)),
 		CommentPraise:   lipgloss.NewStyle().Foreground(lipgloss.Color(green)).Bold(true),
 
 		StatusBar: lipgloss.NewStyle().Background(lipgloss.Color(panel)).Foreground(lipgloss.Color(fg)),
@@ -236,6 +240,7 @@ func DraculaTheme() Theme {
 		CommentSuggest:  lipgloss.NewStyle().Foreground(lipgloss.Color(yellow)).Bold(true),
 		CommentNote:     lipgloss.NewStyle().Foreground(lipgloss.Color(cyan)).Bold(true),
 		CommentQuestion: lipgloss.NewStyle().Foreground(lipgloss.Color(cyan)).Bold(true),
+		CommentAnswer:   lipgloss.NewStyle().Foreground(lipgloss.Color(cyan)),
 		CommentPraise:   lipgloss.NewStyle().Foreground(lipgloss.Color(green)).Bold(true),
 
 		StatusBar: lipgloss.NewStyle().Background(lipgloss.Color(panel)).Foreground(lipgloss.Color(fg)),
@@ -293,6 +298,7 @@ func NordTheme() Theme {
 		CommentSuggest:  lipgloss.NewStyle().Foreground(lipgloss.Color(yellow)).Bold(true),
 		CommentNote:     lipgloss.NewStyle().Foreground(lipgloss.Color(frost2)).Bold(true),
 		CommentQuestion: lipgloss.NewStyle().Foreground(lipgloss.Color(frost1)).Bold(true),
+		CommentAnswer:   lipgloss.NewStyle().Foreground(lipgloss.Color(frost1)),
 		CommentPraise:   lipgloss.NewStyle().Foreground(lipgloss.Color(green)).Bold(true),
 
 		StatusBar: lipgloss.NewStyle().Background(lipgloss.Color(panel)).Foreground(lipgloss.Color(fg)),

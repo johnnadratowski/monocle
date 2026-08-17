@@ -76,13 +76,17 @@ func TestQuestionCommentType(t *testing.T) {
 	}
 
 	t.Run("questions are counted separately", func(t *testing.T) {
-		issue, suggestion, question, note, praise := countByType(mixed)
-		if question != 1 {
-			t.Errorf("question count = %d, want 1", question)
+		ct := countByType(mixed)
+		if ct[types.CommentQuestion] != 1 {
+			t.Errorf("question count = %d, want 1", ct[types.CommentQuestion])
 		}
-		if issue+suggestion+note != 0 || praise != 1 {
-			t.Errorf("other counts wrong: issue=%d suggestion=%d note=%d praise=%d",
-				issue, suggestion, note, praise)
+		if ct[types.CommentPraise] != 1 {
+			t.Errorf("praise count = %d, want 1", ct[types.CommentPraise])
+		}
+		for _, absent := range []types.CommentType{types.CommentIssue, types.CommentSuggestion, types.CommentNote} {
+			if ct[absent] != 0 {
+				t.Errorf("%s count = %d, want 0", absent, ct[absent])
+			}
 		}
 	})
 
@@ -115,6 +119,59 @@ func TestQuestionCommentType(t *testing.T) {
 		got := buildFeedbackSummary(string(types.ActionQuestions), mixed)
 		if !strings.Contains(got, "1 question") {
 			t.Errorf("expected the question count, got %q", got)
+		}
+	})
+}
+
+func TestAnswerCommentType(t *testing.T) {
+	now := time.Now()
+	answers := []types.ReviewComment{
+		{ID: "a1", TargetType: types.TargetFile, TargetRef: "a.go", LineStart: 1, LineEnd: 1,
+			Type: types.CommentAnswer, Body: "yes, the mutex guards the map", CreatedAt: now, UpdatedAt: now},
+	}
+
+	// The point the reviewer made: a review that is only answers is a reviewer
+	// discharging a request, not making one, so it goes back as an approval.
+	t.Run("an answer asks nothing of the agent", func(t *testing.T) {
+		if types.CommentAnswer.WantsResponse() {
+			t.Error("an answer should not oblige the agent to come back")
+		}
+		if !types.CommentQuestion.WantsResponse() {
+			t.Error("a question still should")
+		}
+	})
+
+	t.Run("answers are counted separately", func(t *testing.T) {
+		if got := countByType(answers)[types.CommentAnswer]; got != 1 {
+			t.Errorf("answer count = %d, want 1", got)
+		}
+	})
+
+	t.Run("an approval carrying answers still reads as approved", func(t *testing.T) {
+		got := NewReviewFormatter(nil, defaultFormatCfg()).
+			Format(&types.ReviewSession{}, answers, types.ActionApprove, "").Formatted
+		if !strings.Contains(got, "answer(s)") {
+			t.Errorf("expected the answer count in the summary:\n%s", got)
+		}
+		for _, forbidden := range []string{"Changes Requested", "address the issues", "answer the questions"} {
+			if strings.Contains(got, forbidden) {
+				t.Errorf("an approval with answers must not read as %q:\n%s", forbidden, got)
+			}
+		}
+	})
+
+	t.Run("the notification counts answers", func(t *testing.T) {
+		got := buildFeedbackSummary(string(types.ActionApprove), answers)
+		if !strings.Contains(got, "1 answer") {
+			t.Errorf("expected the answer count, got %q", got)
+		}
+	})
+
+	t.Run("praise is still left out of the notification", func(t *testing.T) {
+		praise := []types.ReviewComment{{ID: "p", Type: types.CommentPraise, Body: "nice",
+			TargetType: types.TargetFile, TargetRef: "a.go", CreatedAt: now, UpdatedAt: now}}
+		if got := buildFeedbackSummary(string(types.ActionApprove), praise); strings.Contains(got, "praise") {
+			t.Errorf("praise asks nothing and should not inflate the count: %q", got)
 		}
 	})
 }

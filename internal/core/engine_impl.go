@@ -1498,6 +1498,8 @@ func (e *Engine) GetReviewSummary() (*types.ReviewSummary, error) {
 			summary.NoteCt++
 		case types.CommentQuestion:
 			summary.QuestionCt++
+		case types.CommentAnswer:
+			summary.AnswerCt++
 		case types.CommentPraise:
 			summary.PraiseCt++
 		}
@@ -1602,36 +1604,26 @@ func (e *Engine) Submit(action types.SubmitAction, body string) error {
 
 // buildFeedbackSummary creates a human-readable one-liner for channel notifications.
 func buildFeedbackSummary(action string, comments []types.ReviewComment) string {
-	issues, suggestions, questions, notes, _ := countByType(comments)
+	ct := countByType(comments)
 
-	// Build counts portion (skip praise — not actionable)
+	// Praise is deliberately absent: it asks nothing of the agent, so counting
+	// it would inflate a notification that exists to say how much there is to do.
 	var parts []string
-	if issues > 0 {
-		if issues == 1 {
-			parts = append(parts, "1 issue")
-		} else {
-			parts = append(parts, fmt.Sprintf("%d issues", issues))
-		}
-	}
-	if suggestions > 0 {
-		if suggestions == 1 {
-			parts = append(parts, "1 suggestion")
-		} else {
-			parts = append(parts, fmt.Sprintf("%d suggestions", suggestions))
-		}
-	}
-	if notes > 0 {
-		if notes == 1 {
-			parts = append(parts, "1 note")
-		} else {
-			parts = append(parts, fmt.Sprintf("%d notes", notes))
-		}
-	}
-	if questions > 0 {
-		if questions == 1 {
-			parts = append(parts, "1 question")
-		} else {
-			parts = append(parts, fmt.Sprintf("%d questions", questions))
+	for _, t := range []struct {
+		kind      types.CommentType
+		one, many string
+	}{
+		{types.CommentIssue, "1 issue", "%d issues"},
+		{types.CommentSuggestion, "1 suggestion", "%d suggestions"},
+		{types.CommentQuestion, "1 question", "%d questions"},
+		{types.CommentAnswer, "1 answer", "%d answers"},
+		{types.CommentNote, "1 note", "%d notes"},
+	} {
+		switch n := ct[t.kind]; {
+		case n == 1:
+			parts = append(parts, t.one)
+		case n > 1:
+			parts = append(parts, fmt.Sprintf(t.many, n))
 		}
 	}
 	counts := strings.Join(parts, ", ")

@@ -51,3 +51,32 @@ func TestSubmitDefaultsToQuestions(t *testing.T) {
 		}
 	})
 }
+
+func TestAnswersDefaultToApproval(t *testing.T) {
+	open := func(s *types.ReviewSummary) reviewSummaryModel {
+		var m reviewSummaryModel
+		m.open(s, true)
+		return m
+	}
+
+	t.Run("answers alone approve", func(t *testing.T) {
+		m := open(&types.ReviewSummary{AnswerCt: 3})
+		if m.action != types.ActionApprove {
+			t.Errorf("action = %v, want approve — answers ask nothing back", m.action)
+		}
+	})
+
+	t.Run("an outstanding question still outranks answers", func(t *testing.T) {
+		m := open(&types.ReviewSummary{AnswerCt: 2, QuestionCt: 1})
+		if m.action != types.ActionQuestions {
+			t.Errorf("action = %v, want questions", m.action)
+		}
+	})
+
+	t.Run("an issue still outranks both", func(t *testing.T) {
+		m := open(&types.ReviewSummary{AnswerCt: 2, QuestionCt: 1, IssueCt: 1})
+		if m.action != types.ActionRequestChanges {
+			t.Errorf("action = %v, want request_changes", m.action)
+		}
+	})
+}

@@ -490,6 +490,6 @@ A retrieved review carries an `action`, and its heading says the same thing:
 - `questions` — `## Review — Questions`. The reviewer wants answers, **not** changes. Answer them and continue; edit code only where an answer turns out to require it. The review stays open, so submit again when you are done.
 - `request_changes` — `## Review — Changes Requested`. Address the comments and resubmit.
 
-Individual comments carry a type too — `issue`, `suggestion`, `question`, `note`, `praise` — and the review's summary line counts them, so a review can request changes and still contain questions to answer.
+Individual comments carry a type too — `issue`, `suggestion`, `question`, `answer`, `note`, `praise` — and the review's summary line counts them, so a review can request changes and still contain questions to answer. An `answer` is the reviewer replying to something you raised (an annotation, or a question in an artifact); it asks nothing further, which is why a review made only of answers arrives as an approval.
 
 Treat `questions` as blocking in the same way `request_changes` is — the reviewer is waiting — but do not rewrite code merely to have something to show.

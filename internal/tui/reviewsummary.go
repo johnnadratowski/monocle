@@ -51,8 +51,11 @@ func (m *reviewSummaryModel) open(summary *types.ReviewSummary, agentConnected b
 	m.copyToClipboard = false
 
 	// Default to the verdict the comments already describe: anything asking for
-	// an edit means changes, questions alone mean questions, and neither means
-	// there is nothing to hold the agent for.
+	// an edit means changes, an unanswered question means questions, and
+	// anything else — answers, notes, praise — holds the agent for nothing, so
+	// it approves. An answer is the reviewer discharging a request rather than
+	// making one, which is why a review of nothing but answers goes back as an
+	// approval.
 	switch {
 	case summary != nil && summary.IssueCt+summary.SuggestionCt > 0:
 		m.action = types.ActionRequestChanges
@@ -113,7 +116,7 @@ func (m reviewSummaryModel) canSubmit() bool {
 	if strings.TrimSpace(m.body) != "" {
 		return true
 	}
-	if m.summary != nil && (m.summary.IssueCt+m.summary.SuggestionCt+m.summary.QuestionCt+m.summary.NoteCt+m.summary.PraiseCt > 0) {
+	if m.summary != nil && (m.summary.IssueCt+m.summary.SuggestionCt+m.summary.QuestionCt+m.summary.AnswerCt+m.summary.NoteCt+m.summary.PraiseCt > 0) {
 		return true
 	}
 	return false
@@ -235,7 +238,7 @@ func (m reviewSummaryModel) checkboxLine() int {
 	line := 4
 
 	// Variable-height comment summary section
-	hasComments := m.summary != nil && (m.summary.IssueCt+m.summary.SuggestionCt+m.summary.QuestionCt+m.summary.NoteCt+m.summary.PraiseCt > 0)
+	hasComments := m.summary != nil && (m.summary.IssueCt+m.summary.SuggestionCt+m.summary.QuestionCt+m.summary.AnswerCt+m.summary.NoteCt+m.summary.PraiseCt > 0)
 	if hasComments {
 		if m.summary.IssueCt > 0 {
 			line++
@@ -244,6 +247,9 @@ func (m reviewSummaryModel) checkboxLine() int {
 			line++
 		}
 		if m.summary.QuestionCt > 0 {
+			line++
+		}
+		if m.summary.AnswerCt > 0 {
 			line++
 		}
 		if m.summary.NoteCt > 0 {
@@ -312,7 +318,7 @@ func (m reviewSummaryModel) View() string {
 	b.WriteString("\n\n")
 
 	// Comment counts (if any inline comments)
-	hasComments := m.summary != nil && (m.summary.IssueCt+m.summary.SuggestionCt+m.summary.QuestionCt+m.summary.NoteCt+m.summary.PraiseCt > 0)
+	hasComments := m.summary != nil && (m.summary.IssueCt+m.summary.SuggestionCt+m.summary.QuestionCt+m.summary.AnswerCt+m.summary.NoteCt+m.summary.PraiseCt > 0)
 	if hasComments {
 		if m.summary.IssueCt > 0 {
 			b.WriteString(fmt.Sprintf("  Issues:      %d\n", m.summary.IssueCt))
@@ -322,6 +328,9 @@ func (m reviewSummaryModel) View() string {
 		}
 		if m.summary.QuestionCt > 0 {
 			b.WriteString(fmt.Sprintf("  Questions:   %d\n", m.summary.QuestionCt))
+		}
+		if m.summary.AnswerCt > 0 {
+			b.WriteString(fmt.Sprintf("  Answers:     %d\n", m.summary.AnswerCt))
 		}
 		if m.summary.NoteCt > 0 {
 			b.WriteString(fmt.Sprintf("  Notes:       %d\n", m.summary.NoteCt))

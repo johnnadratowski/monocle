@@ -85,6 +85,8 @@ func (m commentEditorModel) Update(msg tea.Msg) (commentEditorModel, tea.Cmd) {
 			case types.CommentSuggestion:
 				m.commentType = types.CommentQuestion
 			case types.CommentQuestion:
+				m.commentType = types.CommentAnswer
+			case types.CommentAnswer:
 				m.commentType = types.CommentNote
 			case types.CommentNote:
 				m.commentType = types.CommentPraise

@@ -577,6 +577,14 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 				return m, openTypedCommentCmd(ref, start, end, tt, types.CommentQuestion)
 			}
 
+		case Matches(key, m.keys.Answer):
+			if m.mediaMode {
+				break // media artifacts have no line-level targets
+			}
+			if ref, start, end, tt, ok := m.commentTarget(); ok {
+				return m, openTypedCommentCmd(ref, start, end, tt, types.CommentAnswer)
+			}
+
 		case Matches(key, m.keys.Comment):
 			if m.mediaMode {
 				break // media artifacts have no line-level targets
@@ -1300,6 +1308,9 @@ func (m diffViewModel) renderCommentLine(line diffViewLine, selected bool) strin
 		case types.CommentSuggestion:
 			clr = lipgloss.Color("3")
 		case types.CommentQuestion:
+			clr = lipgloss.Color("6")
+		case types.CommentAnswer:
+			// Same hue as a question: an answer is its other half.
 			clr = lipgloss.Color("6")
 		case types.CommentNote:
 			clr = lipgloss.Color("4")
