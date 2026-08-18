@@ -1086,6 +1086,7 @@ func (m *sidebarModel) selectPath(path string) {
 		for i, item := range m.visibleItems {
 			if !item.isDir && item.node.File != nil && item.node.File.Path == path {
 				m.cursor = i + contentCount
+				m.ensureVisible()
 				return
 			}
 		}
@@ -1093,10 +1094,38 @@ func (m *sidebarModel) selectPath(path string) {
 		for i, f := range m.displayFiles() {
 			if f.Path == path {
 				m.cursor = i + contentCount
+				m.ensureVisible()
 				return
 			}
 		}
 	}
+}
+
+// resetToTop puts the cursor on the first item and scrolls the list back to the
+// start. Used when a new review arrives: the previous round left the cursor
+// wherever the reviewer finished, which is usually the bottom, and opening a
+// fresh review already scrolled past its first files reads as though the top of
+// it were missing.
+func (m *sidebarModel) resetToTop() {
+	m.cursor = 0
+	m.offset = 0
+	// The first row can be a directory in tree mode, which holds no selection.
+	if m.treeMode {
+		m.cursor = m.nextSelectableItem(0)
+	}
+}
+
+// nextSelectableItem returns the first index at or after i that can hold a
+// selection, or i when none can.
+func (m sidebarModel) nextSelectableItem(i int) int {
+	contentCount := len(m.contentItems)
+	for j := i; j < m.totalItems(); j++ {
+		idx := j - contentCount
+		if idx < 0 || idx >= len(m.visibleItems) || !m.visibleItems[idx].isDir {
+			return j
+		}
+	}
+	return i
 }
 
 // currentItemKey returns a (kind, id) pair identifying the cursor's item.

@@ -263,6 +263,10 @@ type appModel struct {
 	// diff pane: +1 = land on the new file's first chunk, -1 = its last chunk.
 	pendingChunkLanding int
 	jumps               jumpList
+	// newReviewPending marks that the reviewer's feedback reached the agent, so
+	// the next batch of work to arrive is a NEW review rather than more of the
+	// one being read. Consumed by the refresh that brings that work in.
+	newReviewPending bool
 	// pendingJumpLine is the line to land on once an async file load finishes.
 	pendingJumpLine int
 
@@ -669,6 +673,19 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.annotationCount = len(session.Annotations)
 			m.reviewName = session.ReviewName
 		}
+		// A new review's first refresh: go back to the top. This runs ahead of
+		// the selection-preserving logic below, which exists so the agent
+		// editing files mid-review doesn't move the cursor — correct within a
+		// round, and precisely wrong across one.
+		if m.newReviewPending && (len(m.sidebar.files) > 0 || len(m.sidebar.contentItems) > 0) {
+			m.newReviewPending = false
+			m.sidebar.resetToTop()
+			if cmd := m.sidebar.selectCurrent(); cmd != nil {
+				return m, cmd
+			}
+			return m, nil
+		}
+
 		// Auto-advance to next unreviewed item after marking reviewed
 		if msg.advance {
 			if cmd := m.sidebar.nextUnreviewed(); cmd != nil {
@@ -1452,6 +1469,9 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusBar.feedbackStatus = "delivered"
 		// The agent's prior activity has now been reviewed — stop the pulse.
 		m.statusBar.agentActive = false
+		// Whatever the agent sends next is a new review, and should start at the
+		// top rather than wherever this round happened to end.
+		m.newReviewPending = true
 		session := m.engine.GetSession()
 
 		m.syncArtifactsAfterSubmit(session)
