@@ -84,6 +84,10 @@ On a narrow pane, chips shed from most re-derivable elsewhere to least: the age 
 
 The line under the cursor always wraps when it runs off the right edge, even with wrap mode off, so you never have to scroll sideways to read the line you are on. Only that line expands — the rest of the diff keeps its one-row-per-line shape. Wrapped rows keep their colouring in full — syntax highlighting, the line background, and the brighter span marking the words that actually changed. The whole line is coloured first and the styled result is then split, so a wrapped line looks identical to the same line unwrapped. `w` wraps in split view too. Each half wraps on its own and the halves are zipped back row by row, so the divider stays in one column and a long line on one side never drags the other out of alignment. Wrapping turns off horizontal scrolling and intra-line change highlighting for the wrapped row — the line-level added/removed background still shows which side changed.
 
+`ctrl+h` / `ctrl+j` / `ctrl+k` / `ctrl+l` move focus between monocle's panes, following [vim-tmux-navigator](https://github.com/christoomey/vim-tmux-navigator): when there is no pane that way, the key is handed to tmux as `select-pane` so focus leaves monocle instead of stopping. The key is never dropped — a direction monocle cannot act on always reaches tmux, since silently swallowing it makes navigation appear broken one way with no feedback. Active only inside tmux; elsewhere the keys keep whatever they meant before.
+
+Inside the comment or submit editor they keep their editing meaning — `ctrl+k` still kills to end of line — the same way these keys stay out of vim's insert mode. `ctrl+\` is deliberately not bound: tmux owns last-pane.
+
 When a new review arrives — the agent's first batch of work after your feedback reached it — the sidebar scrolls back to the top and selects the first item, rather than leaving the cursor wherever the previous round ended. It fires once per review, so the agent editing files mid-review never moves your cursor.
 
 When the agent sends groupings (`set_file_groups`), the sidebar switches to grouped view on its own the first time they arrive, so the reading order the agent chose is visible without hunting for it. It happens once per session — after that `f` is yours and a refresh won't drag you back.
@@ -143,6 +147,26 @@ When the agent sends groupings (`set_file_groups`), the sidebar switches to grou
 | `/` | Sidebar: cycle the reviewed filter |
 | `;` | Show/hide the sidebar |
 | `enter` | Focus the diff pane / toggle a directory open |
+| `tab` / `shift+tab` | Switch pane focus (sidebar/diff/doc) |
+
+## View & panes
+
+| Key | Action |
+|-----|--------|
+| `a` | Toggle full-file diff (whole file vs. changed lines) |
+| `f` | Cycle sidebar view (flat/tree/grouped) |
+| `t` | Cycle diff style (unified/split/file) (any pane) |
+| `w` | Toggle line wrapping (any pane) |
+| `z` / `e` | Collapse/expand all (tree view) |
+| `F` | Toggle focus mode (hide sidebar, wrap lines) |
+| `O` | Hide/show inline comments + annotations |
+| `T` | Cycle layout (auto/side-by-side/stacked) |
+| `1` / `2` | Jump straight to a pane |
+| `#` | Cycle source-code comments: dim → hide → show |
+| `/` | Sidebar: cycle the reviewed filter |
+| `;` | Show/hide the sidebar |
+| `enter` | Focus the diff pane / toggle a directory open |
+| `ctrl+h` / `ctrl+j` / `ctrl+k` / `ctrl+l` | Move pane focus left/down/up/right; at the edge, moves the tmux pane |
 | `tab` / `shift+tab` | Switch pane focus (sidebar/diff/doc) |
 
 ## Comment

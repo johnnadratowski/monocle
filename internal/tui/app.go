@@ -1879,6 +1879,29 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// n/N navigation (those cases re-set it) and clears on the next keystroke.
 	m.statusBar.searchInfo = ""
 
+	// vim-tmux-navigator: ctrl+h/j/k/l move focus one pane, and hand the key to
+	// tmux when monocle has no pane that way. Reached only outside overlays —
+	// inside the comment editor ctrl+k still kills to end of line, the same way
+	// these keys keep their editing meaning in vim's insert mode.
+	//
+	// Outside tmux they do nothing here and fall through to whatever they meant
+	// before, which for all four is nothing.
+	if inTmux() {
+		for _, pd := range []struct {
+			keys []string
+			dir  paneDir
+		}{
+			{km.PaneLeft, paneLeft},
+			{km.PaneDown, paneDown},
+			{km.PaneUp, paneUp},
+			{km.PaneRight, paneRight},
+		} {
+			if Matches(key, pd.keys) {
+				return m.navigatePane(pd.dir)
+			}
+		}
+	}
+
 	// Check for pane-number shortcuts (1, 2, etc.)
 	if pane, ok := km.FocusPaneN[key]; ok {
 		switch pane {

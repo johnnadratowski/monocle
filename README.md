@@ -248,6 +248,7 @@ Bindings are grouped by the task they serve, and within a group ordered by key: 
 | `/` | Sidebar: cycle the reviewed filter |
 | `;` | Show/hide the sidebar |
 | `enter` | Focus the diff pane / toggle a directory open |
+| `ctrl+h` / `ctrl+j` / `ctrl+k` / `ctrl+l` | Move pane focus left/down/up/right; at the edge, moves the tmux pane |
 | `tab` / `shift+tab` | Switch pane focus (sidebar/diff/doc) |
 
 #### Comment
@@ -492,7 +493,7 @@ Override any action key by mapping the action name to a new key string:
 }
 ```
 
-Available action names: `answer`, `artifact_versions`, `base_ref`, `block_match`, `block_top`, `block_up`, `bottom`, `clear_review`, `collapse_all`, `command_mode`, `comment`, `cycle_layout`, `dismiss_artifact`, `down`, `expand_all`, `file_comment`, `filter_reviewed`, `focus_swap`, `half_down`, `half_up`, `help`, `hide_comments`, `jump_back`, `jump_forward`, `next_file`, `next_mark`, `next_section`, `open_doc_ref`, `open_in_editor`, `open_in_editor_takeover`, `open_in_markdown_viewer`, `open_terminal`, `open_terminal_takeover`, `pause`, `prev_file`, `prev_mark`, `prev_section`, `question`, `quit`, `refresh`, `reviewed`, `scroll_down`, `scroll_end`, `scroll_first_char`, `scroll_home`, `scroll_left`, `scroll_right`, `scroll_up`, `search_backward`, `search_next`, `search_prev`, `select`, `shell_command`, `submit`, `suggest`, `toggle_diff`, `toggle_focus_mode`, `toggle_full_diff`, `toggle_overlays`, `toggle_sidebar`, `top`, `tree_mode`, `up`, `visual`, `wizard_advance`, `wizard_back`, `wizard_toggle`, `wrap`, `yank_line`.
+Available action names: `answer`, `artifact_versions`, `base_ref`, `block_match`, `block_top`, `block_up`, `bottom`, `clear_review`, `collapse_all`, `command_mode`, `comment`, `cycle_layout`, `dismiss_artifact`, `down`, `expand_all`, `file_comment`, `filter_reviewed`, `focus_swap`, `half_down`, `half_up`, `help`, `hide_comments`, `jump_back`, `jump_forward`, `next_file`, `next_mark`, `next_section`, `open_doc_ref`, `open_in_editor`, `open_in_editor_takeover`, `open_in_markdown_viewer`, `open_terminal`, `open_terminal_takeover`, `pane_down`, `pane_left`, `pane_right`, `pane_up`, `pause`, `prev_file`, `prev_mark`, `prev_section`, `question`, `quit`, `refresh`, `reviewed`, `scroll_down`, `scroll_end`, `scroll_first_char`, `scroll_home`, `scroll_left`, `scroll_right`, `scroll_up`, `search_backward`, `search_next`, `search_prev`, `select`, `shell_command`, `submit`, `suggest`, `toggle_diff`, `toggle_focus_mode`, `toggle_full_diff`, `toggle_overlays`, `toggle_sidebar`, `top`, `tree_mode`, `up`, `visual`, `wizard_advance`, `wizard_back`, `wizard_toggle`, `wrap`, `yank_line`.
 
 The help overlay (`H`) dynamically reflects your custom bindings. Modal keys (Enter, Esc, Tab in overlays) are not configurable.
 

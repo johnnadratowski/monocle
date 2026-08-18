@@ -18,7 +18,13 @@ type KeyMap struct {
 	Select   []string
 
 	// Pane focus
-	FocusSwap     []string
+	FocusSwap []string
+	// vim-tmux-navigator directions: move focus between panes, handing off to
+	// tmux at monocle's edge.
+	PaneLeft      []string
+	PaneDown      []string
+	PaneUp        []string
+	PaneRight     []string
 	FocusPaneN    map[string]int // key → pane number (1=sidebar, 2=diff)
 	ToggleSidebar []string
 
@@ -113,6 +119,10 @@ func DefaultKeyMap() KeyMap {
 		Select:   []string{"enter"},
 
 		FocusSwap:     []string{"tab"},
+		PaneLeft:      []string{"ctrl+h"},
+		PaneDown:      []string{"ctrl+j"},
+		PaneUp:        []string{"ctrl+k"},
+		PaneRight:     []string{"ctrl+l"},
 		FocusPaneN:    map[string]int{"1": 1, "2": 2},
 		ToggleSidebar: []string{";"},
 
@@ -202,6 +212,10 @@ var keyActions = map[string]func(*KeyMap) *[]string{
 	"next_file":               func(km *KeyMap) *[]string { return &km.NextFile },
 	"select":                  func(km *KeyMap) *[]string { return &km.Select },
 	"focus_swap":              func(km *KeyMap) *[]string { return &km.FocusSwap },
+	"pane_left":               func(km *KeyMap) *[]string { return &km.PaneLeft },
+	"pane_down":               func(km *KeyMap) *[]string { return &km.PaneDown },
+	"pane_up":                 func(km *KeyMap) *[]string { return &km.PaneUp },
+	"pane_right":              func(km *KeyMap) *[]string { return &km.PaneRight },
 	"toggle_sidebar":          func(km *KeyMap) *[]string { return &km.ToggleSidebar },
 	"scroll_down":             func(km *KeyMap) *[]string { return &km.ScrollDown },
 	"scroll_up":               func(km *KeyMap) *[]string { return &km.ScrollUp },

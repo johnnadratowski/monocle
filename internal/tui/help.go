@@ -304,6 +304,8 @@ func (m helpModel) buildContent() string {
 		},
 		secView: {
 			{Label(km.FocusSwap) + "/shift+tab", "Switch pane focus (sidebar/diff/doc)"},
+			{Label(km.PaneLeft) + "/" + Label(km.PaneDown) + "/" + Label(km.PaneUp) + "/" + Label(km.PaneRight),
+				"Move pane focus left/down/up/right; at the edge, moves the tmux pane"},
 			{"1/2", "Jump straight to a pane"},
 			{Label(km.Select), "Focus the diff pane / toggle a directory open"},
 			{Label(km.ToggleSidebar), "Show/hide the sidebar"},
