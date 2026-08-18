@@ -469,28 +469,23 @@ func TestMouseRightClickIgnored(t *testing.T) {
 }
 
 func TestCommentEditorClickTypeLabel(t *testing.T) {
-	m := &commentEditorModel{
-		active:      true,
-		commentType: types.CommentIssue,
-	}
-
-	// Click on SUGGESTION label (starts at x=8: ISSUE(7) + separator(1))
-	if !m.handleClick(8, 4) {
-		t.Error("click on SUGGESTION label should return true")
-	}
-	if m.commentType != types.CommentSuggestion {
-		t.Errorf("commentType = %v, want CommentSuggestion", m.commentType)
-	}
-
-	// Click on NOTE label (starts at x=21: ISSUE(7) + sep(1) + SUGGESTION(12) + sep(1))
-	if !m.handleClick(21, 4) {
-		t.Error("click on NOTE label should return true")
-	}
-	if m.commentType != types.CommentNote {
-		t.Errorf("commentType = %v, want CommentNote", m.commentType)
+	// Derive each label's column from the same table the renderer uses. The
+	// hardcoded offsets this replaces silently started clicking QUESTION once
+	// it was inserted ahead of NOTE.
+	x := 0
+	for _, want := range commentTypes {
+		m := &commentEditorModel{active: true, commentType: types.CommentIssue}
+		if !m.handleClick(x, 4) {
+			t.Errorf("click on %s at x=%d should be handled", want.label, x)
+		}
+		if m.commentType != want.kind {
+			t.Errorf("click at x=%d selected %q, want %q", x, m.commentType, want.kind)
+		}
+		x += len(want.label) + 2 + 1 // padding(0,1) + separator
 	}
 
 	// Click on wrong line should not change
+	m := &commentEditorModel{active: true, commentType: types.CommentIssue}
 	if m.handleClick(0, 3) {
 		t.Error("click on wrong line should return false")
 	}

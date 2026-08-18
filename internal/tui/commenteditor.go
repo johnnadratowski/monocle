@@ -79,20 +79,7 @@ func (m commentEditorModel) Update(msg tea.Msg) (commentEditorModel, tea.Cmd) {
 			m.insertAtCursor("\n")
 		case "tab":
 			// Cycle comment type
-			switch m.commentType {
-			case types.CommentIssue:
-				m.commentType = types.CommentSuggestion
-			case types.CommentSuggestion:
-				m.commentType = types.CommentQuestion
-			case types.CommentQuestion:
-				m.commentType = types.CommentAnswer
-			case types.CommentAnswer:
-				m.commentType = types.CommentNote
-			case types.CommentNote:
-				m.commentType = types.CommentPraise
-			case types.CommentPraise:
-				m.commentType = types.CommentIssue
-			}
+			m.commentType = nextCommentType(m.commentType)
 		case "backspace":
 			m.deleteBeforeCursor()
 		case "delete", "ctrl+d":
@@ -389,19 +376,9 @@ func (m commentEditorModel) View() string {
 	b.WriteString("\n")
 
 	// Type selector — each type has a color; selected gets solid bg, unselected gets colored text
-	typeLabels := []struct {
-		t     types.CommentType
-		label string
-		color color.Color
-	}{
-		{types.CommentIssue, "ISSUE", lipgloss.Color("1")},
-		{types.CommentSuggestion, "SUGGESTION", lipgloss.Color("3")},
-		{types.CommentNote, "NOTE", lipgloss.Color("4")},
-		{types.CommentPraise, "PRAISE", lipgloss.Color("2")},
-	}
-	for i, tl := range typeLabels {
+	for i, tl := range commentTypes {
 		var style lipgloss.Style
-		if tl.t == m.commentType {
+		if tl.kind == m.commentType {
 			style = lipgloss.NewStyle().
 				Background(tl.color).
 				Foreground(lipgloss.Color("0")).
@@ -413,7 +390,7 @@ func (m commentEditorModel) View() string {
 				Padding(0, 1)
 		}
 		b.WriteString(style.Render(tl.label))
-		if i < len(typeLabels)-1 {
+		if i < len(commentTypes)-1 {
 			b.WriteString(" ")
 		}
 	}
@@ -467,6 +444,36 @@ func (m *commentEditorModel) open(path string, lineStart, lineEnd int, targetTyp
 	m.editingID = ""
 }
 
+// commentTypes is the single ordered list of comment types: it drives the Tab
+// cycle, the labels the editor draws, their colours and the click targets.
+//
+// Those were three separate literals, which is exactly how "question" and
+// "answer" ended up in the cycle but missing from the row of labels — Tab
+// stepped onto a type the selector could not show, so it appeared to do
+// nothing. The order runs most-actionable to least.
+var commentTypes = []struct {
+	kind  types.CommentType
+	label string
+	color color.Color
+}{
+	{types.CommentIssue, "ISSUE", lipgloss.Color("1")},
+	{types.CommentSuggestion, "SUGGESTION", lipgloss.Color("3")},
+	{types.CommentQuestion, "QUESTION", lipgloss.Color("6")},
+	{types.CommentAnswer, "ANSWER", lipgloss.Color("6")},
+	{types.CommentNote, "NOTE", lipgloss.Color("4")},
+	{types.CommentPraise, "PRAISE", lipgloss.Color("2")},
+}
+
+// nextCommentType advances the Tab cycle, wrapping at the end.
+func nextCommentType(t types.CommentType) types.CommentType {
+	for i, ct := range commentTypes {
+		if ct.kind == t {
+			return commentTypes[(i+1)%len(commentTypes)].kind
+		}
+	}
+	return commentTypes[0].kind
+}
+
 // handleClick processes a mouse click at content-relative coordinates.
 // Returns true if the click was on an interactive element.
 func (m *commentEditorModel) handleClick(contentX, contentY int) bool {
@@ -476,21 +483,11 @@ func (m *commentEditorModel) handleClick(contentX, contentY int) bool {
 		return false
 	}
 
-	labels := []struct {
-		t     types.CommentType
-		label string
-	}{
-		{types.CommentIssue, "ISSUE"},
-		{types.CommentSuggestion, "SUGGESTION"},
-		{types.CommentNote, "NOTE"},
-		{types.CommentPraise, "PRAISE"},
-	}
-
 	x := 0
-	for _, l := range labels {
+	for _, l := range commentTypes {
 		labelW := len(l.label) + 2 // padding(0,1) adds 1 each side
 		if contentX >= x && contentX < x+labelW {
-			m.commentType = l.t
+			m.commentType = l.kind
 			return true
 		}
 		x += labelW + 1 // +1 for " " separator
