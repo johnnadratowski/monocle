@@ -1653,13 +1653,8 @@ func (m diffViewModel) renderDiffLine(line diffViewLine, _, contentWidth int, se
 		renderedContent = applyBgAndPad(styled, lineBg, contentWidth)
 	} else {
 		// Non-markdown → syntax highlighting with intra-line changes
-		var changes []changeRange
-		if line.pairContent != "" {
-			if line.kind == types.DiffLineRemoved {
-				changes, _ = computeChangeRanges(line.content, line.pairContent)
-			} else if line.kind == types.DiffLineAdded {
-				_, changes = computeChangeRanges(line.pairContent, line.content)
-			}
+		changes := lineChangeRanges(line)
+		if len(changes) > 0 {
 			if m.hOffset > 0 {
 				changes = shiftChangeRanges(changes, m.hOffset)
 			}
@@ -1670,6 +1665,42 @@ func (m diffViewModel) renderDiffLine(line diffViewLine, _, contentWidth int, se
 	}
 
 	return renderedGutter + renderedContent
+}
+
+// lineChangeRanges returns the intra-line change spans for a unified diff line,
+// as offsets into the line's own text. The wrapped renderer can use them
+// unshifted because it styles the whole line before splitting it.
+func lineChangeRanges(line diffViewLine) []changeRange {
+	if line.pairContent == "" {
+		return nil
+	}
+	switch line.kind {
+	case types.DiffLineRemoved:
+		changes, _ := computeChangeRanges(line.content, line.pairContent)
+		return changes
+	case types.DiffLineAdded:
+		_, changes := computeChangeRanges(line.pairContent, line.content)
+		return changes
+	}
+	return nil
+}
+
+// mdLineOrZero guards the wrapped renderer's optional line pointer.
+func mdLineOrZero(l *diffViewLine) diffViewLine {
+	if l == nil {
+		return diffViewLine{}
+	}
+	return *l
+}
+
+// splitChangeRanges returns the intra-line change spans for both halves of a
+// split row, or nil when the row is not a paired edit.
+func (m diffViewModel) splitChangeRanges(line diffViewLine) (left, right []changeRange) {
+	if line.leftEmpty || line.rightEmpty ||
+		line.kind != types.DiffLineRemoved || line.rightKind != types.DiffLineAdded {
+		return nil, nil
+	}
+	return computeChangeRanges(line.content, line.rightContent)
 }
 
 // splitSideChunks breaks one side of a split row into the rows it occupies.
@@ -1801,12 +1832,17 @@ func (m diffViewModel) renderWrappedSplitLine(line diffViewLine, selected, inVis
 	//
 	// The plain text is what screenLinesFor counts, and wrapContent measures
 	// printable width only, so styled and plain break at the same points.
+	//
+	// The change spans go in unshifted: they index the unwrapped side, which is
+	// what is being styled. Dropping them was why a wrapped line lost the
+	// brighter background on the words that actually changed.
 	leftChunks := m.splitSideChunks(line.content, line.leftEmpty, contentW)
 	rightChunks := m.splitSideChunks(line.rightContent, line.rightEmpty, contentW)
+	leftChanges, rightChanges := m.splitChangeRanges(line)
 	leftStyled := m.splitSideChunks(
-		m.styleSplitContent(line.content, line.kind, nil, 0, line), line.leftEmpty, contentW)
+		m.styleSplitContent(line.content, line.kind, leftChanges, 0, line), line.leftEmpty, contentW)
 	rightStyled := m.splitSideChunks(
-		m.styleSplitContent(line.rightContent, line.rightKind, nil, 0, line), line.rightEmpty, contentW)
+		m.styleSplitContent(line.rightContent, line.rightKind, rightChanges, 0, line), line.rightEmpty, contentW)
 	rows := max(len(leftChunks), len(rightChunks))
 
 	blankGutter := strings.Repeat(" ", gutterW)
@@ -2020,7 +2056,9 @@ func (m diffViewModel) renderWrappedLine(gutter, content string, gutterWidth, co
 	case isMd:
 		styled = applyBgAndPad(m.mdStyler.StyleLine(content), lineBg, 0)
 	default:
-		sc, sbg := m.applySearchHighlight(content, nil, changeBg)
+		// The offsets index the unwrapped line, which is exactly what is being
+		// styled here — so intra-line change highlighting survives the wrap.
+		sc, sbg := m.applySearchHighlight(content, lineChangeRanges(mdLineOrZero(mdLine)), changeBg)
 		styled = m.hl.highlightLine(m.path, content, lineBg, sbg, sc, 0)
 	}
 
