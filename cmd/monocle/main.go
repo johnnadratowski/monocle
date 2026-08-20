@@ -493,8 +493,23 @@ func (cmd *ReviewStatusCmd) Run() error {
 	if err != nil {
 		return err
 	}
+	// This command is a pure read: it never spawns an engine and never consumes
+	// a queued verdict, so it is safe to poll. get_feedback is the opposite on
+	// both counts, which is why a dashboard must use this instead.
 	c, err := client.Connect(socketPath)
 	if err != nil {
+		if cmd.JSON {
+			// Unreachable is an answer, not a failure — distinguishing it from
+			// "nothing staged" is the reason this shape exists. Exit 0 so a
+			// poller reads the state rather than a shell error.
+			return printJSON(&protocol.GetReviewStatusResponse{
+				Type:        protocol.TypeGetReviewStatusResponse,
+				Status:      core.ReviewStateUnreachable,
+				ReviewState: core.ReviewStateUnreachable,
+				Summary:     err.Error(),
+				RepoRoot:    repoRootForStatus(cmd.WorkDir),
+			})
+		}
 		if errors.Is(err, client.ErrNotRunning) {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
@@ -508,6 +523,17 @@ func (cmd *ReviewStatusCmd) Run() error {
 		client.DefaultTimeout,
 	)
 	if err != nil {
+		if cmd.JSON {
+			// A socket that accepts but does not answer is unreachable too; a
+			// hung engine must not read as "nothing staged".
+			return printJSON(&protocol.GetReviewStatusResponse{
+				Type:        protocol.TypeGetReviewStatusResponse,
+				Status:      core.ReviewStateUnreachable,
+				ReviewState: core.ReviewStateUnreachable,
+				Summary:     err.Error(),
+				RepoRoot:    repoRootForStatus(cmd.WorkDir),
+			})
+		}
 		return fmt.Errorf("review status: %w", err)
 	}
 
@@ -1205,4 +1231,18 @@ func runTUI(socketOverride string, workdir string, additionalPaths []string, con
 	// Note: don't call engine.Shutdown() — serve owns its own lifecycle
 	// (idle timeout, PID file) and other clients may still be attached.
 	return nil
+}
+
+// repoRootForStatus resolves the repo a status answer is about, so an
+// unreachable engine still names which repo could not be reached. Best-effort:
+// the path is reported as given when it is not a repo.
+func repoRootForStatus(workDir string) string {
+	dir := workDir
+	if dir == "" {
+		dir, _ = os.Getwd()
+	}
+	if root := adapters.FindRepoRoot(dir); root != "" {
+		return root
+	}
+	return dir
 }

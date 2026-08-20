@@ -2226,33 +2226,68 @@ func (e *Engine) GetReviewStatusInfo() *ReviewStatusInfo {
 	var repoRoot, reviewName string
 	commentCount := 0
 	loaded := false
+	var counts reviewCounts
 	if e.current != nil {
 		repoRoot = e.current.RepoRoot
 		reviewName = e.current.ReviewName
 		commentCount = len(e.current.Comments)
 		loaded = e.reviewLoadedLocked()
+		counts = e.reviewCountsLocked()
 	}
 	e.mu.RUnlock()
 
+	// The reviewer-side state, which is a different question from the agent-side
+	// Status below: "is a human being waited on" rather than "is there feedback
+	// to collect". They are not inverses — between a submit and the agent's
+	// collection, neither side is waiting on the other.
+	queued := e.feedback.HasPending()
+	tracking := e.IsReviewTrackingEnabled()
+	reviewState := ReviewStateNone
+	if loaded && !queued {
+		// With review tracking on, "unreviewed" is the exact signal: submitting
+		// marks files reviewed and the agent's next write unmarks them again.
+		//
+		// With it off nothing is ever marked, so that test would read "waiting"
+		// forever. There is no better signal available in that configuration, so
+		// anything staged counts as waiting and ReviewTracking is reported
+		// alongside, letting a consumer see that the answer is the coarse one.
+		if !tracking || counts.unreviewed() > 0 {
+			reviewState = ReviewStateWaiting
+		}
+	}
+	fill := func(info *ReviewStatusInfo) *ReviewStatusInfo {
+		info.ReviewState = reviewState
+		info.FeedbackQueued = queued
+		info.Round = counts.round
+		info.Files = counts.files
+		info.FilesUnreviewed = counts.filesUnreviewed
+		info.Artifacts = counts.artifacts
+		info.ArtifactsUnreviewed = counts.artifactsUnreviewed
+		info.AddedFiles = counts.addedFiles
+		info.Comments = commentCount
+		info.ReviewTracking = tracking
+		return info
+	}
+
 	if e.feedback.IsPauseRequested() {
-		return &ReviewStatusInfo{
+		return fill(&ReviewStatusInfo{
 			Status:       "pause_requested",
 			ReviewLoaded: loaded,
 			Summary:      "Your reviewer has requested a pause. Use the get_feedback tool with wait=true to receive feedback.",
 			RepoRoot:     repoRoot,
 			ReviewName:   reviewName,
-		}
+		})
 	}
 
 	if e.feedback.HasPending() {
-		return &ReviewStatusInfo{
+		return fill(&ReviewStatusInfo{
 			Status:       "pending",
 			ReviewLoaded: loaded,
 			CommentCount: commentCount,
 			Summary:      fmt.Sprintf("%d comment(s) pending review.", commentCount),
 			RepoRoot:     repoRoot,
 			ReviewName:   reviewName,
-		}
+		})
 	}
 
 	// "Nothing pending" and "nothing here to review" look identical to an agent
@@ -2262,7 +2297,7 @@ func (e *Engine) GetReviewStatusInfo() *ReviewStatusInfo {
 	// with the same words turns a misbinding into a false approval, so they get
 	// distinct statuses and distinct wording.
 	if !loaded {
-		return &ReviewStatusInfo{
+		return fill(&ReviewStatusInfo{
 			Status:       "no_review",
 			ReviewLoaded: false,
 			Summary: fmt.Sprintf(
@@ -2270,16 +2305,50 @@ func (e *Engine) GetReviewStatusInfo() *ReviewStatusInfo {
 				repoRootOrUnbound(repoRoot)),
 			RepoRoot:   repoRoot,
 			ReviewName: reviewName,
-		}
+		})
 	}
 
-	return &ReviewStatusInfo{
+	return fill(&ReviewStatusInfo{
 		Status:       "no_feedback",
 		ReviewLoaded: true,
 		Summary:      "No feedback pending.",
 		RepoRoot:     repoRoot,
 		ReviewName:   reviewName,
+	})
+}
+
+// reviewCounts is what a status line needs to describe a review in one glance.
+type reviewCounts struct {
+	round                                                              int
+	files, filesUnreviewed, artifacts, artifactsUnreviewed, addedFiles int
+}
+
+// unreviewed is the number of items still awaiting the human. Added context
+// files are excluded: they are reference material the agent attached, not work
+// to be signed off, so leaving them unopened must not read as an outstanding
+// review.
+func (c reviewCounts) unreviewed() int { return c.filesUnreviewed + c.artifactsUnreviewed }
+
+// reviewCountsLocked tallies the current session. Callers must hold e.mu.
+func (e *Engine) reviewCountsLocked() reviewCounts {
+	s := e.current
+	c := reviewCounts{
+		round:      s.ReviewRound,
+		files:      len(s.ChangedFiles),
+		artifacts:  len(s.ContentItems),
+		addedFiles: len(s.AdditionalFiles),
 	}
+	for _, f := range s.ChangedFiles {
+		if !f.Reviewed {
+			c.filesUnreviewed++
+		}
+	}
+	for _, it := range s.ContentItems {
+		if !it.Reviewed {
+			c.artifactsUnreviewed++
+		}
+	}
+	return c
 }
 
 // reviewLoadedLocked reports whether this engine actually holds a review: any
@@ -2635,6 +2704,17 @@ func (e *Engine) handleGetReviewStatus(_ *protocol.GetReviewStatusMsg) *protocol
 		RepoRoot:     info.RepoRoot,
 		ReviewName:   info.ReviewName,
 		ReviewLoaded: info.ReviewLoaded,
+
+		ReviewState:         info.ReviewState,
+		FeedbackQueued:      info.FeedbackQueued,
+		ReviewTracking:      info.ReviewTracking,
+		Round:               info.Round,
+		Files:               info.Files,
+		FilesUnreviewed:     info.FilesUnreviewed,
+		Artifacts:           info.Artifacts,
+		ArtifactsUnreviewed: info.ArtifactsUnreviewed,
+		AddedFiles:          info.AddedFiles,
+		Comments:            info.Comments,
 	}
 }
 

@@ -63,7 +63,31 @@ type ReviewStatusInfo struct {
 	// an agent but mean opposite things — the second is usually a misbinding,
 	// and reporting it as an all-clear is how a dead engine passes for approval.
 	ReviewLoaded bool
+
+	// ReviewState is the reviewer-facing answer: "none" (nothing staged, or the
+	// human is done with what is) or "waiting" (staged and unreviewed). Callers
+	// that cannot reach the engine report "unreachable" themselves.
+	ReviewState    string
+	FeedbackQueued bool
+	// ReviewTracking reports whether reviewed-state is being tracked at all.
+	// When false the "waiting" answer is coarse — see GetReviewStatusInfo.
+	ReviewTracking bool
+
+	Round               int
+	Files               int
+	FilesUnreviewed     int
+	Artifacts           int
+	ArtifactsUnreviewed int
+	AddedFiles          int
+	Comments            int
 }
+
+// Review states, from the reviewer's point of view rather than the agent's.
+const (
+	ReviewStateNone        = "none"
+	ReviewStateWaiting     = "waiting"
+	ReviewStateUnreachable = "unreachable"
+)
 
 // FeedbackQueue manages the synchronization between user review actions
 // and MCP channel/tool feedback retrieval. Supports both non-blocking and

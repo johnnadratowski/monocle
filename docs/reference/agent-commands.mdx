@@ -493,3 +493,59 @@ A retrieved review carries an `action`, and its heading says the same thing:
 Individual comments carry a type too — `issue`, `suggestion`, `question`, `answer`, `note`, `praise` — and the review's summary line counts them, so a review can request changes and still contain questions to answer. An `answer` is the reviewer replying to something you raised (an annotation, or a question in an artifact); it asks nothing further, which is why a review made only of answers arrives as an approval.
 
 Treat `questions` as blocking in the same way `request_changes` is — the reviewer is waiting — but do not rewrite code merely to have something to show.
+
+## Polling whether a review is waiting
+
+`monocle review status --json` answers, for one repo and without side effects, whether a review is staged and waiting on the human. It is intended for dashboards and status lines — processes that are not agents and may poll every few seconds.
+
+```bash
+monocle review status -C /path/to/repo --json
+```
+
+```json
+{
+  "review_state": "waiting",
+  "repo_root": "/path/to/repo",
+  "review_name": "Auth rework",
+  "round": 3,
+  "files": 12,
+  "files_unreviewed": 5,
+  "artifacts": 2,
+  "artifacts_unreviewed": 1,
+  "added_files": 1,
+  "comments": 4,
+  "feedback_queued": false,
+  "review_tracking": true
+}
+```
+
+### `review_state`
+
+| Value | Meaning |
+|-------|---------|
+| `none` | The engine is reachable and nothing awaits the human — either nothing is staged, or everything staged has been signed off |
+| `waiting` | Something is staged and unreviewed. This is the "a human is being waited on" signal |
+| `unreachable` | No engine could be reached for this repo. Reported only by the CLI, since it is the caller that failed to connect |
+
+`unreachable` is distinct from `none` on purpose: a dead engine and an empty one are opposite facts, and conflating them is how a dashboard silently reports "all clear" for a lane whose engine died.
+
+### It is safe to poll
+
+Two properties, both deliberate:
+
+- **It never drains.** Asking any number of times does not change what a later `get_feedback` returns. `get_feedback` is the opposite — it commits delivery, so a dashboard calling it could consume a verdict before the agent meant to act on it ever saw it. Use this instead.
+- **It never spawns an engine.** An absent engine is reported as `unreachable` rather than started, so polling cannot bring engines to life across a fleet.
+
+With `--json`, an unreachable engine exits 0 and reports the state, so a poller reads the answer rather than a shell error. Without `--json` the behaviour is unchanged: a message on stderr and exit 1.
+
+### The other fields
+
+`feedback_queued` is true when the human has submitted and the agent has not collected yet. Such a review is `none` — nobody is waiting on the human — but a status line usually wants to distinguish it from genuinely idle.
+
+`review_tracking` reports whether reviewed-state is tracked at all. When it is false, nothing is ever marked reviewed, so `waiting` degrades to "something is staged" rather than "something is unreviewed". The field is there so a consumer can tell that the answer is the coarse one.
+
+Added context files are counted in `added_files` but never make a review `waiting`: they are reference material the agent attached, not work to sign off.
+
+<Note>
+  Reading `~/.local/share/monocle/monocle.db` gives similar answers, but the schema is private and changes without notice. This command is the supported surface.
+</Note>

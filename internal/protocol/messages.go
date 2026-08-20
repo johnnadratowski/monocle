@@ -65,6 +65,30 @@ type GetReviewStatusResponse struct {
 	// reads identically to "nothing pending" but usually means the caller is
 	// bound to the wrong engine. See ReviewStatusInfo.ReviewLoaded.
 	ReviewLoaded bool `json:"review_loaded"`
+
+	// ReviewState answers the REVIEWER's question — is a review staged and
+	// waiting on the human — as opposed to Status, which answers the agent's:
+	// is there feedback to collect. "none" or "waiting"; a caller that cannot
+	// reach the engine reports "unreachable" itself, which is the state nothing
+	// could express before.
+	ReviewState string `json:"review_state"`
+	// FeedbackQueued is true when the human has submitted and the agent has not
+	// collected yet. Such a review is not waiting on the human, but it is also
+	// not nothing, and a dashboard usually wants to say so.
+	FeedbackQueued bool `json:"feedback_queued"`
+	// ReviewTracking is false when reviewed-state tracking is disabled, in which
+	// case "waiting" means only "something is staged" — see the engine's
+	// GetReviewStatusInfo for why.
+	ReviewTracking bool `json:"review_tracking"`
+
+	// Counts, so a status line needs no second call.
+	Round               int `json:"round"`
+	Files               int `json:"files"`
+	FilesUnreviewed     int `json:"files_unreviewed"`
+	Artifacts           int `json:"artifacts"`
+	ArtifactsUnreviewed int `json:"artifacts_unreviewed"`
+	AddedFiles          int `json:"added_files"`
+	Comments            int `json:"comments"`
 }
 
 // PollFeedbackMsg requests pending feedback, optionally blocking until available.
