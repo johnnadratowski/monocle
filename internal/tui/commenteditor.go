@@ -78,8 +78,12 @@ func (m commentEditorModel) Update(msg tea.Msg) (commentEditorModel, tea.Cmd) {
 		case "shift+enter", "alt+enter":
 			m.insertAtCursor("\n")
 		case "tab":
-			// Cycle comment type
 			m.commentType = nextCommentType(m.commentType)
+		case "shift+tab":
+			// Backwards through the same list. Without this, overshooting the
+			// type you wanted meant cycling all the way round — five presses to
+			// undo one, and the list grew to six.
+			m.commentType = prevCommentType(m.commentType)
 		case "backspace":
 			m.deleteBeforeCursor()
 		case "delete", "ctrl+d":
@@ -422,7 +426,7 @@ func (m commentEditorModel) View() string {
 	b.WriteString("\n\n")
 
 	// Hints
-	b.WriteString(lipgloss.NewStyle().Faint(true).Render("Enter: save  Shift+Enter: newline  Ctrl+g: editor  Esc: cancel  Tab: cycle type"))
+	b.WriteString(lipgloss.NewStyle().Faint(true).Render("Enter: save  Alt+Enter: newline  Ctrl+g: editor  Esc: cancel  Tab/Shift+Tab: type"))
 
 	return m.theme.ModalBorder.Width(modalWidth).Render(b.String())
 }
@@ -465,10 +469,19 @@ var commentTypes = []struct {
 }
 
 // nextCommentType advances the Tab cycle, wrapping at the end.
-func nextCommentType(t types.CommentType) types.CommentType {
+func nextCommentType(t types.CommentType) types.CommentType { return stepCommentType(t, 1) }
+
+// prevCommentType walks the cycle backwards for Shift+Tab, wrapping at the start.
+func prevCommentType(t types.CommentType) types.CommentType { return stepCommentType(t, -1) }
+
+// stepCommentType moves dir places through commentTypes, wrapping either way.
+// An unknown type lands on the first entry, so a comment saved under a type
+// that no longer exists still cycles rather than sticking.
+func stepCommentType(t types.CommentType, dir int) types.CommentType {
+	n := len(commentTypes)
 	for i, ct := range commentTypes {
 		if ct.kind == t {
-			return commentTypes[(i+1)%len(commentTypes)].kind
+			return commentTypes[((i+dir)%n+n)%n].kind
 		}
 	}
 	return commentTypes[0].kind

@@ -7,7 +7,6 @@ description: "Complete keyboard shortcut reference for monocle."
   Press `H` inside monocle to see the current effective keybindings, including any custom overrides you have configured.
 </Tip>
 
-Bindings are grouped by the task they serve, and within a group they are ordered by key: lowercase, uppercase, digits, punctuation, modified keys, then `:` commands. Press `H` in monocle for the same list with your own overrides applied, and `/` inside it to search.
 Bindings are grouped by the task they serve, and within a group ordered by key: lowercase, uppercase, digits, punctuation, modified keys, then `:` commands. Press `H` in monocle for this same list with your own overrides applied, and `/` inside it to search. The arrow keys mirror `h`/`j`/`k`/`l` throughout.
 
 ## Move
@@ -75,7 +74,7 @@ The diff pane's borders carry two kinds of fact, split by side.
 The badge names each dimension that is not at its default: how much of the file is shown (hunks, or `ALL` of it) and how it is laid out (`UNIFIED` or `SPLIT`). The layout is spelled out whenever `ALL` is, because `ALL` on its own reads as though it replaced the layout — `[ALL · UNIFIED]`, `[ALL · SPLIT]`. A plain `[SPLIT]` needs no such qualifier, and the all-defaults view carries no badge at all, so a badge appearing always means you are not in the default view.
 
 ```
-┌─ internal/core/engine_impl.go · 12m · modified ────── [ALL] ↑ 128 lines · 3 chunks ─┐
+┌─ internal/core/engine_impl.go · 12m · modified ── [ALL · UNIFIED] ↑ 128 lines · 3 chunks ─┐
 │                                                                                     │
 └─────────────────────────────────────────────────────────── ↓ 940 lines · 12 chunks ─┘
 ```
@@ -147,6 +146,26 @@ When the agent sends groupings (`set_file_groups`), the sidebar switches to grou
 | `/` | Sidebar: cycle the reviewed filter |
 | `;` | Show/hide the sidebar |
 | `enter` | Focus the diff pane / toggle a directory open |
+| `tab` / `shift+tab` | Switch pane focus (sidebar/diff/doc) |
+
+## View & panes
+
+| Key | Action |
+|-----|--------|
+| `a` | Toggle full-file diff (whole file vs. changed lines) |
+| `f` | Cycle sidebar view (flat/tree/grouped) |
+| `t` | Cycle diff style (unified/split/file) (any pane) |
+| `w` | Toggle line wrapping (any pane) |
+| `z` / `e` | Collapse/expand all (tree view) |
+| `F` | Toggle focus mode (hide sidebar, wrap lines) |
+| `O` | Hide/show inline comments + annotations |
+| `T` | Cycle layout (auto/side-by-side/stacked) |
+| `1` / `2` | Jump straight to a pane |
+| `#` | Cycle source-code comments: dim → hide → show |
+| `/` | Sidebar: cycle the reviewed filter |
+| `;` | Show/hide the sidebar |
+| `enter` | Focus the diff pane / toggle a directory open |
+| `ctrl+h` / `ctrl+j` / `ctrl+k` / `ctrl+l` | Move pane focus left/down/up/right; at the edge, moves the tmux pane |
 | `tab` / `shift+tab` | Switch pane focus (sidebar/diff/doc) |
 
 ## View & panes
@@ -250,7 +269,8 @@ When the agent sends groupings (`set_file_groups`), the sidebar switches to grou
 | `ctrl+u` | Kill to start of line |
 | `ctrl+w` / `alt+bksp` | Delete word before cursor |
 | `alt+d` | Delete word after cursor |
-| `shift+enter` | Insert a newline |
+| `alt+enter` | Insert a newline (shift+enter too, where the terminal sends it) |
+| `tab` / `shift+tab` | Next / previous comment type |
 | `ctrl+g` | Open in your external editor |
 
 ## Review verdicts

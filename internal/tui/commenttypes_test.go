@@ -88,3 +88,63 @@ func TestEveryCommentTypeIsSelectable(t *testing.T) {
 		}
 	})
 }
+
+func TestCommentTypeCycleGoesBothWays(t *testing.T) {
+	first, last := commentTypes[0].kind, commentTypes[len(commentTypes)-1].kind
+
+	t.Run("shift+tab reverses tab", func(t *testing.T) {
+		for _, ct := range commentTypes {
+			if got := prevCommentType(nextCommentType(ct.kind)); got != ct.kind {
+				t.Errorf("forward then back from %q gave %q", ct.kind, got)
+			}
+		}
+	})
+
+	t.Run("it wraps at both ends", func(t *testing.T) {
+		if got := prevCommentType(first); got != last {
+			t.Errorf("back from the first type = %q, want %q", got, last)
+		}
+		if got := nextCommentType(last); got != first {
+			t.Errorf("forward from the last type = %q, want %q", got, first)
+		}
+	})
+
+	t.Run("backwards visits every type", func(t *testing.T) {
+		seen := map[types.CommentType]bool{}
+		cur := first
+		for range commentTypes {
+			seen[cur] = true
+			cur = prevCommentType(cur)
+		}
+		if cur != first {
+			t.Errorf("the reverse cycle should wrap to %q, got %q", first, cur)
+		}
+		for _, ct := range commentTypes {
+			if !seen[ct.kind] {
+				t.Errorf("Shift+Tab never reaches %q", ct.kind)
+			}
+		}
+	})
+
+	// A comment stored under a type that has since been removed must still
+	// cycle rather than sticking on an unrecognised value.
+	t.Run("an unknown type lands on the first", func(t *testing.T) {
+		if got := prevCommentType(types.CommentType("gone")); got != first {
+			t.Errorf("got %q, want %q", got, first)
+		}
+	})
+
+	// The hint line is the only place these keys are advertised in the editor.
+	t.Run("the hint advertises keys the terminal actually sends", func(t *testing.T) {
+		out := stripANSISeq(editorFor(t, types.CommentIssue).View())
+		if !strings.Contains(out, "Shift+Tab") {
+			t.Error("the backward cycle is undiscoverable unless the hint names it")
+		}
+		if !strings.Contains(out, "Alt+Enter") {
+			t.Error("hint should name Alt+Enter, which terminals deliver")
+		}
+		if strings.Contains(out, "Shift+Enter") {
+			t.Error("Shift+Enter is not sent distinctly by common terminals; advertising it sends people to a key that does nothing")
+		}
+	})
+}

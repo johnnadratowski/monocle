@@ -332,7 +332,8 @@ Bindings are grouped by the task they serve, and within a group ordered by key: 
 | `ctrl+u` | Kill to start of line |
 | `ctrl+w` / `alt+bksp` | Delete word before cursor |
 | `alt+d` | Delete word after cursor |
-| `shift+enter` | Insert a newline |
+| `alt+enter` | Insert a newline (shift+enter too, where the terminal sends it) |
+| `tab` / `shift+tab` | Next / previous comment type |
 | `ctrl+g` | Open in your external editor |
 
 ### Comment editor
