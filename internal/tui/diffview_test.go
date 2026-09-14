@@ -584,7 +584,8 @@ func TestIndexForNewLine(t *testing.T) {
 }
 
 // TestReanchorTo verifies that re-anchoring after a style toggle centers the
-// cursor on the matching source line and falls back to the top when absent.
+// cursor on the matching source line, and lands on the nearest line the new
+// layout does contain when the exact one is absent.
 func TestReanchorTo(t *testing.T) {
 	lines := make([]diffViewLine, 40)
 	for i := range lines {
@@ -604,10 +605,12 @@ func TestReanchorTo(t *testing.T) {
 		t.Error("cursor should be visible after reanchor")
 	}
 
-	// Missing line falls back to the top.
+	// A line this layout doesn't contain lands on the nearest one it does —
+	// falling back to the top threw the reader's position away on every
+	// whole-file toggle. See TestReanchorFallsBackToNearestLine.
 	m.reanchorTo(9999)
-	if m.cursor != 0 || m.offset != 0 {
-		t.Errorf("fallback: cursor=%d offset=%d, want 0/0", m.cursor, m.offset)
+	if got := m.lineNumAt(m.cursor); got != 40 {
+		t.Errorf("fallback landed on line %d, want the last line (40)", got)
 	}
 }
 

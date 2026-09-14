@@ -2401,13 +2401,50 @@ func (m diffViewModel) indexForNewLine(n int) int {
 	return -1
 }
 
+// indexNearestNewLine returns the rendered line closest to source line n, or -1
+// when the view holds no numbered line at all.
+//
+// Leaving whole-file mode is the case this exists for: the compact diff keeps
+// only the hunks, so the unchanged line you were reading usually has no row of
+// its own. "Closest" is by absolute distance, tie-breaking toward the earlier
+// line, so you land just above where you were rather than just below it.
+func (m diffViewModel) indexNearestNewLine(n int) int {
+	if n <= 0 {
+		return -1
+	}
+	best, bestDist := -1, 0
+	for i := range m.lines {
+		ln := m.lineNumAt(i)
+		if ln <= 0 {
+			continue
+		}
+		d := ln - n
+		if d < 0 {
+			d = -d
+		}
+		if best < 0 || d < bestDist {
+			best, bestDist = i, d
+		}
+	}
+	return best
+}
+
 // reanchorTo re-centers the viewport on the rebuilt line matching source line
-// lineNum after a style change. Falls back to the top when the line isn't found
-// (e.g. it was a pure-removed line absent from the new layout).
+// lineNum after a style change, falling back to the nearest line the new layout
+// does contain.
+//
+// It used to fall back to the top of the file, which made toggling whole-file
+// mode off throw away your position every time: the line you were on is
+// unchanged context, and the compact diff omits exactly those.
 func (m *diffViewModel) reanchorTo(lineNum int) {
 	m.hOffset = 0
 	idx := m.indexForNewLine(lineNum)
 	if idx < 0 {
+		idx = m.indexNearestNewLine(lineNum)
+	}
+	if idx < 0 {
+		// Nothing in this view carries a line number — an empty diff, or a
+		// media card. The top is the only sensible answer.
 		m.cursor = m.nearestSelectable(0, 1)
 		m.offset = 0
 		return
