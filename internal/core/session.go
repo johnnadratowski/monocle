@@ -146,6 +146,11 @@ func (sm *SessionManager) RefreshChangedFiles(session *types.ReviewSession) ([]t
 // and the periodic refresh handles downstream updates.
 func (sm *SessionManager) AdvanceRound(session *types.ReviewSession) error {
 	session.ReviewRound++
+	// The agent has taken this round's feedback, so what is on screen is no
+	// longer something that was sent to the reviewer. Clearing the stamp stops
+	// the top bar aging a handover that is already answered; the agent's next
+	// send re-stamps it with the new round's arrival.
+	session.SentAt = time.Time{}
 	session.UpdatedAt = time.Now()
 
 	if err := sm.db.UpdateSession(session); err != nil {

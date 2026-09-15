@@ -215,6 +215,7 @@ func (e *Engine) ResumeSession(sessionID string) (*types.ReviewSession, error) {
 		len(e.current.AdditionalFiles) == 0 &&
 		len(e.current.Comments) == 0 {
 		e.current.ReviewName = ""
+		e.current.SentAt = time.Time{}
 		_ = e.database.UpdateSession(e.current)
 	}
 	// reviewBase stays nil — Working Tree is the default view.
@@ -550,6 +551,23 @@ func (e *Engine) GetAnnotations() []types.Annotation {
 //   - new name while a review is open:
 //   - no reviewer comments → silently close the old review and open the new.
 //   - has comments → refused unless force; force discards the old review.
+//
+// noteReviewSent stamps the moment the agent handed the current round over, if
+// it has not already been stamped. Only the first send of a round counts: an
+// agent that follows send_artifact with add_files and set_file_groups made one
+// handover, and re-stamping on each call would report the review as newer than
+// it is. The stamp clears when the agent collects the reviewer's feedback, which
+// is what arms the next round.
+func (e *Engine) noteReviewSent() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.current == nil || !e.current.SentAt.IsZero() {
+		return
+	}
+	e.current.SentAt = time.Now()
+	_ = e.database.UpdateSession(e.current)
+}
+
 func (e *Engine) handleSetReviewName(msg *protocol.SetReviewNameMsg) *protocol.SetReviewNameResponse {
 	name := strings.TrimSpace(msg.Name)
 	reject := func(format string, a ...any) *protocol.SetReviewNameResponse {
@@ -1200,6 +1218,7 @@ func (e *Engine) clearReviewLocked() error {
 	// returning the review to a clean working-tree state. Set the fields directly
 	// (we already hold e.mu) rather than calling SetAutoAdvanceRef.
 	e.current.ReviewName = ""
+	e.current.SentAt = time.Time{}
 	e.current.AutoAdvanceRef = true
 	e.current.SelectedRef = ""
 	e.autoAdvanceRef = true
@@ -1788,6 +1807,7 @@ func (e *Engine) closeReviewOnApprove() {
 		return
 	}
 	e.current.ReviewName = ""
+	e.current.SentAt = time.Time{}
 	e.current.AutoAdvanceRef = true
 	e.current.SelectedRef = ""
 	e.autoAdvanceRef = true

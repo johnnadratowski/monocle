@@ -67,11 +67,16 @@ const (
 func (a SubmitAction) ClosesReview() bool { return a == ActionApprove }
 
 type ReviewSession struct {
-	ID              string
-	Agent           string
-	RepoRoot        string
-	BaseRef         string
-	ReviewName      string // optional agent-supplied name for the review (shown in the top bar)
+	ID         string
+	Agent      string
+	RepoRoot   string
+	BaseRef    string
+	ReviewName string // optional agent-supplied name for the review (shown in the top bar)
+	// SentAt is when the agent last handed this review over — the moment the
+	// current round landed in front of the reviewer, not when the session was
+	// created. Zero while nothing has been sent since the reviewer last
+	// submitted, so the top bar can stay silent rather than show a stale age.
+	SentAt          time.Time
 	AutoAdvanceRef  bool   // when true, BaseRef advances to HEAD on refresh; persisted so resume keeps a deliberately-set base
 	SelectedRef     string // the commit the reviewer/agent selected as the base (display); empty in auto-advance mode
 	ChangedFiles    []ChangedFile

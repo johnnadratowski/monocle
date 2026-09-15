@@ -297,6 +297,10 @@ type appModel struct {
 
 	// reviewName is the agent-supplied name for the review, shown in the top bar.
 	reviewName string
+	// reviewSentAt is when the agent handed the current round over, rendered as a
+	// live age beside the title. Zero means nothing has been sent since the agent
+	// last collected feedback, and the age is omitted rather than frozen.
+	reviewSentAt time.Time
 }
 
 // NewApp creates the root appModel and wires up all subsystems.
@@ -552,6 +556,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusBar.agentName = session.Agent
 			m.annotationCount = len(session.Annotations)
 			m.reviewName = session.ReviewName
+			m.reviewSentAt = session.SentAt
 		}
 		m.statusBar.fileCount = len(msg.files)
 		m.statusBar.socketStarted = m.engine.GetSocketPath() != ""
@@ -672,6 +677,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusBar.setCommentStats(session.Comments)
 			m.annotationCount = len(session.Annotations)
 			m.reviewName = session.ReviewName
+			m.reviewSentAt = session.SentAt
 		}
 		// A new review's first refresh: go back to the top. This runs ahead of
 		// the selection-preserving logic below, which exists so the agent
@@ -1662,6 +1668,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusBar.setCommentStats(session.Comments)
 			// A full clear also drops the review name and resets the base ref.
 			m.reviewName = session.ReviewName
+			m.reviewSentAt = session.SentAt
 			m.annotationCount = len(session.Annotations)
 		}
 		// If viewing a content item or an added file, it no longer exists —
@@ -4229,22 +4236,44 @@ func (m appModel) renderTitleBar() string {
 		left += " " + badge
 	}
 
-	center := m.reviewNameText()
 	right := m.renderReviewMetrics(dimStyle)
-	return composeThreeZone(left, center, right, m.width)
+	return composeThreeZone(left, m.reviewNameVariants(), right, m.width)
 }
 
-// reviewNameText returns the styled review name for the centre of the top bar:
-// the agent-supplied name, falling back to the latest artifact title, or "".
-func (m appModel) reviewNameText() string {
+// reviewNameVariants returns the centre of the top bar, widest form first: the
+// review name with how long ago the agent sent it, then the name alone. The name
+// is the agent-supplied one, falling back to the latest artifact's title.
+//
+// The age is what tells you, on walking back to the terminal, whether this is the
+// round you already read or a new one — so it is worth a slot in the bar, but not
+// at the cost of the name, hence the narrower fallback.
+func (m appModel) reviewNameVariants() []string {
 	name := m.reviewName
+	sentAt := m.reviewSentAt
 	if name == "" && len(m.sidebar.contentItems) > 0 {
-		name = m.sidebar.contentItems[len(m.sidebar.contentItems)-1].Title
+		latest := m.sidebar.contentItems[len(m.sidebar.contentItems)-1]
+		name = latest.Title
+		// Untitled review: the age belongs to the artifact standing in as the
+		// title, which carries its own timestamp.
+		if sentAt.IsZero() {
+			sentAt = latest.UpdatedAt
+		}
 	}
 	if name == "" {
-		return ""
+		return nil
 	}
-	return lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true).Render(name)
+	titled := lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true).Render(name)
+	age := humanizeAge(time.Since(sentAt), sentAt)
+	if age == "" {
+		return []string{titled}
+	}
+	// "sent 12m ago", not a bare "12m": beside a title the number needs to say
+	// what it is counting, and the top bar has the room the pane header does not.
+	when := "sent " + age + " ago"
+	if age == "now" {
+		when = "sent just now"
+	}
+	return []string{titled + lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(" · "+when), titled}
 }
 
 // renderReviewMetrics builds the right-hand review summary: total +/- churn,
@@ -4276,10 +4305,11 @@ func (m appModel) renderReviewMetrics(dim lipgloss.Style) string {
 
 // composeThreeZone lays out a bar with left- and right-anchored segments and a
 // centred segment. The centre is placed at the bar's midpoint, nudged aside if it
-// would collide with either edge segment; when everything can't fit it falls back
-// to a simple left|right layout (dropping the centre).
-func composeThreeZone(left, center, right string, width int) string {
-	lw, cw, rw := lipgloss.Width(left), lipgloss.Width(center), lipgloss.Width(right)
+// would collide with either edge segment. Callers pass the centre as candidates
+// from widest to narrowest; the first that fits is used, and when none does the
+// bar falls back to a simple left|right layout.
+func composeThreeZone(left string, centers []string, right string, width int) string {
+	lw, rw := lipgloss.Width(left), lipgloss.Width(right)
 
 	leftRight := func() string {
 		gap := width - lw - rw
@@ -4289,11 +4319,16 @@ func composeThreeZone(left, center, right string, width int) string {
 		return left + strings.Repeat(" ", gap) + right
 	}
 
-	if center == "" {
-		return leftRight()
+	// Need a space on each side of the centre; if none of the candidates can fit,
+	// drop the centre entirely.
+	center, cw := "", 0
+	for _, c := range centers {
+		if w := lipgloss.Width(c); c != "" && lw+w+rw+2 <= width {
+			center, cw = c, w
+			break
+		}
 	}
-	// Need a space on each side of the centre; if it can't fit, drop it.
-	if lw+cw+rw+2 > width {
+	if center == "" {
 		return leftRight()
 	}
 	centerStart := (width - cw) / 2

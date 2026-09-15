@@ -357,6 +357,7 @@ Lifecycle rules:
 - Calling it again with the **same name** is a no-op.
 - Calling it with a **new name while a review is already open** replaces the old review automatically **if the reviewer hasn't left any comments**. If the reviewer **has** commented, the call is **refused** to protect their work — pass `--force` to discard the in-progress review and start the new one.
 - Approving or clearing a review resets its name (and the diff base), so the next review starts clean.
+- The top bar shows how long ago the review was handed over (`Add OAuth login · sent 12m ago`). The clock starts on the first call that sends work — `set-name`, `send-artifact`, `send-diff`, `add-files`, `set-file-groups` or `add-annotations` — and the follow-up calls dressing the same review leave it alone. It resets when you collect the reviewer's feedback, and the next round's first send restarts it.
 
 ### Flags
 

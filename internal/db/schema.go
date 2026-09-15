@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-const schemaVersion = 13
+const schemaVersion = 14
 
 const dropSQL = `
 DROP TABLE IF EXISTS review_snapshot_files;
@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 	repo_root TEXT NOT NULL,
 	base_ref TEXT NOT NULL,
 	review_name TEXT NOT NULL DEFAULT '',
+	review_sent_at DATETIME,
 	auto_advance_ref INTEGER NOT NULL DEFAULT 1,
 	selected_ref TEXT NOT NULL DEFAULT '',
 	ignore_patterns TEXT NOT NULL DEFAULT '[]',
@@ -210,16 +211,19 @@ func Migrate(db *sql.DB) error {
 		return fmt.Errorf("database schema version %d is newer than supported version %d", currentVersion, schemaVersion)
 	}
 
-	if currentVersion == schemaVersion {
-		// Verify schema integrity — check that key columns exist.
-		var colCount int
-		err = db.QueryRow(
-			"SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name = 'repo_root'",
-		).Scan(&colCount)
-		if err != nil || colCount == 1 {
-			return nil // schema looks good
+	// A database that is intact and recent enough is migrated in place. The
+	// drop-and-recreate below is fine for a change that restructures data, but it
+	// would also throw away a review the reviewer has staged and not yet
+	// submitted — so a change that only appends nullable columns says so in
+	// addedColumns and keeps the data.
+	if currentVersion >= firstAdditiveVersion && schemaIntact(db) {
+		if err := addColumns(db); err != nil {
+			return err
 		}
-		// Schema is stale — fall through to recreate.
+		if currentVersion == schemaVersion {
+			return nil
+		}
+		return setVersion(db, schemaVersion)
 	}
 
 	// Drop and recreate (safe during pre-release development).
@@ -230,6 +234,61 @@ func Migrate(db *sql.DB) error {
 		return fmt.Errorf("apply schema: %w", err)
 	}
 	if _, err := db.Exec("INSERT INTO schema_version (version) VALUES (?)", schemaVersion); err != nil {
+		return fmt.Errorf("set schema version: %w", err)
+	}
+	return nil
+}
+
+// firstAdditiveVersion is the oldest schema a column-append can upgrade in place.
+// Anything older predates a restructuring migration and still takes the
+// drop-and-recreate path.
+const firstAdditiveVersion = 13
+
+// addedColumns lists nullable columns appended since firstAdditiveVersion, as
+// table -> column -> DDL type. Adding one here (and to schemaSQL) is the whole
+// migration: existing rows get NULL, which every reader already tolerates.
+var addedColumns = map[string]map[string]string{
+	"sessions": {"review_sent_at": "DATETIME"},
+}
+
+// schemaIntact reports whether the tables look like the schema they claim to be.
+// A version row can outlive the tables it described (a half-applied migration, a
+// hand-edited database), so the version alone is not proof.
+func schemaIntact(db *sql.DB) bool {
+	var n int
+	err := db.QueryRow(
+		"SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name = 'repo_root'",
+	).Scan(&n)
+	return err == nil && n == 1
+}
+
+// addColumns appends any columns in addedColumns that the database is missing.
+func addColumns(db *sql.DB) error {
+	for table, cols := range addedColumns {
+		for col, typ := range cols {
+			var n int
+			if err := db.QueryRow(
+				"SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?", table, col,
+			).Scan(&n); err != nil {
+				return fmt.Errorf("check %s.%s: %w", table, col, err)
+			}
+			if n > 0 {
+				continue
+			}
+			if _, err := db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, col, typ)); err != nil {
+				return fmt.Errorf("add %s.%s: %w", table, col, err)
+			}
+		}
+	}
+	return nil
+}
+
+// setVersion rewrites the single schema_version row.
+func setVersion(db *sql.DB, v int) error {
+	if _, err := db.Exec("DELETE FROM schema_version"); err != nil {
+		return fmt.Errorf("clear schema version: %w", err)
+	}
+	if _, err := db.Exec("INSERT INTO schema_version (version) VALUES (?)", v); err != nil {
 		return fmt.Errorf("set schema version: %w", err)
 	}
 	return nil

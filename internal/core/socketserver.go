@@ -605,8 +605,38 @@ func (s *SocketServer) handleQueuedConnection(conn net.Conn, scanner *bufio.Scan
 	}
 }
 
-// handleMessage routes a decoded message to the appropriate engine handler.
+// handleMessage routes a decoded message to the appropriate engine handler and
+// records the ones that constitute handing a review to the reviewer.
 func (s *SocketServer) handleMessage(msg any) any {
+	response := s.routeMessage(msg)
+	// Stamped after the handler, not before: set_review_name closes any review
+	// already open, which clears the stamp — marking first would have the clear
+	// erase the very handover that caused it.
+	if isReviewSend(msg) {
+		s.engine.noteReviewSent()
+	}
+	return response
+}
+
+// isReviewSend reports whether a message is the agent putting work in front of
+// the reviewer. Deliberately excludes mark-activity (a per-turn "still working"
+// pulse, not a handover) and every read-only query, both of which would keep
+// resetting the review's age to "now".
+func isReviewSend(msg any) bool {
+	switch msg.(type) {
+	case *protocol.SetReviewNameMsg,
+		*protocol.SubmitContentMsg,
+		*protocol.SubmitDiffMsg,
+		*protocol.AddAdditionalFilesMsg,
+		*protocol.SetFileGroupsMsg,
+		*protocol.AddAnnotationsMsg:
+		return true
+	}
+	return false
+}
+
+// routeMessage dispatches a decoded message to the appropriate engine handler.
+func (s *SocketServer) routeMessage(msg any) any {
 	switch m := msg.(type) {
 	case *protocol.GetReviewStatusMsg:
 		return s.engine.handleGetReviewStatus(m)
