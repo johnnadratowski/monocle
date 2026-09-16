@@ -168,4 +168,4 @@ is complete.
 
 - **Rebases and force-pushes** — snapshots store content hashes, not commit references. They are completely immune to rebases, unlike GitHub's "changes since last review" which breaks on force-push.
 - **File renames** — the old path shows as deleted, the new path shows as new. Both are marked as unreviewed so you can review the rename.
-- **Binary files** — content hashes detect changes, but monocle shows "binary file changed" instead of a diff.
+- **Binary files** — content hashes detect changes, but monocle shows "binary file changed" instead of a diff. The test is how *dense* control bytes are, not whether any are present: a source file carrying a stray NUL or escape still shows its diff, with the byte drawn as a `␀`-style glyph so you can see it. That byte is often the whole change.

@@ -1,6 +1,7 @@
 package core
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -125,8 +126,9 @@ func TestDirClient_Diff_SkipsBinary(t *testing.T) {
 	dir := t.TempDir()
 
 	os.WriteFile(filepath.Join(dir, "text.txt"), []byte("hello"), 0644)
-	// Binary file with null bytes
-	os.WriteFile(filepath.Join(dir, "binary.bin"), []byte("hello\x00world"), 0644)
+	// A real blob: control bytes throughout, not one stray byte in a text file.
+	os.WriteFile(filepath.Join(dir, "binary.bin"),
+		append([]byte("\x89PNG\r\n\x1a\n"), bytes.Repeat([]byte("\x00\x00\x00\rIHDR\x00\x00\x01\x90"), 40)...), 0644)
 
 	d := NewDirClient(dir, nil)
 	files, err := d.Diff("")
@@ -139,6 +141,27 @@ func TestDirClient_Diff_SkipsBinary(t *testing.T) {
 	}
 	if files[0].Path != "text.txt" {
 		t.Errorf("got %q, want %q", files[0].Path, "text.txt")
+	}
+}
+
+// A source file can carry a raw control byte — usually the very thing the
+// reviewer needs to see. Skipping it as "binary" removes the file from the
+// review entirely, which is how the defect stayed invisible.
+func TestDirClient_ShowsSourceFileWithStrayNUL(t *testing.T) {
+	dir := t.TempDir()
+	const src = "const replaced = new Set(staged.map((s) => `${s.document_kind}\x00${s.person_label ?? ''}`))\n"
+	os.WriteFile(filepath.Join(dir, "staging.ts"), []byte(src), 0644)
+
+	d := NewDirClient(dir, nil)
+	files, err := d.Diff("")
+	if err != nil {
+		t.Fatalf("Diff() error: %v", err)
+	}
+	if len(files) != 1 || files[0].Path != "staging.ts" {
+		t.Fatalf("Diff() = %+v, want the TypeScript file listed", files)
+	}
+	if _, err := d.FileContent("", "staging.ts"); err != nil {
+		t.Errorf("FileContent() refused a text file: %v", err)
 	}
 }
 

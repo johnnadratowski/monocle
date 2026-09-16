@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -9,7 +10,23 @@ import (
 	"github.com/josephschmitt/monocle/internal/types"
 )
 
+// TestIsBinaryContent pins the question the detector actually answers: is this
+// content a blob the terminal cannot render, or is it text that happens to carry
+// a control byte? The second case used to be misfiled as the first, which hid the
+// diff of a source file whose whole change was removing the byte.
 func TestIsBinaryContent(t *testing.T) {
+	lines := func(ls ...string) []types.DiffHunk {
+		out := make([]types.DiffLine, len(ls))
+		for i, l := range ls {
+			out[i] = types.DiffLine{Content: l}
+		}
+		return []types.DiffHunk{{Lines: out}}
+	}
+	// A line of real source, long enough that one stray byte in it is the
+	// rounding error it actually is.
+	const code = "  const replaced = new Set(staged.map((s) => `${s.document_kind}%s${s.person_label ?? ''}`))"
+	repeat := func(s string, n int) string { return strings.Repeat(s, n) }
+
 	tests := []struct {
 		name  string
 		hunks []types.DiffHunk
@@ -21,75 +38,63 @@ func TestIsBinaryContent(t *testing.T) {
 			want:  false,
 		},
 		{
-			name: "normal text content",
-			hunks: []types.DiffHunk{{
-				Lines: []types.DiffLine{
-					{Content: "func main() {"},
-					{Content: "\tfmt.Println(\"hello\")"},
-					{Content: "}"},
-				},
-			}},
+			name:  "normal text content",
+			hunks: lines("func main() {", "\tfmt.Println(\"hello\")", "}"),
+			want:  false,
+		},
+		{
+			name:  "tabs are text",
+			hunks: lines("line\twith\ttabs"),
+			want:  false,
+		},
+		// The reported bug: a TypeScript file with two raw NULs inside template
+		// literals. git diffs it as text; so must we, because those two bytes are
+		// the entire change under review.
+		{
+			name: "source line carrying a NUL",
+			hunks: lines(
+				fmt.Sprintf(code, "\x00"),
+				fmt.Sprintf(code, "\\0"),
+			),
 			want: false,
 		},
 		{
-			name: "null byte in content",
-			hunks: []types.DiffHunk{{
-				Lines: []types.DiffLine{
-					{Content: "hello\x00world"},
-				},
-			}},
-			want: true,
+			name:  "a lone control byte anywhere in a short hunk",
+			hunks: lines("hello\x00world"),
+			want:  false,
 		},
 		{
-			name: "control character 0x01",
-			hunks: []types.DiffHunk{{
-				Lines: []types.DiffLine{
-					{Content: "binary\x01data"},
-				},
-			}},
-			want: true,
+			name:  "an escape sequence is shown, not hidden",
+			hunks: lines("printf '\x1b[31mred\x1b[0m'"),
+			want:  false,
 		},
+		// Position no longer matters — the old sampler stopped after two hunks
+		// and ten lines, so a binary payload further in was missed entirely.
 		{
-			name: "control character 0x1f",
-			hunks: []types.DiffHunk{{
-				Lines: []types.DiffLine{
-					{Content: "data\x1fmore"},
-				},
-			}},
-			want: true,
-		},
-		{
-			name: "tab and newline are not binary",
-			hunks: []types.DiffHunk{{
-				Lines: []types.DiffLine{
-					{Content: "line\twith\ttabs"},
-				},
-			}},
-			want: false,
-		},
-		{
-			name: "binary in second hunk",
+			name: "binary far past the old sampling limit",
 			hunks: []types.DiffHunk{
-				{Lines: []types.DiffLine{{Content: "normal text"}}},
-				{Lines: []types.DiffLine{{Content: "has\x00null"}}},
+				{Lines: []types.DiffLine{{Content: "normal"}, {Content: "normal"}}},
+				{Lines: []types.DiffLine{{Content: "normal"}, {Content: "normal"}}},
+				{Lines: []types.DiffLine{{Content: repeat("\x00\x01\x02\x03", 200)}}},
 			},
 			want: true,
 		},
 		{
-			name: "binary beyond sampling limit is missed",
-			hunks: []types.DiffHunk{
-				{Lines: []types.DiffLine{{Content: "normal"}}},
-				{Lines: []types.DiffLine{{Content: "normal"}}},
-				{Lines: []types.DiffLine{{Content: "has\x00null"}}},
-			},
-			want: false,
+			name:  "a PNG header",
+			hunks: lines("\x89PNG\r\n\x1a\n" + repeat("\x00\x00\x00\rIHDR\x00\x00\x01\x90", 40)),
+			want:  true,
+		},
+		// Every other byte is NUL, which is the clearest binary signal there is.
+		{
+			name:  "UTF-16 text",
+			hunks: lines(repeat("h\x00e\x00l\x00l\x00o\x00", 40)),
+			want:  true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := isBinaryContent(tt.hunks)
-			if got != tt.want {
+			if got := isBinaryContent(tt.hunks); got != tt.want {
 				t.Errorf("isBinaryContent() = %v, want %v", got, tt.want)
 			}
 		})

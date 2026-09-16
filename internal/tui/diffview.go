@@ -296,7 +296,7 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 		m.additionalFilePath = ""
 		sameFile := msg.path == m.path
 		if msg.result != nil {
-			m.hunks = msg.result.Hunks
+			m.hunks = visibleControlHunks(msg.result.Hunks)
 		} else {
 			m.hunks = nil
 		}
@@ -437,7 +437,7 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 			return m, nil // stay in content mode on error or no changes
 		}
 		m.contentMode = false
-		m.hunks = msg.result.Hunks
+		m.hunks = visibleControlHunks(msg.result.Hunks)
 		m.comments = msg.comments
 		m.annotations = nil
 		m.style = msg.preferredStyle
@@ -777,32 +777,6 @@ func (m diffViewModel) View() string {
 	return b.String()
 }
 
-// isBinaryContent samples the first few hunks/lines for control characters
-// that indicate binary content (matching the desktop app's detection logic).
-func isBinaryContent(hunks []types.DiffHunk) bool {
-	if len(hunks) == 0 {
-		return false
-	}
-	limit := 2
-	if len(hunks) < limit {
-		limit = len(hunks)
-	}
-	for _, hunk := range hunks[:limit] {
-		lineLimit := 10
-		if len(hunk.Lines) < lineLimit {
-			lineLimit = len(hunk.Lines)
-		}
-		for _, line := range hunk.Lines[:lineLimit] {
-			for _, b := range line.Content {
-				if b <= 0x08 || (b >= 0x0e && b <= 0x1f) {
-					return true
-				}
-			}
-		}
-	}
-	return false
-}
-
 func (m *diffViewModel) buildLines() {
 	m.lines = nil
 	m.ClearSearch()
@@ -896,6 +870,7 @@ func (m *diffViewModel) buildLines() {
 
 // buildContentLines builds lines for a content item (plan/doc) displayed as a document.
 func (m *diffViewModel) buildContentLines(content string) {
+	content = visibleControls(content)
 	m.lines = nil
 	m.ClearSearch()
 
@@ -965,6 +940,7 @@ func (m *diffViewModel) buildContentLines(content string) {
 // buildFileViewLines builds lines from raw file content for file view mode.
 // Uses m.path for comment matching (unlike buildContentLines which uses m.contentID).
 func (m *diffViewModel) buildFileViewLines(content string) {
+	content = visibleControls(content)
 	m.lines = nil
 	m.ClearSearch()
 

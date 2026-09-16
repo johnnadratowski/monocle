@@ -64,7 +64,7 @@ func (d *DirClient) Diff(_ string) ([]types.ChangedFile, error) {
 			return nil
 		}
 
-		if d.hasNullBytes(path) {
+		if d.looksBinary(path) {
 			return nil
 		}
 
@@ -99,7 +99,7 @@ func (d *DirClient) FileDiff(_, path string, _ int) (*types.DiffResult, error) {
 // Returns an error for binary/non-text files.
 func (d *DirClient) FileContent(_, path string) (string, error) {
 	absPath := filepath.Join(d.repoRoot, path)
-	if isNonText(absPath) || d.hasNullBytes(absPath) {
+	if isNonText(absPath) || d.looksBinary(absPath) {
 		return "", fmt.Errorf("binary file — cannot preview %s", path)
 	}
 	data, err := os.ReadFile(absPath)
@@ -184,25 +184,21 @@ func isNonText(path string) bool {
 	return nonTextExtensions[ext]
 }
 
-// hasNullBytes checks if a file contains null bytes in the first 512 bytes,
-// indicating it is a binary file.
-func (d *DirClient) hasNullBytes(path string) bool {
+// looksBinary samples the head of a file and asks whether it is a blob rather
+// than text. A single NUL is not the test — a source file can carry one, and
+// refusing to preview it hides the very byte the reviewer is there to look at.
+// Known-binary extensions are caught separately, by isNonText.
+func (d *DirClient) looksBinary(path string) bool {
 	f, err := os.Open(path)
 	if err != nil {
 		return false
 	}
 	defer f.Close()
 
-	buf := make([]byte, 512)
+	buf := make([]byte, 8000)
 	n, _ := f.Read(buf)
 	if n == 0 {
 		return false
 	}
-
-	for _, b := range buf[:n] {
-		if b == 0 {
-			return true
-		}
-	}
-	return false
+	return types.LooksBinary(types.CountControlBytes(buf[:n]), n)
 }
