@@ -2022,6 +2022,11 @@ func (m diffViewModel) renderWrappedLine(gutter, content string, gutterWidth, co
 	// screenLinesFor count rows off the plain content and still agree.
 	var styled string
 	switch {
+	// The comment filter's dim state applies here too. It used to be checked
+	// only on the unwrapped path, so turning wrap on silently un-dimmed every
+	// comment the filter was hiding.
+	case mdLine != nil && m.isDimmedComment(*mdLine):
+		styled = renderDimmedComment(content, lineBg, 0)
 	case isMd && mdLine.mdIsFence:
 		rule := m.mdStyler.theme.MarkdownRule.Render(strings.Repeat("─", min(40, contentWidth)))
 		styled = applyBgAndPad(rule, lineBg, contentWidth)
@@ -2576,7 +2581,9 @@ func wrapContent(content string, width int) []string {
 	if lipgloss.Width(content) <= width {
 		return []string{content}
 	}
-	return strings.Split(ansi.Wrap(content, width, ""), "\n")
+	// carryStyles, not a bare split: a style that spans a wrap boundary would
+	// otherwise paint only its first row.
+	return carryStyles(strings.Split(ansi.Wrap(content, width, ""), "\n"))
 }
 
 // ScrollDown scrolls the diff viewport down by one line.
