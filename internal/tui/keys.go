@@ -101,6 +101,7 @@ type KeyMap struct {
 	ArtifactVersions     []string
 	CycleLayout          []string
 	Refresh              []string
+	Relaunch             []string // restart the TUI onto a newly installed build
 	Help                 []string
 	Quit                 []string
 	CommandMode          []string
@@ -195,9 +196,12 @@ func DefaultKeyMap() KeyMap {
 		ArtifactVersions:     []string{"B"},
 		CycleLayout:          []string{"T"},
 		Refresh:              []string{"R"},
-		Help:                 []string{"H"},
-		Quit:                 []string{"q"},
-		CommandMode:          []string{":"},
+		// Only acts when a new build is actually installed, so a stray ctrl+r
+		// costs nothing.
+		Relaunch:    []string{"ctrl+r"},
+		Help:        []string{"H"},
+		Quit:        []string{"q"},
+		CommandMode: []string{":"},
 
 		WizardAdvance: []string{"enter"},
 		WizardBack:    []string{"shift+tab", "backspace"},
@@ -281,6 +285,7 @@ var keyActions = map[string]func(*KeyMap) *[]string{
 	"artifact_versions":       func(km *KeyMap) *[]string { return &km.ArtifactVersions },
 	"cycle_layout":            func(km *KeyMap) *[]string { return &km.CycleLayout },
 	"refresh":                 func(km *KeyMap) *[]string { return &km.Refresh },
+	"relaunch":                func(km *KeyMap) *[]string { return &km.Relaunch },
 	"help":                    func(km *KeyMap) *[]string { return &km.Help },
 	"quit":                    func(km *KeyMap) *[]string { return &km.Quit },
 	"command_mode":            func(km *KeyMap) *[]string { return &km.CommandMode },

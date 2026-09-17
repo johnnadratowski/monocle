@@ -339,6 +339,7 @@ func (m helpModel) buildContent() string {
 			{Label(km.BaseRef), "Change the base ref"},
 			{Label(km.ArtifactVersions) + " / :base-artifact-version", "Base artifact version to diff against"},
 			{Label(km.Refresh), "Force reload files"},
+			{Label(km.Relaunch) + " / :relaunch", "Restart onto a newly installed build (when one is)"},
 			{Label(km.DismissArtifact), "Dismiss an artifact / remove an added file (in the sidebar)"},
 			{"ctrl+y", "Copy the review to the clipboard without submitting"},
 		},

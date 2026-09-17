@@ -297,6 +297,12 @@ type appModel struct {
 
 	// reviewName is the agent-supplied name for the review, shown in the top bar.
 	reviewName string
+	// buildWatch notices when the binary this process is running from is replaced
+	// on disk; relaunchRequested is the reviewer's answer to that notice, read by
+	// the caller after the program exits.
+	buildWatch        buildWatch
+	relaunchRequested bool
+
 	// reviewSentAt is when the agent handed the current round over, rendered as a
 	// live age beside the title. Zero means nothing has been sent since the agent
 	// last collected feedback, and the age is omitted rather than frozen.
@@ -417,6 +423,7 @@ func NewApp(engine core.EngineAPI, opts ...AppOptions) appModel {
 		infoBanner:        newInfoBannerModel(theme),
 		focus:             focusSidebar,
 		overlay:           overlayNone,
+		buildWatch:        newBuildWatch(),
 		layoutConfig:      layoutCfg,
 		theme:             theme,
 		themeName:         themeName,
@@ -581,7 +588,14 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	// Periodic refresh — fires on a timer to keep the file list and diff in sync.
+	case relaunchRequestMsg:
+		return m.requestRelaunch()
+
 	case refreshTickMsg:
+		if w, upgraded := m.buildWatch.check(); upgraded {
+			m.buildWatch = w
+			m.statusBar.buildNotice = w.notice(PrimaryLabel(m.keys.Relaunch))
+		}
 		return m, tea.Batch(m.refreshFiles(), refreshTick())
 
 	case refreshResultMsg:
@@ -1935,6 +1949,9 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.statusBar.commandBuffer = ""
 		return m, nil
 
+	case Matches(key, km.Relaunch):
+		return m.requestRelaunch()
+
 	case Matches(key, km.Quit):
 		return m, tea.Quit
 
@@ -2843,6 +2860,7 @@ var commandNames = []string{
 	"pause", "unpause", "history",
 	"mark-all-reviewed", "mark-all-unreviewed",
 	"base-artifact-version", "base-ref", "ref", "theme",
+	"relaunch",
 }
 
 // matchingCommands returns the command names that start with prefix, in order.
@@ -2974,6 +2992,11 @@ func (m appModel) executeCommand(cmd string) tea.Cmd {
 				action:  confirmDiscard,
 			}
 		}
+
+	case "relaunch":
+		// The command handler cannot mutate the model, so route through a message
+		// and share the key's code path — including its two refusals.
+		return func() tea.Msg { return relaunchRequestMsg{} }
 
 	case "clear":
 		return func() tea.Msg {

@@ -1225,8 +1225,13 @@ func runTUI(socketOverride string, workdir string, additionalPaths []string, con
 	p := tea.NewProgram(app)
 	tui.BridgeEngineEvents(engine, p)
 
-	if _, err := p.Run(); err != nil {
+	final, err := p.Run()
+	if err != nil {
 		return fmt.Errorf("run tui: %w", err)
+	}
+	// Bubble Tea has restored the terminal by now, so exec lands in a clean one.
+	if tui.WantsRelaunch(final) {
+		return relaunchSelf()
 	}
 	// Note: don't call engine.Shutdown() — serve owns its own lifecycle
 	// (idle timeout, PID file) and other clients may still be attached.

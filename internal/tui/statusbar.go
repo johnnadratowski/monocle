@@ -37,6 +37,7 @@ type statusBarModel struct {
 	searchBackward      bool
 	searchInfo          string // transient "match i/N" indicator after a search
 	contextHints        string // override hints when set (e.g. comment-specific keybinds)
+	buildNotice         string // "a newer build is installed" hint; "" when current
 	diffStyle           diffStyle
 	contentMode         bool   // true when viewing content (plan/doc) in raw mode
 	contentID           string // non-empty when viewing a content item (raw or diff)
@@ -188,6 +189,12 @@ func (m statusBarModel) View() string {
 	// Info sections. The base ref and raw file count moved to the top bar, so the
 	// status bar focuses on review progress.
 	parts := []string{connLabel}
+
+	// A newer build on disk goes first and bright: the whole point is that a
+	// long-running session cannot otherwise tell it is running stale code.
+	if m.buildNotice != "" {
+		parts = append(parts, lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Bold(true).Render(m.buildNotice))
+	}
 
 	// Agent-working pulse: the agent has written files since the last review.
 	if m.agentActive {
