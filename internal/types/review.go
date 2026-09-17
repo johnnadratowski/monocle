@@ -84,11 +84,15 @@ type ReviewSession struct {
 	AdditionalFiles []AdditionalFile
 	Comments        []ReviewComment
 	Annotations     []Annotation
-	FileStatuses    map[string]bool // path -> reviewed
-	IgnorePatterns  []string
-	ReviewRound     int
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	// SummaryItems is the agent's account of what this round fixed, in reading
+	// order. Empty when the agent sent none, which is the common case and must
+	// leave every view exactly as it was.
+	SummaryItems   []SummaryItem
+	FileStatuses   map[string]bool // path -> reviewed
+	IgnorePatterns []string
+	ReviewRound    int
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }
 
 type ChangedFile struct {
