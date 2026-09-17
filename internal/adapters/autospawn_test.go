@@ -59,12 +59,12 @@ func TestEnsureServe_ReusesExisting(t *testing.T) {
 	}
 }
 
-func TestSocketAlive(t *testing.T) {
+func TestSocketListens(t *testing.T) {
 	dir := t.TempDir()
 	sockPath := filepath.Join(dir, "sock")
 
 	// Nothing listening → not alive
-	if socketAlive(sockPath) {
+	if socketListens(sockPath) {
 		t.Error("expected not alive for missing socket")
 	}
 
@@ -86,13 +86,13 @@ func TestSocketAlive(t *testing.T) {
 	// Give the listener a beat to become ready
 	time.Sleep(10 * time.Millisecond)
 
-	if !socketAlive(sockPath) {
+	if !socketListens(sockPath) {
 		t.Error("expected alive for bound socket")
 	}
 
 	// Close → stale socket file remains but dial fails → not alive
 	l.Close()
-	if socketAlive(sockPath) {
+	if socketListens(sockPath) {
 		t.Error("expected not alive after listener closed")
 	}
 }

@@ -6,7 +6,10 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"runtime"
+	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -54,14 +57,23 @@ func EnsureServe(opts AutoSpawnOptions) (socketPath string, spawned bool, err er
 		socketPath = DefaultSocketPath(opts.RepoRoot)
 	}
 
-	if socketAlive(socketPath) {
+	switch probeSocket(socketPath) {
+	case socketListening:
+		return socketPath, false, nil
+	case socketBusy:
+		// The socket did not answer, but a live monocle process still holds it.
+		// That is a loaded engine, not a dead one, and spawning a rival for it is
+		// how a repo ends up with two: the reviewer's frontend stays attached to
+		// the original while every new client reaches the newcomer.
 		return socketPath, false, nil
 	}
 
-	// Stale socket file (leftover from a crashed serve) — remove it so the
-	// child process can bind cleanly. `monocle serve` does the same on
-	// start, but racing on this is harmless.
-	_ = os.Remove(socketPath)
+	// The stale socket file is deliberately NOT removed here. Unlinking it and
+	// then spawning is a two-step race: between the two steps the path is free,
+	// so the child's own "is someone already listening?" guard sees nothing and
+	// binds a second engine even when the first was alive all along. The child
+	// re-checks and removes under that guard, which is the only place the check
+	// and the bind cannot be separated.
 
 	binary := opts.Binary
 	if binary == "" {
@@ -144,7 +156,7 @@ func EnsureServe(opts AutoSpawnOptions) (socketPath string, spawned bool, err er
 
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		if socketAlive(socketPath) {
+		if socketListens(socketPath) {
 			return socketPath, true, nil
 		}
 		time.Sleep(interval)
@@ -160,17 +172,96 @@ func EnsureServe(opts AutoSpawnOptions) (socketPath string, spawned bool, err er
 	return socketPath, true, fmt.Errorf("autospawn: serve did not become ready within %s (no stderr captured; check %s)", timeout, logPath)
 }
 
-// socketAlive reports whether socketPath is currently accepting connections.
-// A stale socket file left by a crashed serve returns false because Dial
-// fails against it.
-func socketAlive(socketPath string) bool {
+// socketState is what a probe could establish about a socket path.
+type socketState int
+
+const (
+	// socketStale: nothing is there — no file, or a file no live monocle holds.
+	socketStale socketState = iota
+	// socketListening: a server answered.
+	socketListening
+	// socketBusy: nobody answered in time, but the process recorded as owning
+	// the socket is still alive. Almost always a loaded engine rather than a
+	// dead one.
+	socketBusy
+)
+
+const (
+	// dialTimeout is per attempt. The old budget was 250ms for a single try,
+	// which a machine running a fleet of frontends and agents can miss on a
+	// healthy engine — and a missed probe used to mean "spawn another one".
+	dialTimeout = time.Second
+	dialTries   = 3
+)
+
+// socketListens reports whether something answered on socketPath. Used for
+// readiness polling, where a miss simply means "not up yet" and costs nothing.
+func socketListens(socketPath string) bool {
 	if _, err := os.Stat(socketPath); errors.Is(err, os.ErrNotExist) {
 		return false
 	}
-	conn, err := net.DialTimeout("unix", socketPath, 250*time.Millisecond)
+	conn, err := net.DialTimeout("unix", socketPath, dialTimeout)
 	if err != nil {
 		return false
 	}
 	_ = conn.Close()
 	return true
+}
+
+// probeSocket decides whether a repo already has an engine. It is deliberately
+// more patient, and more suspicious, than a readiness check: the cost of a false
+// "nothing here" is a second engine for the repo, which splits the reviewer's
+// frontend away from the agent writing the review and is invisible to both.
+func probeSocket(socketPath string) socketState {
+	if _, err := os.Stat(socketPath); err != nil {
+		return socketStale
+	}
+	for attempt := 0; attempt < dialTries; attempt++ {
+		conn, err := net.DialTimeout("unix", socketPath, dialTimeout)
+		if err == nil {
+			_ = conn.Close()
+			return socketListening
+		}
+		if attempt < dialTries-1 {
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	// Nothing answered. A truly stale socket refuses instantly and its owner is
+	// long gone; an engine buried under a full accept backlog refuses too. The
+	// pid file is what tells them apart.
+	if pidHolderAlive(socketPath) {
+		return socketBusy
+	}
+	return socketStale
+}
+
+// PIDFilePath returns the PID file that pairs with a socket path: the socket at
+// /tmp/monocle-<hash>.sock pairs with /tmp/monocle-<hash>.pid.
+func PIDFilePath(socketPath string) string {
+	if strings.HasSuffix(socketPath, ".sock") {
+		return strings.TrimSuffix(socketPath, ".sock") + ".pid"
+	}
+	return socketPath + ".pid"
+}
+
+// pidHolderAlive reports whether the process that recorded itself as owning this
+// socket still exists. Signal 0 is the kernel's existence check without sending
+// anything.
+func pidHolderAlive(socketPath string) bool {
+	data, err := os.ReadFile(PIDFilePath(socketPath))
+	if err != nil {
+		return false
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil || pid <= 0 {
+		return false
+	}
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	if runtime.GOOS == "windows" {
+		return true // FindProcess already fails for dead pids there
+	}
+	return proc.Signal(syscall.Signal(0)) == nil
 }

@@ -121,13 +121,9 @@ func capLogFile(path string, maxBytes int64, stop <-chan struct{}) {
 }
 
 // pidFilePath returns the PID file path that pairs with a given socket path.
-// The socket at /tmp/monocle-<hash>.sock pairs with /tmp/monocle-<hash>.pid.
-func pidFilePath(socketPath string) string {
-	if strings.HasSuffix(socketPath, ".sock") {
-		return strings.TrimSuffix(socketPath, ".sock") + ".pid"
-	}
-	return socketPath + ".pid"
-}
+// Autospawn reads the same file to tell a loaded engine from a dead one, so the
+// convention lives in one place.
+func pidFilePath(socketPath string) string { return adapters.PIDFilePath(socketPath) }
 
 func writePIDFile(path string) error {
 	return os.WriteFile(path, []byte(strconv.Itoa(os.Getpid())), 0o644)
