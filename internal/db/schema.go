@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-const schemaVersion = 14
+const schemaVersion = 15
 
 const dropSQL = `
 DROP TABLE IF EXISTS review_snapshot_files;
@@ -67,6 +67,18 @@ CREATE TABLE IF NOT EXISTS annotations (
 	review_round INTEGER NOT NULL DEFAULT 1,
 	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- The agent's account of what a review round fixed: one short line per item,
+-- with the files/line-ranges it accounts for carried as a JSON array of
+-- SummaryTarget. Replaced wholesale when the agent sends a new set.
+CREATE TABLE IF NOT EXISTS summary_items (
+	session_id TEXT NOT NULL REFERENCES sessions(id),
+	id TEXT NOT NULL,
+	text TEXT NOT NULL DEFAULT '',
+	sort_order INTEGER NOT NULL DEFAULT 0,
+	targets TEXT NOT NULL DEFAULT '[]',
+	UNIQUE(session_id, id)
 );
 
 -- Agent-supplied per-file grouping metadata. Kept in a separate table so it
@@ -217,6 +229,12 @@ func Migrate(db *sql.DB) error {
 	// submitted — so a change that only appends nullable columns says so in
 	// addedColumns and keeps the data.
 	if currentVersion >= firstAdditiveVersion && schemaIntact(db) {
+		// Every statement in schemaSQL is CREATE TABLE IF NOT EXISTS, so replaying
+		// it adds tables introduced since without touching a row of the ones
+		// already there. Columns appended to existing tables still need addColumns.
+		if _, err := db.Exec(schemaSQL); err != nil {
+			return fmt.Errorf("apply new tables: %w", err)
+		}
 		if err := addColumns(db); err != nil {
 			return err
 		}

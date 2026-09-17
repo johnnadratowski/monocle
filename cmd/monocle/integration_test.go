@@ -35,6 +35,12 @@ func TestServeToClientE2E(t *testing.T) {
 		t.Fatalf("build: %v\n%s", err, out)
 	}
 
+	// Point the spawned serve at a throwaway database. Without this it inherits
+	// the environment and opens the user's real one — which means a test run can
+	// migrate a live database to whatever schema the working tree is on, and a
+	// binary built from an older tree then refuses to open it.
+	t.Setenv("MONOCLE_DB", filepath.Join(t.TempDir(), "e2e.db"))
+
 	// Fresh "repo" with one file.
 	repoRoot := t.TempDir()
 	if err := os.WriteFile(filepath.Join(repoRoot, "a.go"), []byte("package a\n"), 0o644); err != nil {
