@@ -20,6 +20,7 @@ type GitAPI interface {
 	FileDiff(baseRef, path string, contextLines int) (*types.DiffResult, error)
 	FileContent(ref, path string) (string, error)
 	RecentCommits(n int) ([]LogEntry, error)
+	CommitsInRange(base string, limit int) ([]LogEntry, error)
 	ResolveRef(ref string) (string, error)
 	HashObject(path string) (string, error)                   // writes blob to object store
 	HashObjectDry(path string) (string, error)                // computes SHA without writing
@@ -226,6 +227,36 @@ func (g *GitClient) RecentCommits(n int) ([]LogEntry, error) {
 		return nil, fmt.Errorf("git log: %w", err)
 	}
 
+	return parseLogEntries(out), nil
+}
+
+// CommitsInRange returns the commits a review actually contains: everything
+// reachable from HEAD but not from base, newest first.
+//
+// This is not RecentCommits. That answers "what could I diff against?" for the
+// ref picker and always returns the tip of the branch; this answers "what is in
+// front of me?", and is empty whenever the review is uncommitted work — base and
+// HEAD are the same commit then, which is the normal working-tree case rather
+// than an error.
+func (g *GitClient) CommitsInRange(base string, limit int) ([]LogEntry, error) {
+	if strings.TrimSpace(base) == "" {
+		return nil, nil
+	}
+	args := []string{"log", "--format=%h %s", base + "..HEAD"}
+	if limit > 0 {
+		args = append(args, fmt.Sprintf("-n%d", limit))
+	}
+	out, err := g.run(args...)
+	if err != nil {
+		// An unknown or unreachable base is not worth failing the view over —
+		// the modal simply has no commits to show.
+		return nil, nil
+	}
+	return parseLogEntries(out), nil
+}
+
+// parseLogEntries turns "%h %s" lines into entries.
+func parseLogEntries(out string) []LogEntry {
 	var entries []LogEntry
 	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
 		if line == "" {
@@ -238,7 +269,7 @@ func (g *GitClient) RecentCommits(n int) ([]LogEntry, error) {
 		}
 		entries = append(entries, entry)
 	}
-	return entries, nil
+	return entries
 }
 
 // ResolveRef resolves a ref string (e.g. "abc123~1") to a full commit hash.

@@ -1227,6 +1227,25 @@ func (c *EngineClient) SelectedBaseRef() string {
 	return r.Ref
 }
 
+func (c *EngineClient) ReviewCommits(limit int) ([]core.LogEntry, string, error) {
+	resp, err := c.request(&protocol.ReviewCommitsMsg{Type: protocol.TypeReviewCommits, Limit: limit})
+	if err != nil {
+		return nil, "", err
+	}
+	r, ok := resp.(*protocol.ReviewCommitsResponse)
+	if !ok {
+		return nil, "", fmt.Errorf("unexpected response %T", resp)
+	}
+	if r.Error != "" {
+		return nil, r.Base, errors.New(r.Error)
+	}
+	out := make([]core.LogEntry, len(r.Commits))
+	for i, entry := range r.Commits {
+		out[i] = core.LogEntry{Hash: entry.Hash, Subject: entry.Subject}
+	}
+	return out, r.Base, nil
+}
+
 func (c *EngineClient) RecentCommits(n int) ([]core.LogEntry, error) {
 	resp, err := c.request(&protocol.RecentCommitsMsg{Type: protocol.TypeRecentCommits, Count: n})
 	if err != nil {

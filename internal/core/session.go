@@ -93,6 +93,12 @@ func (sm *SessionManager) ResumeSession(sessionID string) (*types.ReviewSession,
 	}
 	session.Annotations = annotations
 
+	summary, err := sm.db.GetSummaryItems(session.ID)
+	if err != nil {
+		return nil, fmt.Errorf("get summary items: %w", err)
+	}
+	session.SummaryItems = summary
+
 	// Build file statuses map
 	session.FileStatuses = make(map[string]bool)
 	for _, f := range files {

@@ -103,6 +103,10 @@ func TestEngineMessagesRoundTrip(t *testing.T) {
 		{"GetSubmissionsResponse", &GetSubmissionsResponse{Type: TypeGetSubmissionsResponse}},
 
 		// Base ref
+		{"ReviewCommits", &ReviewCommitsMsg{Type: TypeReviewCommits, Limit: 50}},
+		{"ReviewCommitsResponse", &ReviewCommitsResponse{Type: TypeReviewCommitsResponse, Base: "abc123",
+			Commits: []LogEntry{{Hash: "def456", Subject: "fix: escape NULs"}}}},
+		{"ReviewCommitsResponseEmpty", &ReviewCommitsResponse{Type: TypeReviewCommitsResponse}},
 		{"SetBaseRef", &SetBaseRefMsg{Type: TypeSetBaseRef, Ref: "main"}},
 		{"SetBaseRefExclusive", &SetBaseRefMsg{Type: TypeSetBaseRef, Ref: "main", Exclusive: true}},
 		{"SetBaseRefResponse", &SetBaseRefResponse{Type: TypeSetBaseRefResponse}},

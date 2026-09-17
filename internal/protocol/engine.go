@@ -62,6 +62,8 @@ const (
 	TypeIsAutoAdvanceRef  = "is_auto_advance_ref"
 	TypeSelectedBaseRef   = "selected_base_ref"
 	TypeRecentCommits     = "recent_commits"
+	TypeReviewCommits     = "review_commits"
+	TypeSetReviewSummary  = "set_review_summary"
 
 	// Snapshots
 	TypeGetSnapshots      = "get_snapshots"
@@ -145,6 +147,8 @@ const (
 	TypeIsAutoAdvanceRefResponse  = "is_auto_advance_ref_response"
 	TypeSelectedBaseRefResponse   = "selected_base_ref_response"
 	TypeRecentCommitsResponse     = "recent_commits_response"
+	TypeReviewCommitsResponse     = "review_commits_response"
+	TypeSetReviewSummaryResponse  = "set_review_summary_response"
 
 	// Snapshots
 	TypeGetSnapshotsResponse      = "get_snapshots_response"
@@ -593,6 +597,48 @@ type RecentCommitsMsg struct {
 type RecentCommitsResponse struct {
 	Type    string     `json:"type"`
 	Commits []LogEntry `json:"commits,omitempty"`
+	Error   string     `json:"error,omitempty"`
+}
+
+// SetReviewSummaryMsg carries the agent's account of what a round fixed. It
+// replaces any previous summary wholesale.
+type SetReviewSummaryMsg struct {
+	Type  string             `json:"type"`
+	Items []SummaryItemEntry `json:"items"`
+}
+
+type SummaryItemEntry struct {
+	ID      string               `json:"id,omitempty"`
+	Text    string               `json:"text"`
+	Order   int                  `json:"order,omitempty"`
+	Targets []SummaryTargetEntry `json:"targets,omitempty"`
+}
+
+type SummaryTargetEntry struct {
+	Path      string `json:"path"`
+	LineStart int    `json:"line_start,omitempty"`
+	LineEnd   int    `json:"line_end,omitempty"`
+}
+
+type SetReviewSummaryResponse struct {
+	Type    string `json:"type"`
+	Success bool   `json:"success"`
+	Message string `json:"message,omitempty"`
+	Count   int    `json:"count"`
+}
+
+// ReviewCommitsMsg asks what commits the current review contains — base..HEAD,
+// which is empty when the review is uncommitted work. Distinct from
+// RecentCommits, which always reports the tip of the branch for the ref picker.
+type ReviewCommitsMsg struct {
+	Type  string `json:"type"`
+	Limit int    `json:"limit,omitempty"`
+}
+
+type ReviewCommitsResponse struct {
+	Type    string     `json:"type"`
+	Commits []LogEntry `json:"commits,omitempty"`
+	Base    string     `json:"base,omitempty"`
 	Error   string     `json:"error,omitempty"`
 }
 

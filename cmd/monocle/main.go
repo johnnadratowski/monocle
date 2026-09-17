@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/alecthomas/kong"
@@ -49,6 +50,7 @@ type ReviewCmd struct {
 	GroupFiles   ReviewGroupFilesCmd   `cmd:"group-files" help:"Assign category/group/order metadata to changed files for the grouped sidebar view"`
 	Annotate     ReviewAnnotateCmd     `cmd:"annotate" help:"Attach agent rationale + doc links to code ranges (shown to the reviewer, not sent back as feedback)"`
 	SetName      ReviewSetNameCmd      `cmd:"set-name" help:"Set a human-friendly name for the current review (shown in the top bar)"`
+	SetSummary   ReviewSetSummaryCmd   `cmd:"set-summary" help:"Tell the reviewer what this round fixed, as a short tagged list"`
 	SetBaseRef   ReviewSetBaseRefCmd   `cmd:"set-base-ref" help:"Diff against a commit so already-committed work is reviewed"`
 }
 
@@ -142,6 +144,68 @@ func (cmd *ReviewSetNameCmd) Run() error {
 		return fmt.Errorf("set-name: %w", err)
 	}
 	r := resp.(*protocol.SetReviewNameResponse)
+	if cmd.JSON {
+		return printJSON(r)
+	}
+	if !r.Success {
+		return fmt.Errorf("%s", r.Message)
+	}
+	fmt.Println(r.Message)
+	return nil
+}
+
+// ReviewSetSummaryCmd takes the summary as JSON on a flag or on stdin. A list of
+// items, each with targets, is too nested for repeated flags to express without
+// inventing a syntax the agent then has to get right.
+type ReviewSetSummaryCmd struct {
+	WorkDirFlag
+	Socket string `help:"Override socket path" env:"MONOCLE_SOCKET" default:""`
+	Items  string `help:"JSON array of items: [{\"text\":\"...\",\"id\":\"...\",\"order\":1,\"targets\":[{\"path\":\"a.go\",\"line_start\":10,\"line_end\":20}]}]. Reads stdin when omitted." default:""`
+	Clear  bool   `help:"Withdraw the summary (equivalent to sending an empty list)" default:"false"`
+	JSON   bool   `help:"Output as JSON" default:"false"`
+}
+
+func (cmd *ReviewSetSummaryCmd) Run() error {
+	var items []protocol.SummaryItemEntry
+	if !cmd.Clear {
+		raw := cmd.Items
+		if strings.TrimSpace(raw) == "" {
+			data, err := io.ReadAll(os.Stdin)
+			if err != nil {
+				return fmt.Errorf("set-summary: read stdin: %w", err)
+			}
+			raw = string(data)
+		}
+		if strings.TrimSpace(raw) == "" {
+			return fmt.Errorf("set-summary: no items given (pass --items, pipe JSON on stdin, or use --clear)")
+		}
+		if err := json.Unmarshal([]byte(raw), &items); err != nil {
+			return fmt.Errorf("set-summary: parse items: %w", err)
+		}
+	}
+
+	socketPath, err := resolveSocketForWorkDir(cmd.Socket, cmd.WorkDir)
+	if err != nil {
+		return err
+	}
+	c, err := client.Connect(socketPath)
+	if err != nil {
+		if errors.Is(err, client.ErrNotRunning) {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return err
+	}
+	defer c.Close()
+
+	resp, err := c.Request(
+		&protocol.SetReviewSummaryMsg{Type: protocol.TypeSetReviewSummary, Items: items},
+		client.DefaultTimeout,
+	)
+	if err != nil {
+		return fmt.Errorf("set-summary: %w", err)
+	}
+	r := resp.(*protocol.SetReviewSummaryResponse)
 	if cmd.JSON {
 		return printJSON(r)
 	}

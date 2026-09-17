@@ -367,6 +367,20 @@ func (e *Engine) handleSelectedBaseRef(_ *protocol.SelectedBaseRefMsg) *protocol
 	}
 }
 
+func (e *Engine) handleReviewCommits(msg *protocol.ReviewCommitsMsg) *protocol.ReviewCommitsResponse {
+	entries, base, err := e.ReviewCommits(msg.Limit)
+	resp := &protocol.ReviewCommitsResponse{Type: protocol.TypeReviewCommitsResponse, Base: base}
+	if err != nil {
+		resp.Error = err.Error()
+		return resp
+	}
+	resp.Commits = make([]protocol.LogEntry, len(entries))
+	for i, entry := range entries {
+		resp.Commits[i] = protocol.LogEntry{Hash: entry.Hash, Subject: entry.Subject}
+	}
+	return resp
+}
+
 func (e *Engine) handleRecentCommits(msg *protocol.RecentCommitsMsg) *protocol.RecentCommitsResponse {
 	entries, err := e.RecentCommits(msg.Count)
 	out := make([]protocol.LogEntry, len(entries))

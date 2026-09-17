@@ -625,6 +625,7 @@ func (s *SocketServer) handleMessage(msg any) any {
 func isReviewSend(msg any) bool {
 	switch msg.(type) {
 	case *protocol.SetReviewNameMsg,
+		*protocol.SetReviewSummaryMsg,
 		*protocol.SubmitContentMsg,
 		*protocol.SubmitDiffMsg,
 		*protocol.AddAdditionalFilesMsg,
@@ -743,6 +744,10 @@ func (s *SocketServer) routeMessage(msg any) any {
 		return s.engine.handleSelectedBaseRef(m)
 	case *protocol.RecentCommitsMsg:
 		return s.engine.handleRecentCommits(m)
+	case *protocol.ReviewCommitsMsg:
+		return s.engine.handleReviewCommits(m)
+	case *protocol.SetReviewSummaryMsg:
+		return s.engine.handleSetReviewSummary(m)
 	case *protocol.GetSnapshotsMsg:
 		return s.engine.handleGetSnapshots(m)
 	case *protocol.SetSnapshotBaseMsg:

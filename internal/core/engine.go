@@ -116,6 +116,7 @@ type EngineAPI interface {
 	IsAutoAdvanceRef() bool
 	SelectedBaseRef() string
 	RecentCommits(n int) ([]LogEntry, error)
+	ReviewCommits(limit int) ([]LogEntry, string, error)
 
 	// Review snapshots
 	GetSnapshots() ([]types.ReviewSnapshot, error)

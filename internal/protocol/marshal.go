@@ -165,6 +165,10 @@ func Decode(data []byte) (any, error) {
 		msg = &SelectedBaseRefMsg{}
 	case TypeRecentCommits:
 		msg = &RecentCommitsMsg{}
+	case TypeReviewCommits:
+		msg = &ReviewCommitsMsg{}
+	case TypeSetReviewSummary:
+		msg = &SetReviewSummaryMsg{}
 	case TypeGetSnapshots:
 		msg = &GetSnapshotsMsg{}
 	case TypeSetSnapshotBase:
@@ -273,6 +277,10 @@ func Decode(data []byte) (any, error) {
 		msg = &SelectedBaseRefResponse{}
 	case TypeRecentCommitsResponse:
 		msg = &RecentCommitsResponse{}
+	case TypeReviewCommitsResponse:
+		msg = &ReviewCommitsResponse{}
+	case TypeSetReviewSummaryResponse:
+		msg = &SetReviewSummaryResponse{}
 	case TypeGetSnapshotsResponse:
 		msg = &GetSnapshotsResponse{}
 	case TypeSetSnapshotBaseResponse:

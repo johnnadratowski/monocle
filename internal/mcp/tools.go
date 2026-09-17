@@ -102,6 +102,63 @@ func registerTools(s *sdkmcp.Server) {
 		Name:        "send_diff",
 		Description: desc["send_diff"],
 	}, handleSendDiff)
+
+	sdkmcp.AddTool(s, &sdkmcp.Tool{
+		Name:        "set_review_summary",
+		Description: desc["set_review_summary"],
+	}, handleSetReviewSummary)
+}
+
+type summaryTargetParams struct {
+	Path      string `json:"path"`
+	LineStart int    `json:"line_start,omitempty"`
+	LineEnd   int    `json:"line_end,omitempty"`
+}
+
+type summaryItemParams struct {
+	ID      string                `json:"id,omitempty"`
+	Text    string                `json:"text"`
+	Order   int                   `json:"order,omitempty"`
+	Targets []summaryTargetParams `json:"targets,omitempty"`
+}
+
+type setReviewSummaryParams struct {
+	Items []summaryItemParams `json:"items"`
+}
+
+func handleSetReviewSummary(ctx context.Context, req *sdkmcp.CallToolRequest, params setReviewSummaryParams) (*sdkmcp.CallToolResult, any, error) {
+	c, guard := boundClient()
+	if guard != nil {
+		return guard, nil, nil
+	}
+	defer c.Close()
+
+	items := make([]protocol.SummaryItemEntry, 0, len(params.Items))
+	for _, in := range params.Items {
+		entry := protocol.SummaryItemEntry{ID: in.ID, Text: in.Text, Order: in.Order}
+		for _, t := range in.Targets {
+			entry.Targets = append(entry.Targets, protocol.SummaryTargetEntry{
+				Path: t.Path, LineStart: t.LineStart, LineEnd: t.LineEnd,
+			})
+		}
+		items = append(items, entry)
+	}
+
+	resp, err := c.Request(
+		&protocol.SetReviewSummaryMsg{Type: protocol.TypeSetReviewSummary, Items: items},
+		client.DefaultTimeout,
+	)
+	if err != nil {
+		return errResult("request: %v", err), nil, nil
+	}
+	r, ok := resp.(*protocol.SetReviewSummaryResponse)
+	if !ok {
+		return errResult("unexpected response %T", resp), nil, nil
+	}
+	if !r.Success {
+		return errResult("set_review_summary: %s", r.Message), nil, nil
+	}
+	return textResult(r.Message), nil, nil
 }
 
 type setReviewNameParams struct {

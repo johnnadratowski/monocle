@@ -53,6 +53,13 @@ func (g *gitStub) RecentCommits(_ int) ([]LogEntry, error) {
 	return g.commits, nil
 }
 
+func (g *gitStub) CommitsInRange(base string, _ int) ([]LogEntry, error) {
+	if base == "" {
+		return nil, nil
+	}
+	return g.commits, nil
+}
+
 func (g *gitStub) ResolveRef(ref string) (string, error) {
 	if g.resolveRefs != nil {
 		if sha, ok := g.resolveRefs[ref]; ok {

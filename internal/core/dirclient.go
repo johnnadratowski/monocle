@@ -114,6 +114,12 @@ func (d *DirClient) RecentCommits(_ int) ([]LogEntry, error) {
 	return nil, nil
 }
 
+// CommitsInRange returns nothing: without a repository a review has no commits,
+// only the files on disk.
+func (d *DirClient) CommitsInRange(_ string, _ int) ([]LogEntry, error) {
+	return nil, nil
+}
+
 // ResolveRef returns an error since there are no git refs.
 func (d *DirClient) ResolveRef(ref string) (string, error) {
 	return "", fmt.Errorf("no git repository: cannot resolve ref %q", ref)

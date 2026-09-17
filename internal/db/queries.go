@@ -847,3 +847,65 @@ func boolToInt(b bool) int {
 	}
 	return 0
 }
+
+// ReplaceSummaryItems swaps a session's summary for a new one in a single
+// transaction. Wholesale replacement, not a merge: the summary is the agent's
+// account of the round in front of the reviewer, so a new send supersedes the
+// old one rather than accumulating with it.
+func (d *DB) ReplaceSummaryItems(sessionID string, items []types.SummaryItem) error {
+	tx, err := d.Begin()
+	if err != nil {
+		return fmt.Errorf("begin: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck // no-op once committed
+
+	if _, err := tx.Exec(`DELETE FROM summary_items WHERE session_id = ?`, sessionID); err != nil {
+		return fmt.Errorf("clear summary items: %w", err)
+	}
+	for i, it := range items {
+		targets, err := json.Marshal(it.Targets)
+		if err != nil {
+			return fmt.Errorf("encode targets for %q: %w", it.ID, err)
+		}
+		if _, err := tx.Exec(
+			`INSERT INTO summary_items (session_id, id, text, sort_order, targets) VALUES (?, ?, ?, ?, ?)`,
+			sessionID, it.ID, it.Text, i, string(targets),
+		); err != nil {
+			return fmt.Errorf("insert summary item %q: %w", it.ID, err)
+		}
+	}
+	return tx.Commit()
+}
+
+// GetSummaryItems returns a session's summary in display order.
+func (d *DB) GetSummaryItems(sessionID string) ([]types.SummaryItem, error) {
+	rows, err := d.Query(
+		`SELECT id, text, sort_order, targets FROM summary_items WHERE session_id = ? ORDER BY sort_order`,
+		sessionID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []types.SummaryItem
+	for rows.Next() {
+		var it types.SummaryItem
+		var targets string
+		if err := rows.Scan(&it.ID, &it.Text, &it.Order, &targets); err != nil {
+			return nil, err
+		}
+		// A row whose targets failed to decode still carries a usable line of
+		// text; dropping the item entirely would lose more than the targets.
+		_ = json.Unmarshal([]byte(targets), &it.Targets)
+		out = append(out, it)
+	}
+	return out, rows.Err()
+}
+
+// DeleteSummaryItems removes a session's summary, used when a review is cleared
+// or approved: the account belongs to the round, not to the repo.
+func (d *DB) DeleteSummaryItems(sessionID string) error {
+	_, err := d.Exec(`DELETE FROM summary_items WHERE session_id = ?`, sessionID)
+	return err
+}

@@ -552,6 +552,51 @@ func (e *Engine) GetAnnotations() []types.Annotation {
 //   - no reviewer comments → silently close the old review and open the new.
 //   - has comments → refused unless force; force discards the old review.
 //
+// handleSetReviewSummary replaces the agent's account of what this round fixed.
+// Wholesale, not merged: the summary describes the round in front of the
+// reviewer, so a re-send supersedes rather than accumulates. Sending an empty
+// list is how an agent withdraws one.
+func (e *Engine) handleSetReviewSummary(msg *protocol.SetReviewSummaryMsg) *protocol.SetReviewSummaryResponse {
+	e.mu.RLock()
+	session := e.current
+	e.mu.RUnlock()
+	if session == nil {
+		return &protocol.SetReviewSummaryResponse{
+			Type: protocol.TypeSetReviewSummaryResponse, Success: false, Message: "no active session",
+		}
+	}
+
+	items := make([]types.SummaryItem, 0, len(msg.Items))
+	for _, in := range msg.Items {
+		it := types.SummaryItem{ID: in.ID, Text: in.Text, Order: in.Order}
+		for _, t := range in.Targets {
+			it.Targets = append(it.Targets, types.SummaryTarget{
+				Path: t.Path, LineStart: t.LineStart, LineEnd: t.LineEnd,
+			})
+		}
+		items = append(items, it)
+	}
+	items = types.NormalizeSummaryItems(items)
+
+	if err := e.database.ReplaceSummaryItems(session.ID, items); err != nil {
+		return &protocol.SetReviewSummaryResponse{
+			Type: protocol.TypeSetReviewSummaryResponse, Success: false, Message: err.Error(),
+		}
+	}
+
+	e.mu.Lock()
+	if e.current != nil && e.current.ID == session.ID {
+		e.current.SummaryItems = items
+	}
+	e.mu.Unlock()
+
+	e.emit(EventFileChanged, EventPayload{Kind: EventFileChanged})
+	return &protocol.SetReviewSummaryResponse{
+		Type: protocol.TypeSetReviewSummaryResponse, Success: true, Count: len(items),
+		Message: fmt.Sprintf("Review summary set (%d item(s))", len(items)),
+	}
+}
+
 // noteReviewSent stamps the moment the agent handed the current round over, if
 // it has not already been stamped. Only the first send of a round counts: an
 // agent that follows send_artifact with add_files and set_file_groups made one
@@ -1201,6 +1246,12 @@ func (e *Engine) clearReviewLocked() error {
 	}
 	e.current.Annotations = nil
 
+	// The summary is an account of one round, so it goes with the round.
+	if err := e.database.DeleteSummaryItems(sessionID); err != nil {
+		return fmt.Errorf("clear summary items: %w", err)
+	}
+	e.current.SummaryItems = nil
+
 	if err := e.database.ResetAllReviewed(sessionID); err != nil {
 		return fmt.Errorf("reset reviewed: %w", err)
 	}
@@ -1837,6 +1888,21 @@ func (e *Engine) IsAutoAdvanceRef() bool {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return e.autoAdvanceRef
+}
+
+// ReviewCommits returns the commits the open review contains, newest first,
+// along with the base they are measured from. Both are empty for a working-tree
+// review: there is nothing committed to list, which is a state to report rather
+// than an error.
+func (e *Engine) ReviewCommits(limit int) ([]LogEntry, string, error) {
+	e.mu.RLock()
+	session := e.current
+	e.mu.RUnlock()
+	if session == nil || e.git == nil {
+		return nil, "", nil
+	}
+	entries, err := e.git.CommitsInRange(session.BaseRef, limit)
+	return entries, session.BaseRef, err
 }
 
 // RecentCommits returns recent commits for the ref picker.
