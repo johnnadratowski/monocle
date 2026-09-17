@@ -329,7 +329,8 @@ func (m helpModel) buildContent() string {
 			{Label(km.YankLine), "Yank the line / selection to the clipboard"},
 			{"x", "Toggle a comment resolved (on a comment)"},
 			{"d", "Delete a comment (on a comment)"},
-			{"space", "Expand/collapse a comment under the cursor"},
+			{Label(km.ExpandComment), "Expand/collapse a comment under the cursor"},
+			{Label(km.ExpandAllComments), "Expand/collapse all comments in the file (any view)"},
 		},
 		secReview: {
 			{Label(km.Submit) + " / :submit", "Submit the review"},

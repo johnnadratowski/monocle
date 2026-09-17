@@ -108,7 +108,12 @@ type diffViewModel struct {
 	mouseDragActive bool
 
 	// Comment expansion on hover
-	expandedCommentID  string        // ID of the currently expanded comment (empty = none)
+	expandedCommentID string // ID of the currently expanded comment (empty = none)
+	// expandAllComments expands every comment in the open file at once,
+	// independently of the cursor. It outranks expandedCommentID rather than
+	// replacing it, so turning it off leaves the cursor's own comment where the
+	// reader left it.
+	expandAllComments  bool
 	expandSeq          int           // sequence counter; incremented on each cursor move to debounce
 	commentExpandDelay time.Duration // <0 = disabled, 0 = instant, >0 = delay before auto-expand
 
@@ -251,6 +256,17 @@ func (m *diffViewModel) cursorMoved() tea.Cmd {
 	return tea.Tick(m.commentExpandDelay, func(time.Time) tea.Msg {
 		return commentExpandTickMsg{seq: seq}
 	})
+}
+
+// commentExpanded reports whether a comment should render as a full box rather
+// than its three-line summary. Both the renderer and the row-height calculation
+// ask this, because a disagreement between them desyncs the cursor from what is
+// actually drawn.
+func (m diffViewModel) commentExpanded(c *types.ReviewComment) bool {
+	if c == nil {
+		return false
+	}
+	return m.expandAllComments || c.ID == m.expandedCommentID
 }
 
 // selectComment moves the cursor to the comment with the given ID and
@@ -667,7 +683,16 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 			if m.path != "" {
 				return m, openFileCommentCmd(m.path, types.TargetFile)
 			}
-		case key == "space":
+		case Matches(key, m.keys.ExpandAllComments):
+			// Expand or collapse every comment in this file at once. Reading a
+			// review's whole conversation before deciding is a different task
+			// from glancing at the one under the cursor, and doing it a comment
+			// at a time loses the thread.
+			m.expandAllComments = !m.expandAllComments
+			m.expandSeq++
+			m.ensureVisible()
+			return m, nil
+		case Matches(key, m.keys.ExpandComment):
 			// Toggle expand/collapse on comment under cursor
 			if c := m.CursorComment(); c != nil {
 				if m.expandedCommentID == c.ID {
@@ -1301,7 +1326,7 @@ func (m diffViewModel) renderCommentLine(line diffViewLine, selected bool) strin
 
 	// Use expanded format if this comment is expanded
 	content := line.content
-	expanded := line.comment != nil && line.comment.ID == m.expandedCommentID
+	expanded := m.commentExpanded(line.comment)
 	if expanded {
 		origCode := m.originalCodeForComment(line.comment)
 		content = formatExpandedComment(line.comment, m.width, origCode, m.wrap)
@@ -2469,7 +2494,7 @@ func (m diffViewModel) screenLinesFor(idx int) int {
 	// This must match what renderCommentLine/View actually draw, or the scroll
 	// and cursor math desync and the cursor/bottom run off the viewport.
 	if line.isComment {
-		if line.comment != nil && line.comment.ID == m.expandedCommentID {
+		if m.commentExpanded(line.comment) {
 			origCode := m.originalCodeForComment(line.comment)
 			return strings.Count(formatExpandedComment(line.comment, m.width, origCode, m.wrap), "\n") + 1
 		}
@@ -3767,8 +3792,14 @@ func formatInlineComment(c *types.ReviewComment) string {
 	body := c.Body
 	if hasSuggestionBlock {
 		body = "(suggested edit)"
-	} else if len(body) > 60 {
-		body = body[:57] + "..."
+	} else {
+		// Flatten first: a collapsed comment is meant to be a three-line box, and
+		// leaving the body's own newlines in made a multi-paragraph comment render
+		// as tall collapsed as expanded — so collapsing it did nothing.
+		body = strings.Join(strings.Fields(body), " ")
+		if len([]rune(body)) > 60 {
+			body = string([]rune(body)[:57]) + "..."
+		}
 	}
 	return fmt.Sprintf("  ┌─── %s %s", typeLabel, strings.Repeat("─", 20)) + "\n" +
 		fmt.Sprintf("  %s %s", prefix, body) + "\n" +

@@ -41,8 +41,14 @@ type KeyMap struct {
 	ToggleFullDiff  []string
 	ToggleOverlays  []string // hide/show inline comments + annotations
 	HideComments    []string // dim/show source-code comment-only lines
-	OpenDocRef      []string // open/cycle the cursor annotation's doc links in the doc pane
-	YankLine        []string
+	// ExpandComment expands the review comment under the cursor; ExpandAllComments
+	// expands every comment in the open file at once. Separate actions because
+	// reading one comment in passing and reading the whole conversation before
+	// deciding are different tasks.
+	ExpandComment     []string
+	ExpandAllComments []string
+	OpenDocRef        []string // open/cycle the cursor annotation's doc links in the doc pane
+	YankLine          []string
 
 	// Diff search
 	SearchBackward []string // forward search uses FilterReviewed's `/` when the diff is focused
@@ -138,8 +144,12 @@ func DefaultKeyMap() KeyMap {
 		ToggleFullDiff:  []string{"a"},
 		ToggleOverlays:  []string{"O"},
 		HideComments:    []string{"#"},
-		OpenDocRef:      []string{"o"},
-		YankLine:        []string{"y"},
+		// space was already the single-comment toggle, but hardcoded, so it could
+		// not be rebound. E pairs with e/z in the sidebar tree: expand everything.
+		ExpandComment:     []string{"space"},
+		ExpandAllComments: []string{"E"},
+		OpenDocRef:        []string{"o"},
+		YankLine:          []string{"y"},
 
 		TreeMode:       []string{"f"},
 		CollapseAll:    []string{"z"},
@@ -229,6 +239,8 @@ var keyActions = map[string]func(*KeyMap) *[]string{
 	"toggle_full_diff":        func(km *KeyMap) *[]string { return &km.ToggleFullDiff },
 	"toggle_overlays":         func(km *KeyMap) *[]string { return &km.ToggleOverlays },
 	"hide_comments":           func(km *KeyMap) *[]string { return &km.HideComments },
+	"expand_comment":          func(km *KeyMap) *[]string { return &km.ExpandComment },
+	"expand_all_comments":     func(km *KeyMap) *[]string { return &km.ExpandAllComments },
 	"open_doc_ref":            func(km *KeyMap) *[]string { return &km.OpenDocRef },
 	"yank_line":               func(km *KeyMap) *[]string { return &km.YankLine },
 	"search_backward":         func(km *KeyMap) *[]string { return &km.SearchBackward },
