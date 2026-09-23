@@ -19,9 +19,19 @@ import (
 var ErrNotRunning = errors.New("monocle is not running — start it with 'monocle'")
 
 // Client communicates with a running Monocle engine over a Unix domain socket.
+//
+// The engine answers a non-subscribing connection one request at a time and
+// then closes it. A caller that sends a second request on the same Client would
+// therefore be writing into a socket the engine had already closed — a broken
+// pipe, with the first request having quietly succeeded. That is not a contract
+// callers should have to know, so the Client redials for them.
 type Client struct {
-	conn    net.Conn
-	scanner *bufio.Scanner
+	conn       net.Conn
+	scanner    *bufio.Scanner
+	socketPath string
+	// spent records that this connection has already carried a request, so the
+	// engine has closed its end even though nothing here has failed yet.
+	spent bool
 }
 
 // Connect dials the Unix domain socket at the given path.
@@ -38,7 +48,24 @@ func Connect(socketPath string) (*Client, error) {
 	scanner := bufio.NewScanner(conn)
 	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
 
-	return &Client{conn: conn, scanner: scanner}, nil
+	return &Client{conn: conn, scanner: scanner, socketPath: socketPath}, nil
+}
+
+// redial replaces a spent connection with a fresh one. Errors are returned to
+// the caller of Request, which is where a dial failure belongs.
+func (c *Client) redial() error {
+	if c.socketPath == "" {
+		return errors.New("connection already used and no socket path to redial")
+	}
+	c.conn.Close()
+	conn, err := net.Dial("unix", c.socketPath)
+	if err != nil {
+		return ErrNotRunning
+	}
+	scanner := bufio.NewScanner(conn)
+	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
+	c.conn, c.scanner, c.spent = conn, scanner, false
+	return nil
 }
 
 // ConnectDefault resolves the socket path from the current working directory
@@ -67,9 +94,17 @@ func (c *Client) Request(msg any, timeout time.Duration) (any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("encode: %w", err)
 	}
+	// The engine closed its end after the previous exchange; write into a fresh
+	// connection rather than a dead one.
+	if c.spent {
+		if err := c.redial(); err != nil {
+			return nil, err
+		}
+	}
 	if _, err := c.conn.Write(data); err != nil {
 		return nil, fmt.Errorf("write: %w", err)
 	}
+	c.spent = true
 
 	if timeout > 0 {
 		c.conn.SetReadDeadline(time.Now().Add(timeout))
@@ -109,9 +144,15 @@ func (c *Client) RequestWithContext(ctx context.Context, msg any) (any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("encode: %w", err)
 	}
+	if c.spent {
+		if err := c.redial(); err != nil {
+			return nil, err
+		}
+	}
 	if _, err := c.conn.Write(data); err != nil {
 		return nil, fmt.Errorf("write: %w", err)
 	}
+	c.spent = true
 	c.conn.SetReadDeadline(time.Time{}) // no deadline; ctx governs cancellation
 
 	done := make(chan struct{})
