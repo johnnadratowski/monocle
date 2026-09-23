@@ -144,7 +144,9 @@ func DefaultKeyMap() KeyMap {
 		ToggleDiff:      []string{"t"},
 		ToggleFullDiff:  []string{"a"},
 		ToggleOverlays:  []string{"O"},
-		HideComments:    []string{"#"},
+		// m for "mute the comments" — a right-hand home-row key, and vim's own m
+		// (set mark) is not bound here; marks are walked with < and >.
+		HideComments: []string{"m"},
 		// space was already the single-comment toggle, but hardcoded, so it could
 		// not be rebound. E pairs with e/z in the sidebar tree: expand everything.
 		ExpandComment:     []string{"space"},

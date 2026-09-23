@@ -244,7 +244,7 @@ Bindings are grouped by the task they serve, and within a group ordered by key: 
 | `O` | Hide/show inline comments + annotations |
 | `T` | Cycle layout (auto/side-by-side/stacked) |
 | `1` / `2` | Jump straight to a pane |
-| `#` | Cycle source-code comments: dim → hide → show |
+| `m` | Cycle source-code comments: dim → hide → show |
 | `/` | Sidebar: cycle the reviewed filter |
 | `;` | Show/hide the sidebar |
 | `enter` | Focus the diff pane / toggle a directory open |

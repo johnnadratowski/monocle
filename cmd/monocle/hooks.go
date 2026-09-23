@@ -431,17 +431,34 @@ func (cmd *OnStopHookCmd) Run() error {
 	if !review.HasActivity {
 		return nil
 	}
-	if review.Action == "request_changes" {
+	if stopHookDelivers(review.Action) {
 		err := emitClaudeStopBlock(os.Stdout, review.Feedback)
 		if err == nil {
 			client.AckFeedback(socketPath, review.DeliveryID)
 		}
 		return err
 	}
-	// HasActivity=true but approved (or no explicit action) — turn ends normally.
-	client.AckFeedback(socketPath, review.DeliveryID)
+
+	// Nothing was emitted, so nothing is acked — see stopHookDelivers.
+	hookDebug("on-stop: action=%q not surfaced here; leaving the verdict for the agent to pull", review.Action)
 	return nil
 }
+
+// stopHookDelivers reports whether this hook actually puts the verdict in front
+// of the agent, and may therefore commit it.
+//
+// Only request_changes does: it blocks the stop and injects the feedback as the
+// reason, so the agent demonstrably sees it. An approval ends the turn normally
+// — blocking would put the agent back to work on a review that just passed —
+// which means the hook emits nothing at all on that path.
+//
+// The hook drains the queue at the end of every turn regardless. Acking a
+// verdict it did not emit is how an approval disappeared: the ack committed it,
+// marking the submission delivered and advancing the round, and the agent's own
+// get_feedback then correctly found nothing left. Leaving it unacknowledged
+// keeps it recoverable — the next poll from anyone reclaims it, and the lease
+// returns it to the queue if no one asks.
+func stopHookDelivers(action string) bool { return action == "request_changes" }
 
 // emitClaudeStopBlock writes a Claude Code Stop-hook response that blocks
 // the stop with the reviewer's feedback injected as the reason. Claude

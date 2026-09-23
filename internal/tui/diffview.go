@@ -77,17 +77,22 @@ type diffViewModel struct {
 	annotations   []types.Annotation // agent-authored, for the current file
 	hideOverlays  bool               // when true, comments + annotations are not inserted
 	commentFilter commentFilterMode  // show / dim / hide source-code comment-only lines
-	commentLines  map[int]bool       // new-file line numbers that are comment-only (when filter != shown)
-	lines         []diffViewLine
-	cursor        int
-	offset        int // scroll offset
-	width         int
-	height        int
-	focused       bool
-	style         diffStyle
-	theme         *Theme
-	hl            *highlighter
-	isBinary      bool // true when hunk content contains binary control characters
+	// commentLines / commentLinesOld hold the line numbers classified as
+	// comment-only on each side of the diff (when filter != shown). Both sides,
+	// because a removed line has no new-file number and would otherwise never
+	// classify — which is most of a doc comment whose body was rewritten.
+	commentLines    map[int]bool
+	commentLinesOld map[int]bool
+	lines           []diffViewLine
+	cursor          int
+	offset          int // scroll offset
+	width           int
+	height          int
+	focused         bool
+	style           diffStyle
+	theme           *Theme
+	hl              *highlighter
+	isBinary        bool // true when hunk content contains binary control characters
 
 	hOffset  int  // horizontal scroll offset (runes)
 	wrap     bool // soft-wrap long lines
@@ -3638,9 +3643,33 @@ func (m *diffViewModel) insertInlineAnnotations() {
 // correctly. No-op (and clears the set) when the toggle is off.
 func (m *diffViewModel) computeCommentLines() {
 	m.commentLines = nil
+	m.commentLinesOld = nil
 	if m.commentFilter == commentsShown || m.hl == nil {
 		return
 	}
+	// Both sides are classified, not just the new one. A removed line has no
+	// new-file number, so a new-side-only pass left it out — and the commonest
+	// edit to a doc comment rewrites its body while leaving the /** and */
+	// unchanged, which made the fences dim and the body stay lit.
+	m.commentLines = m.classifySide(func(ln diffViewLine) (int, string) {
+		if ln.rightLineNum > 0 {
+			return ln.rightLineNum, ln.rightContent // split: new side is the right
+		}
+		return ln.newLineNum, ln.content
+	})
+	m.commentLinesOld = m.classifySide(func(ln diffViewLine) (int, string) {
+		// The old side is the left in split mode, which is where content already
+		// points; in unified a line belongs to the old file when it has an old
+		// number, whatever its kind.
+		return ln.oldLineNum, ln.content
+	})
+}
+
+// classifySide reconstructs one side of the file from the displayed lines and
+// asks the lexer which of its lines are comment-only. Reconstructing rather than
+// classifying line by line is what lets a block comment classify at all: its
+// middle lines are only comments because of an opener several lines above.
+func (m diffViewModel) classifySide(pick func(diffViewLine) (int, string)) map[int]bool {
 	type codeLine struct {
 		num  int
 		text string
@@ -3650,18 +3679,14 @@ func (m *diffViewModel) computeCommentLines() {
 		if ln.isHunk || ln.isComment || ln.isAnnotation {
 			continue
 		}
-		// New-file side: split lines carry it on the right.
-		num, text := ln.rightLineNum, ln.rightContent
-		if num == 0 {
-			num, text = ln.newLineNum, ln.content
-		}
+		num, text := pick(ln)
 		if num <= 0 {
 			continue
 		}
 		code = append(code, codeLine{num, text})
 	}
 	if len(code) == 0 {
-		return
+		return nil
 	}
 	var sb strings.Builder
 	for i, c := range code {
@@ -3672,21 +3697,23 @@ func (m *diffViewModel) computeCommentLines() {
 	}
 	set := m.hl.commentOnlyLines(m.path, sb.String())
 	if len(set) == 0 {
-		return
+		return nil
 	}
-	m.commentLines = make(map[int]bool, len(set))
+	out := make(map[int]bool, len(set))
 	for i, c := range code {
 		if set[i+1] {
-			m.commentLines[c.num] = true
+			out[c.num] = true
 		}
 	}
+	return out
 }
 
-// commentLineNum returns the new-file line number of a code line that the
-// comment filter has classified as comment-only, or 0 when the line is not a
-// classified comment line.
+// commentLineNum returns the line number under which the comment filter has
+// classified this row as comment-only, or 0 when it has not. A row is looked up
+// on whichever side it belongs to: a removed line exists only in the old file,
+// so asking the new-file map about it can only ever answer no.
 func (m diffViewModel) commentLineNum(line diffViewLine) int {
-	if len(m.commentLines) == 0 || line.isHunk || line.isComment || line.isAnnotation {
+	if line.isHunk || line.isComment || line.isAnnotation {
 		return 0
 	}
 	num := line.rightLineNum
@@ -3695,6 +3722,9 @@ func (m diffViewModel) commentLineNum(line diffViewLine) int {
 	}
 	if num > 0 && m.commentLines[num] {
 		return num
+	}
+	if line.oldLineNum > 0 && m.commentLinesOld[line.oldLineNum] {
+		return line.oldLineNum
 	}
 	return 0
 }
