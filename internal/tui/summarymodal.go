@@ -12,6 +12,11 @@ import (
 	"github.com/josephschmitt/monocle/internal/types"
 )
 
+// reviewCommitLimit bounds the commit list. A review with more commits than this
+// is not one anybody reads commit by commit, and an unbounded log would make
+// opening the modal cost more the longer the branch.
+const reviewCommitLimit = 100
+
 // summaryPalette assigns each item a colour it keeps everywhere it appears: the
 // modal row, the gutter bar on its hunks, the active-filter badge. Magenta, cyan
 // and blue lead because red, green and yellow already mean removed, added and

@@ -6,11 +6,17 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/josephschmitt/monocle/internal/types"
 )
 
 type sidebarModel struct {
+	// summaryItems / activeSummaryID mirror the app's summary selection so a file
+	// the selected item says nothing about can be faded rather than hidden — it
+	// is still part of the review, just not part of this fix.
+	summaryItems    []types.SummaryItem
+	activeSummaryID string
 	files           []types.ChangedFile
 	contentItems    []types.ContentItem
 	additionalFiles []types.AdditionalFile
@@ -413,12 +419,72 @@ func (m sidebarModel) View() string {
 			line = m.renderAdditionalFileItem(m.displayAdditionalFiles()[additionalIdx], idx == m.cursor)
 		}
 
-		b.WriteString(line)
+		b.WriteString(m.fadeIfOutsideSummary(line, idx, contentItemCt, additionalStart))
 		b.WriteString("\n")
 		linesUsed++
 	}
 
 	return strings.TrimRight(b.String(), "\n")
+}
+
+// fadeIfOutsideSummary greys a row for a file the selected summary item says
+// nothing about. Faded, not removed: the file is still part of the review, and
+// hiding it would make a filtered review look like a different, smaller change.
+//
+// The row is re-rendered from its plain text rather than wrapped in a faint
+// style, because the status letter and churn carry their own colours and an
+// outer style does not override them — a "greyed" row would keep its green A and
+// red D and not look greyed at all.
+func (m sidebarModel) fadeIfOutsideSummary(line string, idx, contentItemCt, additionalStart int) string {
+	if m.activeSummaryID == "" || m.cursor == idx {
+		return line
+	}
+	path, ok := m.rowPath(idx, contentItemCt, additionalStart)
+	if !ok {
+		return line
+	}
+	for _, it := range m.summaryItems {
+		if it.ID == m.activeSummaryID {
+			if it.ClaimsFile(path) {
+				return line
+			}
+			break
+		}
+	}
+	return lipgloss.NewStyle().Faint(true).Foreground(lipgloss.Color("8")).Render(ansi.Strip(line))
+}
+
+// rowPath returns the file path a sidebar row stands for, and whether it stands
+// for one at all — directories, artifacts and headers do not.
+func (m sidebarModel) rowPath(idx, contentItemCt, additionalStart int) (string, bool) {
+	switch {
+	case idx < contentItemCt:
+		return "", false // an artifact, not a file
+	case idx < additionalStart:
+		fileIdx := idx - contentItemCt
+		if m.treeMode {
+			if fileIdx >= len(m.visibleItems) {
+				return "", false
+			}
+			item := m.visibleItems[fileIdx]
+			if item.isDir || item.node == nil {
+				return "", false
+			}
+			return item.node.File.Path, true
+		}
+		files := m.displayFiles()
+		if fileIdx >= len(files) {
+			return "", false
+		}
+		return files[fileIdx].Path, true
+	default:
+		extra := m.displayAdditionalFiles()
+		i := idx - additionalStart
+		if i >= len(extra) {
+			return "", false
+		}
+		return extra[i].Path, true
+	}
 }
 
 // selectionStyle returns the full-row highlight for the selected sidebar item: a

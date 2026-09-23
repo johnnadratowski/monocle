@@ -366,6 +366,7 @@ func (m helpModel) buildContent() string {
 		secApp: {
 			{"I", "Connection info (socket path, subscriber count)"},
 			{Label(km.Help), "Show this help"},
+			{Label(km.ReviewSummary), "What this round fixed + the commits it contains"},
 			{Label(km.Quit), "Quit"},
 			{"esc", "Close the current modal / leave visual or search mode"},
 		},

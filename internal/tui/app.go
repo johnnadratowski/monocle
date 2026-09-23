@@ -53,6 +53,7 @@ const (
 	overlaySessionPicker
 	overlayInfo
 	overlayVersionPicker
+	overlaySummary
 )
 
 // Engine event messages bridged from core.EngineAPI callbacks.
@@ -297,6 +298,14 @@ type appModel struct {
 
 	// reviewName is the agent-supplied name for the review, shown in the top bar.
 	reviewName string
+	// summaryItems is the agent's account of what this round fixed, and
+	// activeSummaryID the one currently filtering the review (empty = none).
+	// Both live on the app because the sidebar, the diff view and the top bar all
+	// answer to them.
+	summaryModal    summaryModalModel
+	summaryItems    []types.SummaryItem
+	activeSummaryID string
+
 	// buildWatch notices when the binary this process is running from is replaced
 	// on disk; relaunchRequested is the reviewer's answer to that notice, read by
 	// the caller after the program exits.
@@ -424,6 +433,7 @@ func NewApp(engine core.EngineAPI, opts ...AppOptions) appModel {
 		focus:             focusSidebar,
 		overlay:           overlayNone,
 		buildWatch:        newBuildWatch(),
+		summaryModal:      newSummaryModalModel(theme),
 		layoutConfig:      layoutCfg,
 		theme:             theme,
 		themeName:         themeName,
@@ -564,6 +574,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.annotationCount = len(session.Annotations)
 			m.reviewName = session.ReviewName
 			m.reviewSentAt = session.SentAt
+			m.setSummaryItems(session.SummaryItems)
 		}
 		m.statusBar.fileCount = len(msg.files)
 		m.statusBar.socketStarted = m.engine.GetSocketPath() != ""
@@ -692,6 +703,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.annotationCount = len(session.Annotations)
 			m.reviewName = session.ReviewName
 			m.reviewSentAt = session.SentAt
+			m.setSummaryItems(session.SummaryItems)
 		}
 		// A new review's first refresh: go back to the top. This runs ahead of
 		// the selection-preserving logic below, which exists so the agent
@@ -901,6 +913,22 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.refPicker.ensureVisible()
 		m.overlay = overlayRefPicker
+		return m, nil
+
+	case openSummaryMsg:
+		m.summaryModal.width = m.width
+		m.summaryModal.height = m.height
+		m.summaryModal.open(msg)
+		m.overlay = overlaySummary
+		return m, nil
+
+	case closeSummaryMsg:
+		m.overlay = overlayNone
+		return m, nil
+
+	case selectSummaryItemMsg:
+		m.overlay = overlayNone
+		m.selectSummaryItem(msg.id)
 		return m, nil
 
 	case selectRefMsg:
@@ -1683,6 +1711,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// A full clear also drops the review name and resets the base ref.
 			m.reviewName = session.ReviewName
 			m.reviewSentAt = session.SentAt
+			m.setSummaryItems(session.SummaryItems)
 			m.annotationCount = len(session.Annotations)
 		}
 		// If viewing a content item or an added file, it no longer exists —
@@ -1800,6 +1829,14 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.help.justCommitted {
 			m.recordSearch(m.help.searchQuery)
 			m.help.justCommitted = false
+		}
+		return m, cmd
+	}
+	if m.overlay == overlaySummary {
+		var cmd tea.Cmd
+		m.summaryModal, cmd = m.summaryModal.Update(msg)
+		if !m.summaryModal.active {
+			m.overlay = overlayNone
 		}
 		return m, cmd
 	}
@@ -1954,6 +1991,21 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	case Matches(key, km.Quit):
 		return m, tea.Quit
+
+	case Matches(key, km.ReviewSummary):
+		// Commits are fetched on open rather than held on the model: they change
+		// whenever the agent commits, and a list that went stale behind the modal
+		// would be worse than no list.
+		engine := m.engine
+		items := m.summaryItems
+		name := m.reviewName
+		return m, func() tea.Msg {
+			commits, base, err := engine.ReviewCommits(reviewCommitLimit)
+			if err != nil {
+				commits = nil
+			}
+			return openSummaryMsg{items: items, commits: commits, base: base, name: name}
+		}
 
 	case Matches(key, km.Help):
 		m.help.active = true
@@ -4515,6 +4567,11 @@ func (m appModel) View() tea.View {
 		}
 	} else if m.overlay == overlayHelp {
 		overlayContent := m.help.View()
+		if overlayContent != "" {
+			full = overlayOn(full, overlayContent, m.width, m.height)
+		}
+	} else if m.overlay == overlaySummary {
+		overlayContent := m.summaryModal.View()
 		if overlayContent != "" {
 			full = overlayOn(full, overlayContent, m.width, m.height)
 		}

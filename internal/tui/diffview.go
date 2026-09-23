@@ -68,6 +68,15 @@ type diffViewLine struct {
 	// verbatim lines are rendered exactly as-is (ANSI preserved, no gutter or
 	// syntax/markdown styling). Used for the media artifact card.
 	verbatim bool
+
+	// summaryItemID is the summary item accounting for this row's hunk, or "".
+	// An ID rather than an index so the zero value means "no item" — a numeric
+	// field would make an untagged row read as item 0, which is a real one.
+	//
+	// Tagged by hunk rather than by line: that is the unit the agent is asked to
+	// tag, and it is the only thing that works for removed lines, which have no
+	// new-file number for a line range to match against.
+	summaryItemID string
 }
 
 type diffViewModel struct {
@@ -83,6 +92,12 @@ type diffViewModel struct {
 	// classify — which is most of a doc comment whose body was rewritten.
 	commentLines    map[int]bool
 	commentLinesOld map[int]bool
+
+	// summaryItems is the agent's account of what this round fixed, in the same
+	// order the modal lists it — position is what picks an item's colour.
+	// activeSummaryID names the one currently filtering the view, or "".
+	summaryItems    []types.SummaryItem
+	activeSummaryID string
 	lines           []diffViewLine
 	cursor          int
 	offset          int // scroll offset
@@ -759,8 +774,9 @@ func (m diffViewModel) View() string {
 
 	for i := m.offset; i < len(m.lines) && screenUsed < m.height; i++ {
 		line := m.lines[i]
-		// Hide-comments filter: comment-only lines are removed from the view.
-		if m.isHiddenComment(line) {
+		// Rows removed from the view: comment-only lines under the filter, and
+		// hunks outside the selected summary item.
+		if m.isHiddenComment(line) || m.isHiddenBySummary(line) {
 			continue
 		}
 		selected := i == m.cursor
@@ -896,6 +912,7 @@ func (m *diffViewModel) buildLines() {
 	m.pairLines()
 	m.insertInlineAnnotations()
 	m.computeCommentLines()
+	m.tagSummaryHunks()
 }
 
 // buildContentLines builds lines for a content item (plan/doc) displayed as a document.
@@ -965,6 +982,7 @@ func (m *diffViewModel) buildContentLines(content string) {
 	}
 
 	m.computeCommentLines()
+	m.tagSummaryHunks()
 }
 
 // buildFileViewLines builds lines from raw file content for file view mode.
@@ -1035,6 +1053,7 @@ func (m *diffViewModel) buildFileViewLines(content string) {
 
 	m.insertInlineAnnotations()
 	m.computeCommentLines()
+	m.tagSummaryHunks()
 }
 
 func (m *diffViewModel) buildSplitLines() {
@@ -1168,6 +1187,7 @@ func (m *diffViewModel) buildSplitLines() {
 
 	m.insertInlineAnnotations()
 	m.computeCommentLines()
+	m.tagSummaryHunks()
 }
 
 // pairLines pairs consecutive removed/added line runs for intra-line diff highlighting.
@@ -1227,17 +1247,38 @@ const annotationRangeBar = "▌"
 // is inside an annotation's range it draws a solid cyan rail in the leftmost
 // column — at the far-left edge of the pane — so the range reads as a continuous
 // vertical line down the side. base is the gutter's normal style.
-func gutterWithRangeBar(gutter string, base lipgloss.Style, annotated bool, bg color.Color) string {
-	if !annotated || len(gutter) == 0 {
+func gutterWithRangeBar(gutter string, base lipgloss.Style, annotated bool, summary color.Color, bg color.Color) string {
+	if len(gutter) == 0 {
 		return base.Render(gutter)
 	}
-	// Solid cyan block in column 0; the rest of the gutter keeps its normal style.
-	rail := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(annotationColor)).
-		Background(lipgloss.Color(annotationColor)).
-		Render(annotationRangeBar)
-	return rail + base.Render(gutter[1:])
+	head, body, tail := "", gutter, ""
+	if annotated {
+		// Solid cyan block in column 0; the rest of the gutter keeps its style.
+		head = lipgloss.NewStyle().
+			Foreground(lipgloss.Color(annotationColor)).
+			Background(lipgloss.Color(annotationColor)).
+			Render(annotationRangeBar)
+		body = body[1:]
+	}
+	// The summary bar takes the LAST gutter column, so it reads as a left border
+	// on the content and cannot collide with the annotation rail in column 0.
+	// Both facts are worth seeing at once: which fix this hunk is part of, and
+	// whether the agent left a note on it.
+	if summary != nil && len(body) > 0 {
+		barStyle := lipgloss.NewStyle().Foreground(summary)
+		if bg != nil {
+			barStyle = barStyle.Background(bg)
+		}
+		tail = barStyle.Render(summaryGutterBar)
+		body = body[:len(body)-1]
+	}
+	return head + base.Render(body) + tail
 }
+
+// summaryGutterBar marks a hunk as belonging to a summary item. A half-block
+// rather than a solid one: the annotation rail is solid, and the two need to be
+// tellable apart at a glance.
+const summaryGutterBar = "▌"
 
 // renderDimmedComment renders a source-code comment line faint/greyed (used by
 // the hide-comments filter), padded to width on the line's background.
@@ -1543,10 +1584,11 @@ func (m diffViewModel) renderContentLine(line diffViewLine, _, contentWidth int,
 	if len(gutter) < gutterWidth {
 		gutter = fmt.Sprintf("%-*s", gutterWidth, gutter)
 	}
-	renderedGutter := gutterWithRangeBar(gutter, gutterStyle, line.annotated, nil)
+	renderedGutter := gutterWithRangeBar(gutter, gutterStyle, line.annotated, m.summaryColorFor(line), nil)
 
-	// Hide-comments filter: dim comment-only lines.
-	if m.isDimmedComment(line) {
+	// Faded: a source comment under the filter, or a hunk outside the selected
+	// summary item.
+	if m.faded(line) {
 		return renderedGutter + renderDimmedComment(content, nil, contentWidth)
 	}
 
@@ -1630,10 +1672,11 @@ func (m diffViewModel) renderDiffLine(line diffViewLine, _, contentWidth int, se
 	}
 	// Annotated code lines get a cyan bar in the gutter's trailing column to mark
 	// the annotation's range.
-	renderedGutter := gutterWithRangeBar(gutter, gutterStyle, line.annotated, lineBg)
+	renderedGutter := gutterWithRangeBar(gutter, gutterStyle, line.annotated, m.summaryColorFor(line), lineBg)
 
-	// Hide-comments filter: dim comment-only lines instead of syntax-highlighting.
-	if m.isDimmedComment(line) {
+	// Faded: a source comment under the filter, or a hunk outside the selected
+	// summary item.
+	if m.faded(line) {
 		return renderedGutter + renderDimmedComment(content, lineBg, contentWidth)
 	}
 
@@ -1813,7 +1856,7 @@ func (m diffViewModel) renderSplitLine(line diffViewLine, selected, inVisual boo
 	// Annotation ranges and the comment dim are keyed on new-file lines, so they
 	// apply to the right (new) side; the left side only dims on context lines,
 	// where both sides show the same line.
-	dimmed := m.isDimmedComment(line)
+	dimmed := m.faded(line)
 	leftStyled := fitToWidth(m.renderSplitSide(leftGutter, leftRawContent, line.kind, line.leftEmpty, leftChanges, gutterW, contentW, line, false, dimmed && line.kind == types.DiffLineContext), sideW)
 	rightStyled := fitToWidth(m.renderSplitSide(rightGutter, rightRawContent, line.rightKind, line.rightEmpty, rightChanges, gutterW, contentW, line, line.annotated, dimmed), sideW)
 	divStyled := lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(divider)
@@ -1869,7 +1912,7 @@ func (m diffViewModel) renderWrappedSplitLine(line diffViewLine, selected, inVis
 
 	sideW := gutterW + contentW
 	divider := lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render("│")
-	dimmed := m.isDimmedComment(line)
+	dimmed := m.faded(line)
 
 	var out []string
 	for row := 0; row < rows; row++ {
@@ -1917,7 +1960,7 @@ func (m diffViewModel) splitRow(gutter, styled string, kind types.DiffLineKind, 
 	if len(gutter) < gutterW {
 		gutter = fmt.Sprintf("%-*s", gutterW, gutter)
 	}
-	renderedGutter := gutterWithRangeBar(gutter, gutterStyle, annotated, lineBg)
+	renderedGutter := gutterWithRangeBar(gutter, gutterStyle, annotated, m.summaryColorFor(line), lineBg)
 	if dimmed {
 		return renderedGutter + renderDimmedComment(styled, lineBg, contentW)
 	}
@@ -1948,7 +1991,7 @@ func (m diffViewModel) renderSplitSide(gutter, content string, kind types.DiffLi
 	if len(gutter) < gutterW {
 		gutter = fmt.Sprintf("%-*s", gutterW, gutter)
 	}
-	renderedGutter := gutterWithRangeBar(gutter, gutterStyle, annotated, lineBg)
+	renderedGutter := gutterWithRangeBar(gutter, gutterStyle, annotated, m.summaryColorFor(line), lineBg)
 
 	// Hide-comments filter: dim comment-only lines.
 	if dimmed {
@@ -2055,7 +2098,7 @@ func (m diffViewModel) renderWrappedLine(gutter, content string, gutterWidth, co
 	// The comment filter's dim state applies here too. It used to be checked
 	// only on the unwrapped path, so turning wrap on silently un-dimmed every
 	// comment the filter was hiding.
-	case mdLine != nil && m.isDimmedComment(*mdLine):
+	case mdLine != nil && m.faded(*mdLine):
 		styled = renderDimmedComment(content, lineBg, 0)
 	case isMd && mdLine.mdIsFence:
 		rule := m.mdStyler.theme.MarkdownRule.Render(strings.Repeat("─", min(40, contentWidth)))
@@ -2089,7 +2132,7 @@ func (m diffViewModel) renderWrappedLine(gutter, content string, gutterWidth, co
 		if len(g) < gutterWidth {
 			g = fmt.Sprintf("%-*s", gutterWidth, g)
 		}
-		parts = append(parts, gutterWithRangeBar(g, gutterStyle, annotated, lineBg)+
+		parts = append(parts, gutterWithRangeBar(g, gutterStyle, annotated, m.summaryColorFor(mdLineOrZero(mdLine)), lineBg)+
 			applyBgAndPad(row, lineBg, contentWidth))
 	}
 	return strings.Join(parts, "\n")
@@ -2321,6 +2364,7 @@ func (m *diffViewModel) ToggleOverlays() {
 func (m *diffViewModel) CycleCommentFilter() {
 	m.commentFilter = (m.commentFilter + 1) % 3
 	m.computeCommentLines()
+	m.tagSummaryHunks()
 	m.cursor = m.nearestSelectable(m.cursor, 1)
 	m.ensureVisible()
 }
@@ -2490,8 +2534,9 @@ func (m diffViewModel) screenLinesFor(idx int) int {
 		return 1
 	}
 	line := m.lines[idx]
-	// Hidden comment lines occupy no screen rows (filter in the hide state).
-	if m.isHiddenComment(line) {
+	// Hidden rows occupy no screen rows, or the cursor and the viewport bottom
+	// drift apart from what is drawn.
+	if m.isHiddenComment(line) || m.isHiddenBySummary(line) {
 		return 0
 	}
 	// Comments render as a multi-line box regardless of wrap mode: a collapsed
@@ -2774,8 +2819,8 @@ func (m diffViewModel) scrollExtent() scrollExtent {
 		if i >= m.offset && i <= last {
 			continue
 		}
-		// Filtered-out comments occupy no rows, so they aren't scrollable content.
-		if m.isHiddenComment(m.lines[i]) {
+		// Rows that aren't drawn occupy no space, so they aren't scrollable content.
+		if m.isHiddenComment(m.lines[i]) || m.isHiddenBySummary(m.lines[i]) {
 			continue
 		}
 		if i < m.offset {
@@ -3143,8 +3188,8 @@ func (m diffViewModel) isSelectable(idx int) bool {
 	if line.isHunk {
 		return false
 	}
-	// Hidden comment lines can't hold the cursor (filter in the hide state).
-	if m.isHiddenComment(line) {
+	// A row that isn't drawn can't hold the cursor.
+	if m.isHiddenComment(line) || m.isHiddenBySummary(line) {
 		return false
 	}
 	if line.isComment {

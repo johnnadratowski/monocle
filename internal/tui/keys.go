@@ -103,6 +103,7 @@ type KeyMap struct {
 	Refresh              []string
 	Relaunch             []string // restart the TUI onto a newly installed build
 	Help                 []string
+	ReviewSummary        []string // what this round fixed + the commits it contains
 	Quit                 []string
 	CommandMode          []string
 
@@ -200,10 +201,11 @@ func DefaultKeyMap() KeyMap {
 		Refresh:              []string{"R"},
 		// Only acts when a new build is actually installed, so a stray ctrl+r
 		// costs nothing.
-		Relaunch:    []string{"ctrl+r"},
-		Help:        []string{"H"},
-		Quit:        []string{"q"},
-		CommandMode: []string{":"},
+		Relaunch:      []string{"ctrl+r"},
+		Help:          []string{"H"},
+		ReviewSummary: []string{"i"},
+		Quit:          []string{"q"},
+		CommandMode:   []string{":"},
 
 		WizardAdvance: []string{"enter"},
 		WizardBack:    []string{"shift+tab", "backspace"},
@@ -289,6 +291,7 @@ var keyActions = map[string]func(*KeyMap) *[]string{
 	"refresh":                 func(km *KeyMap) *[]string { return &km.Refresh },
 	"relaunch":                func(km *KeyMap) *[]string { return &km.Relaunch },
 	"help":                    func(km *KeyMap) *[]string { return &km.Help },
+	"review_summary":          func(km *KeyMap) *[]string { return &km.ReviewSummary },
 	"quit":                    func(km *KeyMap) *[]string { return &km.Quit },
 	"command_mode":            func(km *KeyMap) *[]string { return &km.CommandMode },
 	"wizard_advance":          func(km *KeyMap) *[]string { return &km.WizardAdvance },
