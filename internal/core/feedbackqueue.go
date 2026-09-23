@@ -190,11 +190,17 @@ func (fq *FeedbackQueue) takeLocked(deliveryID string) *PollResult {
 		ChannelDelivered: fq.channelDelivered,
 		DeliveryID:       deliveryID,
 	}
-	if deliveryID != "" {
-		fq.inFlight = fq.pending
-		fq.inFlightID = deliveryID
-	}
 	fq.pending = nil
+	if deliveryID != "" {
+		// Two-phase: handed out but not committed. The status stays "queued"
+		// because that is what it is — a verdict still owed to someone. Calling
+		// it delivered here made review_status answer "no feedback pending"
+		// while the batch was sitting recoverable in flight.
+		fq.inFlight = result.Reviews
+		fq.inFlightID = deliveryID
+		fq.status = "queued"
+		return result
+	}
 	fq.status = "delivered"
 	return result
 }
@@ -210,6 +216,7 @@ func (fq *FeedbackQueue) AckInFlight(id string) bool {
 	}
 	fq.inFlight = nil
 	fq.inFlightID = ""
+	fq.status = "delivered"
 	return true
 }
 
