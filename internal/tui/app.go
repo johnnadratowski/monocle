@@ -1992,6 +1992,12 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case Matches(key, km.Quit):
 		return m, tea.Quit
 
+	case key == "esc" && m.activeSummaryID != "" && m.overlay == overlayNone:
+		// The badge says esc clears it, and esc is what closes the modal that set
+		// it — one key for getting out of both.
+		m.selectSummaryItem("")
+		return m, nil
+
 	case Matches(key, km.ReviewSummary):
 		// Commits are fetched on open rather than held on the model: they change
 		// whenever the agent commits, and a list that went stale behind the modal
@@ -4299,6 +4305,22 @@ func (m appModel) renderTitleBar() string {
 		left += warnStyle.Render(fmt.Sprintf(" %s  ⚠ server %s", client, m.serverVersion))
 	} else {
 		left += dimStyle.Render(" " + client)
+	}
+
+	// An active summary filter must be visible without opening anything: the
+	// review is showing less than it contains, and nothing else on screen says so.
+	if it, idx := m.activeSummaryItem(); it != nil {
+		text := it.Text
+		if lipgloss.Width(text) > 32 {
+			text = truncateMiddle(text, 32)
+		}
+		badge := lipgloss.NewStyle().
+			Background(summaryColor(idx)).
+			Foreground(lipgloss.Color("0")).
+			Bold(true).
+			Padding(0, 1).
+			Render("◧ " + text)
+		left += " " + badge + dimStyle.Render(" esc clears")
 	}
 
 	if m.focusModeActive {

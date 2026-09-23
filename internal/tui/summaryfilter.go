@@ -21,6 +21,17 @@ func (m *diffViewModel) tagSummaryHunks() {
 	if len(m.summaryItems) == 0 || m.path == "" {
 		return
 	}
+	// Whole-file mode is a single hunk spanning the file, so hunk granularity
+	// would paint the entire file one colour. It shows lines, so it tags lines.
+	if m.fullFile || m.contentMode || m.style == diffStyleFile {
+		m.tagSummaryLines()
+		return
+	}
+
+	// The compact diff shows hunks, so it tags hunks: a hunk is the unit the
+	// agent is asked to tag and the unit the reviewer moves in, and tagging its
+	// context lines individually would fragment it under a filter.
+	//
 	// Walk the rows in order, carrying the current hunk's item forward. Rows
 	// between hunk headers all belong to the same hunk, including the comment and
 	// annotation boxes attached to them.
@@ -31,6 +42,62 @@ func (m *diffViewModel) tagSummaryHunks() {
 		}
 		m.lines[i].summaryItemID = id
 	}
+}
+
+// tagSummaryLines tags each row by its own new-file line. Rows with no new-file
+// number — removed lines — inherit from their neighbours: a removed line sits
+// against the added line that replaced it, so the row after it is the right
+// answer, and the row before it is the fallback at the end of a block.
+func (m *diffViewModel) tagSummaryLines() {
+	for i, ln := range m.lines {
+		if ln.isHunk {
+			continue
+		}
+		if n := newLineOf(ln); n > 0 {
+			m.lines[i].summaryItemID = m.itemForLine(n)
+		}
+	}
+	for i := range m.lines {
+		ln := m.lines[i]
+		// Only rows that could not be asked directly borrow from a neighbour. A
+		// row WITH a new-file number was asked and answered "no item"; filling it
+		// anyway would bleed a tag outwards from every range boundary and paint
+		// lines the agent never claimed.
+		if ln.isHunk || ln.summaryItemID != "" || newLineOf(ln) > 0 {
+			continue
+		}
+		if id := m.neighbourTag(i); id != "" {
+			m.lines[i].summaryItemID = id
+		}
+	}
+}
+
+// neighbourTag looks forward first, then back, for the tag of an adjacent row,
+// stopping at a hunk boundary so a tag never leaks across one.
+func (m diffViewModel) neighbourTag(i int) string {
+	for j := i + 1; j < len(m.lines) && !m.lines[j].isHunk; j++ {
+		if newLineOf(m.lines[j]) > 0 {
+			return m.lines[j].summaryItemID
+		}
+	}
+	for j := i - 1; j >= 0 && !m.lines[j].isHunk; j-- {
+		if newLineOf(m.lines[j]) > 0 {
+			return m.lines[j].summaryItemID
+		}
+	}
+	return ""
+}
+
+// itemForLine returns the item covering one new-file line, or "".
+func (m diffViewModel) itemForLine(n int) string {
+	for _, it := range m.summaryItems {
+		for _, t := range it.Targets {
+			if t.Covers(m.path, n) {
+				return it.ID
+			}
+		}
+	}
+	return ""
 }
 
 // itemForHunk finds the summary item accounting for the hunk starting at the

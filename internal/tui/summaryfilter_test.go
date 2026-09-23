@@ -207,3 +207,92 @@ func TestSelectionIsDroppedWhenTheItemGoes(t *testing.T) {
 		t.Error("a selection that still exists must survive a re-send")
 	}
 }
+
+// Whole-file mode is a single hunk spanning the file, so tagging by hunk would
+// paint every line one colour and fade nothing. It shows lines, so it tags them.
+func TestWholeFileModeTagsByLine(t *testing.T) {
+	m := summaryModel(t)
+	m.fullFile = true
+	// A whole-file view: every line of the file, one hunk.
+	var lines []types.DiffLine
+	for i := 1; i <= 100; i++ {
+		lines = append(lines, types.DiffLine{
+			Kind: types.DiffLineContext, Content: "line", OldLineNum: i, NewLineNum: i,
+		})
+	}
+	m.hunks = []types.DiffHunk{{OldStart: 1, OldCount: 100, NewStart: 1, NewCount: 100, Lines: lines}}
+	m.buildLines()
+
+	byLine := map[int]string{}
+	for _, ln := range m.lines {
+		if ln.isHunk {
+			continue
+		}
+		byLine[ln.newLineNum] = ln.summaryItemID
+	}
+	if got := byLine[10]; got != "fix-a" {
+		t.Errorf("line 10 tagged %q, want fix-a (its range is 9-12)", got)
+	}
+	if got := byLine[90]; got != "fix-b" {
+		t.Errorf("line 90 tagged %q, want fix-b (its range is 88-95)", got)
+	}
+	// Between the two ranges belongs to neither, which is what makes fading mean
+	// something in whole-file mode.
+	if got := byLine[50]; got != "" {
+		t.Errorf("line 50 tagged %q, want no item — it is between the two ranges", got)
+	}
+}
+
+// A removed line has no new-file number even in whole-file mode, so it takes the
+// tag of the added line it sits against.
+func TestWholeFileModeTagsRemovedLinesFromTheirNeighbour(t *testing.T) {
+	m := summaryModel(t)
+	m.fullFile = true
+	m.buildLines()
+	for _, ln := range m.lines {
+		if ln.kind != types.DiffLineRemoved {
+			continue
+		}
+		if ln.summaryItemID == "" {
+			t.Errorf("removed line %q took no tag from its neighbour", ln.content)
+		}
+	}
+}
+
+// A line the agent did not claim must stay unclaimed, even sitting next to one
+// that is. Borrowing from a neighbour is only for rows that cannot be asked
+// directly — removed lines, which have no new-file number.
+func TestLineTagsDoNotBleedPastTheirRange(t *testing.T) {
+	m := summaryModel(t)
+	m.fullFile = true
+	var lines []types.DiffLine
+	for i := 1; i <= 100; i++ {
+		lines = append(lines, types.DiffLine{
+			Kind: types.DiffLineContext, Content: "line", OldLineNum: i, NewLineNum: i,
+		})
+	}
+	m.hunks = []types.DiffHunk{{OldStart: 1, OldCount: 100, NewStart: 1, NewCount: 100, Lines: lines}}
+	m.buildLines()
+
+	byLine := map[int]string{}
+	for _, ln := range m.lines {
+		if !ln.isHunk {
+			byLine[ln.newLineNum] = ln.summaryItemID
+		}
+	}
+	// fix-a covers 9-12 and fix-b covers 88-95; the lines just outside each edge
+	// are the ones a careless fill would capture.
+	for _, n := range []int{8, 13, 87, 96} {
+		if got := byLine[n]; got != "" {
+			t.Errorf("line %d tagged %q, want no item — it is outside every range", n, got)
+		}
+	}
+	for _, tc := range []struct {
+		line int
+		want string
+	}{{9, "fix-a"}, {12, "fix-a"}, {88, "fix-b"}, {95, "fix-b"}} {
+		if got := byLine[tc.line]; got != tc.want {
+			t.Errorf("line %d tagged %q, want %q", tc.line, got, tc.want)
+		}
+	}
+}

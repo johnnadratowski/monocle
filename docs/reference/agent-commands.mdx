@@ -371,6 +371,45 @@ In MCP tools mode, call the `set_review_name` tool with `name` (required) and op
 
 ---
 
+## `monocle review set-summary`
+
+Tell the reviewer what this round fixed, as a short list they can read before the diff. Each item tags the files and line ranges it accounts for, so the reviewer can select one and see only its hunks.
+
+```bash
+monocle review set-summary --items '[{"id":"nul","text":"Escape raw NULs in doc staging","order":1,"targets":[{"path":"server/models/staging.ts","line_start":306,"line_end":314}]}]'
+echo "$JSON" | monocle review set-summary          # or pipe it on stdin
+monocle review set-summary --clear                 # withdraw the summary
+```
+
+Item fields:
+
+| Field | Description |
+|-------|-------------|
+| `text` | One short line — what was fixed, at the ticket or fix level, not how. Around ten words. |
+| `id` | Optional. Reuse the same id across rounds so the reviewer's selection survives a re-send. |
+| `order` | Optional integer; lower is read first. |
+| `targets` | The parts of the diff this item accounts for: `path`, plus optional `line_start`/`line_end` in **new-file** line numbers. Omit the lines to claim the whole file. |
+
+Notes:
+
+- **Targets are what make the list useful.** Without them an item cannot be selected, and the modal marks it `untagged`.
+- Sent wholesale: a new call replaces the previous summary rather than adding to it, because it describes the round in front of the reviewer.
+- Call it after the files are in place (after `set-base-ref` / `add-files` / `set-file-groups`), since targets reference them.
+- The reviewer opens it with `i`, which also lists the commits the review contains.
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--items` | JSON array of items. Reads stdin when omitted. |
+| `--clear` | Withdraw the summary (equivalent to sending an empty list). |
+
+### MCP tool equivalent
+
+In MCP tools mode, call the `set_review_summary` tool with `items`.
+
+---
+
 ## `monocle review set-base-ref`
 
 Review work you have **already committed**. By default monocle only shows uncommitted working-tree changes, so once your changes are committed they fall behind the base and disappear from the diff. This command points the diff at a base commit so everything since it — including your commits — is shown for review.

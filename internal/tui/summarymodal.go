@@ -149,15 +149,16 @@ func (m summaryModalModel) View() string {
 
 	boxW := CalcModalWidth(m.width, 110)
 	contentW := boxW - 6
-	if contentW < 20 {
-		contentW = 20
+	if contentW < 24 {
+		contentW = 24
 	}
 
 	// Side by side when there is room for two readable columns; stacked when
 	// narrow, because a 20-column commit subject is worse than no columns.
-	leftW, rightW := contentW, 0
 	const gap = 3
-	if len(m.commits) > 0 && contentW >= 70 {
+	leftW, rightW := contentW, 0
+	side := contentW >= 74
+	if side {
 		rightW = contentW/2 - gap
 		leftW = contentW - rightW - gap
 	}
@@ -171,11 +172,10 @@ func (m summaryModalModel) View() string {
 
 	left := m.itemRows(leftW)
 	right := m.commitRows(rightW)
-	if rightW == 0 {
+	if !side {
 		b.WriteString(strings.Join(left, "\n"))
-		if len(m.commits) > 0 {
-			b.WriteString("\n\n" + strings.Join(m.commitRows(contentW), "\n"))
-		}
+		b.WriteString("\n\n")
+		b.WriteString(strings.Join(m.commitRows(contentW), "\n"))
 	} else {
 		rows := max(len(left), len(right))
 		for i := 0; i < rows; i++ {
@@ -190,7 +190,13 @@ func (m summaryModalModel) View() string {
 
 	b.WriteString("\n\n")
 	b.WriteString(lipgloss.NewStyle().Faint(true).Render(m.hint()))
-	return b.String()
+
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("4")).
+		Padding(1, 2).
+		Width(boxW).
+		Render(b.String())
 }
 
 func (m summaryModalModel) hint() string {
@@ -198,9 +204,9 @@ func (m summaryModalModel) hint() string {
 		return "esc: close"
 	}
 	if m.activeID != "" {
-		return "j/k: move  enter: show only this item  esc: clear the filter and close"
+		return "j/k: move   enter: show only this item   esc: clear the filter and close"
 	}
-	return "j/k: move  enter: show only this item  esc: close"
+	return "j/k: move   enter: show only this item   esc: close"
 }
 
 func rowAt(rows []string, i int) string {
@@ -210,38 +216,35 @@ func rowAt(rows []string, i int) string {
 	return ""
 }
 
-// itemRows renders the left half: one row per item, led by its colour bar.
+// itemRows renders the left half: one row per item, led by its colour bar. Rows
+// are composed as plain text and styled last, so the cursor highlight spans
+// exactly the same width as an unselected row.
 func (m summaryModalModel) itemRows(w int) []string {
 	head := lipgloss.NewStyle().Faint(true).Render("What this round fixed")
 	if len(m.items) == 0 {
-		return []string{
-			head,
-			lipgloss.NewStyle().Faint(true).Render("  the agent sent no summary for this review"),
-		}
+		return []string{head, lipgloss.NewStyle().Faint(true).Render("  no summary sent for this review")}
 	}
 	rows := []string{head}
 	for i, it := range m.items {
-		bar := lipgloss.NewStyle().Foreground(summaryColor(i)).Render("▌")
 		mark := " "
 		if it.ID == m.activeID {
 			mark = "✓"
 		}
-		text := it.Text
-		// 4 leading cells (bar, space, mark, space) plus the target count.
 		count := m.targetLabel(it)
+		// "▌ x " prefix is 4 cells; the count sits right-aligned after a space.
 		room := w - 4 - lipgloss.Width(count) - 1
+		text := it.Text
 		if room > 3 && lipgloss.Width(text) > room {
 			text = truncateMiddle(text, room)
 		}
-		line := bar + " " + mark + " " + text
-		if count != "" {
-			line += " " + lipgloss.NewStyle().Faint(true).Render(count)
-		}
+		body := padToWidth(mark+" "+text, w-2-lipgloss.Width(count)) + count
+
+		bar := lipgloss.NewStyle().Foreground(summaryColor(i)).Render("▌")
 		if i == m.cursor {
-			line = lipgloss.NewStyle().Reverse(true).Render(padToWidth(bar+" "+mark+" "+text, w-lipgloss.Width(count)-1)) +
-				" " + lipgloss.NewStyle().Faint(true).Render(count)
+			rows = append(rows, bar+lipgloss.NewStyle().Reverse(true).Render(padToWidth(body, w-1)))
+			continue
 		}
-		rows = append(rows, line)
+		rows = append(rows, bar+body)
 	}
 	return rows
 }
@@ -263,7 +266,9 @@ func (m summaryModalModel) targetLabel(it types.SummaryItem) string {
 	return fmt.Sprintf("%d files", len(files))
 }
 
-// commitRows renders the right half: the commits the review contains.
+// commitRows renders the right half: the commits the review contains. An empty
+// list is still worth a row — "uncommitted changes" is an answer, and leaving
+// the column blank would read as a failure to load.
 func (m summaryModalModel) commitRows(w int) []string {
 	if w <= 0 {
 		return nil
