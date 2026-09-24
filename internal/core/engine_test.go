@@ -1034,6 +1034,10 @@ func TestSubmitRequestChangesRequiresContent(t *testing.T) {
 			FileStatuses: make(map[string]bool),
 			ReviewRound:  1,
 			Comments:     comments,
+			// A staged file, because a submission is a verdict ON something;
+			// these cases are about whether a verdict needs comments, not about
+			// whether there is a review to pass it on.
+			ChangedFiles: []types.ChangedFile{{Path: "main.go"}},
 		}
 		_ = database.CreateSession(e.current)
 	}
@@ -1491,6 +1495,9 @@ func TestAgentBaseRefResetsAfterReview(t *testing.T) {
 			ID: "sess-1", Agent: "claude",
 			RepoRoot: "/tmp/repo", BaseRef: "old-base", ReviewRound: 1,
 			FileStatuses: make(map[string]bool), CreatedAt: now, UpdatedAt: now,
+			// Something staged, so these cases exercise base-ref lifecycle
+			// rather than the "nothing to review" guard.
+			ChangedFiles: []types.ChangedFile{{Path: "main.go"}},
 		}
 		database.CreateSession(session)
 		e := &Engine{

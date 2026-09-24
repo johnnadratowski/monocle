@@ -49,6 +49,16 @@ func setupTestEngine(t *testing.T) (*core.Engine, string) {
 	return engine, socketPath
 }
 
+// stageSomething gives the engine a review to pass a verdict on. The engine
+// refuses a submission against an empty review, and the delivery tests below
+// are about what happens to a verdict, not about that guard.
+func stageSomething(t *testing.T, engine *core.Engine) {
+	t.Helper()
+	if err := engine.SubmitContentForReview("plan", "Plan", "a plan", "md", true); err != nil {
+		t.Fatalf("stage content: %v", err)
+	}
+}
+
 func TestClient_ReviewStatus(t *testing.T) {
 	_, socketPath := setupTestEngine(t)
 
@@ -111,6 +121,7 @@ func TestClient_PollFeedback_NoWait(t *testing.T) {
 // consuming — so the verdict stays queued for the next poll.
 func TestClient_AbortedWaitPreservesVerdict(t *testing.T) {
 	engine, socketPath := setupTestEngine(t)
+	stageSomething(t, engine)
 
 	cA, err := client.Connect(socketPath)
 	if err != nil {
@@ -203,6 +214,7 @@ func pollFeedback(t *testing.T, socketPath string, ackRequired bool) *protocol.P
 // redelivers — and only the ack commits it.
 func TestClient_TwoPhaseDelivery_SurvivesMissingAck(t *testing.T) {
 	engine, socketPath := setupTestEngine(t)
+	stageSomething(t, engine)
 
 	if err := engine.Submit(types.ActionRequestChanges, "please fix"); err != nil {
 		t.Fatalf("submit: %v", err)
@@ -237,6 +249,7 @@ func TestClient_TwoPhaseDelivery_SurvivesMissingAck(t *testing.T) {
 // behaviour so they never loop on the same verdict.
 func TestClient_OnePhaseDelivery_BackCompat(t *testing.T) {
 	engine, socketPath := setupTestEngine(t)
+	stageSomething(t, engine)
 
 	if err := engine.Submit(types.ActionRequestChanges, "please fix"); err != nil {
 		t.Fatalf("submit: %v", err)

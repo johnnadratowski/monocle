@@ -119,11 +119,14 @@ type PollFeedbackMsg struct {
 
 // PollFeedbackResponse returns feedback if available.
 type PollFeedbackResponse struct {
-	Type         string `json:"type"`
-	HasFeedback  bool   `json:"has_feedback"`
-	Feedback     string `json:"feedback,omitempty"`
-	CommentCount int    `json:"comment_count,omitempty"`
-	Action       string `json:"action,omitempty"` // "approve" | "request_changes"
+	Type        string `json:"type"`
+	HasFeedback bool   `json:"has_feedback"`
+	Feedback    string `json:"feedback,omitempty"`
+	// Superseded names verdicts retired because a newer round was staged before
+	// they were collected. Reported so a verdict never disappears in silence.
+	Superseded   []string `json:"superseded,omitempty"`
+	CommentCount int      `json:"comment_count,omitempty"`
+	Action       string   `json:"action,omitempty"` // "approve" | "request_changes"
 	// DeliveryID is set only when the request opted into two-phase delivery.
 	// The client must send AckFeedbackMsg with this id once it has the verdict
 	// in hand; until then the delivery is uncommitted and recoverable.

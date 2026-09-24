@@ -669,6 +669,7 @@ func (cmd *ReviewGetFeedbackCmd) Run() error {
 		return nil
 	}
 	if !feedback.HasFeedback {
+		printSuperseded(feedback.Superseded)
 		if !feedback.ReviewLoaded {
 			where := feedback.RepoRoot
 			if where == "" {
@@ -681,10 +682,23 @@ func (cmd *ReviewGetFeedbackCmd) Run() error {
 		fmt.Println("No feedback pending.")
 		return nil
 	}
+	printSuperseded(feedback.Superseded)
 	fmt.Println(feedback.Feedback)
 	// Printed successfully — commit the delivery.
 	client.AckFeedback(socketPath, feedback.DeliveryID)
 	return nil
+}
+
+// printSuperseded reports verdicts retired because a newer round was staged
+// before they were collected. Printed ahead of everything else: it changes how
+// the rest of the answer should be read.
+func printSuperseded(notes []string) {
+	for _, n := range notes {
+		fmt.Println(n)
+	}
+	if len(notes) > 0 {
+		fmt.Println()
+	}
 }
 
 func (cmd *ReviewSendArtifactCmd) Run() error {

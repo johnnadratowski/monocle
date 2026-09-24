@@ -41,6 +41,12 @@ type Engine struct {
 	// full content — so changeset-based dedup (see changesetAbsPaths) is off.
 	nonGitMode bool
 
+	// supersededNotes records verdicts retired because the agent staged a newer
+	// round before collecting them. Drained into the next delivery: a verdict
+	// that silently disappears is the same class of bug as one delivered against
+	// the wrong review.
+	supersededNotes []string
+
 	// hasUnreviewedActivity is set by handleMarkActivity when Claude fires a
 	// write-tool (PostToolUse hook). Cleared when the reviewer's feedback
 	// queue is next drained. Used by handleAwaitReview to decide whether a
@@ -637,12 +643,42 @@ func (e *Engine) handleSetReviewSummary(msg *protocol.SetReviewSummaryMsg) *prot
 // is what arms the next round.
 func (e *Engine) noteReviewSent() {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 	if e.current == nil || !e.current.SentAt.IsZero() {
+		e.mu.Unlock()
 		return
 	}
 	e.current.SentAt = time.Now()
+	round := e.current.ReviewRound
 	_ = e.database.UpdateSession(e.current)
+	e.mu.Unlock()
+
+	// Handing over a new round retires any verdict still queued for an older
+	// one. The reviewer passed judgement on what they were looking at; the agent
+	// has since replaced it, and delivering that verdict against the new work
+	// reads as approval of a review nobody saw. Recorded rather than dropped
+	// quietly — the next collection says what was retired.
+	if dropped := e.feedback.SupersedeBefore(round); len(dropped) > 0 {
+		e.mu.Lock()
+		for _, rev := range dropped {
+			e.supersededNotes = append(e.supersededNotes, fmt.Sprintf(
+				"A %s verdict submitted for round %d was superseded when round %d was staged, and was never collected.",
+				verdictWord(rev.Action), rev.Round, round))
+		}
+		e.mu.Unlock()
+	}
+}
+
+// verdictWord renders an action for a human sentence.
+func verdictWord(action string) string {
+	switch action {
+	case string(types.ActionApprove):
+		return "approve"
+	case string(types.ActionRequestChanges):
+		return "request_changes"
+	case string(types.ActionQuestions):
+		return "questions"
+	}
+	return "review"
 }
 
 func (e *Engine) handleSetReviewName(msg *protocol.SetReviewNameMsg) *protocol.SetReviewNameResponse {
@@ -1621,6 +1657,15 @@ func (e *Engine) Submit(action types.SubmitAction, body string) error {
 		return fmt.Errorf("no active session")
 	}
 
+	// Validate: there has to be something to pass judgement on. An approval of
+	// an empty review is a verdict about nothing, and it does not stay harmless
+	// — it sits in the queue until some later round collects it and reads it as
+	// approval of work nobody looked at.
+	if len(session.ChangedFiles) == 0 && len(session.ContentItems) == 0 &&
+		len(session.AdditionalFiles) == 0 && len(session.Comments) == 0 {
+		return fmt.Errorf("nothing staged to review — this review has no files, artifacts or comments, so there is nothing to approve or send back")
+	}
+
 	// Validate: anything that keeps the review open must say something — a
 	// request for changes with no comments, or a question with no question,
 	// leaves the agent nothing to act on.
@@ -1639,6 +1684,11 @@ func (e *Engine) Submit(action types.SubmitAction, body string) error {
 	}
 
 	formatted := e.formatter.Format(session, session.Comments, action, body)
+	// Stamp which review this verdict is about, so a queued one cannot be read
+	// as a verdict on work staged after it.
+	now := time.Now()
+	formatted.Round = session.ReviewRound
+	formatted.SubmittedAt = now
 
 	// The daemon always queues feedback for pull delivery: the agent gets an
 	// event notification as a hint and then retrieves the review via
@@ -1647,7 +1697,6 @@ func (e *Engine) Submit(action types.SubmitAction, body string) error {
 	e.feedback.Submit(formatted, false)
 
 	// Save submission record
-	now := time.Now()
 	sub := &types.ReviewSubmission{
 		ID:              uuid.New().String(),
 		SessionID:       session.ID,
@@ -2927,6 +2976,7 @@ func (e *Engine) handlePollFeedback(msg *protocol.PollFeedbackMsg, cancel <-chan
 			RepoRoot:     info.RepoRoot,
 			ReviewName:   info.ReviewName,
 			ReviewLoaded: info.ReviewLoaded,
+			Superseded:   e.takeSupersededNotes(),
 		}
 	}
 
@@ -2946,7 +2996,20 @@ func (e *Engine) handlePollFeedback(msg *protocol.PollFeedbackMsg, cancel <-chan
 		CommentCount: commentCount,
 		Action:       action,
 		DeliveryID:   result.DeliveryID,
+		Superseded:   e.takeSupersededNotes(),
 	}
+}
+
+// takeSupersededNotes drains the retired-verdict notes, so each is reported
+// exactly once — to whoever collects next, whether or not there is a verdict to
+// collect. An agent that staged over an uncollected verdict most often learns of
+// it from an otherwise empty answer.
+func (e *Engine) takeSupersededNotes() []string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	notes := e.supersededNotes
+	e.supersededNotes = nil
+	return notes
 }
 
 // deliveryLeaseTTL bounds how long an unacknowledged delivery is held before it

@@ -63,7 +63,7 @@ type fileChangedMsg struct {
 	advance bool // auto-advance to next unreviewed item
 }
 
-type submitErrorMsg struct{}
+type submitErrorMsg struct{ reason string }
 
 type feedbackStatusMsg struct {
 	status string
@@ -1436,7 +1436,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		engine := m.engine
 		return m, func() tea.Msg {
 			if err := engine.Submit(action, body); err != nil {
-				return submitErrorMsg{}
+				return submitErrorMsg{reason: err.Error()}
 			}
 			if copyToClip {
 				if text, err := engine.FormatReview(action, body); err == nil {
@@ -1471,7 +1471,10 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case submitErrorMsg:
-		m.statusBar.feedbackStatus = "submit_failed"
+		// Not feedbackStatus: every non-terminal value there renders as
+		// "⌛ feedback pending", so reporting a failure through it told the
+		// reviewer their submission had gone through.
+		m.statusBar.submitError = msg.reason
 		return m, nil
 
 	case cancelSubmitMsg:
@@ -1480,6 +1483,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Post-submit: offer to clear comments
 	case submitSuccessMsg:
+		m.statusBar.submitError = ""
 		m.statusBar.feedbackStatus = m.engine.GetFeedbackStatus()
 		session := m.engine.GetSession()
 		if session != nil {
@@ -3073,7 +3077,7 @@ func (m appModel) executeCommand(cmd string) tea.Cmd {
 				action = types.ActionRequestChanges
 			}
 			if err := engine.Submit(action, ""); err != nil {
-				return submitErrorMsg{}
+				return submitErrorMsg{reason: err.Error()}
 			}
 			return submitSuccessMsg{}
 		}

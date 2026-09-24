@@ -23,29 +23,33 @@ type statusBarModel struct {
 	commentResolved     int
 	agentActive         bool // agent has reported a write-tool action since the last review
 	feedbackStatus      string
-	subscriberCount     int
-	connectionMode      string // "queue" for queue-mode connections
-	socketStarted       bool
-	commandMode         bool
-	commandBuffer       string
-	commandHint         string // tab-completion candidates shown after the command line
-	shellMode           bool
-	shellBuffer         string
-	shellCursor         int
-	searchMode          bool
-	searchBuffer        string
-	searchBackward      bool
-	searchInfo          string // transient "match i/N" indicator after a search
-	contextHints        string // override hints when set (e.g. comment-specific keybinds)
-	buildNotice         string // "a newer build is installed" hint; "" when current
-	diffStyle           diffStyle
-	contentMode         bool   // true when viewing content (plan/doc) in raw mode
-	contentID           string // non-empty when viewing a content item (raw or diff)
-	diffBaseVersion     int    // base version being diffed from (0 = default)
-	diffToVersion       int    // target version being diffed to
-	waitingForReview    bool
-	width               int
-	theme               Theme
+	// submitError is why the last submission was refused, shown until the next
+	// one. Separate from feedbackStatus, which means "the agent has not picked
+	// it up yet" and would read a failure as a success.
+	submitError      string
+	subscriberCount  int
+	connectionMode   string // "queue" for queue-mode connections
+	socketStarted    bool
+	commandMode      bool
+	commandBuffer    string
+	commandHint      string // tab-completion candidates shown after the command line
+	shellMode        bool
+	shellBuffer      string
+	shellCursor      int
+	searchMode       bool
+	searchBuffer     string
+	searchBackward   bool
+	searchInfo       string // transient "match i/N" indicator after a search
+	contextHints     string // override hints when set (e.g. comment-specific keybinds)
+	buildNotice      string // "a newer build is installed" hint; "" when current
+	diffStyle        diffStyle
+	contentMode      bool   // true when viewing content (plan/doc) in raw mode
+	contentID        string // non-empty when viewing a content item (raw or diff)
+	diffBaseVersion  int    // base version being diffed from (0 = default)
+	diffToVersion    int    // target version being diffed to
+	waitingForReview bool
+	width            int
+	theme            Theme
 }
 
 func newStatusBarModel(theme Theme) statusBarModel {
@@ -230,6 +234,11 @@ func (m statusBarModel) View() string {
 	if m.feedbackStatus != "" && m.feedbackStatus != "none" && m.feedbackStatus != "delivered" {
 		fbStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Bold(true)
 		parts = append(parts, fbStyle.Render("⌛ feedback pending"))
+	}
+
+	if m.submitError != "" {
+		errStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Bold(true)
+		parts = append(parts, errStyle.Render("✗ "+m.submitError))
 	}
 
 	// Key hints (right-aligned, collapse to H:help when narrow)

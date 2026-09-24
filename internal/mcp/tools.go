@@ -559,13 +559,22 @@ func handleGetFeedback(ctx context.Context, req *sdkmcp.CallToolRequest, params 
 
 	feedback := resp.(*protocol.PollFeedbackResponse)
 	if !feedback.HasFeedback {
-		return textResult(emptyFeedbackMessage(feedback)), nil, nil
+		return textResult(supersededPrefix(feedback.Superseded) + emptyFeedbackMessage(feedback)), nil, nil
 	}
 	// The verdict is in hand and about to be returned to the agent — commit the
 	// delivery. Done last so any failure above leaves it recoverable.
-	result := textResult(feedback.Feedback)
+	result := textResult(supersededPrefix(feedback.Superseded) + feedback.Feedback)
 	client.AckFeedbackDefault(feedback.DeliveryID)
 	return result, nil, nil
+}
+
+// supersededPrefix leads the answer with any verdict retired because a newer
+// round was staged before it was collected — it changes how the rest reads.
+func supersededPrefix(notes []string) string {
+	if len(notes) == 0 {
+		return ""
+	}
+	return strings.Join(notes, "\n") + "\n\n"
 }
 
 func handleSendArtifact(ctx context.Context, req *sdkmcp.CallToolRequest, params sendArtifactParams) (*sdkmcp.CallToolResult, any, error) {

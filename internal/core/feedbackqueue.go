@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 )
 
 // FormattedReview holds a formatted review ready for delivery.
@@ -11,6 +12,12 @@ type FormattedReview struct {
 	Formatted    string
 	CommentCount int
 	Action       string
+	// Round and SubmittedAt say which review this verdict is about. Without
+	// them a queued verdict is indistinguishable from a fresh one — an agent
+	// that staged new work and then collected would read an older round's
+	// "Approved" as approval of the work it just sent.
+	Round       int
+	SubmittedAt time.Time
 }
 
 // PollResult holds the result of polling the feedback queue.
@@ -31,7 +38,7 @@ func (r *PollResult) CombinedFeedback() (string, int, string) {
 	}
 	if len(r.Reviews) == 1 {
 		rev := r.Reviews[0]
-		return rev.Formatted, rev.CommentCount, rev.Action
+		return provenance(rev) + rev.Formatted, rev.CommentCount, rev.Action
 	}
 
 	var b strings.Builder
@@ -42,6 +49,7 @@ func (r *PollResult) CombinedFeedback() (string, int, string) {
 			b.WriteString("\n\n")
 		}
 		b.WriteString(fmt.Sprintf("--- Review %d of %d ---\n\n", i+1, len(r.Reviews)))
+		b.WriteString(provenance(rev))
 		b.WriteString(rev.Formatted)
 		totalComments += rev.CommentCount
 		if rev.Action == "request_changes" {
@@ -49,6 +57,55 @@ func (r *PollResult) CombinedFeedback() (string, int, string) {
 		}
 	}
 	return b.String(), totalComments, action
+}
+
+// provenance is a one-line header saying which review a verdict is about. It
+// leads the feedback rather than trailing it, because an agent that reads only
+// the verdict line must not get that far without seeing the round it belongs to.
+func provenance(rev *FormattedReview) string {
+	if rev == nil || rev.Round <= 0 {
+		return ""
+	}
+	when := ""
+	if !rev.SubmittedAt.IsZero() {
+		when = " · submitted " + rev.SubmittedAt.Format("2006-01-02 15:04:05 MST")
+	}
+	return fmt.Sprintf("[review round %d%s]\n\n", rev.Round, when)
+}
+
+// SupersedeBefore drops every queued or in-flight verdict belonging to a round
+// earlier than the one given, returning them. Called when the agent stages a new
+// round: a verdict is about the content the reviewer was looking at, and handing
+// an older round's "Approved" to an agent asking about newer work is how an
+// unreviewed round gets committed as approved.
+func (fq *FeedbackQueue) SupersedeBefore(round int) []*FormattedReview {
+	fq.mu.Lock()
+	defer fq.mu.Unlock()
+
+	var dropped []*FormattedReview
+	keep := func(in []*FormattedReview) []*FormattedReview {
+		var out []*FormattedReview
+		for _, rev := range in {
+			// Round 0 means a verdict from before rounds were recorded; keep it
+			// rather than guess, since dropping is the destructive answer.
+			if rev.Round > 0 && rev.Round < round {
+				dropped = append(dropped, rev)
+				continue
+			}
+			out = append(out, rev)
+		}
+		return out
+	}
+	fq.pending = keep(fq.pending)
+	fq.inFlight = keep(fq.inFlight)
+	if len(fq.inFlight) == 0 {
+		fq.inFlightID = ""
+	}
+	if len(fq.pending) == 0 && len(fq.inFlight) == 0 {
+		fq.channelDelivered = false
+		fq.status = "none"
+	}
+	return dropped
 }
 
 // ReviewStatusInfo holds the current review status for MCP channel queries.

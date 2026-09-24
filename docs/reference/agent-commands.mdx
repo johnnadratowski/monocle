@@ -55,6 +55,10 @@ When the reviewer submits a review, it is placed in a queue. Multiple queued rev
 
 Without `--wait`, the command returns immediately. If no feedback is pending it prints `No feedback pending.` and exits.
 
+**Every verdict names the review it is about.** The feedback is led by a line like `[review round 11 · submitted 2026-09-24 15:43:49 EDT]`, so a verdict can never be mistaken for one about work you staged afterwards.
+
+**A verdict you never collected is retired when you stage a new round.** The reviewer passed judgement on what they were looking at; once you replace it, that verdict is not about the new work and is not delivered as though it were. It is reported rather than dropped in silence — the next `get-feedback` begins with a line naming the round it belonged to, whether or not there is a new verdict to collect (`superseded` in the JSON).
+
 ### Flags
 
 | Flag | Short | Description |
