@@ -1025,6 +1025,11 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.diffView.GoToLine(m.pendingJumpLine)
 			m.pendingJumpLine = 0
 		}
+		// A new file needs its own source for the comment filter; the cached one
+		// belongs to the file just left.
+		if m.diffView.needsCommentSource() {
+			return m, tea.Batch(cmd, m.diffView.requestCommentSource())
+		}
 		return m, cmd
 
 	// Content item loading (plans, docs)
@@ -1062,6 +1067,25 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	// File content request (from diff style cycle)
+	case requestCommentSourceMsg:
+		// The diff shows fragments; classifying comments needs the file.
+		engine := m.engine
+		path := msg.path
+		return m, func() tea.Msg {
+			content, err := engine.GetFileContent(path)
+			if err != nil {
+				return nil // best effort: the reconstruction still applies
+			}
+			return commentSourceMsg{path: path, content: content}
+		}
+
+	case commentSourceMsg:
+		if m.diffView.setCommentSource(msg.path, msg.content) {
+			m.diffView.cursor = m.diffView.nearestSelectable(m.diffView.cursor, 1)
+			m.diffView.ensureVisible()
+		}
+		return m, nil
+
 	case requestFileContentMsg:
 		engine := m.engine
 		path := msg.path
@@ -2356,6 +2380,10 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.statusBar.searchInfo = label
 		} else {
 			m.statusBar.searchInfo = "comments shown"
+		}
+		// Turning the filter on is the first moment the full file is needed.
+		if m.diffView.needsCommentSource() {
+			return m, m.diffView.requestCommentSource()
 		}
 		return m, nil
 
