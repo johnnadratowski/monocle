@@ -154,3 +154,36 @@ func TestApprovingAStagedReviewNeedsNoComments(t *testing.T) {
 		t.Fatalf("approve with no comments must be allowed: %v", err)
 	}
 }
+
+// A restart must not launder a stale verdict into an unattributable one: an
+// unstamped verdict prints no round and is deliberately never retired, so
+// dropping the stamps on reload would undo both halves of the fix.
+func TestReloadKeepsAVerdictsProvenance(t *testing.T) {
+	e, _ := summaryEngine(t)
+	e.mu.Lock()
+	e.current.ChangedFiles = []types.ChangedFile{{Path: "hello.go"}}
+	e.current.ReviewRound = 7
+	e.mu.Unlock()
+	if err := e.Submit(types.ActionApprove, ""); err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+
+	// Drop the in-memory queue the way a restart does, then reload from the DB.
+	e.feedback = NewFeedbackQueue()
+	e.ReloadPendingFeedback()
+
+	r := e.feedback.PollWithInfo("")
+	if r == nil || len(r.Reviews) != 1 {
+		t.Fatal("expected the verdict to be reloaded")
+	}
+	if got := r.Reviews[0].Round; got != 7 {
+		t.Errorf("round = %d after reload, want 7", got)
+	}
+	if r.Reviews[0].SubmittedAt.IsZero() {
+		t.Error("submitted-at was lost across the reload")
+	}
+	text, _, _ := r.CombinedFeedback()
+	if !strings.Contains(text, "review round 7") {
+		t.Errorf("reloaded verdict does not name its round:\n%s", text)
+	}
+}

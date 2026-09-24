@@ -2759,6 +2759,12 @@ func (e *Engine) ReloadPendingFeedback() {
 			Formatted:    sub.FormattedReview,
 			CommentCount: sub.CommentCount,
 			Action:       string(sub.Action),
+			// Carried across the restart, or a reload would launder a stale
+			// verdict into an unattributable one: no round to print, and none to
+			// retire it by, since an unstamped verdict is deliberately never
+			// dropped.
+			Round:       sub.ReviewRound,
+			SubmittedAt: sub.SubmittedAt,
 		}
 		e.feedback.Submit(review, false)
 	}
