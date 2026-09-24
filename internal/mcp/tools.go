@@ -301,6 +301,9 @@ func handleReviewStatus(ctx context.Context, req *sdkmcp.CallToolRequest, _ revi
 	if status.Summary != "" {
 		text = status.Summary
 	}
+	if status.SummaryItems > 0 {
+		text += fmt.Sprintf("\n%d summary item(s) attached.", status.SummaryItems)
+	}
 	return textResult(bindingLine(status.RepoRoot, status.ReviewName) + text + groupingNudge(c)), nil, nil
 }
 

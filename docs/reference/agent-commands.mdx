@@ -33,7 +33,9 @@ monocle review status [--json] [--workdir PATH] [--socket PATH]
 
 ### Output
 
-Without `--json`, prints a status string or summary. The status reflects whether feedback is pending, a pause has been requested, or the session is idle.
+Without `--json`, prints a status string or summary. The status reflects whether feedback is pending, a pause has been requested, or the session is idle. When a round carries work-item summaries, a second line reports how many are attached (`3 summary item(s) attached.`); `--json` reports the same as `summary_items`.
+
+This count is the only read-back of an attached summary — [`set-summary`](#monocle-review-set-summary) replaces the list wholesale, so re-sending one to see what is there would overwrite it. `status` is a pure read and safe to poll.
 
 ### MCP tool equivalent
 
@@ -396,6 +398,7 @@ Notes:
 - Sent wholesale: a new call replaces the previous summary rather than adding to it, because it describes the round in front of the reviewer.
 - Call it after the files are in place (after `set-base-ref` / `add-files` / `set-file-groups`), since targets reference them.
 - The reviewer opens it with `i`, which also lists the commits the review contains.
+- To confirm a summary landed, read `monocle review status` — it reports the number of items attached.
 
 ### Flags
 

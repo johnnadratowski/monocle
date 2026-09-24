@@ -617,6 +617,9 @@ func (cmd *ReviewStatusCmd) Run() error {
 	} else {
 		fmt.Println(status.Status)
 	}
+	if status.SummaryItems > 0 {
+		fmt.Printf("%d summary item(s) attached.\n", status.SummaryItems)
+	}
 	return nil
 }
 

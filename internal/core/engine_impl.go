@@ -2311,12 +2311,14 @@ func (e *Engine) GetReviewStatusInfo() *ReviewStatusInfo {
 	e.mu.RLock()
 	var repoRoot, reviewName string
 	commentCount := 0
+	summaryItems := 0
 	loaded := false
 	var counts reviewCounts
 	if e.current != nil {
 		repoRoot = e.current.RepoRoot
 		reviewName = e.current.ReviewName
 		commentCount = len(e.current.Comments)
+		summaryItems = len(e.current.SummaryItems)
 		loaded = e.reviewLoadedLocked()
 		counts = e.reviewCountsLocked()
 	}
@@ -2351,6 +2353,7 @@ func (e *Engine) GetReviewStatusInfo() *ReviewStatusInfo {
 		info.ArtifactsUnreviewed = counts.artifactsUnreviewed
 		info.AddedFiles = counts.addedFiles
 		info.Comments = commentCount
+		info.SummaryItems = summaryItems
 		info.ReviewTracking = tracking
 		return info
 	}
@@ -2801,6 +2804,7 @@ func (e *Engine) handleGetReviewStatus(_ *protocol.GetReviewStatusMsg) *protocol
 		ArtifactsUnreviewed: info.ArtifactsUnreviewed,
 		AddedFiles:          info.AddedFiles,
 		Comments:            info.Comments,
+		SummaryItems:        info.SummaryItems,
 	}
 }
 

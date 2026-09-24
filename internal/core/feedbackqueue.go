@@ -80,6 +80,11 @@ type ReviewStatusInfo struct {
 	ArtifactsUnreviewed int
 	AddedFiles          int
 	Comments            int
+	// SummaryItems is how many work-item summaries the agent attached to this
+	// round. Zero is the common case and means none were sent; it is the only
+	// read-back of a summary, since set_review_summary replaces wholesale and
+	// re-sending to check would overwrite what is there.
+	SummaryItems int
 }
 
 // Review states, from the reviewer's point of view rather than the agent's.

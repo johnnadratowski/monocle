@@ -89,6 +89,9 @@ type GetReviewStatusResponse struct {
 	ArtifactsUnreviewed int `json:"artifacts_unreviewed"`
 	AddedFiles          int `json:"added_files"`
 	Comments            int `json:"comments"`
+	// SummaryItems counts the work-item summaries attached to this round. Named
+	// apart from Summary above, which is the human-readable status blurb.
+	SummaryItems int `json:"summary_items"`
 }
 
 // PollFeedbackMsg requests pending feedback, optionally blocking until available.

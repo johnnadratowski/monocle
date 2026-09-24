@@ -155,3 +155,33 @@ func TestReviewCommits(t *testing.T) {
 		}
 	})
 }
+
+// The count in review status is the only read-back of an attached summary:
+// set_review_summary replaces wholesale, so re-sending to see what is there
+// would destroy it. A coordinator checking "did the lane actually send one"
+// must be able to ask without writing.
+func TestReviewStatusReportsSummaryItemCount(t *testing.T) {
+	e, _ := summaryEngine(t)
+
+	if got := e.GetReviewStatusInfo().SummaryItems; got != 0 {
+		t.Fatalf("summary items = %d before any summary, want 0", got)
+	}
+
+	e.handleSetReviewSummary(items(
+		protocol.SummaryItemEntry{ID: "a", Text: "first thing", Order: 1},
+		protocol.SummaryItemEntry{ID: "b", Text: "second thing", Order: 2},
+	))
+	if got := e.GetReviewStatusInfo().SummaryItems; got != 2 {
+		t.Errorf("summary items = %d, want 2", got)
+	}
+	if got := e.handleGetReviewStatus(&protocol.GetReviewStatusMsg{}).SummaryItems; got != 2 {
+		t.Errorf("summary items over the wire = %d, want 2", got)
+	}
+
+	// Withdrawing has to move the count back down, or a stale "2 attached"
+	// reads as a summary that is no longer there.
+	e.handleSetReviewSummary(items())
+	if got := e.GetReviewStatusInfo().SummaryItems; got != 0 {
+		t.Errorf("summary items = %d after withdrawal, want 0", got)
+	}
+}
