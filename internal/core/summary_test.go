@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -248,5 +249,72 @@ func TestSummaryItemTextIsCapped(t *testing.T) {
 	got := e.current.SummaryItems[0].Text
 	if len([]rune(got)) != types.SummaryTextLimit {
 		t.Errorf("item text is %d runes, want %d", len([]rune(got)), types.SummaryTextLimit)
+	}
+}
+
+// A cap that applies silently is a cap the sender cannot correct for — jaa's
+// 155-character item came back as success with no sign it had been cut.
+func TestTrimmingIsReported(t *testing.T) {
+	e, _ := summaryEngine(t)
+	r := e.handleSetReviewSummary(&protocol.SetReviewSummaryMsg{
+		Type:     protocol.TypeSetReviewSummary,
+		Overview: strings.Repeat("long ", 200),
+		Items: []protocol.SummaryItemEntry{
+			{ID: "short", Text: "a brief line"},
+			{ID: "long", Text: strings.Repeat("verbose ", 40)},
+		},
+	})
+	if !r.Success {
+		t.Fatalf("response = %+v", r)
+	}
+	want := map[string]bool{"long": true, "overview": true}
+	got := map[string]bool{}
+	for _, id := range r.Truncated {
+		got[id] = true
+	}
+	if len(got) != len(want) {
+		t.Fatalf("truncated = %v, want exactly %v", r.Truncated, want)
+	}
+	for id := range want {
+		if !got[id] {
+			t.Errorf("truncated = %v, missing %q", r.Truncated, id)
+		}
+	}
+	if !strings.Contains(r.Message, "Trimmed to the length cap") {
+		t.Errorf("message = %q, want it to say what was trimmed", r.Message)
+	}
+}
+
+// An absent key reads the same as an engine too old to check, so both lists are
+// emitted even when empty.
+func TestCleanSummaryStillEmitsBothLists(t *testing.T) {
+	e, _ := summaryEngine(t)
+	r := e.handleSetReviewSummary(items(protocol.SummaryItemEntry{ID: "a", Text: "a brief line"}))
+	if r.Unmatched == nil || r.Truncated == nil {
+		t.Fatalf("unmatched=%v truncated=%v, want empty lists rather than nil", r.Unmatched, r.Truncated)
+	}
+	blob, err := json.Marshal(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{`"unmatched":[]`, `"truncated":[]`} {
+		if !strings.Contains(string(blob), key) {
+			t.Errorf("response JSON %s lacks %s", blob, key)
+		}
+	}
+}
+
+// Reflowing whitespace is not truncation; only a line that actually loses text
+// should be reported, or the report becomes noise a sender learns to ignore.
+func TestWhitespaceCollapseIsNotReportedAsTrimming(t *testing.T) {
+	e, _ := summaryEngine(t)
+	r := e.handleSetReviewSummary(items(protocol.SummaryItemEntry{
+		ID: "a", Text: "  a   line   with   loose   spacing  ",
+	}))
+	if len(r.Truncated) != 0 {
+		t.Errorf("truncated = %v, want none — nothing was cut", r.Truncated)
+	}
+	if got := e.current.SummaryItems[0].Text; got != "a line with loose spacing" {
+		t.Errorf("text = %q, want it collapsed", got)
 	}
 }

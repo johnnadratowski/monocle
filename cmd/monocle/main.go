@@ -160,8 +160,8 @@ func (cmd *ReviewSetNameCmd) Run() error {
 type ReviewSetSummaryCmd struct {
 	WorkDirFlag
 	Socket   string `help:"Override socket path" env:"MONOCLE_SOCKET" default:""`
-	Items    string `help:"JSON array of items: [{\"text\":\"...\",\"id\":\"...\",\"order\":1,\"targets\":[{\"path\":\"a.go\",\"line_start\":10,\"line_end\":20}]}]. A target may name an artifact instead of a path. Reads stdin when omitted." default:""`
-	Overview string `help:"The round in a sentence or two, shown above the items" default:""`
+	Items    string `help:"JSON array of items: [{\"text\":\"...\",\"id\":\"...\",\"order\":1,\"targets\":[{\"path\":\"a.go\",\"line_start\":10,\"line_end\":20}]}]. A target names EITHER \"path\" (a changed file) OR \"artifact\" (an id from send-artifact); lines are new-file numbers, omit them to claim the whole thing. Two items may claim the same lines. Item text is trimmed at 120 chars, and the response names what it trimmed and any target that matched nothing. Reads stdin when omitted." default:""`
+	Overview string `help:"The round in a sentence or two, shown above the items (trimmed at 500 chars)" default:""`
 	Clear    bool   `help:"Withdraw the summary (equivalent to sending an empty list)" default:"false"`
 	JSON     bool   `help:"Output as JSON" default:"false"`
 }

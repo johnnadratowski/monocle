@@ -132,9 +132,20 @@ func TrimSummaryText(s string, limit int) string {
 // the agent left out, so the rest of the system can assume both. Items with no
 // text are dropped: an unlabelled entry is a colour with nothing to say.
 func NormalizeSummaryItems(items []SummaryItem) []SummaryItem {
+	out, _ := NormalizeSummaryItemsReport(items)
+	return out
+}
+
+// NormalizeSummaryItemsReport also names the items whose text hit the cap. The
+// caller tells the agent, because a line silently shortened still reads as the
+// whole of what was said — a worse failure than a target that matched nothing,
+// which at least looks wrong.
+func NormalizeSummaryItemsReport(items []SummaryItem) ([]SummaryItem, []string) {
+	var trimmed []string
 	out := make([]SummaryItem, 0, len(items))
 	seen := make(map[string]bool, len(items))
 	for i, it := range items {
+		wasLong := exceedsLimit(it.Text, SummaryTextLimit)
 		it.Text = TrimSummaryText(it.Text, SummaryTextLimit)
 		if it.Text == "" {
 			continue
@@ -144,6 +155,9 @@ func NormalizeSummaryItems(items []SummaryItem) []SummaryItem {
 			it.ID = summaryFallbackID(i)
 		}
 		seen[it.ID] = true
+		if wasLong {
+			trimmed = append(trimmed, it.ID)
+		}
 		targets := make([]SummaryTarget, 0, len(it.Targets))
 		for _, t := range it.Targets {
 			t.Path = strings.TrimSpace(t.Path)
@@ -170,7 +184,14 @@ func NormalizeSummaryItems(items []SummaryItem) []SummaryItem {
 			out[j], out[j-1] = out[j-1], out[j]
 		}
 	}
-	return out
+	return out, trimmed
+}
+
+// exceedsLimit reports whether text would be cut by the cap — asked before
+// trimming, on the same whitespace-collapsed form the cap applies to, so
+// reflowing alone is never reported as a trim.
+func exceedsLimit(s string, limit int) bool {
+	return len([]rune(strings.Join(strings.Fields(s), " "))) > limit
 }
 
 func summaryFallbackID(i int) string {

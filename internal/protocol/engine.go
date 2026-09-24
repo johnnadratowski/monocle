@@ -637,7 +637,16 @@ type SetReviewSummaryResponse struct {
 	// authority on what it fixed, and a target that looks wrong here can be
 	// right a moment later when the next add_files lands. Reported rather than
 	// rejected, because the failure it replaces was silent.
-	Unmatched []string `json:"unmatched,omitempty"`
+	//
+	// Always emitted, empty list included: an absent key cannot be told apart
+	// from an engine too old to check, so a sender reading it would have to
+	// guess which silence it was looking at.
+	Unmatched []string `json:"unmatched"`
+	// Truncated names the items whose text was cut to the length cap, and
+	// carries "overview" when that was cut. Same reasoning as Unmatched: a cap
+	// applied silently is one the sender cannot correct for — and trimming is
+	// worse than an unmatched target, because the text still reads as whole.
+	Truncated []string `json:"truncated"`
 }
 
 // ReviewCommitsMsg asks what commits the current review contains — base..HEAD,

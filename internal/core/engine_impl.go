@@ -576,8 +576,11 @@ func (e *Engine) handleSetReviewSummary(msg *protocol.SetReviewSummaryMsg) *prot
 		}
 		items = append(items, it)
 	}
-	items = types.NormalizeSummaryItems(items)
+	items, truncated := types.NormalizeSummaryItemsReport(items)
 	overview := types.TrimSummaryText(msg.Overview, types.SummaryOverviewLimit)
+	if overview != strings.Join(strings.Fields(msg.Overview), " ") {
+		truncated = append(truncated, "overview")
+	}
 
 	if err := e.database.ReplaceSummaryItems(session.ID, items); err != nil {
 		return &protocol.SetReviewSummaryResponse{
@@ -604,13 +607,25 @@ func (e *Engine) handleSetReviewSummary(msg *protocol.SetReviewSummaryMsg) *prot
 
 	unmatched := e.checkSummaryTargets(session, items)
 	message := fmt.Sprintf("Review summary set (%d item(s))", len(items))
+	if len(truncated) > 0 {
+		message += fmt.Sprintf("\nTrimmed to the length cap (%d for an item, %d for the overview): %s",
+			types.SummaryTextLimit, types.SummaryOverviewLimit, strings.Join(truncated, ", "))
+	}
 	if len(unmatched) > 0 {
 		message += fmt.Sprintf("\n%d target(s) matched nothing in the review:\n  %s",
 			len(unmatched), strings.Join(unmatched, "\n  "))
 	}
+	// Both lists are always present, empty included: an absent key reads the
+	// same as an engine that never checked.
+	if unmatched == nil {
+		unmatched = []string{}
+	}
+	if truncated == nil {
+		truncated = []string{}
+	}
 	return &protocol.SetReviewSummaryResponse{
 		Type: protocol.TypeSetReviewSummaryResponse, Success: true, Count: len(items),
-		Message: message, Unmatched: unmatched,
+		Message: message, Unmatched: unmatched, Truncated: truncated,
 	}
 }
 
