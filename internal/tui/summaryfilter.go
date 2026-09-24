@@ -142,15 +142,6 @@ func (m diffViewModel) itemClaims(it types.SummaryItem, lines []int) bool {
 	return false
 }
 
-// newLineOf returns a row's new-file line number, taking the right side in split
-// mode where that is where the new file lives.
-func newLineOf(ln diffViewLine) int {
-	if ln.rightLineNum > 0 {
-		return ln.rightLineNum
-	}
-	return ln.newLineNum
-}
-
 // activeSummaryIndex is the position of the item currently filtering the view,
 // or -1 when nothing is selected.
 func (m diffViewModel) activeSummaryIndex() int {

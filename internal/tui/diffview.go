@@ -98,16 +98,22 @@ type diffViewModel struct {
 	// activeSummaryID names the one currently filtering the view, or "".
 	summaryItems    []types.SummaryItem
 	activeSummaryID string
-	lines           []diffViewLine
-	cursor          int
-	offset          int // scroll offset
-	width           int
-	height          int
-	focused         bool
-	style           diffStyle
-	theme           *Theme
-	hl              *highlighter
-	isBinary        bool // true when hunk content contains binary control characters
+
+	// commentSource is the current file's full new-side text, fetched so a block
+	// comment can be classified even when the diff shows only part of it.
+	commentSource     string
+	commentSourcePath string
+
+	lines    []diffViewLine
+	cursor   int
+	offset   int // scroll offset
+	width    int
+	height   int
+	focused  bool
+	style    diffStyle
+	theme    *Theme
+	hl       *highlighter
+	isBinary bool // true when hunk content contains binary control characters
 
 	hOffset  int  // horizontal scroll offset (runes)
 	wrap     bool // soft-wrap long lines
@@ -187,6 +193,11 @@ func (m diffViewModel) isViewingContentItem() bool {
 // metadata (contentID, contentMode). Call when no file should be shown.
 func (m *diffViewModel) clearFileState() {
 	m.path = ""
+	// Clear the additional-file claim with it. A view that has been emptied but
+	// still names a file it is "showing" makes diffViewShowsValidFile answer yes
+	// about a blank pane — and then no, once the claim is noticed as stale, which
+	// yanks the reviewer somewhere else.
+	m.additionalFilePath = ""
 	m.hunks = nil
 	m.lines = nil
 	m.comments = nil
@@ -3696,18 +3707,30 @@ func (m *diffViewModel) computeCommentLines() {
 	// new-file number, so a new-side-only pass left it out — and the commonest
 	// edit to a doc comment rewrites its body while leaving the /** and */
 	// unchanged, which made the fences dim and the body stay lit.
-	m.commentLines = m.classifySide(func(ln diffViewLine) (int, string) {
-		if ln.rightLineNum > 0 {
-			return ln.rightLineNum, ln.rightContent // split: new side is the right
-		}
-		return ln.newLineNum, ln.content
-	})
+	// The full file when it has been fetched, since a fragment cannot tell that
+	// its first line is already inside a comment; the reconstruction otherwise.
+	if fromSource := m.sourceCommentLines(); fromSource != nil {
+		m.commentLines = fromSource
+	} else {
+		m.commentLines = m.classifySide(func(ln diffViewLine) (int, string) {
+			if ln.rightLineNum > 0 {
+				return ln.rightLineNum, ln.rightContent // split: new side is the right
+			}
+			return ln.newLineNum, ln.content
+		})
+	}
 	m.commentLinesOld = m.classifySide(func(ln diffViewLine) (int, string) {
 		// The old side is the left in split mode, which is where content already
 		// points; in unified a line belongs to the old file when it has an old
 		// number, whatever its kind.
 		return ln.oldLineNum, ln.content
 	})
+
+	// A removed line inside a block the diff only partly shows stays unclassified.
+	// The old file's full text is not fetched — it may not exist on disk at all —
+	// and the tempting shortcut, treating a removed line bracketed by comment
+	// lines as one itself, dims deleted CODE between two adjacent comments. Not
+	// fading a deleted comment is a much smaller error than hiding deleted code.
 }
 
 // classifySide reconstructs one side of the file from the displayed lines and
