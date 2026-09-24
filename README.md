@@ -316,7 +316,7 @@ Bindings are grouped by the task they serve, and within a group ordered by key: 
 |-----|--------|
 | `q` | Quit |
 | `H` | Show this help |
-| `i` | Review summary: what this round fixed, and the commits it contains |
+| `i` | Review summary: what this round fixed, and the commits it contains (press again to close) |
 | `I` | Connection info (socket path, subscriber count) |
 | `esc` | Close the current modal / leave visual or search mode |
 

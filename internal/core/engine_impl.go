@@ -1721,11 +1721,24 @@ func (e *Engine) Submit(action types.SubmitAction, body string) error {
 			// Don't reset reviewed state — auto-unmark will handle it on the
 			// next refresh, unmarking only files that actually changed.
 		} else {
-			// Approve: review is complete, wipe everything
+			// Approve: the round is settled, so what was approved is reviewed.
+			//
+			// Resetting instead — which this did — made every file unreviewed
+			// the instant the round advanced, so an unchanged diff waiting to be
+			// committed re-presented itself as a fresh unreviewed round and got
+			// approved a second time. That second verdict then sat in the queue
+			// for whatever collected next.
+			//
+			// The snapshot is what keeps this honest: it records the approved
+			// content, and auto-unmark re-opens exactly the files the agent
+			// changes afterwards. The old chain of mid-iteration snapshots still
+			// goes — they are stale the moment the review closes — but the
+			// approval's own snapshot is the most accurate baseline there is.
+			_ = e.MarkAllReviewed()
 			e.mu.Lock()
 			e.deleteSnapshots()
+			_ = e.createSnapshot(session, sub.ID)
 			e.mu.Unlock()
-			_ = e.ResetAllReviewed()
 		}
 	}
 

@@ -1820,7 +1820,7 @@ func TestSnapshotCreatedOnRequestChanges(t *testing.T) {
 	}
 }
 
-func TestSnapshotWipedOnApprove(t *testing.T) {
+func TestApproveReplacesTheSnapshotChainWithItsOwn(t *testing.T) {
 	database, err := db.Open(":memory:")
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -1874,10 +1874,40 @@ func TestSnapshotWipedOnApprove(t *testing.T) {
 	e.current.Comments = nil // clear comments for approve
 	e.Submit(types.ActionApprove, "")
 
-	// Verify snapshots were wiped
-	has, _ = database.HasSnapshots("sess-1")
-	if has {
-		t.Error("expected snapshots to be wiped after approve")
+	// The mid-iteration chain goes — those snapshots are stale the moment the
+	// review closes — but the approval keeps one of its own. Without it nothing
+	// would auto-unmark afterwards, and the next round's genuinely changed files
+	// would show as already reviewed.
+	snaps, err := database.GetSnapshots("sess-1")
+	if err != nil {
+		t.Fatalf("get snapshots: %v", err)
+	}
+	if len(snaps) != 1 {
+		t.Fatalf("got %d snapshots after approve, want exactly the approval's", len(snaps))
+	}
+}
+
+// The re-presentation this replaced: approving reset every file to unreviewed,
+// so the same unchanged diff came straight back as a fresh round and was
+// approved a second time — queueing a verdict nobody meant to give.
+func TestApprovedFilesStayReviewedUntilTheyChange(t *testing.T) {
+	e, _ := summaryEngine(t)
+	e.mu.Lock()
+	e.current.ChangedFiles = []types.ChangedFile{{Path: "hello.go", Status: types.FileModified}}
+	e.current.Comments = nil
+	e.mu.Unlock()
+
+	if err := e.Submit(types.ActionApprove, ""); err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+
+	info := e.GetReviewStatusInfo()
+	if info.FilesUnreviewed != 0 {
+		t.Errorf("%d file(s) unreviewed straight after approving them", info.FilesUnreviewed)
+	}
+	if info.ReviewState != ReviewStateNone {
+		t.Errorf("review state = %q after approve, want %q — an approved diff is not waiting on the reviewer",
+			info.ReviewState, ReviewStateNone)
 	}
 }
 

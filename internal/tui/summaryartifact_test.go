@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/josephschmitt/monocle/internal/types"
 )
 
@@ -164,5 +166,59 @@ func TestUnfilteredViewNeverShowsTheEmptyNote(t *testing.T) {
 	m := summaryModel(t)
 	if m.summaryHidesEverything() {
 		t.Error("nothing is hidden when no item is selected")
+	}
+}
+
+// The modal opens on i and closes on i — a glance costs one keystroke each way.
+func TestTheOpenKeyAlsoClosesTheSummary(t *testing.T) {
+	m := newSummaryModalModel(DefaultTheme())
+	m.width, m.height = 120, 40
+	m.open(openSummaryMsg{
+		items:    []types.SummaryItem{{ID: "a", Text: "a fix"}},
+		openKeys: []string{"i"},
+	})
+	if !m.active {
+		t.Fatal("modal should be open")
+	}
+	m, _ = m.Update(tea.KeyPressMsg{Code: 'i', Text: "i"})
+	if m.active {
+		t.Error("the key that opened the modal must also close it")
+	}
+}
+
+// Closing with that key must not clear an active filter — esc is the key that
+// does both, and a toggle that silently dropped the filter would be a trap.
+func TestTheOpenKeyDoesNotClearTheFilter(t *testing.T) {
+	m := newSummaryModalModel(DefaultTheme())
+	m.width, m.height = 120, 40
+	m.activeID = "a"
+	m.open(openSummaryMsg{
+		items:    []types.SummaryItem{{ID: "a", Text: "a fix"}},
+		openKeys: []string{"i"},
+	})
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'i', Text: "i"})
+	if cmd == nil {
+		t.Fatal("expected a close command")
+	}
+	if _, clears := cmd().(selectSummaryItemMsg); clears {
+		t.Error("the toggle key cleared the filter; only esc should do that")
+	}
+}
+
+// A rebound open key must carry the toggle with it.
+func TestTheToggleFollowsARebindingOfTheOpenKey(t *testing.T) {
+	m := newSummaryModalModel(DefaultTheme())
+	m.width, m.height = 120, 40
+	m.open(openSummaryMsg{
+		items:    []types.SummaryItem{{ID: "a", Text: "a fix"}},
+		openKeys: []string{"w"},
+	})
+	got, _ := m.Update(tea.KeyPressMsg{Code: 'i', Text: "i"})
+	if !got.active {
+		t.Error("i closed a modal bound to w")
+	}
+	got, _ = got.Update(tea.KeyPressMsg{Code: 'w', Text: "w"})
+	if got.active {
+		t.Error("the rebound key did not close the modal")
 	}
 }

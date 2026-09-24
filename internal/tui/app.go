@@ -2045,12 +2045,16 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		items := m.summaryItems
 		name := m.reviewName
 		overview := m.summaryOverview
+		openKeys := km.ReviewSummary
 		return m, func() tea.Msg {
 			commits, base, err := engine.ReviewCommits(reviewCommitLimit)
 			if err != nil {
 				commits = nil
 			}
-			return openSummaryMsg{items: items, commits: commits, base: base, name: name, overview: overview}
+			return openSummaryMsg{
+				items: items, commits: commits, base: base, name: name,
+				overview: overview, openKeys: openKeys,
+			}
 		}
 
 	case Matches(key, km.Help):

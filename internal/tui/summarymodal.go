@@ -49,6 +49,10 @@ type summaryModalModel struct {
 	name     string // the review's name, for the modal title
 	cursor   int
 	activeID string // the item currently filtering the view, if any
+	// openKeys is whatever opened the modal, so the same key closes it. Taken
+	// from the keymap rather than hardcoded, or rebinding the open key would
+	// leave "i" closing a modal it no longer opens.
+	openKeys []string
 	width    int
 	height   int
 	theme    Theme
@@ -66,6 +70,7 @@ type openSummaryMsg struct {
 	commits  []core.LogEntry
 	base     string
 	name     string
+	openKeys []string
 }
 
 // selectSummaryItemMsg filters the review to one item; an empty ID clears the
@@ -83,6 +88,7 @@ func (m *summaryModalModel) open(msg openSummaryMsg) {
 	m.commits = msg.commits
 	m.base = msg.base
 	m.name = msg.name
+	m.openKeys = msg.openKeys
 	m.cursor = 0
 	// Open on the item already filtering, so reopening to change selection does
 	// not start from the top of the list every time.
@@ -102,6 +108,14 @@ func (m summaryModalModel) Update(msg tea.Msg) (summaryModalModel, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
+	// The key that opens the modal closes it — a toggle, so a glance at the
+	// summary costs one keystroke and undoing the glance costs the same one.
+	// Closing only: esc is what also clears an active filter.
+	if Matches(key.String(), m.openKeys) {
+		m.active = false
+		return m, func() tea.Msg { return closeSummaryMsg{} }
+	}
+
 	switch key.String() {
 	case "esc":
 		m.active = false
@@ -220,10 +234,14 @@ func (m summaryModalModel) hint() string {
 	if len(m.items) == 0 {
 		return "esc: close"
 	}
+	close := "esc"
+	if k := PrimaryLabel(m.openKeys); k != "" {
+		close = k + "/esc"
+	}
 	if m.activeID != "" {
 		return "j/k: move   enter: show only this item   esc: clear the filter and close"
 	}
-	return "j/k: move   enter: show only this item   esc: close"
+	return "j/k: move   enter: show only this item   " + close + ": close"
 }
 
 func rowAt(rows []string, i int) string {
