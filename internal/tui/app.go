@@ -302,8 +302,11 @@ type appModel struct {
 	// activeSummaryID the one currently filtering the review (empty = none).
 	// Both live on the app because the sidebar, the diff view and the top bar all
 	// answer to them.
-	summaryModal    summaryModalModel
-	summaryItems    []types.SummaryItem
+	summaryModal summaryModalModel
+	summaryItems []types.SummaryItem
+	// summaryOverview is the round in a sentence or two, shown above the items.
+	// Not on the diff view or sidebar: nothing filters by it.
+	summaryOverview string
 	activeSummaryID string
 
 	// buildWatch notices when the binary this process is running from is replaced
@@ -575,6 +578,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.reviewName = session.ReviewName
 			m.reviewSentAt = session.SentAt
 			m.setSummaryItems(session.SummaryItems)
+			m.summaryOverview = session.SummaryOverview
 		}
 		m.statusBar.fileCount = len(msg.files)
 		m.statusBar.socketStarted = m.engine.GetSocketPath() != ""
@@ -709,6 +713,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.reviewName = session.ReviewName
 			m.reviewSentAt = session.SentAt
 			m.setSummaryItems(session.SummaryItems)
+			m.summaryOverview = session.SummaryOverview
 		}
 		// A new review's first refresh: go back to the top. This runs ahead of
 		// the selection-preserving logic below, which exists so the agent
@@ -1741,6 +1746,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.reviewName = session.ReviewName
 			m.reviewSentAt = session.SentAt
 			m.setSummaryItems(session.SummaryItems)
+			m.summaryOverview = session.SummaryOverview
 			m.annotationCount = len(session.Annotations)
 		}
 		// If viewing a content item or an added file, it no longer exists —
@@ -2034,12 +2040,13 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		engine := m.engine
 		items := m.summaryItems
 		name := m.reviewName
+		overview := m.summaryOverview
 		return m, func() tea.Msg {
 			commits, base, err := engine.ReviewCommits(reviewCommitLimit)
 			if err != nil {
 				commits = nil
 			}
-			return openSummaryMsg{items: items, commits: commits, base: base, name: name}
+			return openSummaryMsg{items: items, commits: commits, base: base, name: name, overview: overview}
 		}
 
 	case Matches(key, km.Help):

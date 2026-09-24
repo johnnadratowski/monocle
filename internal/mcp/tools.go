@@ -110,7 +110,10 @@ func registerTools(s *sdkmcp.Server) {
 }
 
 type summaryTargetParams struct {
-	Path      string `json:"path"`
+	// Path names a changed file; artifact names a sent artifact by its id. Give
+	// one or the other — a plan or ruling lives in an artifact and has no path.
+	Path      string `json:"path,omitempty"`
+	Artifact  string `json:"artifact,omitempty"`
 	LineStart int    `json:"line_start,omitempty"`
 	LineEnd   int    `json:"line_end,omitempty"`
 }
@@ -123,7 +126,9 @@ type summaryItemParams struct {
 }
 
 type setReviewSummaryParams struct {
-	Items []summaryItemParams `json:"items"`
+	// Overview is the round in a sentence or two, shown above the items.
+	Overview string              `json:"overview,omitempty"`
+	Items    []summaryItemParams `json:"items"`
 }
 
 func handleSetReviewSummary(ctx context.Context, req *sdkmcp.CallToolRequest, params setReviewSummaryParams) (*sdkmcp.CallToolResult, any, error) {
@@ -138,14 +143,16 @@ func handleSetReviewSummary(ctx context.Context, req *sdkmcp.CallToolRequest, pa
 		entry := protocol.SummaryItemEntry{ID: in.ID, Text: in.Text, Order: in.Order}
 		for _, t := range in.Targets {
 			entry.Targets = append(entry.Targets, protocol.SummaryTargetEntry{
-				Path: t.Path, LineStart: t.LineStart, LineEnd: t.LineEnd,
+				Path: t.Path, Artifact: t.Artifact, LineStart: t.LineStart, LineEnd: t.LineEnd,
 			})
 		}
 		items = append(items, entry)
 	}
 
 	resp, err := c.Request(
-		&protocol.SetReviewSummaryMsg{Type: protocol.TypeSetReviewSummary, Items: items},
+		&protocol.SetReviewSummaryMsg{
+			Type: protocol.TypeSetReviewSummary, Items: items, Overview: params.Overview,
+		},
 		client.DefaultTimeout,
 	)
 	if err != nil {

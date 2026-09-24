@@ -87,12 +87,17 @@ type ReviewSession struct {
 	// SummaryItems is the agent's account of what this round fixed, in reading
 	// order. Empty when the agent sent none, which is the common case and must
 	// leave every view exactly as it was.
-	SummaryItems   []SummaryItem
-	FileStatuses   map[string]bool // path -> reviewed
-	IgnorePatterns []string
-	ReviewRound    int
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	SummaryItems []SummaryItem
+	// SummaryOverview is the round in a sentence or two — what the items are
+	// individually, taken together. Optional, and capped, because a reviewer
+	// opening the summary wants the shape of the round before its parts, not an
+	// essay standing between them and the diff.
+	SummaryOverview string
+	FileStatuses    map[string]bool // path -> reviewed
+	IgnorePatterns  []string
+	ReviewRound     int
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
 }
 
 type ChangedFile struct {

@@ -86,14 +86,25 @@ func (m diffViewModel) neighbourTag(i int) []string {
 	return nil
 }
 
-// itemsForLine returns every item covering one new-file line, in reading order.
-// More than one is normal rather than a mistake: a single line of prose can
-// carry two separate fixes, and both items own it.
+// targetHere reports whether a target names the thing currently on screen. An
+// artifact is matched by its id, a file by its path — and never the other way
+// round: in content mode m.path holds a synthetic name like "content.md", which
+// a file target must not be allowed to match.
+func (m diffViewModel) targetHere(t types.SummaryTarget) bool {
+	if t.IsArtifact() {
+		return m.contentID != "" && t.Artifact == m.contentID
+	}
+	return m.contentID == "" && m.path != "" && t.Path == m.path
+}
+
+// itemsForLine returns every item covering one line of what is on screen, in
+// reading order. More than one is normal rather than a mistake: a single line of
+// prose can carry two separate fixes, and both items own it.
 func (m diffViewModel) itemsForLine(n int) []string {
 	var ids []string
 	for _, it := range m.summaryItems {
 		for _, t := range it.Targets {
-			if t.Covers(m.path, n) {
+			if m.targetHere(t) && t.CoversLine(n) {
 				ids = append(ids, it.ID)
 				break
 			}
@@ -128,7 +139,7 @@ func (m diffViewModel) itemsForHunk(start int) []string {
 
 func (m diffViewModel) itemClaims(it types.SummaryItem, lines []int) bool {
 	for _, t := range it.Targets {
-		if t.Path != m.path {
+		if !m.targetHere(t) {
 			continue
 		}
 		// A whole-file target claims every hunk in it, which is the right default
@@ -137,7 +148,7 @@ func (m diffViewModel) itemClaims(it types.SummaryItem, lines []int) bool {
 			return true
 		}
 		for _, n := range lines {
-			if t.Covers(m.path, n) {
+			if t.CoversLine(n) {
 				return true
 			}
 		}
@@ -230,6 +241,21 @@ func (m diffViewModel) isFadedBySummary(line diffViewLine) bool {
 	return m.outsideActiveSummary(line)
 }
 
+// summaryHidesEverything reports whether a selection has removed every row the
+// pane would otherwise draw. Only asked while a filter is active, so an unfiltered
+// view pays nothing for it.
+func (m diffViewModel) summaryHidesEverything() bool {
+	if m.activeSummaryID == "" || len(m.lines) == 0 {
+		return false
+	}
+	for _, ln := range m.lines {
+		if !m.isHiddenBySummary(ln) && !m.isHiddenComment(ln) {
+			return false
+		}
+	}
+	return true
+}
+
 // faded is the single question the renderers ask: should this row be drawn
 // greyed rather than styled? Two independent reasons converge here — the
 // source-comment filter and a summary selection — and a renderer that asked only
@@ -274,7 +300,7 @@ func (m *appModel) selectSummaryItem(id string) {
 	m.sidebar.activeSummaryID = id
 	// The line list itself changes shape in the compact diff, so it has to be
 	// rebuilt rather than merely redrawn.
-	m.diffView.buildLines()
+	m.diffView.rebuild()
 	m.diffView.cursor = m.diffView.nearestSelectable(m.diffView.cursor, 1)
 	m.diffView.ensureVisible()
 }

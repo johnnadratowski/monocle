@@ -2,10 +2,12 @@ package core
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/josephschmitt/monocle/internal/db"
 	"github.com/josephschmitt/monocle/internal/protocol"
+	"github.com/josephschmitt/monocle/internal/types"
 )
 
 func summaryEngine(t *testing.T) (*Engine, string) {
@@ -183,5 +185,68 @@ func TestReviewStatusReportsSummaryItemCount(t *testing.T) {
 	e.handleSetReviewSummary(items())
 	if got := e.GetReviewStatusInfo().SummaryItems; got != 0 {
 		t.Errorf("summary items = %d after withdrawal, want 0", got)
+	}
+}
+
+// The overview is the round in a sentence; it belongs to the round and has to
+// survive a restart and vanish with it, exactly as the items do.
+func TestSummaryOverview(t *testing.T) {
+	t.Run("is stored and capped", func(t *testing.T) {
+		e, _ := summaryEngine(t)
+		long := strings.Repeat("word ", 300)
+		r := e.handleSetReviewSummary(&protocol.SetReviewSummaryMsg{
+			Type: protocol.TypeSetReviewSummary, Overview: long,
+			Items: []protocol.SummaryItemEntry{{ID: "a", Text: "a fix"}},
+		})
+		if !r.Success {
+			t.Fatalf("response = %+v", r)
+		}
+		got := e.current.SummaryOverview
+		if len([]rune(got)) != types.SummaryOverviewLimit {
+			t.Errorf("overview is %d runes, want it capped at %d", len([]rune(got)), types.SummaryOverviewLimit)
+		}
+		if !strings.HasSuffix(got, "…") {
+			t.Error("a trimmed overview must show that it was cut")
+		}
+	})
+
+	t.Run("survives a restart", func(t *testing.T) {
+		e, dbPath := summaryEngine(t)
+		repo := e.current.RepoRoot
+		e.handleSetReviewSummary(&protocol.SetReviewSummaryMsg{
+			Type: protocol.TypeSetReviewSummary, Overview: "two halves of one fix",
+			Items: []protocol.SummaryItemEntry{{ID: "a", Text: "a fix"}},
+		})
+		sessionID := e.current.ID
+
+		database, err := db.Open(dbPath)
+		if err != nil {
+			t.Fatalf("reopen db: %v", err)
+		}
+		defer database.Close()
+		e2, err := NewEngine(DefaultConfig(), database, repo, false)
+		if err != nil {
+			t.Fatalf("new engine: %v", err)
+		}
+		resumed, err := e2.ResumeSession(sessionID)
+		if err != nil {
+			t.Fatalf("resume: %v", err)
+		}
+		if got := resumed.SummaryOverview; got != "two halves of one fix" {
+			t.Errorf("overview after restart = %q", got)
+		}
+	})
+}
+
+// An item's own line is capped too: one long item would crowd out the list it
+// belongs to.
+func TestSummaryItemTextIsCapped(t *testing.T) {
+	e, _ := summaryEngine(t)
+	e.handleSetReviewSummary(items(protocol.SummaryItemEntry{
+		ID: "a", Text: strings.Repeat("verbose ", 60),
+	}))
+	got := e.current.SummaryItems[0].Text
+	if len([]rune(got)) != types.SummaryTextLimit {
+		t.Errorf("item text is %d runes, want %d", len([]rune(got)), types.SummaryTextLimit)
 	}
 }

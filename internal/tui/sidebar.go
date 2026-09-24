@@ -439,19 +439,39 @@ func (m sidebarModel) fadeIfOutsideSummary(line string, idx, contentItemCt, addi
 	if m.activeSummaryID == "" || m.cursor == idx {
 		return line
 	}
-	path, ok := m.rowPath(idx, contentItemCt, additionalStart)
-	if !ok {
+	claimed, known := m.rowClaimed(idx, contentItemCt, additionalStart)
+	if !known || claimed {
 		return line
 	}
-	for _, it := range m.summaryItems {
-		if it.ID == m.activeSummaryID {
-			if it.ClaimsFile(path) {
-				return line
-			}
+	return lipgloss.NewStyle().Faint(true).Foreground(lipgloss.Color("8")).Render(ansi.Strip(line))
+}
+
+// rowClaimed reports whether the selected item claims what a row stands for, and
+// whether the row stands for anything claimable at all. Artifacts are asked the
+// same question as files: a round whose real work is in a plan would otherwise
+// show that plan ungreyed under every item, saying nothing.
+func (m sidebarModel) rowClaimed(idx, contentItemCt, additionalStart int) (claimed, known bool) {
+	var item *types.SummaryItem
+	for i := range m.summaryItems {
+		if m.summaryItems[i].ID == m.activeSummaryID {
+			item = &m.summaryItems[i]
 			break
 		}
 	}
-	return lipgloss.NewStyle().Faint(true).Foreground(lipgloss.Color("8")).Render(ansi.Strip(line))
+	if item == nil {
+		return false, false
+	}
+	if idx < contentItemCt {
+		if idx >= len(m.contentItems) {
+			return false, false
+		}
+		return item.ClaimsArtifact(m.contentItems[idx].ID), true
+	}
+	path, ok := m.rowPath(idx, contentItemCt, additionalStart)
+	if !ok {
+		return false, false
+	}
+	return item.ClaimsFile(path), true
 }
 
 // rowPath returns the file path a sidebar row stands for, and whether it stands

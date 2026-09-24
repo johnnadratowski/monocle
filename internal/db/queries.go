@@ -26,9 +26,9 @@ func nullTime(t time.Time) any {
 func (d *DB) CreateSession(s *types.ReviewSession) error {
 	patterns, _ := json.Marshal(s.IgnorePatterns)
 	_, err := d.Exec(
-		`INSERT INTO sessions (id, agent, repo_root, base_ref, review_name, review_sent_at, auto_advance_ref, selected_ref, ignore_patterns, review_round, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		s.ID, s.Agent, s.RepoRoot, s.BaseRef, s.ReviewName, nullTime(s.SentAt), boolToInt(s.AutoAdvanceRef), s.SelectedRef, string(patterns), s.ReviewRound, s.CreatedAt, s.UpdatedAt,
+		`INSERT INTO sessions (id, agent, repo_root, base_ref, review_name, summary_overview, review_sent_at, auto_advance_ref, selected_ref, ignore_patterns, review_round, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		s.ID, s.Agent, s.RepoRoot, s.BaseRef, s.ReviewName, s.SummaryOverview, nullTime(s.SentAt), boolToInt(s.AutoAdvanceRef), s.SelectedRef, string(patterns), s.ReviewRound, s.CreatedAt, s.UpdatedAt,
 	)
 	return err
 }
@@ -40,9 +40,9 @@ func (d *DB) GetSession(id string) (*types.ReviewSession, error) {
 	var autoAdvance int
 	var sentAt sql.NullTime
 	err := d.QueryRow(
-		`SELECT id, agent, repo_root, base_ref, review_name, review_sent_at, auto_advance_ref, selected_ref, ignore_patterns, review_round, created_at, updated_at
+		`SELECT id, agent, repo_root, base_ref, review_name, summary_overview, review_sent_at, auto_advance_ref, selected_ref, ignore_patterns, review_round, created_at, updated_at
 		 FROM sessions WHERE id = ?`, id,
-	).Scan(&s.ID, &s.Agent, &s.RepoRoot, &s.BaseRef, &s.ReviewName, &sentAt, &autoAdvance, &s.SelectedRef, &patterns, &s.ReviewRound, &s.CreatedAt, &s.UpdatedAt)
+	).Scan(&s.ID, &s.Agent, &s.RepoRoot, &s.BaseRef, &s.ReviewName, &s.SummaryOverview, &sentAt, &autoAdvance, &s.SelectedRef, &patterns, &s.ReviewRound, &s.CreatedAt, &s.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -57,8 +57,8 @@ func (d *DB) GetSession(id string) (*types.ReviewSession, error) {
 func (d *DB) UpdateSession(s *types.ReviewSession) error {
 	patterns, _ := json.Marshal(s.IgnorePatterns)
 	_, err := d.Exec(
-		`UPDATE sessions SET base_ref = ?, review_name = ?, review_sent_at = ?, auto_advance_ref = ?, selected_ref = ?, review_round = ?, ignore_patterns = ?, updated_at = ? WHERE id = ?`,
-		s.BaseRef, s.ReviewName, nullTime(s.SentAt), boolToInt(s.AutoAdvanceRef), s.SelectedRef, s.ReviewRound, string(patterns), time.Now(), s.ID,
+		`UPDATE sessions SET base_ref = ?, review_name = ?, summary_overview = ?, review_sent_at = ?, auto_advance_ref = ?, selected_ref = ?, review_round = ?, ignore_patterns = ?, updated_at = ? WHERE id = ?`,
+		s.BaseRef, s.ReviewName, s.SummaryOverview, nullTime(s.SentAt), boolToInt(s.AutoAdvanceRef), s.SelectedRef, s.ReviewRound, string(patterns), time.Now(), s.ID,
 	)
 	return err
 }

@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-const schemaVersion = 15
+const schemaVersion = 16
 
 const dropSQL = `
 DROP TABLE IF EXISTS review_snapshot_files;
@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 	repo_root TEXT NOT NULL,
 	base_ref TEXT NOT NULL,
 	review_name TEXT NOT NULL DEFAULT '',
+	summary_overview TEXT NOT NULL DEFAULT '',
 	review_sent_at DATETIME,
 	auto_advance_ref INTEGER NOT NULL DEFAULT 1,
 	selected_ref TEXT NOT NULL DEFAULT '',
@@ -266,7 +267,10 @@ const firstAdditiveVersion = 13
 // table -> column -> DDL type. Adding one here (and to schemaSQL) is the whole
 // migration: existing rows get NULL, which every reader already tolerates.
 var addedColumns = map[string]map[string]string{
-	"sessions": {"review_sent_at": "DATETIME"},
+	"sessions": {
+		"review_sent_at":   "DATETIME",
+		"summary_overview": "TEXT NOT NULL DEFAULT ''",
+	},
 }
 
 // schemaIntact reports whether the tables look like the schema they claim to be.

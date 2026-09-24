@@ -43,6 +43,7 @@ func summaryColor(i int) color.Color {
 type summaryModalModel struct {
 	active   bool
 	items    []types.SummaryItem
+	overview string // the round in a sentence or two, above the items
 	commits  []core.LogEntry
 	base     string
 	name     string // the review's name, for the modal title
@@ -60,10 +61,11 @@ func newSummaryModalModel(theme Theme) summaryModalModel {
 // openSummaryMsg carries everything the modal shows. Commits are fetched when it
 // opens rather than held on the model, so they cannot go stale behind it.
 type openSummaryMsg struct {
-	items   []types.SummaryItem
-	commits []core.LogEntry
-	base    string
-	name    string
+	items    []types.SummaryItem
+	overview string
+	commits  []core.LogEntry
+	base     string
+	name     string
 }
 
 // selectSummaryItemMsg filters the review to one item; an empty ID clears the
@@ -77,6 +79,7 @@ type closeSummaryMsg struct{}
 func (m *summaryModalModel) open(msg openSummaryMsg) {
 	m.active = true
 	m.items = msg.items
+	m.overview = msg.overview
 	m.commits = msg.commits
 	m.base = msg.base
 	m.name = msg.name
@@ -168,7 +171,16 @@ func (m summaryModalModel) View() string {
 	if m.name != "" {
 		title = m.name
 	}
-	b.WriteString(lipgloss.NewStyle().Bold(true).Render(title) + "\n\n")
+	b.WriteString(lipgloss.NewStyle().Bold(true).Render(title) + "\n")
+	if m.overview != "" {
+		// Above the columns and across the full width: it describes the round, not
+		// either column, and wrapping it into one would make it read as a note on
+		// the items rather than the thing they add up to.
+		for _, row := range wrapContent(m.overview, contentW) {
+			b.WriteString(row + "\n")
+		}
+	}
+	b.WriteString("\n")
 
 	left := m.itemRows(leftW)
 	right := m.commitRows(rightW)
@@ -186,6 +198,11 @@ func (m summaryModalModel) View() string {
 				b.WriteString("\n")
 			}
 		}
+	}
+
+	if detail := m.detailRows(contentW); len(detail) > 0 {
+		b.WriteString("\n\n")
+		b.WriteString(strings.Join(detail, "\n"))
 	}
 
 	b.WriteString("\n\n")
@@ -249,6 +266,54 @@ func (m summaryModalModel) itemRows(w int) []string {
 	return rows
 }
 
+// detailRows shows the item under the cursor in full: its whole line of text,
+// which the list itself has to truncate to keep one row per item, and what it
+// actually points at. Without this the list can name a file count but never the
+// file, and a trimmed item is unreadable rather than merely abbreviated.
+func (m summaryModalModel) detailRows(w int) []string {
+	if m.cursor < 0 || m.cursor >= len(m.items) {
+		return nil
+	}
+	it := m.items[m.cursor]
+	bar := lipgloss.NewStyle().Foreground(summaryColor(m.cursor)).Render("▌")
+	var rows []string
+	for i, row := range wrapContent(it.Text, w-2) {
+		if i == 0 {
+			rows = append(rows, bar+" "+row)
+			continue
+		}
+		rows = append(rows, "  "+row)
+	}
+	if where := m.targetDetail(it); where != "" {
+		for _, row := range wrapContent(where, w-2) {
+			rows = append(rows, "  "+lipgloss.NewStyle().Faint(true).Render(row))
+		}
+	}
+	return rows
+}
+
+// targetDetail names what the item points at, so the reviewer can tell whether a
+// "2 files" item covers the two they care about before selecting it.
+func (m summaryModalModel) targetDetail(it types.SummaryItem) string {
+	if len(it.Targets) == 0 {
+		return "no targets — this item cannot be filtered to"
+	}
+	var names []string
+	seen := map[string]bool{}
+	for _, t := range it.Targets {
+		name := t.Path
+		if t.IsArtifact() {
+			name = "artifact " + t.Artifact
+		}
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+		names = append(names, name)
+	}
+	return strings.Join(names, ", ")
+}
+
 // targetLabel says how much of the diff an item accounts for, in files — the
 // unit the reviewer navigates in. An item with no targets says so, because an
 // untagged item cannot be selected usefully.
@@ -256,14 +321,22 @@ func (m summaryModalModel) targetLabel(it types.SummaryItem) string {
 	if len(it.Targets) == 0 {
 		return "untagged"
 	}
-	files := map[string]bool{}
+	files, artifacts := map[string]bool{}, map[string]bool{}
 	for _, t := range it.Targets {
+		if t.IsArtifact() {
+			artifacts[t.Artifact] = true
+			continue
+		}
 		files[t.Path] = true
 	}
-	if len(files) == 1 {
-		return "1 file"
+	switch {
+	case len(artifacts) == 0:
+		return fmt.Sprintf("%d file%s", len(files), plural(len(files)))
+	case len(files) == 0:
+		return fmt.Sprintf("%d artifact%s", len(artifacts), plural(len(artifacts)))
+	default:
+		return fmt.Sprintf("%d file%s +%d", len(files), plural(len(files)), len(artifacts))
 	}
-	return fmt.Sprintf("%d files", len(files))
 }
 
 // commitRows renders the right half: the commits the review contains. An empty

@@ -159,10 +159,11 @@ func (cmd *ReviewSetNameCmd) Run() error {
 // inventing a syntax the agent then has to get right.
 type ReviewSetSummaryCmd struct {
 	WorkDirFlag
-	Socket string `help:"Override socket path" env:"MONOCLE_SOCKET" default:""`
-	Items  string `help:"JSON array of items: [{\"text\":\"...\",\"id\":\"...\",\"order\":1,\"targets\":[{\"path\":\"a.go\",\"line_start\":10,\"line_end\":20}]}]. Reads stdin when omitted." default:""`
-	Clear  bool   `help:"Withdraw the summary (equivalent to sending an empty list)" default:"false"`
-	JSON   bool   `help:"Output as JSON" default:"false"`
+	Socket   string `help:"Override socket path" env:"MONOCLE_SOCKET" default:""`
+	Items    string `help:"JSON array of items: [{\"text\":\"...\",\"id\":\"...\",\"order\":1,\"targets\":[{\"path\":\"a.go\",\"line_start\":10,\"line_end\":20}]}]. A target may name an artifact instead of a path. Reads stdin when omitted." default:""`
+	Overview string `help:"The round in a sentence or two, shown above the items" default:""`
+	Clear    bool   `help:"Withdraw the summary (equivalent to sending an empty list)" default:"false"`
+	JSON     bool   `help:"Output as JSON" default:"false"`
 }
 
 func (cmd *ReviewSetSummaryCmd) Run() error {
@@ -199,7 +200,9 @@ func (cmd *ReviewSetSummaryCmd) Run() error {
 	defer c.Close()
 
 	resp, err := c.Request(
-		&protocol.SetReviewSummaryMsg{Type: protocol.TypeSetReviewSummary, Items: items},
+		&protocol.SetReviewSummaryMsg{
+			Type: protocol.TypeSetReviewSummary, Items: items, Overview: cmd.Overview,
+		},
 		client.DefaultTimeout,
 	)
 	if err != nil {

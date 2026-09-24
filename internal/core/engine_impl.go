@@ -571,12 +571,13 @@ func (e *Engine) handleSetReviewSummary(msg *protocol.SetReviewSummaryMsg) *prot
 		it := types.SummaryItem{ID: in.ID, Text: in.Text, Order: in.Order}
 		for _, t := range in.Targets {
 			it.Targets = append(it.Targets, types.SummaryTarget{
-				Path: t.Path, LineStart: t.LineStart, LineEnd: t.LineEnd,
+				Path: t.Path, Artifact: t.Artifact, LineStart: t.LineStart, LineEnd: t.LineEnd,
 			})
 		}
 		items = append(items, it)
 	}
 	items = types.NormalizeSummaryItems(items)
+	overview := types.TrimSummaryText(msg.Overview, types.SummaryOverviewLimit)
 
 	if err := e.database.ReplaceSummaryItems(session.ID, items); err != nil {
 		return &protocol.SetReviewSummaryResponse{
@@ -587,13 +588,29 @@ func (e *Engine) handleSetReviewSummary(msg *protocol.SetReviewSummaryMsg) *prot
 	e.mu.Lock()
 	if e.current != nil && e.current.ID == session.ID {
 		e.current.SummaryItems = items
+		e.current.SummaryOverview = overview
+		// The overview lives on the session row, so it needs a write of its own —
+		// ReplaceSummaryItems only touches the items table.
+		if err := e.database.UpdateSession(e.current); err != nil {
+			e.mu.Unlock()
+			return &protocol.SetReviewSummaryResponse{
+				Type: protocol.TypeSetReviewSummaryResponse, Success: false, Message: err.Error(),
+			}
+		}
 	}
 	e.mu.Unlock()
 
 	e.emit(EventFileChanged, EventPayload{Kind: EventFileChanged})
+
+	unmatched := e.checkSummaryTargets(session, items)
+	message := fmt.Sprintf("Review summary set (%d item(s))", len(items))
+	if len(unmatched) > 0 {
+		message += fmt.Sprintf("\n%d target(s) matched nothing in the review:\n  %s",
+			len(unmatched), strings.Join(unmatched, "\n  "))
+	}
 	return &protocol.SetReviewSummaryResponse{
 		Type: protocol.TypeSetReviewSummaryResponse, Success: true, Count: len(items),
-		Message: fmt.Sprintf("Review summary set (%d item(s))", len(items)),
+		Message: message, Unmatched: unmatched,
 	}
 }
 
@@ -1246,11 +1263,13 @@ func (e *Engine) clearReviewLocked() error {
 	}
 	e.current.Annotations = nil
 
-	// The summary is an account of one round, so it goes with the round.
+	// The summary is an account of one round, so it goes with the round —
+	// overview included, or the next round opens under the last one's headline.
 	if err := e.database.DeleteSummaryItems(sessionID); err != nil {
 		return fmt.Errorf("clear summary items: %w", err)
 	}
 	e.current.SummaryItems = nil
+	e.current.SummaryOverview = ""
 
 	if err := e.database.ResetAllReviewed(sessionID); err != nil {
 		return fmt.Errorf("reset reviewed: %w", err)

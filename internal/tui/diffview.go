@@ -785,6 +785,18 @@ func (m diffViewModel) View() string {
 		return centerBlock([]string{"No changes"}, m.width, m.height)
 	}
 
+	// A filtered file with no rows for the selected item renders as a blank pane,
+	// which reads as a broken view rather than an answer. Say which it is, and
+	// name the key that undoes it.
+	if m.summaryHidesEverything() {
+		dim := lipgloss.NewStyle().Faint(true)
+		return centerBlock([]string{
+			"Nothing here for the selected summary item",
+			"",
+			dim.Render("esc clears the filter · i picks another item"),
+		}, m.width, m.height)
+	}
+
 	var b strings.Builder
 	screenUsed := 0
 
@@ -837,6 +849,21 @@ func (m diffViewModel) View() string {
 	}
 
 	return b.String()
+}
+
+// rebuild re-renders whatever the view is currently showing. buildLines alone is
+// not that: an artifact's rows come from its text and a media card's from its
+// metadata, neither of which is in m.hunks, so calling buildLines while one of
+// those is on screen empties the pane.
+func (m *diffViewModel) rebuild() {
+	switch {
+	case m.mediaMode:
+		m.buildMediaCardLines()
+	case m.contentMode:
+		m.buildContentLines(m.contentDiffContent)
+	default:
+		m.buildLines()
+	}
 }
 
 func (m *diffViewModel) buildLines() {

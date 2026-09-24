@@ -603,8 +603,11 @@ type RecentCommitsResponse struct {
 // SetReviewSummaryMsg carries the agent's account of what a round fixed. It
 // replaces any previous summary wholesale.
 type SetReviewSummaryMsg struct {
-	Type  string             `json:"type"`
-	Items []SummaryItemEntry `json:"items"`
+	Type string `json:"type"`
+	// Overview is the round in a sentence or two, shown above the items. Sent
+	// with them and replaced with them, because it describes the same round.
+	Overview string             `json:"overview,omitempty"`
+	Items    []SummaryItemEntry `json:"items"`
 }
 
 type SummaryItemEntry struct {
@@ -615,7 +618,10 @@ type SummaryItemEntry struct {
 }
 
 type SummaryTargetEntry struct {
-	Path      string `json:"path"`
+	// Path names a changed file; Artifact names a content item by its id. One or
+	// the other — an item accounting for a plan has no file to point at.
+	Path      string `json:"path,omitempty"`
+	Artifact  string `json:"artifact,omitempty"`
 	LineStart int    `json:"line_start,omitempty"`
 	LineEnd   int    `json:"line_end,omitempty"`
 }
@@ -625,6 +631,13 @@ type SetReviewSummaryResponse struct {
 	Success bool   `json:"success"`
 	Message string `json:"message,omitempty"`
 	Count   int    `json:"count"`
+	// Unmatched names targets that hit nothing in the review — a path that is
+	// not in the changeset, an artifact id that does not exist, or a line range
+	// outside the file's hunks. The summary is still stored: the agent is the
+	// authority on what it fixed, and a target that looks wrong here can be
+	// right a moment later when the next add_files lands. Reported rather than
+	// rejected, because the failure it replaces was silent.
+	Unmatched []string `json:"unmatched,omitempty"`
 }
 
 // ReviewCommitsMsg asks what commits the current review contains — base..HEAD,
