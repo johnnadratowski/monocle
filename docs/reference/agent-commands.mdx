@@ -395,6 +395,7 @@ Item fields:
 Notes:
 
 - **Targets are what make the list useful.** Without them an item cannot be selected, and the modal marks it `untagged`.
+- **Two items may claim the same line.** That is supported rather than a mistake — one paragraph of prose can carry two separate fixes. A shared line appears under both items' filters and draws a broken gutter bar (`▚`) instead of a solid one, in the selected item's colour while a selection is active.
 - Sent wholesale: a new call replaces the previous summary rather than adding to it, because it describes the round in front of the reviewer.
 - Call it after the files are in place (after `set-base-ref` / `add-files` / `set-file-groups`), since targets reference them.
 - The reviewer opens it with `i`, which also lists the commits the review contains.

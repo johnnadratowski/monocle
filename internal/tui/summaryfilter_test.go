@@ -3,6 +3,7 @@ package tui
 import (
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/josephschmitt/monocle/internal/types"
 )
 
@@ -49,8 +50,8 @@ func TestSummaryTagsByHunk(t *testing.T) {
 			continue
 		}
 		seen++
-		if ln.summaryItemID != w {
-			t.Errorf("%q tagged %q, want %q", ln.content, ln.summaryItemID, w)
+		if tagOf(ln) != w {
+			t.Errorf("%q tagged %q, want %q", ln.content, tagOf(ln), w)
 		}
 	}
 	if seen != 4 {
@@ -63,7 +64,7 @@ func TestSummaryTagsByHunk(t *testing.T) {
 func TestRemovedLinesAreTaggedWithTheirHunk(t *testing.T) {
 	m := summaryModel(t)
 	for _, ln := range m.lines {
-		if ln.kind == types.DiffLineRemoved && ln.summaryItemID == "" {
+		if ln.kind == types.DiffLineRemoved && tagOf(ln) == "" {
 			t.Errorf("removed line untagged: %q", ln.content)
 		}
 	}
@@ -75,7 +76,7 @@ func TestUntaggedRowsHaveNoColour(t *testing.T) {
 	m.summaryItems = nil
 	m.buildLines()
 	for _, ln := range m.lines {
-		if c := m.summaryColorFor(ln); c != nil {
+		if c := m.summaryBarFor(ln).color; c != nil {
 			t.Fatalf("a review with no summary must colour nothing, got %v on %q", c, ln.content)
 		}
 	}
@@ -148,8 +149,8 @@ func TestWholeFileTargetClaimsEveryHunk(t *testing.T) {
 		if ln.isHunk {
 			continue
 		}
-		if ln.summaryItemID != "all" {
-			t.Errorf("%q tagged %q, want the whole-file item", ln.content, ln.summaryItemID)
+		if tagOf(ln) != "all" {
+			t.Errorf("%q tagged %q, want the whole-file item", ln.content, tagOf(ln))
 		}
 	}
 }
@@ -228,7 +229,7 @@ func TestWholeFileModeTagsByLine(t *testing.T) {
 		if ln.isHunk {
 			continue
 		}
-		byLine[ln.newLineNum] = ln.summaryItemID
+		byLine[ln.newLineNum] = tagOf(ln)
 	}
 	if got := byLine[10]; got != "fix-a" {
 		t.Errorf("line 10 tagged %q, want fix-a (its range is 9-12)", got)
@@ -253,7 +254,7 @@ func TestWholeFileModeTagsRemovedLinesFromTheirNeighbour(t *testing.T) {
 		if ln.kind != types.DiffLineRemoved {
 			continue
 		}
-		if ln.summaryItemID == "" {
+		if tagOf(ln) == "" {
 			t.Errorf("removed line %q took no tag from its neighbour", ln.content)
 		}
 	}
@@ -277,7 +278,7 @@ func TestLineTagsDoNotBleedPastTheirRange(t *testing.T) {
 	byLine := map[int]string{}
 	for _, ln := range m.lines {
 		if !ln.isHunk {
-			byLine[ln.newLineNum] = ln.summaryItemID
+			byLine[ln.newLineNum] = tagOf(ln)
 		}
 	}
 	// fix-a covers 9-12 and fix-b covers 88-95; the lines just outside each edge
@@ -293,6 +294,133 @@ func TestLineTagsDoNotBleedPastTheirRange(t *testing.T) {
 	}{{9, "fix-a"}, {12, "fix-a"}, {88, "fix-b"}, {95, "fix-b"}} {
 		if got := byLine[tc.line]; got != tc.want {
 			t.Errorf("line %d tagged %q, want %q", tc.line, got, tc.want)
+		}
+	}
+}
+
+// tagOf is the first item claiming a row — what a row used to carry when it
+// could carry only one. Tests that predate shared rows still read it.
+func tagOf(ln diffViewLine) string {
+	if len(ln.summaryItemIDs) == 0 {
+		return ""
+	}
+	return ln.summaryItemIDs[0]
+}
+
+// sharedLineModel is the case a real review produced on its first outing: one
+// line of prose carrying two separate fixes, so two items claim it.
+func sharedLineModel(t *testing.T) diffViewModel {
+	t.Helper()
+	th := DefaultTheme()
+	km := DefaultKeyMap()
+	m := newDiffViewModel(&th, &km)
+	m.width, m.height = 120, 40
+	m.path = "standards.md"
+	m.hunks = []types.DiffHunk{
+		{OldStart: 532, OldCount: 1, NewStart: 532, NewCount: 1, Lines: []types.DiffLine{
+			{Kind: types.DiffLineRemoved, Content: "old rule", OldLineNum: 532},
+			{Kind: types.DiffLineAdded, Content: "narrowed claim plus the new rule", NewLineNum: 532},
+		}},
+		{OldStart: 600, OldCount: 1, NewStart: 600, NewCount: 1, Lines: []types.DiffLine{
+			{Kind: types.DiffLineAdded, Content: "second item only", NewLineNum: 600},
+		}},
+	}
+	m.summaryItems = []types.SummaryItem{
+		{ID: "narrowed", Text: "narrow the test claim",
+			Targets: []types.SummaryTarget{{Path: "standards.md", LineStart: 532, LineEnd: 532}}},
+		{ID: "no-inline", Text: "no inline js or css",
+			Targets: []types.SummaryTarget{
+				{Path: "standards.md", LineStart: 532, LineEnd: 532},
+				{Path: "standards.md", LineStart: 600, LineEnd: 600},
+			}},
+	}
+	m.buildLines()
+	return m
+}
+
+// The defect this replaced: a row remembered only its first claimant, so
+// selecting the second item dropped the very line that item describes.
+func TestSharedLineStaysInBothFilters(t *testing.T) {
+	for _, id := range []string{"narrowed", "no-inline"} {
+		m := sharedLineModel(t)
+		m.activeSummaryID = id
+		m.buildLines()
+		found := false
+		for _, ln := range m.lines {
+			if ln.content == "narrowed claim plus the new rule" && !m.isHiddenBySummary(ln) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("selecting %q hid the line it claims", id)
+		}
+	}
+}
+
+func TestSharedLineIsClaimedByBothItems(t *testing.T) {
+	m := sharedLineModel(t)
+	for _, ln := range m.lines {
+		if ln.content != "narrowed claim plus the new rule" {
+			continue
+		}
+		if len(ln.summaryItemIDs) != 2 {
+			t.Fatalf("shared line claimed by %v, want both items", ln.summaryItemIDs)
+		}
+		if !m.summaryBarFor(ln).shared {
+			t.Error("a shared line must be marked shared, or its colour reads as the whole answer")
+		}
+		return
+	}
+	t.Fatal("shared line not found")
+}
+
+// With nothing selected the bar can only show one colour, and the first
+// claimant in reading order is the one it shows. With an item selected the
+// question has changed: the bar answers about THAT item.
+func TestSelectedItemOwnsTheSharedLinesColour(t *testing.T) {
+	m := sharedLineModel(t)
+	line := func(m diffViewModel) diffViewLine {
+		t.Helper()
+		for _, ln := range m.lines {
+			if ln.content == "narrowed claim plus the new rule" {
+				return ln
+			}
+		}
+		t.Fatal("shared line not found")
+		return diffViewLine{}
+	}
+	if got, want := m.summaryBarFor(line(m)).color, summaryColor(0); got != want {
+		t.Errorf("unselected colour = %v, want the first claimant's %v", got, want)
+	}
+	m.activeSummaryID = "no-inline"
+	m.buildLines()
+	if got, want := m.summaryBarFor(line(m)).color, summaryColor(1); got != want {
+		t.Errorf("colour under selection = %v, want the selected item's %v", got, want)
+	}
+}
+
+// An unshared row must keep the solid bar; the broken one has to stay rare
+// enough to mean something.
+func TestSoleClaimKeepsTheSolidBar(t *testing.T) {
+	m := sharedLineModel(t)
+	for _, ln := range m.lines {
+		if ln.content != "second item only" {
+			continue
+		}
+		if b := m.summaryBarFor(ln); b.shared || b.glyph() != summaryGutterBar {
+			t.Errorf("sole-claim row drew %q, want the solid bar", b.glyph())
+		}
+		return
+	}
+	t.Fatal("sole-claim line not found")
+}
+
+// The bar occupies one gutter column. A glyph that measured wider would push
+// the gutter out of alignment on every shared row.
+func TestSummaryBarsAreOneColumn(t *testing.T) {
+	for _, g := range []string{summaryGutterBar, summarySharedBar} {
+		if w := ansi.StringWidth(g); w != 1 {
+			t.Errorf("%q measures %d columns, want 1", g, w)
 		}
 	}
 }

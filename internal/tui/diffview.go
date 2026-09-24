@@ -69,14 +69,19 @@ type diffViewLine struct {
 	// syntax/markdown styling). Used for the media artifact card.
 	verbatim bool
 
-	// summaryItemID is the summary item accounting for this row's hunk, or "".
-	// An ID rather than an index so the zero value means "no item" — a numeric
-	// field would make an untagged row read as item 0, which is a real one.
+	// summaryItemIDs are the summary items accounting for this row, in reading
+	// order, or empty. IDs rather than indices so an untagged row cannot read as
+	// item 0, which is a real one.
+	//
+	// A list rather than one id because two items legitimately claim the same
+	// line — one paragraph of prose can carry two separate fixes — and a row
+	// that remembered only the first would vanish from the second item's filter,
+	// hiding that item's own evidence.
 	//
 	// Tagged by hunk rather than by line: that is the unit the agent is asked to
 	// tag, and it is the only thing that works for removed lines, which have no
 	// new-file number for a line range to match against.
-	summaryItemID string
+	summaryItemIDs []string
 }
 
 type diffViewModel struct {
@@ -1258,7 +1263,7 @@ const annotationRangeBar = "▌"
 // is inside an annotation's range it draws a solid cyan rail in the leftmost
 // column — at the far-left edge of the pane — so the range reads as a continuous
 // vertical line down the side. base is the gutter's normal style.
-func gutterWithRangeBar(gutter string, base lipgloss.Style, annotated bool, summary color.Color, bg color.Color) string {
+func gutterWithRangeBar(gutter string, base lipgloss.Style, annotated bool, summary summaryBar, bg color.Color) string {
 	if len(gutter) == 0 {
 		return base.Render(gutter)
 	}
@@ -1275,12 +1280,12 @@ func gutterWithRangeBar(gutter string, base lipgloss.Style, annotated bool, summ
 	// on the content and cannot collide with the annotation rail in column 0.
 	// Both facts are worth seeing at once: which fix this hunk is part of, and
 	// whether the agent left a note on it.
-	if summary != nil && len(body) > 0 {
-		barStyle := lipgloss.NewStyle().Foreground(summary)
+	if summary.color != nil && len(body) > 0 {
+		barStyle := lipgloss.NewStyle().Foreground(summary.color)
 		if bg != nil {
 			barStyle = barStyle.Background(bg)
 		}
-		tail = barStyle.Render(summaryGutterBar)
+		tail = barStyle.Render(summary.glyph())
 		body = body[:len(body)-1]
 	}
 	return head + base.Render(body) + tail
@@ -1290,6 +1295,27 @@ func gutterWithRangeBar(gutter string, base lipgloss.Style, annotated bool, summ
 // rather than a solid one: the annotation rail is solid, and the two need to be
 // tellable apart at a glance.
 const summaryGutterBar = "▌"
+
+// summarySharedBar marks a row more than one item claims. Broken rather than
+// solid, because the one thing the colour cannot say is "there is another item
+// here too" — with nothing selected the bar can only show one of them, and a
+// reviewer who reads it as the whole answer will miss the second fix.
+const summarySharedBar = "▚"
+
+// summaryBar is what a row's gutter should draw: a colour, and whether the row
+// is claimed by more than one item. The two travel together because the glyph
+// is meaningless without the colour and misleading without the shared flag.
+type summaryBar struct {
+	color  color.Color
+	shared bool
+}
+
+func (b summaryBar) glyph() string {
+	if b.shared {
+		return summarySharedBar
+	}
+	return summaryGutterBar
+}
 
 // renderDimmedComment renders a source-code comment line faint/greyed (used by
 // the hide-comments filter), padded to width on the line's background.
@@ -1595,7 +1621,7 @@ func (m diffViewModel) renderContentLine(line diffViewLine, _, contentWidth int,
 	if len(gutter) < gutterWidth {
 		gutter = fmt.Sprintf("%-*s", gutterWidth, gutter)
 	}
-	renderedGutter := gutterWithRangeBar(gutter, gutterStyle, line.annotated, m.summaryColorFor(line), nil)
+	renderedGutter := gutterWithRangeBar(gutter, gutterStyle, line.annotated, m.summaryBarFor(line), nil)
 
 	// Faded: a source comment under the filter, or a hunk outside the selected
 	// summary item.
@@ -1683,7 +1709,7 @@ func (m diffViewModel) renderDiffLine(line diffViewLine, _, contentWidth int, se
 	}
 	// Annotated code lines get a cyan bar in the gutter's trailing column to mark
 	// the annotation's range.
-	renderedGutter := gutterWithRangeBar(gutter, gutterStyle, line.annotated, m.summaryColorFor(line), lineBg)
+	renderedGutter := gutterWithRangeBar(gutter, gutterStyle, line.annotated, m.summaryBarFor(line), lineBg)
 
 	// Faded: a source comment under the filter, or a hunk outside the selected
 	// summary item.
@@ -1971,7 +1997,7 @@ func (m diffViewModel) splitRow(gutter, styled string, kind types.DiffLineKind, 
 	if len(gutter) < gutterW {
 		gutter = fmt.Sprintf("%-*s", gutterW, gutter)
 	}
-	renderedGutter := gutterWithRangeBar(gutter, gutterStyle, annotated, m.summaryColorFor(line), lineBg)
+	renderedGutter := gutterWithRangeBar(gutter, gutterStyle, annotated, m.summaryBarFor(line), lineBg)
 	if dimmed {
 		return renderedGutter + renderDimmedComment(styled, lineBg, contentW)
 	}
@@ -2002,7 +2028,7 @@ func (m diffViewModel) renderSplitSide(gutter, content string, kind types.DiffLi
 	if len(gutter) < gutterW {
 		gutter = fmt.Sprintf("%-*s", gutterW, gutter)
 	}
-	renderedGutter := gutterWithRangeBar(gutter, gutterStyle, annotated, m.summaryColorFor(line), lineBg)
+	renderedGutter := gutterWithRangeBar(gutter, gutterStyle, annotated, m.summaryBarFor(line), lineBg)
 
 	// Hide-comments filter: dim comment-only lines.
 	if dimmed {
@@ -2143,7 +2169,7 @@ func (m diffViewModel) renderWrappedLine(gutter, content string, gutterWidth, co
 		if len(g) < gutterWidth {
 			g = fmt.Sprintf("%-*s", gutterWidth, g)
 		}
-		parts = append(parts, gutterWithRangeBar(g, gutterStyle, annotated, m.summaryColorFor(mdLineOrZero(mdLine)), lineBg)+
+		parts = append(parts, gutterWithRangeBar(g, gutterStyle, annotated, m.summaryBarFor(mdLineOrZero(mdLine)), lineBg)+
 			applyBgAndPad(row, lineBg, contentWidth))
 	}
 	return strings.Join(parts, "\n")
