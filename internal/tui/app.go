@@ -651,7 +651,12 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(msg.files) > 0 && !m.diffViewShowsValidFile() {
 			m.sidebar.selectPath(msg.files[0].Path)
 			return m, m.handleSidebarSelect(sidebarSelectMsg{path: msg.files[0].Path})
-		} else if len(msg.files) == 0 && !m.diffView.isViewingContentItem() && m.diffView.path != "" {
+		} else if len(msg.files) == 0 && !m.diffView.isViewingContentItem() &&
+			m.diffView.additionalFilePath == "" && m.diffView.path != "" {
+			// An empty changeset means the git diff is empty, not that there is
+			// nothing to show: an agent-attached file is not part of the changeset
+			// and outlives it. Wiping the pane here emptied an added file the
+			// moment it was opened, on the very next refresh tick.
 			m.diffView.clearFileState()
 		}
 		// Keep the highlight on the shown item after the refresh/regroup — but

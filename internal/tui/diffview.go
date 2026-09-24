@@ -172,6 +172,11 @@ func (m diffViewModel) isViewingContentItem() bool {
 // metadata (contentID, contentMode). Call when no file should be shown.
 func (m *diffViewModel) clearFileState() {
 	m.path = ""
+	// Clear the additional-file claim with it. A view that has been emptied but
+	// still names a file it is "showing" makes diffViewShowsValidFile answer yes
+	// about a blank pane — and then no, once the claim is noticed as stale, which
+	// yanks the reviewer somewhere else.
+	m.additionalFilePath = ""
 	m.hunks = nil
 	m.lines = nil
 	m.comments = nil
