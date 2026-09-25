@@ -446,6 +446,17 @@ func (m sidebarModel) fadeIfOutsideSummary(line string, idx, contentItemCt, addi
 	return lipgloss.NewStyle().Faint(true).Foreground(lipgloss.Color("8")).Render(ansi.Strip(line))
 }
 
+// summaryFadesRow reports whether a row is greyed out by the current selection —
+// the rows file navigation should walk past rather than land on. False when
+// nothing is selected, so navigation is unchanged in the common case.
+func (m sidebarModel) summaryFadesRow(idx int) bool {
+	if m.activeSummaryID == "" {
+		return false
+	}
+	claimed, known := m.rowClaimed(idx, len(m.contentItems), len(m.contentItems)+m.fileItemCount())
+	return known && !claimed
+}
+
 // rowClaimed reports whether the selected item claims what a row stands for, and
 // whether the row stands for anything claimable at all. Artifacts are asked the
 // same question as files: a round whose real work is in a plan would otherwise
@@ -1011,6 +1022,13 @@ func (m *sidebarModel) navigateFile(dir int) tea.Cmd {
 				next += dir
 				continue
 			}
+		}
+		// With an item selected, walk past what it says nothing about: those rows
+		// are greyed for exactly this reason, and stopping on one shows a file
+		// with no chunks to look at.
+		if m.summaryFadesRow(next) {
+			next += dir
+			continue
 		}
 		break
 	}

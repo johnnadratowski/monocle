@@ -316,6 +316,7 @@ func (m helpModel) buildContent() string {
 			{Label(km.ToggleFullDiff), "Toggle full-file diff (whole file vs. changed lines)"},
 			{Label(km.ToggleOverlays), "Hide/show inline comments + annotations"},
 			{Label(km.HideComments), "Cycle source-code comments: dim → hide → show"},
+			{Label(km.HideCommentsBack), "The same cycle in reverse"},
 			{Label(km.TreeMode), "Cycle sidebar view (flat/tree/grouped)"},
 			{Label(km.CollapseAll) + "/" + Label(km.ExpandAll), "Collapse/expand all (tree view)"},
 		},

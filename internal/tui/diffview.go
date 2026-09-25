@@ -23,8 +23,8 @@ const (
 	diffStyleFile // raw file content, no diff coloring
 )
 
-// commentFilterMode controls how source-code comment-only lines are shown. The
-// `#` key cycles through the three states.
+// commentFilterMode controls how source-code comment-only lines are shown. `m`
+// cycles forward through the three states and `M` back.
 type commentFilterMode int
 
 const (
@@ -32,6 +32,10 @@ const (
 	commentsDimmed                          // comment-only lines rendered faint
 	commentsHidden                          // comment-only lines removed from the view
 )
+
+// commentFilterModes is how many states the filter cycles through, named so the
+// forward and backward walks cannot disagree about it.
+const commentFilterModes = 3
 
 // diffViewLine represents a rendered line in the diff view.
 type diffViewLine struct {
@@ -106,7 +110,11 @@ type diffViewModel struct {
 
 	// commentSource is the current file's full new-side text, fetched so a block
 	// comment can be classified even when the diff shows only part of it.
-	commentSource     string
+	commentSource string
+	// baseSource / baseSourcePath are the same for the OLD revision, so a removed
+	// line can be classified against the file it was removed from.
+	baseSource        string
+	baseSourcePath    string
 	commentSourcePath string
 
 	lines    []diffViewLine
@@ -2426,7 +2434,18 @@ func (m *diffViewModel) ToggleOverlays() {
 // (skipped at render and in navigation). It recomputes the comment-line set and
 // nudges the cursor off any now-hidden line; no rebuild, so scroll stays stable.
 func (m *diffViewModel) CycleCommentFilter() {
-	m.commentFilter = (m.commentFilter + 1) % 3
+	m.setCommentFilter((m.commentFilter + 1) % commentFilterModes)
+}
+
+// CycleCommentFilterBack walks the same three states the other way. Three states
+// means forward is never more than two presses from anywhere, but overshooting
+// the one you wanted and having to go round is the annoyance this removes.
+func (m *diffViewModel) CycleCommentFilterBack() {
+	m.setCommentFilter((m.commentFilter + commentFilterModes - 1) % commentFilterModes)
+}
+
+func (m *diffViewModel) setCommentFilter(mode commentFilterMode) {
+	m.commentFilter = mode
 	m.computeCommentLines()
 	m.tagSummaryHunks()
 	m.cursor = m.nearestSelectable(m.cursor, 1)
@@ -2849,6 +2868,14 @@ func (m diffViewModel) lineHasChange(i int) bool {
 	if line.isComment || line.isAnnotation || line.isHunk {
 		return false
 	}
+	// A change belonging to another summary item is not a chunk to navigate to
+	// while one item is selected — whether it was dropped from the compact diff
+	// or merely greyed in whole-file mode. Answering here rather than at each
+	// jump site means [ and ], the landing after a file change, and the "how many
+	// chunks are off screen" counter all agree.
+	if m.outsideActiveSummary(line) {
+		return false
+	}
 	if line.kind == types.DiffLineAdded || line.kind == types.DiffLineRemoved {
 		return true
 	}
@@ -2991,7 +3018,11 @@ func (m *diffViewModel) centerCursor() {
 // LandOnChunkEdge positions the cursor on the first (dir>=0) or last (dir<0)
 // change block in the file and centers it. Used when [ / ] cross into an
 // adjacent file so the cursor lands on a chunk instead of the file's top.
-func (m *diffViewModel) LandOnChunkEdge(dir int) {
+// It reports whether it actually landed. A caller holding a pending landing must
+// keep holding it when the answer is false: the message that reached it first can
+// be for the file being LEFT, which under a summary filter has no chunks at all,
+// and clearing the request there loses the landing for the file being entered.
+func (m *diffViewModel) LandOnChunkEdge(dir int) bool {
 	target := -1
 	if dir >= 0 {
 		for i := 0; i < len(m.lines); i++ {
@@ -3009,12 +3040,14 @@ func (m *diffViewModel) LandOnChunkEdge(dir int) {
 		}
 	}
 	if target < 0 {
-		return
+		return false
 	}
 	if sel := m.selectableForChange(target); sel >= 0 {
 		m.cursor = sel
 		m.centerCursor()
+		return true
 	}
+	return false
 }
 
 // JumpToMark moves the cursor to the next (dir=+1) or previous (dir=-1) review
@@ -3772,17 +3805,25 @@ func (m *diffViewModel) computeCommentLines() {
 			return ln.newLineNum, ln.content
 		})
 	}
-	m.commentLinesOld = m.classifySide(func(ln diffViewLine) (int, string) {
-		// The old side is the left in split mode, which is where content already
-		// points; in unified a line belongs to the old file when it has an old
-		// number, whatever its kind.
-		return ln.oldLineNum, ln.content
-	})
+	// The old side gets the same treatment, against the base revision. Without it
+	// a comment edited rather than added had its removed half stay lit while its
+	// added half faded — the halves of one block behaving differently, which
+	// reads as the filter being broken rather than conservative.
+	if fromBase := m.baseSourceCommentLines(); fromBase != nil {
+		m.commentLinesOld = fromBase
+	} else {
+		m.commentLinesOld = m.classifySide(func(ln diffViewLine) (int, string) {
+			// The old side is the left in split mode, which is where content
+			// already points; in unified a line belongs to the old file when it
+			// has an old number, whatever its kind.
+			return ln.oldLineNum, ln.content
+		})
+	}
 
-	// A removed line inside a block the diff only partly shows stays unclassified.
-	// The old file's full text is not fetched — it may not exist on disk at all —
-	// and the tempting shortcut, treating a removed line bracketed by comment
-	// lines as one itself, dims deleted CODE between two adjacent comments. Not
+	// When the base text cannot be fetched the reconstruction stands, and a
+	// removed line inside a block the diff only partly shows stays unclassified.
+	// The tempting shortcut — treating a removed line bracketed by comment lines
+	// as one itself — dims deleted CODE between two adjacent comments, and not
 	// fading a deleted comment is a much smaller error than hiding deleted code.
 }
 

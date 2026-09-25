@@ -23,10 +23,13 @@ func newLineOf(ln diffViewLine) int {
 	return ln.newLineNum
 }
 
-// commentSourceMsg carries a file's full new-side text for classification.
+// commentSourceMsg carries a file's full text for classification. Both sides
+// arrive the same way: the removed half of an edit needs the file it was removed
+// FROM, which the diff shows just as partially as the added half.
 type commentSourceMsg struct {
 	path    string
 	content string
+	base    bool
 }
 
 // needsCommentSource reports whether the view would benefit from the full file:
@@ -44,24 +47,50 @@ func (m diffViewModel) needsCommentSource() bool {
 	return m.commentSourcePath != m.path
 }
 
-// requestCommentSource asks the app layer for the current file's full text.
+// needsBaseCommentSource is the same question for the old side. Asked separately
+// because the two fetches are independent — one can arrive, or fail, without the
+// other — and a file with no old side at all (newly added) must not keep asking.
+func (m diffViewModel) needsBaseCommentSource() bool {
+	if m.commentFilter == commentsShown || m.path == "" || m.contentMode {
+		return false
+	}
+	if m.fullFile || m.style == diffStyleFile {
+		return false
+	}
+	return m.baseSourcePath != m.path
+}
+
+// requestCommentSource asks the app layer for the current file's full text —
+// both revisions, in one command, since the filter needs both to answer for a
+// comment that was edited rather than merely added.
 func (m diffViewModel) requestCommentSource() tea.Cmd {
 	path := m.path
-	return func() tea.Msg { return requestCommentSourceMsg{path: path} }
+	needNew := m.needsCommentSource()
+	needBase := m.needsBaseCommentSource()
+	return func() tea.Msg {
+		return requestCommentSourceMsg{path: path, wantNew: needNew, wantBase: needBase}
+	}
 }
 
 type requestCommentSourceMsg struct {
-	path string
+	path     string
+	wantNew  bool
+	wantBase bool
 }
 
-// setCommentSource stores a fetched file and re-derives the classification.
+// setCommentSource stores a fetched revision and re-derives the classification.
 // A stale answer (the reviewer moved on while it was in flight) is dropped.
-func (m *diffViewModel) setCommentSource(path, content string) bool {
+func (m *diffViewModel) setCommentSource(path, content string, base bool) bool {
 	if path != m.path {
 		return false
 	}
-	m.commentSourcePath = path
-	m.commentSource = content
+	if base {
+		m.baseSourcePath = path
+		m.baseSource = content
+	} else {
+		m.commentSourcePath = path
+		m.commentSource = content
+	}
 	m.computeCommentLines()
 	return true
 }
@@ -74,4 +103,15 @@ func (m diffViewModel) sourceCommentLines() map[int]bool {
 		return nil
 	}
 	return m.hl.commentOnlyLines(m.path, m.commentSource)
+}
+
+// baseSourceCommentLines does the same for the old revision, keyed by OLD-file
+// line number. This is what lets the removed half of an edited comment fade:
+// from the fragment alone a removed middle line is just text, because the /**
+// that opened it is above the hunk and was never removed.
+func (m diffViewModel) baseSourceCommentLines() map[int]bool {
+	if m.baseSource == "" || m.baseSourcePath != m.path || m.hl == nil {
+		return nil
+	}
+	return m.hl.commentOnlyLines(m.path, m.baseSource)
 }

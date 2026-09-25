@@ -30,6 +30,18 @@ const fullSource = `const a = 1
 async function retire() {}
 `
 
+// baseSourceText is the same file BEFORE the edit — the revision a removed line
+// was removed from, and the only thing that can say the removed line was inside
+// the comment.
+const baseSourceText = `const a = 1
+/**
+ * Retire submissions superseded by a newer row.
+ * Old wording.
+ * Carried rows keep their id.
+ */
+async function retire() {}
+`
+
 func sourceModel(t *testing.T) diffViewModel {
 	t.Helper()
 	th := DefaultTheme()
@@ -66,7 +78,7 @@ func TestPartialBlockCommentNeedsTheSource(t *testing.T) {
 // the diff shows.
 func TestFullSourceClassifiesAPartialBlock(t *testing.T) {
 	m := sourceModel(t)
-	if !m.setCommentSource("x.ts", fullSource) {
+	if !m.setCommentSource("x.ts", fullSource, false) {
 		t.Fatal("the source should have been accepted for the current path")
 	}
 	if m.needsCommentSource() {
@@ -91,18 +103,88 @@ func TestFullSourceClassifiesAPartialBlock(t *testing.T) {
 	}
 }
 
-// A removed line inside a block the diff only partly shows is a known gap: the
-// old file is never fetched, and guessing from its neighbours dims deleted code.
-// Pinned so the trade-off is deliberate rather than forgotten.
-func TestRemovedLineInsideAPartialBlockIsNotClassified(t *testing.T) {
+// Without the base revision a removed line inside a partly-shown block stays
+// unclassified: the fragment cannot say it was inside a comment, and guessing
+// from its neighbours dims deleted code.
+func TestRemovedLineNeedsTheBaseRevision(t *testing.T) {
 	m := sourceModel(t)
-	m.setCommentSource("x.ts", fullSource)
+	m.setCommentSource("x.ts", fullSource, false)
+	if !m.needsBaseCommentSource() {
+		t.Error("the old side is unclassified; the base revision should be wanted")
+	}
+	for _, ln := range m.lines {
+		if ln.kind == types.DiffLineRemoved && m.isDimmedComment(ln) {
+			t.Errorf("classified without the base revision: %q", ln.content)
+		}
+	}
+}
+
+// The reported bug: a big comment edited rather than added had its additions
+// fade and its removals stay lit — the two halves of one block behaving
+// differently, which reads as the filter being broken.
+func TestBaseRevisionClassifiesRemovedCommentLines(t *testing.T) {
+	m := sourceModel(t)
+	m.setCommentSource("x.ts", fullSource, false)
+	m.setCommentSource("x.ts", baseSourceText, true)
+	if m.needsBaseCommentSource() {
+		t.Error("the base revision is loaded; it should not be asked for again")
+	}
+
+	removed := 0
 	for _, ln := range m.lines {
 		if ln.kind != types.DiffLineRemoved {
 			continue
 		}
-		if m.isDimmedComment(ln) {
-			t.Errorf("unexpected: %q classified — if this now works, update the note", ln.content)
+		removed++
+		if !m.isDimmedComment(ln) {
+			t.Errorf("removed comment line stayed lit (old=%d): %q", ln.oldLineNum, ln.content)
+		}
+	}
+	if removed != 1 {
+		t.Fatalf("checked %d removed rows, want 1", removed)
+	}
+}
+
+// Both halves of the same edited comment must end up the same. This is the
+// assertion the bug report reduces to.
+func TestBothHalvesOfAnEditedCommentAgree(t *testing.T) {
+	m := sourceModel(t)
+	m.setCommentSource("x.ts", fullSource, false)
+	m.setCommentSource("x.ts", baseSourceText, true)
+	for _, ln := range m.lines {
+		if ln.isHunk {
+			continue
+		}
+		if !m.isDimmedComment(ln) {
+			t.Errorf("one half of the block is not dimmed (kind=%s): %q", ln.kind, ln.content)
+		}
+	}
+}
+
+// Knowing the base revision must not make deleted CODE fade. The old rule was
+// conservative and got this right by accident; now it is right on purpose.
+func TestDeletedCodeStaysLitEvenWithTheBaseRevision(t *testing.T) {
+	th := DefaultTheme()
+	km := DefaultKeyMap()
+	m := newDiffViewModel(&th, &km)
+	m.width, m.height = 120, 40
+	m.path = "x.ts"
+	m.commentFilter = commentsDimmed
+	m.hunks = []types.DiffHunk{{
+		OldStart: 1, OldCount: 3, NewStart: 1, NewCount: 3,
+		Lines: []types.DiffLine{
+			{Kind: types.DiffLineContext, Content: "// a comment", OldLineNum: 1, NewLineNum: 1},
+			{Kind: types.DiffLineRemoved, Content: "const gone = 1", OldLineNum: 2},
+			{Kind: types.DiffLineContext, Content: "// another comment", OldLineNum: 3, NewLineNum: 2},
+		},
+	}}
+	m.buildLines()
+	m.setCommentSource("x.ts", "// a comment\n// another comment\n", false)
+	m.setCommentSource("x.ts", "// a comment\nconst gone = 1\n// another comment\n", true)
+
+	for _, ln := range m.lines {
+		if ln.kind == types.DiffLineRemoved && m.isDimmedComment(ln) {
+			t.Errorf("deleted code must never be dimmed: %q", ln.content)
 		}
 	}
 }
@@ -125,7 +207,7 @@ func TestDeletedCodeIsNeverDimmed(t *testing.T) {
 		},
 	}}
 	m.buildLines()
-	m.setCommentSource("x.ts", "// a comment\n// another comment\n")
+	m.setCommentSource("x.ts", "// a comment\n// another comment\n", false)
 
 	for _, ln := range m.lines {
 		if ln.kind == types.DiffLineRemoved && m.isDimmedComment(ln) {
@@ -137,7 +219,7 @@ func TestDeletedCodeIsNeverDimmed(t *testing.T) {
 // A source that arrives after the reviewer has moved on belongs to another file.
 func TestStaleSourceIsDropped(t *testing.T) {
 	m := sourceModel(t)
-	if m.setCommentSource("other.ts", fullSource) {
+	if m.setCommentSource("other.ts", fullSource, false) {
 		t.Error("a source for a different path must be refused")
 	}
 	if m.commentSource != "" {

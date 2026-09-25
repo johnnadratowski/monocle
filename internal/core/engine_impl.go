@@ -452,6 +452,36 @@ func (e *Engine) GetFileContent(path string) (string, error) {
 	return e.git.FileContent("", path)
 }
 
+// GetBaseFileContent returns a file as it looks on the OLD side of the diff —
+// the base commit, or the review snapshot when one is in force. It mirrors
+// getFileDiff's own choice of base, so a caller classifying the removed lines is
+// looking at the same text the diff was computed from rather than at HEAD.
+func (e *Engine) GetBaseFileContent(path string) (string, error) {
+	e.mu.RLock()
+	session := e.current
+	snapshot := e.reviewBase
+	e.mu.RUnlock()
+	if session == nil {
+		return "", fmt.Errorf("no active session")
+	}
+	if snapshot != nil {
+		var file *types.SnapshotFile
+		if snapshot.FilesByPath != nil {
+			file = snapshot.FilesByPath[path]
+		}
+		if file == nil {
+			// Not in the snapshot means the file is new since it, so its old side
+			// is empty rather than unknown.
+			return "", nil
+		}
+		if file.BlobSHA != "" {
+			return e.git.CatFile(file.BlobSHA)
+		}
+		return file.Content, nil
+	}
+	return e.git.FileContent(session.BaseRef, path)
+}
+
 func (e *Engine) GetContentItem(id string) (*types.ContentItem, error) {
 	e.mu.RLock()
 	session := e.current

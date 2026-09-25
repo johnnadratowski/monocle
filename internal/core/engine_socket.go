@@ -88,7 +88,11 @@ func (e *Engine) handleGetFileDiff(msg *protocol.GetFileDiffMsg) *protocol.GetFi
 }
 
 func (e *Engine) handleGetFileContent(msg *protocol.GetFileContentMsg) *protocol.GetFileContentResponse {
-	content, err := e.GetFileContent(msg.Path)
+	get := e.GetFileContent
+	if msg.Base {
+		get = e.GetBaseFileContent
+	}
+	content, err := get(msg.Path)
 	return &protocol.GetFileContentResponse{
 		Type:    protocol.TypeGetFileContentResponse,
 		Content: content,

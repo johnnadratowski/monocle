@@ -73,6 +73,9 @@ type EngineAPI interface {
 	GetFileDiff(path string) (*types.DiffResult, error)
 	GetFileDiffFull(path string) (*types.DiffResult, error)
 	GetFileContent(path string) (string, error)
+	// GetBaseFileContent returns the file as the OLD side of the diff has it, so
+	// removed lines can be classified against the text they were removed from.
+	GetBaseFileContent(path string) (string, error)
 	GetContentItem(id string) (*types.ContentItem, error)
 	GetContentDiff(id string) (*types.DiffResult, error)
 	GetContentVersions(id string) ([]types.ContentVersion, error)

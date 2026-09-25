@@ -424,3 +424,116 @@ func TestSummaryBarsAreOneColumn(t *testing.T) {
 		}
 	}
 }
+
+// With an item selected, [ and ] are for that item's chunks. A jump that landed
+// on another item's hunk would undo the filter the reviewer just applied.
+func TestChunkJumpsSkipOtherItemsChunks(t *testing.T) {
+	m := summaryModel(t)
+	m.fullFile = true // whole-file mode keeps the other hunks, greyed
+	m.activeSummaryID = "fix-a"
+	m.buildLines()
+
+	for i := range m.lines {
+		if !m.lineHasChange(i) {
+			continue
+		}
+		if m.outsideActiveSummary(m.lines[i]) {
+			t.Fatalf("row %d belongs to another item but counts as a chunk: %q", i, m.lines[i].content)
+		}
+	}
+}
+
+// Crossing into a file should land on the SELECTED item's first chunk, not the
+// file's — otherwise the reviewer arrives somewhere the filter says to ignore.
+func TestLandingOnAFileGoesToTheItemsFirstChunk(t *testing.T) {
+	m := summaryModel(t)
+	m.fullFile = true
+	m.activeSummaryID = "fix-b" // its range is 88-95; fix-a's is 9-12
+	m.buildLines()
+
+	m.LandOnChunkEdge(+1)
+	if m.cursor < 0 || m.cursor >= len(m.lines) {
+		t.Fatalf("cursor %d out of range", m.cursor)
+	}
+	landed := m.lines[m.cursor]
+	if m.outsideActiveSummary(landed) {
+		t.Errorf("landed on a row outside the selected item: %q", landed.content)
+	}
+	if got := newLineOf(landed); got != 0 && (got < 88 || got > 95) {
+		t.Errorf("landed on new-file line %d, want one inside fix-b's range", got)
+	}
+}
+
+// Without a selection nothing changes — the filter-aware skip must not alter
+// ordinary navigation.
+func TestChunkJumpsAreUnchangedWithNoSelection(t *testing.T) {
+	m := summaryModel(t)
+	m.fullFile = true
+	m.buildLines()
+	changes := 0
+	for i := range m.lines {
+		if m.lineHasChange(i) {
+			changes++
+		}
+	}
+	if changes != 4 {
+		t.Errorf("counted %d change rows with no selection, want all 4", changes)
+	}
+}
+
+// The sidebar walks past files the selected item says nothing about, so [ and ]
+// cross straight to a file that has something to show.
+func TestFileNavigationSkipsUnclaimedFiles(t *testing.T) {
+	km := DefaultKeyMap()
+	m := newSidebarModel(&km)
+	m.files = []types.ChangedFile{{Path: "a.go"}, {Path: "unrelated.go"}, {Path: "b.go"}}
+	m.summaryItems = []types.SummaryItem{
+		{ID: "fix", Text: "a fix", Targets: []types.SummaryTarget{
+			{Path: "a.go"}, {Path: "b.go"},
+		}},
+	}
+	m.activeSummaryID = "fix"
+	m.cursor = 0
+
+	if m.summaryFadesRow(1) != true {
+		t.Fatal("unrelated.go should be faded by the selection")
+	}
+	if m.summaryFadesRow(2) != false {
+		t.Fatal("b.go is claimed and should not be faded")
+	}
+
+	m.navigateFile(+1)
+	if m.cursor != 2 {
+		t.Errorf("cursor = %d after one step, want 2 (unrelated.go skipped)", m.cursor)
+	}
+}
+
+func TestFileNavigationIsUnchangedWithNoSelection(t *testing.T) {
+	km := DefaultKeyMap()
+	m := newSidebarModel(&km)
+	m.files = []types.ChangedFile{{Path: "a.go"}, {Path: "unrelated.go"}, {Path: "b.go"}}
+	m.cursor = 0
+	m.navigateFile(+1)
+	if m.cursor != 1 {
+		t.Errorf("cursor = %d, want 1 — no selection means no skipping", m.cursor)
+	}
+}
+
+// A landing request must survive a file that has nothing to land on. The message
+// for the file being LEFT can arrive first, and under a filter that file often
+// has no chunks at all — clearing the request there loses the landing for the
+// file being entered, which is what made the feature look inert.
+func TestALandingRequestSurvivesAFileWithNoChunks(t *testing.T) {
+	th := DefaultTheme()
+	km := DefaultKeyMap()
+	empty := newDiffViewModel(&th, &km)
+	empty.width, empty.height = 120, 40
+	if empty.LandOnChunkEdge(+1) {
+		t.Error("an empty view cannot have landed on anything")
+	}
+
+	m := summaryModel(t)
+	if !m.LandOnChunkEdge(+1) {
+		t.Error("a view with chunks should report that it landed")
+	}
+}

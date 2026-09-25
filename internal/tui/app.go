@@ -1048,8 +1048,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case loadDiffMsg:
 		var cmd tea.Cmd
 		m.diffView, cmd = m.diffView.Update(msg)
-		if m.pendingChunkLanding != 0 {
-			m.diffView.LandOnChunkEdge(m.pendingChunkLanding)
+		if m.pendingChunkLanding != 0 && m.diffView.LandOnChunkEdge(m.pendingChunkLanding) {
 			m.pendingChunkLanding = 0
 		}
 		// A ctrl+o / ctrl+i landing: the file has finished loading, so the
@@ -1060,7 +1059,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// A new file needs its own source for the comment filter; the cached one
 		// belongs to the file just left.
-		if m.diffView.needsCommentSource() {
+		if m.diffView.needsCommentSource() || m.diffView.needsBaseCommentSource() {
 			return m, tea.Batch(cmd, m.diffView.requestCommentSource())
 		}
 		return m, cmd
@@ -1101,19 +1100,39 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// File content request (from diff style cycle)
 	case requestCommentSourceMsg:
-		// The diff shows fragments; classifying comments needs the file.
+		// The diff shows fragments; classifying comments needs the file. Both
+		// revisions, because an edited comment has half its lines on each side.
 		engine := m.engine
 		path := msg.path
-		return m, func() tea.Msg {
-			content, err := engine.GetFileContent(path)
-			if err != nil {
-				return nil // best effort: the reconstruction still applies
-			}
-			return commentSourceMsg{path: path, content: content}
+		var cmds []tea.Cmd
+		if msg.wantNew {
+			cmds = append(cmds, func() tea.Msg {
+				content, err := engine.GetFileContent(path)
+				if err != nil {
+					return nil // best effort: the reconstruction still applies
+				}
+				return commentSourceMsg{path: path, content: content}
+			})
 		}
+		if msg.wantBase {
+			cmds = append(cmds, func() tea.Msg {
+				content, err := engine.GetBaseFileContent(path)
+				if err != nil {
+					// A file with no old side (newly added) answers with an error
+					// or nothing; either way an empty base is the right answer and
+					// stops the view asking again.
+					return commentSourceMsg{path: path, base: true}
+				}
+				return commentSourceMsg{path: path, content: content, base: true}
+			})
+		}
+		if len(cmds) == 0 {
+			return m, nil
+		}
+		return m, tea.Batch(cmds...)
 
 	case commentSourceMsg:
-		if m.diffView.setCommentSource(msg.path, msg.content) {
+		if m.diffView.setCommentSource(msg.path, msg.content, msg.base) {
 			m.diffView.cursor = m.diffView.nearestSelectable(m.diffView.cursor, 1)
 			m.diffView.ensureVisible()
 		}
@@ -1181,8 +1200,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case loadFileContentMsg:
 		var cmd tea.Cmd
 		m.diffView, cmd = m.diffView.Update(msg)
-		if m.pendingChunkLanding != 0 {
-			m.diffView.LandOnChunkEdge(m.pendingChunkLanding)
+		if m.pendingChunkLanding != 0 && m.diffView.LandOnChunkEdge(m.pendingChunkLanding) {
 			m.pendingChunkLanding = 0
 		}
 		// A ctrl+o / ctrl+i landing: the file has finished loading, so the
@@ -2447,15 +2465,19 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.diffView.ToggleOverlays()
 		return m, nil
 
-	case Matches(key, km.HideComments):
-		m.diffView.CycleCommentFilter()
+	case Matches(key, km.HideComments), Matches(key, km.HideCommentsBack):
+		if Matches(key, km.HideCommentsBack) {
+			m.diffView.CycleCommentFilterBack()
+		} else {
+			m.diffView.CycleCommentFilter()
+		}
 		if label := m.diffView.CommentFilterLabel(); label != "" {
 			m.statusBar.searchInfo = label
 		} else {
 			m.statusBar.searchInfo = "comments shown"
 		}
 		// Turning the filter on is the first moment the full file is needed.
-		if m.diffView.needsCommentSource() {
+		if m.diffView.needsCommentSource() || m.diffView.needsBaseCommentSource() {
 			return m, m.diffView.requestCommentSource()
 		}
 		return m, nil
@@ -2511,7 +2533,7 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		cmd := m.sidebar.navigateFile(-1)
-		if cmd != nil && m.focus == focusMain {
+		if cmd != nil && m.landsOnChunkAfterFileChange() {
 			m.pendingChunkLanding = -1
 		}
 		return m, cmd
@@ -2524,7 +2546,7 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		cmd := m.sidebar.navigateFile(+1)
-		if cmd != nil && m.focus == focusMain {
+		if cmd != nil && m.landsOnChunkAfterFileChange() {
 			m.pendingChunkLanding = +1
 		}
 		return m, cmd
@@ -4818,6 +4840,16 @@ func (m appModel) currentJumpPos() jumpPos {
 
 // recordJump remembers the position being left, so ctrl+o can return to it.
 // Call it BEFORE the cursor moves — the list holds departures, not arrivals.
+// landsOnChunkAfterFileChange reports whether crossing into a file should put the
+// cursor on a change block rather than at the top. Normally that is a diff-pane
+// gesture, so sidebar navigation leaves the cursor alone. With a summary item
+// selected it applies from either pane: the reviewer asked to see one item, and
+// arriving at the top of a file whose only relevant change is 200 lines down
+// makes them hunt for what the filter already knows.
+func (m appModel) landsOnChunkAfterFileChange() bool {
+	return m.focus == focusMain || m.activeSummaryID != ""
+}
+
 func (m *appModel) recordJump() {
 	m.jumps.push(m.currentJumpPos())
 }

@@ -29,18 +29,19 @@ type KeyMap struct {
 	ToggleSidebar []string
 
 	// Diff view
-	ScrollDown      []string
-	ScrollUp        []string
-	ScrollLeft      []string
-	ScrollRight     []string
-	ScrollHome      []string
-	ScrollFirstChar []string
-	ScrollEnd       []string
-	Wrap            []string
-	ToggleDiff      []string
-	ToggleFullDiff  []string
-	ToggleOverlays  []string // hide/show inline comments + annotations
-	HideComments    []string // dim/show source-code comment-only lines
+	ScrollDown       []string
+	ScrollUp         []string
+	ScrollLeft       []string
+	ScrollRight      []string
+	ScrollHome       []string
+	ScrollFirstChar  []string
+	ScrollEnd        []string
+	Wrap             []string
+	ToggleDiff       []string
+	ToggleFullDiff   []string
+	ToggleOverlays   []string // hide/show inline comments + annotations
+	HideComments     []string // dim/show source-code comment-only lines
+	HideCommentsBack []string // the same cycle in reverse
 	// ExpandComment expands the review comment under the cursor; ExpandAllComments
 	// expands every comment in the open file at once. Separate actions because
 	// reading one comment in passing and reading the whole conversation before
@@ -147,7 +148,8 @@ func DefaultKeyMap() KeyMap {
 		ToggleOverlays:  []string{"O"},
 		// m for "mute the comments" — a right-hand home-row key, and vim's own m
 		// (set mark) is not bound here; marks are walked with < and >.
-		HideComments: []string{"m"},
+		HideComments:     []string{"m"},
+		HideCommentsBack: []string{"M"},
 		// space was already the single-comment toggle, but hardcoded, so it could
 		// not be rebound. E pairs with e/z in the sidebar tree: expand everything.
 		ExpandComment:     []string{"space"},
@@ -247,6 +249,7 @@ var keyActions = map[string]func(*KeyMap) *[]string{
 	"toggle_full_diff":        func(km *KeyMap) *[]string { return &km.ToggleFullDiff },
 	"toggle_overlays":         func(km *KeyMap) *[]string { return &km.ToggleOverlays },
 	"hide_comments":           func(km *KeyMap) *[]string { return &km.HideComments },
+	"hide_comments_back":      func(km *KeyMap) *[]string { return &km.HideCommentsBack },
 	"expand_comment":          func(km *KeyMap) *[]string { return &km.ExpandComment },
 	"expand_all_comments":     func(km *KeyMap) *[]string { return &km.ExpandAllComments },
 	"open_doc_ref":            func(km *KeyMap) *[]string { return &km.OpenDocRef },

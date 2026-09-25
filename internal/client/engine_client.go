@@ -670,8 +670,18 @@ func (c *EngineClient) getFileDiff(path string, full bool) (*types.DiffResult, e
 	return r.Diff, nil
 }
 
+func (c *EngineClient) GetBaseFileContent(path string) (string, error) {
+	return c.fileContent(path, true)
+}
+
 func (c *EngineClient) GetFileContent(path string) (string, error) {
-	resp, err := c.request(&protocol.GetFileContentMsg{Type: protocol.TypeGetFileContent, Path: path})
+	return c.fileContent(path, false)
+}
+
+func (c *EngineClient) fileContent(path string, base bool) (string, error) {
+	resp, err := c.request(&protocol.GetFileContentMsg{
+		Type: protocol.TypeGetFileContent, Path: path, Base: base,
+	})
 	if err != nil {
 		return "", err
 	}

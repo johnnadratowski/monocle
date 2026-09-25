@@ -275,6 +275,10 @@ type GetFileDiffResponse struct {
 type GetFileContentMsg struct {
 	Type string `json:"type"`
 	Path string `json:"path"`
+	// Base asks for the file as the OLD side of the diff has it rather than the
+	// working tree. A flag rather than a second message type: it is the same
+	// question about the same file, asked of a different revision.
+	Base bool `json:"base,omitempty"`
 }
 
 type GetFileContentResponse struct {
