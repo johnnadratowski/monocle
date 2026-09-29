@@ -51,6 +51,7 @@ type ReviewCmd struct {
 	Annotate     ReviewAnnotateCmd     `cmd:"annotate" help:"Attach agent rationale + doc links to code ranges (shown to the reviewer, not sent back as feedback)"`
 	SetName      ReviewSetNameCmd      `cmd:"set-name" help:"Set a human-friendly name for the current review (shown in the top bar)"`
 	SetSummary   ReviewSetSummaryCmd   `cmd:"set-summary" help:"Tell the reviewer what this round fixed, as a short tagged list"`
+	SetLabel     ReviewSetLabelCmd     `cmd:"set-label" help:"Name this Monocle, shown in the TUI's top-left so tiled panes are tellable apart"`
 	SetBaseRef   ReviewSetBaseRefCmd   `cmd:"set-base-ref" help:"Diff against a commit so already-committed work is reviewed"`
 }
 
@@ -144,6 +145,49 @@ func (cmd *ReviewSetNameCmd) Run() error {
 		return fmt.Errorf("set-name: %w", err)
 	}
 	r := resp.(*protocol.SetReviewNameResponse)
+	if cmd.JSON {
+		return printJSON(r)
+	}
+	if !r.Success {
+		return fmt.Errorf("%s", r.Message)
+	}
+	fmt.Println(r.Message)
+	return nil
+}
+
+// ReviewSetLabelCmd names the Monocle this agent is talking to. It identifies
+// the pane, not the review, which is why it is a separate command from set-name
+// and why an approval does not clear it.
+type ReviewSetLabelCmd struct {
+	WorkDirFlag
+	Socket string `help:"Override socket path" env:"MONOCLE_SOCKET" default:""`
+	Label  string `arg:"" optional:"" help:"What to call this Monocle, e.g. \"ott (2)\". Omit to clear it."`
+	JSON   bool   `help:"Output as JSON" default:"false"`
+}
+
+func (cmd *ReviewSetLabelCmd) Run() error {
+	socketPath, err := resolveSocketForWorkDir(cmd.Socket, cmd.WorkDir)
+	if err != nil {
+		return err
+	}
+	c, err := client.Connect(socketPath)
+	if err != nil {
+		if errors.Is(err, client.ErrNotRunning) {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return err
+	}
+	defer c.Close()
+
+	resp, err := c.Request(
+		&protocol.SetAgentLabelMsg{Type: protocol.TypeSetAgentLabel, Label: cmd.Label},
+		client.DefaultTimeout,
+	)
+	if err != nil {
+		return fmt.Errorf("set-label: %w", err)
+	}
+	r := resp.(*protocol.SetAgentLabelResponse)
 	if cmd.JSON {
 		return printJSON(r)
 	}

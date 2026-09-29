@@ -394,6 +394,7 @@ monocle review remove-files <paths...> [--json]          Remove previously-added
 monocle review group-files [--file M] [--replace] [--json]  Group/order changed files (grouped view)
 monocle review annotate [--file M] [--replace] [--json]    Annotate code ranges with doc links
 monocle review set-name <name> [--force] [--json]        Start/name a review (refused if one is open with comments)
+monocle review set-label [label] [--json]                Name this Monocle in the TUI's top-left (omit to clear)
 monocle review set-base-ref <ref> [--reset] [--json]     Review already-committed work (diff against <ref>)
 ```
 

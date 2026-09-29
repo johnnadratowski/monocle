@@ -169,6 +169,8 @@ func Decode(data []byte) (any, error) {
 		msg = &ReviewCommitsMsg{}
 	case TypeSetReviewSummary:
 		msg = &SetReviewSummaryMsg{}
+	case TypeSetAgentLabel:
+		msg = &SetAgentLabelMsg{}
 	case TypeGetSnapshots:
 		msg = &GetSnapshotsMsg{}
 	case TypeSetSnapshotBase:
@@ -281,6 +283,8 @@ func Decode(data []byte) (any, error) {
 		msg = &ReviewCommitsResponse{}
 	case TypeSetReviewSummaryResponse:
 		msg = &SetReviewSummaryResponse{}
+	case TypeSetAgentLabelResponse:
+		msg = &SetAgentLabelResponse{}
 	case TypeGetSnapshotsResponse:
 		msg = &GetSnapshotsResponse{}
 	case TypeSetSnapshotBaseResponse:

@@ -93,11 +93,16 @@ type ReviewSession struct {
 	// opening the summary wants the shape of the round before its parts, not an
 	// essay standing between them and the diff.
 	SummaryOverview string
-	FileStatuses    map[string]bool // path -> reviewed
-	IgnorePatterns  []string
-	ReviewRound     int
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	// AgentLabel is what the agent calls itself, shown in place of the product
+	// name in the TUI's top-left. It identifies the PANE, not the review, so
+	// unlike ReviewName it outlives an approval and every round after it — a
+	// tiled fleet of identical headers is the problem it exists to solve.
+	AgentLabel     string
+	FileStatuses   map[string]bool // path -> reviewed
+	IgnorePatterns []string
+	ReviewRound    int
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }
 
 type ChangedFile struct {

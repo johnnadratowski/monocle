@@ -64,6 +64,7 @@ const (
 	TypeRecentCommits     = "recent_commits"
 	TypeReviewCommits     = "review_commits"
 	TypeSetReviewSummary  = "set_review_summary"
+	TypeSetAgentLabel     = "set_agent_label"
 
 	// Snapshots
 	TypeGetSnapshots      = "get_snapshots"
@@ -149,6 +150,7 @@ const (
 	TypeRecentCommitsResponse     = "recent_commits_response"
 	TypeReviewCommitsResponse     = "review_commits_response"
 	TypeSetReviewSummaryResponse  = "set_review_summary_response"
+	TypeSetAgentLabelResponse     = "set_agent_label_response"
 
 	// Snapshots
 	TypeGetSnapshotsResponse      = "get_snapshots_response"
@@ -651,6 +653,21 @@ type SetReviewSummaryResponse struct {
 	// applied silently is one the sender cannot correct for — and trimming is
 	// worse than an unmatched target, because the text still reads as whole.
 	Truncated []string `json:"truncated"`
+}
+
+// SetAgentLabelMsg names the agent behind this engine, for the TUI's top-left.
+// It identifies the pane rather than the review, so it is deliberately not part
+// of the review lifecycle: approving does not clear it.
+type SetAgentLabelMsg struct {
+	Type  string `json:"type"`
+	Label string `json:"label"`
+}
+
+type SetAgentLabelResponse struct {
+	Type    string `json:"type"`
+	Success bool   `json:"success"`
+	Label   string `json:"label,omitempty"`
+	Message string `json:"message,omitempty"`
 }
 
 // ReviewCommitsMsg asks what commits the current review contains — base..HEAD,

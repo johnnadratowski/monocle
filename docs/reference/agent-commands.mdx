@@ -377,6 +377,38 @@ In MCP tools mode, call the `set_review_name` tool with `name` (required) and op
 
 ---
 
+## `monocle review set-label`
+
+Name the Monocle you are talking to. The label replaces the product name in the **top-left of the reviewer's TUI**, so a screen tiled with several Monocle panes is tellable apart at a glance.
+
+```bash
+monocle review set-label "ott (2)"      # name this Monocle
+monocle review set-label                # clear it
+```
+
+Notes:
+
+- **It names the pane, not the review.** Unlike [`set-name`](#monocle-review-set-name) it survives approvals, rounds and TUI restarts — it is cleared only by sending an empty one.
+- It is not a handover, so setting it does not restart the "sent N ago" clock in the top bar.
+- Trimmed to 32 characters, since it shares the bar with the version and the review name.
+- With no label, the header falls back to the repo directory's basename — so an unlabelled pane is still identifiable.
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--json` | Output as JSON. |
+
+### MCP tool equivalent
+
+In MCP tools mode, pass `label` to the `set_repo` tool — every agent already calls it, so the label costs no extra call:
+
+```json
+{"path": "/repo/worktrees/feature-2", "label": "ott (2)"}
+```
+
+---
+
 ## `monocle review set-summary`
 
 Tell the reviewer what this round fixed, as a short list they can read before the diff. Each item tags the files and line ranges it accounts for, so the reviewer can select one and see only its hunks.

@@ -284,6 +284,11 @@ type setRepoParams struct {
 	// Path is any path inside the repository/worktree to review. The repo root
 	// is derived from it. Empty means the current working directory.
 	Path string `json:"path,omitempty"`
+	// Label names this Monocle in the reviewer's TUI, replacing the product name
+	// in its top-left. Set it to whatever identifies you to the human — a tiled
+	// fleet of Monocle panes is otherwise indistinguishable. Omitted leaves any
+	// existing label alone.
+	Label string `json:"label,omitempty"`
 }
 
 // -- Tool handlers --
@@ -478,9 +483,25 @@ func handleSetRepo(ctx context.Context, req *sdkmcp.CallToolRequest, params setR
 	if name == "" {
 		name = "(unnamed)"
 	}
+
+	// Label after binding, so it lands on the engine the agent just claimed
+	// rather than on whichever one it was pointed at before.
+	labelled := ""
+	if params.Label != "" {
+		lr, err := c.Request(
+			&protocol.SetAgentLabelMsg{Type: protocol.TypeSetAgentLabel, Label: params.Label},
+			client.DefaultTimeout,
+		)
+		if err == nil {
+			if r, ok := lr.(*protocol.SetAgentLabelResponse); ok && r.Success {
+				labelled = fmt.Sprintf(" This Monocle is labelled %q in the reviewer's window.", r.Label)
+			}
+		}
+	}
+
 	return textResult(fmt.Sprintf(
-		"Monocle is now bound to %s (review: %s). All review tools now target this repo.",
-		repoRoot, name,
+		"Monocle is now bound to %s (review: %s). All review tools now target this repo.%s",
+		repoRoot, name, labelled,
 	)), nil, nil
 }
 

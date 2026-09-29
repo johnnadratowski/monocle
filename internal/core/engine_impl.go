@@ -665,6 +665,47 @@ func (e *Engine) handleSetReviewSummary(msg *protocol.SetReviewSummaryMsg) *prot
 	}
 }
 
+// handleSetAgentLabel records what the agent calls itself. The TUI shows it in
+// place of the product name, because a tiled fleet of Monocle panes is otherwise
+// six identical headers.
+//
+// Not part of the review lifecycle on purpose: it names the pane, so it outlives
+// approvals and rounds, and sending it is not a handover — a label arriving
+// must not reset the review's age or count as work put in front of the reviewer.
+func (e *Engine) handleSetAgentLabel(msg *protocol.SetAgentLabelMsg) *protocol.SetAgentLabelResponse {
+	label := types.TrimSummaryText(msg.Label, agentLabelLimit)
+
+	e.mu.Lock()
+	if e.current == nil {
+		e.mu.Unlock()
+		return &protocol.SetAgentLabelResponse{
+			Type: protocol.TypeSetAgentLabelResponse, Success: false, Message: "no active session",
+		}
+	}
+	e.current.AgentLabel = label
+	err := e.database.UpdateSession(e.current)
+	e.mu.Unlock()
+	if err != nil {
+		return &protocol.SetAgentLabelResponse{
+			Type: protocol.TypeSetAgentLabelResponse, Success: false, Message: err.Error(),
+		}
+	}
+
+	e.emit(EventFileChanged, EventPayload{Kind: EventFileChanged})
+
+	message := fmt.Sprintf("This Monocle is now labelled %q.", label)
+	if label == "" {
+		message = "Label cleared; the TUI falls back to the repo directory name."
+	}
+	return &protocol.SetAgentLabelResponse{
+		Type: protocol.TypeSetAgentLabelResponse, Success: true, Label: label, Message: message,
+	}
+}
+
+// agentLabelLimit keeps a label to something that fits a header beside the
+// version and the review name. Longer is trimmed rather than refused.
+const agentLabelLimit = 32
+
 // noteReviewSent stamps the moment the agent handed the current round over, if
 // it has not already been stamped. Only the first send of a round counts: an
 // agent that follows send_artifact with add_files and set_file_groups made one

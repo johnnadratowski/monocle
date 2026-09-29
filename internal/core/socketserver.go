@@ -748,6 +748,8 @@ func (s *SocketServer) routeMessage(msg any) any {
 		return s.engine.handleReviewCommits(m)
 	case *protocol.SetReviewSummaryMsg:
 		return s.engine.handleSetReviewSummary(m)
+	case *protocol.SetAgentLabelMsg:
+		return s.engine.handleSetAgentLabel(m)
 	case *protocol.GetSnapshotsMsg:
 		return s.engine.handleGetSnapshots(m)
 	case *protocol.SetSnapshotBaseMsg:

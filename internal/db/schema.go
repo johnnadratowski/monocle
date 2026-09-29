@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-const schemaVersion = 16
+const schemaVersion = 17
 
 const dropSQL = `
 DROP TABLE IF EXISTS review_snapshot_files;
@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 	base_ref TEXT NOT NULL,
 	review_name TEXT NOT NULL DEFAULT '',
 	summary_overview TEXT NOT NULL DEFAULT '',
+	agent_label TEXT NOT NULL DEFAULT '',
 	review_sent_at DATETIME,
 	auto_advance_ref INTEGER NOT NULL DEFAULT 1,
 	selected_ref TEXT NOT NULL DEFAULT '',
@@ -270,6 +271,7 @@ var addedColumns = map[string]map[string]string{
 	"sessions": {
 		"review_sent_at":   "DATETIME",
 		"summary_overview": "TEXT NOT NULL DEFAULT ''",
+		"agent_label":      "TEXT NOT NULL DEFAULT ''",
 	},
 }
 

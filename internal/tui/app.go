@@ -307,6 +307,9 @@ type appModel struct {
 	// summaryOverview is the round in a sentence or two, shown above the items.
 	// Not on the diff view or sidebar: nothing filters by it.
 	summaryOverview string
+	// agentLabel is what the agent calls itself, shown in the top-left in place
+	// of the product name so tiled panes are tellable apart.
+	agentLabel      string
 	activeSummaryID string
 
 	// buildWatch notices when the binary this process is running from is replaced
@@ -579,6 +582,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.reviewSentAt = session.SentAt
 			m.setSummaryItems(session.SummaryItems)
 			m.summaryOverview = session.SummaryOverview
+			m.agentLabel = session.AgentLabel
 		}
 		m.statusBar.fileCount = len(msg.files)
 		m.statusBar.socketStarted = m.engine.GetSocketPath() != ""
@@ -714,6 +718,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.reviewSentAt = session.SentAt
 			m.setSummaryItems(session.SummaryItems)
 			m.summaryOverview = session.SummaryOverview
+			m.agentLabel = session.AgentLabel
 		}
 		// A new review's first refresh: go back to the top. This runs ahead of
 		// the selection-preserving logic below, which exists so the agent
@@ -1769,6 +1774,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.reviewSentAt = session.SentAt
 			m.setSummaryItems(session.SummaryItems)
 			m.summaryOverview = session.SummaryOverview
+			m.agentLabel = session.AgentLabel
 			m.annotationCount = len(session.Annotations)
 		}
 		// If viewing a content item or an added file, it no longer exists —
@@ -4359,12 +4365,28 @@ func shortHash(h string) string {
 // the left (with a mismatch warning when the connected engine's version differs),
 // and the review name + churn metrics on the right when an agent has sent content
 // for review.
+// paneName is what the top-left calls this window. The agent's label when it has
+// given one, the repo directory otherwise, and the product name only when there
+// is no repo either — a tiled fleet of Monocle panes is six identical headers,
+// and the product name is the one thing that cannot tell them apart.
+func (m appModel) paneName() string {
+	if m.agentLabel != "" {
+		return m.agentLabel
+	}
+	if m.repoRoot != "" {
+		if base := filepath.Base(m.repoRoot); base != "" && base != "." && base != string(filepath.Separator) {
+			return base
+		}
+	}
+	return "monocle"
+}
+
 func (m appModel) renderTitleBar() string {
 	nameStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("4"))
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 	warnStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Bold(true)
 
-	left := nameStyle.Render(" o_(◉) monocle")
+	left := nameStyle.Render(" o_(◉) " + m.paneName())
 
 	client := m.clientVersion
 	if client == "" {
