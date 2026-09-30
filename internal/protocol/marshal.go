@@ -171,6 +171,12 @@ func Decode(data []byte) (any, error) {
 		msg = &SetReviewSummaryMsg{}
 	case TypeSetAgentLabel:
 		msg = &SetAgentLabelMsg{}
+	case TypeSetWalkthrough:
+		msg = &SetWalkthroughMsg{}
+	case TypeGotoStop:
+		msg = &GotoStopMsg{}
+	case TypeSetWalkthroughStop:
+		msg = &SetWalkthroughStopMsg{}
 	case TypeGetSnapshots:
 		msg = &GetSnapshotsMsg{}
 	case TypeSetSnapshotBase:
@@ -285,6 +291,12 @@ func Decode(data []byte) (any, error) {
 		msg = &SetReviewSummaryResponse{}
 	case TypeSetAgentLabelResponse:
 		msg = &SetAgentLabelResponse{}
+	case TypeSetWalkthroughResponse:
+		msg = &SetWalkthroughResponse{}
+	case TypeGotoStopResponse:
+		msg = &GotoStopResponse{}
+	case TypeSetWalkthroughStopResponse:
+		msg = &SetWalkthroughStopResponse{}
 	case TypeGetSnapshotsResponse:
 		msg = &GetSnapshotsResponse{}
 	case TypeSetSnapshotBaseResponse:

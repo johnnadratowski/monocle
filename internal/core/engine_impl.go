@@ -1393,6 +1393,11 @@ func (e *Engine) clearReviewLocked() error {
 	e.current.SummaryItems = nil
 	e.current.SummaryOverview = ""
 
+	// A tour explains one review; the next one needs its own.
+	if err := e.dropWalkthroughLocked(sessionID); err != nil {
+		return fmt.Errorf("clear walkthrough: %w", err)
+	}
+
 	if err := e.database.ResetAllReviewed(sessionID); err != nil {
 		return fmt.Errorf("reset reviewed: %w", err)
 	}
@@ -1442,6 +1447,9 @@ func (e *Engine) clearReviewContent(sessionID string) {
 		e.current.ContentItems = nil
 		e.current.AdditionalFiles = nil
 	}
+	// The approved review's tour goes with it, or the next review would open
+	// on stops that describe code already merged.
+	_ = e.dropWalkthroughLocked(sessionID)
 	e.mu.Unlock()
 }
 

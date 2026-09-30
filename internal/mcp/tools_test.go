@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -147,4 +148,35 @@ func TestEmptyFeedbackMessage(t *testing.T) {
 			t.Errorf("expected the unbound wording, got %q", got)
 		}
 	})
+}
+
+func TestWalkthroughFromParams(t *testing.T) {
+	got := walkthroughFromParams(setWalkthroughParams{Title: "T", Stops: []walkthroughStopParam{{
+		ID: "1.2", Title: "t", File: "a.go", LineStart: 3, LineEnd: 5, Note: "n", Layout: "review",
+		Related: []relatedParam{{Doc: "b.go", StartLine: 7, Label: "caller"}},
+		Views:   []stopViewParam{{Kind: "video", Target: "d.webm", Label: "demo"}},
+	}}})
+	want := types.Walkthrough{Title: "T", Stops: []types.WalkthroughStop{{
+		ID: "1.2", Title: "t", File: "a.go", LineStart: 3, LineEnd: 5, Note: "n", Layout: "review",
+		Related: []types.DocRef{{Kind: types.DocRefFile, Doc: "b.go", StartLine: 7, Label: "caller"}},
+		Views:   []types.StopView{{Kind: "video", Target: "d.webm", Label: "demo"}},
+	}}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got  %+v\nwant %+v", got, want)
+	}
+}
+
+// Both tour tools must be described: an empty description is an MCP tool an
+// agent has no reason to call.
+func TestTourToolsAreDescribed(t *testing.T) {
+	for _, name := range []string{"set_walkthrough", "goto_stop"} {
+		if toolDescriptions()[name] == "" {
+			t.Errorf("tools.json has no description for %s", name)
+		}
+	}
+	for _, name := range []string{"set_walkthrough", "goto_stop"} {
+		if !strings.Contains(toolInstructions, name) {
+			t.Errorf("the server instructions never mention %s", name)
+		}
+	}
 }

@@ -626,6 +626,7 @@ func isReviewSend(msg any) bool {
 	switch msg.(type) {
 	case *protocol.SetReviewNameMsg,
 		*protocol.SetReviewSummaryMsg,
+		*protocol.SetWalkthroughMsg,
 		*protocol.SubmitContentMsg,
 		*protocol.SubmitDiffMsg,
 		*protocol.AddAdditionalFilesMsg,
@@ -750,6 +751,12 @@ func (s *SocketServer) routeMessage(msg any) any {
 		return s.engine.handleSetReviewSummary(m)
 	case *protocol.SetAgentLabelMsg:
 		return s.engine.handleSetAgentLabel(m)
+	case *protocol.SetWalkthroughMsg:
+		return s.engine.handleSetWalkthrough(m)
+	case *protocol.GotoStopMsg:
+		return s.engine.handleGotoStop(m)
+	case *protocol.SetWalkthroughStopMsg:
+		return s.engine.handleSetWalkthroughStop(m)
 	case *protocol.GetSnapshotsMsg:
 		return s.engine.handleGetSnapshots(m)
 	case *protocol.SetSnapshotBaseMsg:

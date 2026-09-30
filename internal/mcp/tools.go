@@ -107,6 +107,117 @@ func registerTools(s *sdkmcp.Server) {
 		Name:        "set_review_summary",
 		Description: desc["set_review_summary"],
 	}, handleSetReviewSummary)
+
+	sdkmcp.AddTool(s, &sdkmcp.Tool{
+		Name:        "set_walkthrough",
+		Description: desc["set_walkthrough"],
+	}, handleSetWalkthrough)
+
+	sdkmcp.AddTool(s, &sdkmcp.Tool{
+		Name:        "goto_stop",
+		Description: desc["goto_stop"],
+	}, handleGotoStop)
+}
+
+// relatedParam is a repo file to open beside a tour stop, at a line.
+type relatedParam struct {
+	Doc       string `json:"doc"`
+	StartLine int    `json:"start_line,omitempty"`
+	EndLine   int    `json:"end_line,omitempty"`
+	Label     string `json:"label,omitempty"`
+}
+
+type stopViewParam struct {
+	Kind   string `json:"kind,omitempty"` // image | video | markdown | url | artifact; inferred from target when omitted
+	Target string `json:"target"`
+	Label  string `json:"label,omitempty"`
+}
+
+type walkthroughStopParam struct {
+	ID        string          `json:"id"`
+	Title     string          `json:"title,omitempty"`
+	File      string          `json:"file,omitempty"`
+	LineStart int             `json:"line_start,omitempty"`
+	LineEnd   int             `json:"line_end,omitempty"`
+	Note      string          `json:"note,omitempty"`
+	Related   []relatedParam  `json:"related,omitempty"`
+	Views     []stopViewParam `json:"views,omitempty"`
+	Layout    string          `json:"layout,omitempty"`
+}
+
+type setWalkthroughParams struct {
+	Title string                 `json:"title,omitempty"`
+	Stops []walkthroughStopParam `json:"stops"`
+}
+
+// walkthroughFromParams converts the tool's arguments into the domain type.
+func walkthroughFromParams(p setWalkthroughParams) types.Walkthrough {
+	w := types.Walkthrough{Title: p.Title, Stops: make([]types.WalkthroughStop, 0, len(p.Stops))}
+	for _, s := range p.Stops {
+		stop := types.WalkthroughStop{
+			ID: s.ID, Title: s.Title, File: s.File, LineStart: s.LineStart, LineEnd: s.LineEnd,
+			Note: s.Note, Layout: s.Layout,
+		}
+		for _, r := range s.Related {
+			stop.Related = append(stop.Related, types.DocRef{
+				Kind: types.DocRefFile, Doc: r.Doc, Label: r.Label, StartLine: r.StartLine, EndLine: r.EndLine,
+			})
+		}
+		for _, v := range s.Views {
+			stop.Views = append(stop.Views, types.StopView{Kind: v.Kind, Target: v.Target, Label: v.Label})
+		}
+		w.Stops = append(w.Stops, stop)
+	}
+	return w
+}
+
+func handleSetWalkthrough(ctx context.Context, req *sdkmcp.CallToolRequest, params setWalkthroughParams) (*sdkmcp.CallToolResult, any, error) {
+	c, guard := boundClient()
+	if guard != nil {
+		return guard, nil, nil
+	}
+	defer c.Close()
+
+	resp, err := c.Request(
+		&protocol.SetWalkthroughMsg{Type: protocol.TypeSetWalkthrough, Walkthrough: walkthroughFromParams(params)},
+		client.DefaultTimeout,
+	)
+	if err != nil {
+		return errResult("request: %v", err), nil, nil
+	}
+	r, ok := resp.(*protocol.SetWalkthroughResponse)
+	if !ok {
+		return errResult("unexpected response %T", resp), nil, nil
+	}
+	if !r.Success {
+		return errResult("set_walkthrough: %s", r.Message), nil, nil
+	}
+	return textResult(r.Message), nil, nil
+}
+
+type gotoStopParams struct {
+	ID string `json:"id"`
+}
+
+func handleGotoStop(ctx context.Context, req *sdkmcp.CallToolRequest, params gotoStopParams) (*sdkmcp.CallToolResult, any, error) {
+	c, guard := boundClient()
+	if guard != nil {
+		return guard, nil, nil
+	}
+	defer c.Close()
+
+	resp, err := c.Request(&protocol.GotoStopMsg{Type: protocol.TypeGotoStop, ID: params.ID}, client.DefaultTimeout)
+	if err != nil {
+		return errResult("request: %v", err), nil, nil
+	}
+	r, ok := resp.(*protocol.GotoStopResponse)
+	if !ok {
+		return errResult("unexpected response %T", resp), nil, nil
+	}
+	if !r.Success {
+		return errResult("goto_stop: %s", r.Message), nil, nil
+	}
+	return textResult(r.Message), nil, nil
 }
 
 type summaryTargetParams struct {

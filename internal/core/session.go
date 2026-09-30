@@ -99,6 +99,13 @@ func (sm *SessionManager) ResumeSession(sessionID string) (*types.ReviewSession,
 	}
 	session.SummaryItems = summary
 
+	// A tour that fails to decode is dropped rather than failing the resume:
+	// the review is still reviewable without it, and the agent can resend it.
+	if tour, stop, err := sm.db.GetWalkthrough(session.ID); err == nil && tour != nil {
+		session.Walkthrough = tour
+		session.WalkthroughStop = stop
+	}
+
 	// Build file statuses map
 	session.FileStatuses = make(map[string]bool)
 	for _, f := range files {

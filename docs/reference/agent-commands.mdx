@@ -512,6 +512,95 @@ The base ref is scoped to one review. After the reviewer submits (approve or req
 
 ---
 
+## `monocle review set-walkthrough`
+
+Give the reviewer a **guided tour** of the review: an ordered list of stops they step through with `.` (next) and `,` (previous). Each stop puts the diff cursor on a range, shows your note about it in the pane under the diff, and can open related files beside it and hand screenshots or recordings to the reviewer's [on-stop command](/configuration/config-file). The reviewer asks about a stop by its id ("1.2 — does `x` get hoisted here?"), and you answer with [`goto-stop`](#monocle-review-goto-stop).
+
+```bash
+monocle review set-walkthrough --file tour.json
+cat tour.json | monocle review set-walkthrough
+monocle review set-walkthrough --clear          # withdraw the tour
+```
+
+A tour file is a JSON object (or a bare array of stops):
+
+```json
+{
+  "title": "Token refresh",
+  "stops": [
+    {
+      "id": "1.1",
+      "title": "Where the refresh starts",
+      "file": "src/auth/session.ts",
+      "line_start": 40,
+      "line_end": 52,
+      "note": "The refresh is **scheduled**, not awaited — a slow IdP no longer blocks the request.",
+      "related": [{"doc": "src/auth/idp.ts", "start_line": 12}],
+      "views": [{"kind": "video", "target": "recordings/refresh.webm", "label": "Before/after"}],
+      "layout": "review"
+    },
+    {"id": "1.2", "title": "Where it lands", "file": "src/db/tokens.sql", "line_start": 8}
+  ]
+}
+```
+
+### Stop fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `id` | Yes | The label the reviewer sees and types, e.g. `1.2`. Unique within the tour; a stop sent without one is numbered by its position. |
+| `title` | No | One line, shown as `1.2 · Title` above the note. |
+| `file` | No | Repo-relative file in the review. Omit for a stop with no code anchor (a stop that shows a recording, say). |
+| `line_start` / `line_end` | No | **New-file** line numbers. The cursor lands on `line_start` and the range is marked in the gutter; omit for the file as a whole. |
+| `note` | No | Markdown shown in the doc pane. Say what matters here: the decision, the side effect, the risk. |
+| `related` | No | Repo files to open beside the diff, each `{"doc": path, "start_line": n}`. They open together in **one reusable tmux pane** (`nvim -o` for vim/nvim, each window at its line). |
+| `views` | No | Things to show that are not code, each `{"kind", "target", "label"}`. `kind` is `image`, `video`, `markdown`, `url` or `artifact` (inferred from the target when omitted); `target` is a path (absolute or repo-relative), a URL, or an artifact id. |
+| `layout` | No | A scene name passed through to the on-stop command. monocle never interprets it. |
+
+Notes:
+
+- **Sent wholesale.** A new tour replaces the old one. The reviewer keeps their stop when its id survives the replace, and starts from the first stop otherwise.
+- **Read the response.** It says how many stops the tour has and which one the reviewer is on, and **warns** about any stop whose `file` is not in the review and any `related` file that does not exist. The tour is still set.
+- Unknown fields in a tour file are refused by name, so a typo like `"line"` for `"line_start"` fails loudly instead of landing the stop at the top of its file.
+- The tour goes with the review: clearing the review (`D` / `:clear`) or approving it drops it.
+- Call it after the files are in place (after `set-base-ref` / `add-files` / `set-name`), since stops reference them.
+
+### Flags
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--file` | `-f` | Tour JSON file. Reads stdin when omitted or `-`. |
+| `--clear` | | Withdraw the tour (equivalent to sending no stops). |
+| `--json` | | Output as JSON. |
+
+### MCP tool equivalent
+
+In MCP tools mode, call the `set_walkthrough` tool with `title` and `stops` in the same shape.
+
+---
+
+## `monocle review goto-stop`
+
+Move the reviewer's monocle to a stop of the tour, by its id — the way to answer "1.2 — why is this here?" is to put 1.2 in front of them while you explain.
+
+```bash
+monocle review goto-stop 1.2
+```
+
+The diff jumps to the stop, its note opens, and its related files and on-stop command run, exactly as when the reviewer steps there. An unknown id is an error that lists the valid ones. The response names the stop the reviewer was on before.
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--json` | Output as JSON. |
+
+### MCP tool equivalent
+
+In MCP tools mode, call the `goto_stop` tool with `id`.
+
+---
+
 ## `send_diff` (MCP tool)
 
 Show the reviewer a before/after comparison whose contents you supply directly — for *illustrating* a change rather than reviewing one. Typical uses: pseudocode before/after, two competing design options side by side, or any contrast that is not the state of the repository.

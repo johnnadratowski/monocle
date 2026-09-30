@@ -159,6 +159,7 @@ func (c *EngineClient) dialAndSubscribe() error {
 			string(core.EventFeedbackPickedUp),
 			string(core.EventWaitStatusChanged),
 			string(core.EventActivityChanged),
+			string(core.EventWalkthroughChanged),
 		},
 		Passive: true,
 	}
@@ -867,6 +868,22 @@ func (c *EngineClient) GetAnnotations() []types.Annotation {
 		return nil
 	}
 	return r.Annotations
+}
+
+// SetWalkthroughStop records the stop the reviewer stepped to.
+func (c *EngineClient) SetWalkthroughStop(id string) error {
+	resp, err := c.request(&protocol.SetWalkthroughStopMsg{Type: protocol.TypeSetWalkthroughStop, ID: id})
+	if err != nil {
+		return err
+	}
+	r, ok := resp.(*protocol.SetWalkthroughStopResponse)
+	if !ok {
+		return fmt.Errorf("unexpected response %T", resp)
+	}
+	if r.Error != "" {
+		return errors.New(r.Error)
+	}
+	return nil
 }
 
 // AddAnnotations sends agent annotations to the engine. When replace is true,

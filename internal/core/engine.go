@@ -18,6 +18,10 @@ const (
 	EventFeedbackPickedUp      EventKind = "feedback_picked_up"
 	EventWaitStatusChanged     EventKind = "wait_status_changed"
 	EventActivityChanged       EventKind = "activity_changed"
+	// EventWalkthroughChanged fires when the agent sets, replaces or withdraws
+	// the review's guided tour, or asks for a stop. Status is one of the
+	// WalkthroughEvent* values; ItemID is the stop to show.
+	EventWalkthroughChanged EventKind = "walkthrough_changed"
 )
 
 // EventPayload carries data for an engine event.
@@ -90,6 +94,10 @@ type EngineAPI interface {
 
 	// Annotations (agent-authored)
 	GetAnnotations() []types.Annotation
+
+	// Guided review tour: record the stop the reviewer stepped to. The tour
+	// itself arrives on the session (ReviewSession.Walkthrough).
+	SetWalkthroughStop(id string) error
 
 	// Commenting
 	AddComment(target CommentTarget, commentType types.CommentType, body string) (*types.ReviewComment, error)

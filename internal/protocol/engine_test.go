@@ -107,6 +107,14 @@ func TestEngineMessagesRoundTrip(t *testing.T) {
 		{"ReviewCommitsResponse", &ReviewCommitsResponse{Type: TypeReviewCommitsResponse, Base: "abc123",
 			Commits: []LogEntry{{Hash: "def456", Subject: "fix: escape NULs"}}}},
 		{"ReviewCommitsResponseEmpty", &ReviewCommitsResponse{Type: TypeReviewCommitsResponse}},
+
+		// Guided review tour
+		{"SetWalkthrough", &SetWalkthroughMsg{Type: TypeSetWalkthrough, Walkthrough: types.Walkthrough{Stops: []types.WalkthroughStop{{ID: "1.1"}}}}},
+		{"SetWalkthroughResponse", &SetWalkthroughResponse{Type: TypeSetWalkthroughResponse, Success: true, Count: 1, Current: "1.1"}},
+		{"GotoStop", &GotoStopMsg{Type: TypeGotoStop, ID: "1.2"}},
+		{"GotoStopResponse", &GotoStopResponse{Type: TypeGotoStopResponse, Success: true}},
+		{"SetWalkthroughStop", &SetWalkthroughStopMsg{Type: TypeSetWalkthroughStop, ID: "1.2"}},
+		{"SetWalkthroughStopResponse", &SetWalkthroughStopResponse{Type: TypeSetWalkthroughStopResponse}},
 		{"SetBaseRef", &SetBaseRefMsg{Type: TypeSetBaseRef, Ref: "main"}},
 		{"SetBaseRefExclusive", &SetBaseRefMsg{Type: TypeSetBaseRef, Ref: "main", Exclusive: true}},
 		{"SetBaseRefResponse", &SetBaseRefResponse{Type: TypeSetBaseRefResponse}},

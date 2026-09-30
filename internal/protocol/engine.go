@@ -66,6 +66,11 @@ const (
 	TypeSetReviewSummary  = "set_review_summary"
 	TypeSetAgentLabel     = "set_agent_label"
 
+	// Guided review tour
+	TypeSetWalkthrough     = "set_walkthrough"
+	TypeGotoStop           = "goto_stop"
+	TypeSetWalkthroughStop = "set_walkthrough_stop"
+
 	// Snapshots
 	TypeGetSnapshots      = "get_snapshots"
 	TypeSetSnapshotBase   = "set_snapshot_base"
@@ -151,6 +156,11 @@ const (
 	TypeReviewCommitsResponse     = "review_commits_response"
 	TypeSetReviewSummaryResponse  = "set_review_summary_response"
 	TypeSetAgentLabelResponse     = "set_agent_label_response"
+
+	// Guided review tour
+	TypeSetWalkthroughResponse     = "set_walkthrough_response"
+	TypeGotoStopResponse           = "goto_stop_response"
+	TypeSetWalkthroughStopResponse = "set_walkthrough_stop_response"
 
 	// Snapshots
 	TypeGetSnapshotsResponse      = "get_snapshots_response"
@@ -668,6 +678,52 @@ type SetAgentLabelResponse struct {
 	Success bool   `json:"success"`
 	Label   string `json:"label,omitempty"`
 	Message string `json:"message,omitempty"`
+}
+
+// SetWalkthroughMsg replaces the review's guided tour. An empty stop list
+// withdraws it.
+type SetWalkthroughMsg struct {
+	Type        string            `json:"type"`
+	Walkthrough types.Walkthrough `json:"walkthrough"`
+}
+
+type SetWalkthroughResponse struct {
+	Type    string `json:"type"`
+	Success bool   `json:"success"`
+	Message string `json:"message,omitempty"`
+	Count   int    `json:"count"`
+	// Current is the stop the reviewer is on after the replace: the same stop
+	// when its id survived, the first one otherwise.
+	Current string `json:"current,omitempty"`
+	// Warnings name stops that point at something the reviewer cannot be shown
+	// (a file outside the review, a related file that does not exist). The tour
+	// is still set; these are for the agent to fix.
+	Warnings []string `json:"warnings,omitempty"`
+}
+
+// GotoStopMsg moves the reviewer's TUI to a stop — how the agent answers
+// "1.2 — why is this here?" by putting 1.2 in front of them.
+type GotoStopMsg struct {
+	Type string `json:"type"`
+	ID   string `json:"id"`
+}
+
+type GotoStopResponse struct {
+	Type    string `json:"type"`
+	Success bool   `json:"success"`
+	Message string `json:"message,omitempty"`
+}
+
+// SetWalkthroughStopMsg records the stop the reviewer stepped to. Unlike
+// GotoStopMsg it moves nothing: the TUI sends it after it has already moved.
+type SetWalkthroughStopMsg struct {
+	Type string `json:"type"`
+	ID   string `json:"id"`
+}
+
+type SetWalkthroughStopResponse struct {
+	Type  string `json:"type"`
+	Error string `json:"error,omitempty"`
 }
 
 // ReviewCommitsMsg asks what commits the current review contains — base..HEAD,
