@@ -1262,6 +1262,12 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case relatedPaneMsg:
 		return m.handleRelatedPane(msg), nil
 
+	case onStopDoneMsg:
+		return m.handleOnStopDone(msg), nil
+
+	case tourViewMsg:
+		return m.openStopView(msg.arg)
+
 	// Sidebar selection → load diff (focus stays where it is)
 	case sidebarSelectMsg:
 		return m, m.handleSidebarSelect(msg)
@@ -3056,7 +3062,7 @@ var commandNames = []string{
 	"pause", "unpause", "history",
 	"mark-all-reviewed", "mark-all-unreviewed",
 	"base-artifact-version", "base-ref", "ref", "theme",
-	"relaunch", "stop",
+	"relaunch", "stop", "view",
 }
 
 // matchingCommands returns the command names that start with prefix, in order.
@@ -3149,6 +3155,11 @@ func (m appModel) executeCommand(cmd string) tea.Cmd {
 	if trimmed == "stop" || strings.HasPrefix(trimmed, "stop ") {
 		id := strings.TrimSpace(strings.TrimPrefix(trimmed, "stop"))
 		return func() tea.Msg { return tourGotoMsg{id: id} }
+	}
+	// `:view 2` — open one of the current stop's views.
+	if trimmed == "view" || strings.HasPrefix(trimmed, "view ") {
+		arg := strings.TrimSpace(strings.TrimPrefix(trimmed, "view"))
+		return func() tea.Msg { return tourViewMsg{arg: arg} }
 	}
 	switch trimmed {
 	case "submit":

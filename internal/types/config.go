@@ -19,6 +19,12 @@ type Config struct {
 	Editor         string            `json:"editor"`          // external editor command; overrides $VISUAL/$EDITOR when set
 	MarkdownViewer string            `json:"markdown_viewer"` // external rendered-markdown viewer for artifacts / .md files (default: glow)
 	MediaViewer    string            `json:"media_viewer"`    // external viewer for media artifacts / files (default: Google Chrome)
+	// WalkthroughOnStop is a shell command run (via sh -c, in the repo root,
+	// fire-and-forget) on every guided-tour stop the reviewer settles on, with
+	// MONOCLE_STOP_ID, MONOCLE_REPO_ROOT and MONOCLE_STOP_JSON in its
+	// environment. It is how a stop's screenshots, recordings and window layout
+	// get shown: Monocle itself knows nothing about windows. Empty runs nothing.
+	WalkthroughOnStop string `json:"walkthrough_on_stop"`
 	// EditorMode controls how Ctrl+g / Ctrl+o open a file: "terminal" (take over
 	// Monocle's screen, the default), "tmux_vertical" (side-by-side split),
 	// "tmux_horizontal" (stacked split), or "tmux_window" (new tmux window/tab).

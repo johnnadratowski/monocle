@@ -163,7 +163,7 @@ func (m appModel) settleOnStop(msg tourSettledMsg) (appModel, tea.Cmd) {
 // stopEffects is everything arriving at a stop does outside Monocle's own
 // window. Each runs asynchronously and reports back; none blocks the TUI.
 func (m appModel) stopEffects(stop types.WalkthroughStop) tea.Cmd {
-	return m.openRelated(stop)
+	return tea.Batch(m.openRelated(stop), m.runOnStop(stop))
 }
 
 // stepTour moves one stop forward (+1) or back (-1). The ends clamp rather than

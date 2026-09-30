@@ -20,6 +20,7 @@ When the agent sends a tour, monocle enters **tour mode** on its first stop. Eac
 | `W` | Tour mode on/off. Off hides the note, the marks and the status; your stop is kept, and `.`/`,` or `W` resume there. |
 | `X` | Close the related-files pane. |
 | `:stop <id>` | Jump to a stop by id, e.g. `:stop 1.2`. With no id it lists the stops. |
+| `:view [n]` | Open the stop's nth view (default the first) in your [`media_viewer`](/configuration/config-file) — or `markdown_viewer` for a markdown view. |
 
 The ends clamp: `.` on the last stop tells you it is the end rather than wrapping to the first. A stop with no file — one that exists to show a recording, say — shows its note and leaves the diff where it is. `ctrl+o` returns to wherever a stop jumped you from.
 
@@ -35,6 +36,24 @@ A stop can name **related files** — typically where a change starts, when the 
 The next stop with related files **reuses** that pane (`tmux respawn-pane`) instead of splitting another; a stop without any leaves it as it is. `X` closes it. The pane is split beside monocle's own (stacked instead with `editor_mode: "tmux_horizontal"`), and it does not take focus unless you set `editor_focus: true` — the tour is driven from monocle, and a split that took the keyboard would swallow your next `.`. Related files need monocle to be running inside tmux.
 
 Side effects wait until you rest on a stop for a moment, so holding `.` to skip ahead does not open a pane per stop.
+
+## Screenshots, recordings and layouts
+
+A stop can carry **views** — screenshots, screen recordings, rendered documents, pages, artifacts — and a **layout** name. monocle does not open windows itself on a stop. It hands the stop to one command you configure, [`walkthrough_on_stop`](/configuration/config-file), which it runs on every stop you settle on:
+
+```json
+{ "walkthrough_on_stop": "stage on-stop" }
+```
+
+The command runs with `sh -c` in the repo root, in the background and with a 30-second timeout, so it never blocks the TUI; a failure shows in the status bar with the last line it wrote to stderr. It gets the stop in its environment:
+
+| Variable | Value |
+|----------|-------|
+| `MONOCLE_STOP_ID` | The stop's id, e.g. `1.2` |
+| `MONOCLE_REPO_ROOT` | The repository root |
+| `MONOCLE_STOP_JSON` | The whole stop as JSON — `id`, `title`, `file`, `line_start`, `line_end`, `note`, `related`, `views`, `layout` — with each view's `target` resolved: repo-relative paths made absolute, artifact ids made into the file holding the artifact |
+
+What the command does with it is up to you: open the recording in a browser, arrange windows into the stop's layout, anything. Without one, `:view` opens a stop's views on demand.
 
 ## Asking about a stop
 
