@@ -3,7 +3,28 @@ package main
 import (
 	"strings"
 	"testing"
+
+	"github.com/alecthomas/kong"
 )
+
+// Kong names a command after its FIELD, not its cmd tag, so a field called
+// SetTour shipped as `set-tour` while every doc said set-walkthrough.
+func TestTourCommandsParseByTheirDocumentedNames(t *testing.T) {
+	for _, args := range [][]string{
+		{"review", "set-walkthrough", "--file", "tour.json"},
+		{"review", "set-walkthrough", "--clear"},
+		{"review", "goto-stop", "1.2"},
+	} {
+		var cli CLI
+		parser, err := kong.New(&cli)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := parser.Parse(args); err != nil {
+			t.Errorf("monocle %s: %v", strings.Join(args, " "), err)
+		}
+	}
+}
 
 func TestParseWalkthroughJSON(t *testing.T) {
 	t.Run("a tour object", func(t *testing.T) {

@@ -42,19 +42,19 @@ type CLI struct {
 
 // ReviewCmd groups agent-facing subcommands for interacting with a running Monocle session.
 type ReviewCmd struct {
-	Status       ReviewStatusCmd         `cmd:"status" help:"Check the current review status"`
-	GetFeedback  ReviewGetFeedbackCmd    `cmd:"get-feedback" help:"Retrieve review feedback"`
-	SendArtifact ReviewSendArtifactCmd   `cmd:"send-artifact" help:"Send content to the reviewer"`
-	AddFiles     ReviewAddFilesCmd       `cmd:"add-files" help:"Add files to the review session"`
-	RemoveFiles  ReviewRemoveFilesCmd    `cmd:"remove-files" help:"Remove previously-added files from the review session"`
-	GroupFiles   ReviewGroupFilesCmd     `cmd:"group-files" help:"Assign category/group/order metadata to changed files for the grouped sidebar view"`
-	Annotate     ReviewAnnotateCmd       `cmd:"annotate" help:"Attach agent rationale + doc links to code ranges (shown to the reviewer, not sent back as feedback)"`
-	SetName      ReviewSetNameCmd        `cmd:"set-name" help:"Set a human-friendly name for the current review (shown in the top bar)"`
-	SetSummary   ReviewSetSummaryCmd     `cmd:"set-summary" help:"Tell the reviewer what this round fixed, as a short tagged list"`
-	SetLabel     ReviewSetLabelCmd       `cmd:"set-label" help:"Name this Monocle, shown in the TUI's top-left so tiled panes are tellable apart"`
-	SetBaseRef   ReviewSetBaseRefCmd     `cmd:"set-base-ref" help:"Diff against a commit so already-committed work is reviewed"`
-	SetTour      ReviewSetWalkthroughCmd `cmd:"set-walkthrough" help:"Give the reviewer a guided tour of the review: ordered stops stepped through with . and ,"`
-	GotoStop     ReviewGotoStopCmd       `cmd:"goto-stop" help:"Move the reviewer's Monocle to a stop of the guided tour"`
+	Status         ReviewStatusCmd         `cmd:"status" help:"Check the current review status"`
+	GetFeedback    ReviewGetFeedbackCmd    `cmd:"get-feedback" help:"Retrieve review feedback"`
+	SendArtifact   ReviewSendArtifactCmd   `cmd:"send-artifact" help:"Send content to the reviewer"`
+	AddFiles       ReviewAddFilesCmd       `cmd:"add-files" help:"Add files to the review session"`
+	RemoveFiles    ReviewRemoveFilesCmd    `cmd:"remove-files" help:"Remove previously-added files from the review session"`
+	GroupFiles     ReviewGroupFilesCmd     `cmd:"group-files" help:"Assign category/group/order metadata to changed files for the grouped sidebar view"`
+	Annotate       ReviewAnnotateCmd       `cmd:"annotate" help:"Attach agent rationale + doc links to code ranges (shown to the reviewer, not sent back as feedback)"`
+	SetName        ReviewSetNameCmd        `cmd:"set-name" help:"Set a human-friendly name for the current review (shown in the top bar)"`
+	SetSummary     ReviewSetSummaryCmd     `cmd:"set-summary" help:"Tell the reviewer what this round fixed, as a short tagged list"`
+	SetLabel       ReviewSetLabelCmd       `cmd:"set-label" help:"Name this Monocle, shown in the TUI's top-left so tiled panes are tellable apart"`
+	SetBaseRef     ReviewSetBaseRefCmd     `cmd:"set-base-ref" help:"Diff against a commit so already-committed work is reviewed"`
+	SetWalkthrough ReviewSetWalkthroughCmd `cmd:"set-walkthrough" help:"Give the reviewer a guided tour of the review: ordered stops stepped through with . and ,"`
+	GotoStop       ReviewGotoStopCmd       `cmd:"goto-stop" help:"Move the reviewer's Monocle to a stop of the guided tour"`
 }
 
 // WorkDirFlag is embedded by commands that support --workdir.
