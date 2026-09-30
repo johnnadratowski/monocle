@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -29,7 +30,21 @@ type tourState struct {
 	// triggered a moment earlier — and must not land on screen, or the note
 	// would sit under the wrong file.
 	loading string
+	// settle numbers stop entries, so the side effects of arriving at a stop —
+	// opening windows, running the on-stop command — happen once the reviewer
+	// stops moving rather than for every stop they skipped past on the way.
+	settle int
+	// pane is the tmux pane holding the related files, "" when none is known.
+	pane string
 }
+
+// tourSettleDelay is how long the reviewer has to rest on a stop before its
+// side effects run. Short enough not to feel like lag, long enough that
+// holding . does not open and close a split per stop.
+const tourSettleDelay = 150 * time.Millisecond
+
+// tourSettledMsg fires tourSettleDelay after a stop is entered.
+type tourSettledMsg struct{ seq int }
 
 // tourEventMsg carries a walkthrough_changed engine event into the TUI.
 type tourEventMsg struct {
@@ -98,6 +113,10 @@ type stopEntry struct {
 	// one that moved them (goto_stop, a tour arriving) or nothing moved (a
 	// restart restoring the stop the engine already has).
 	report bool
+	// effects opens the stop's related files (and runs the on-stop command)
+	// once the reviewer settles on it. Off only for a restart restoring the
+	// stop: resuming is not arriving.
+	effects bool
 }
 
 // enterStop makes stop i current and shows it.
@@ -123,7 +142,28 @@ func (m appModel) enterStop(i int, how stopEntry) (appModel, tea.Cmd) {
 			return nil
 		})
 	}
+	if how.effects {
+		m.tour.settle++
+		seq := m.tour.settle
+		cmds = append(cmds, tea.Tick(tourSettleDelay, func(time.Time) tea.Msg { return tourSettledMsg{seq: seq} }))
+	}
 	return m, tea.Batch(cmds...)
+}
+
+// settleOnStop runs the side effects of arriving at a stop, if the reviewer is
+// still on the stop that scheduled them.
+func (m appModel) settleOnStop(msg tourSettledMsg) (appModel, tea.Cmd) {
+	stop, ok := m.currentStop()
+	if !ok || !m.tour.on || msg.seq != m.tour.settle {
+		return m, nil
+	}
+	return m, m.stopEffects(stop)
+}
+
+// stopEffects is everything arriving at a stop does outside Monocle's own
+// window. Each runs asynchronously and reports back; none blocks the TUI.
+func (m appModel) stopEffects(stop types.WalkthroughStop) tea.Cmd {
+	return m.openRelated(stop)
 }
 
 // stepTour moves one stop forward (+1) or back (-1). The ends clamp rather than
@@ -136,7 +176,7 @@ func (m appModel) stepTour(dir int) (appModel, tea.Cmd) {
 		return m, nil
 	}
 	if !m.tour.on {
-		return m.enterStop(m.tour.index, stopEntry{report: true})
+		return m.enterStop(m.tour.index, stopEntry{report: true, effects: true})
 	}
 	next := m.tour.index + dir
 	if next < 0 || next >= len(m.tour.tour.Stops) {
@@ -147,7 +187,7 @@ func (m appModel) stepTour(dir int) (appModel, tea.Cmd) {
 		}
 		return m, nil
 	}
-	return m.enterStop(next, stopEntry{report: true})
+	return m.enterStop(next, stopEntry{report: true, effects: true})
 }
 
 // gotoStop enters a stop by id, from `:stop` or the agent.
@@ -185,7 +225,7 @@ func (m appModel) toggleTour() (appModel, tea.Cmd) {
 		m.statusBar.searchInfo = "tour off"
 		return m, nil
 	}
-	return m.enterStop(m.tour.index, stopEntry{report: true})
+	return m.enterStop(m.tour.index, stopEntry{report: true, effects: true})
 }
 
 // leaveTour takes the tour off screen: its note, its position, its marked
@@ -345,7 +385,7 @@ func (m appModel) handleTourEvent(msg tourEventMsg) (appModel, tea.Cmd) {
 			i = m.tour.index
 		}
 		// The engine already knows where the reviewer is: it put them there.
-		return m.enterStop(i, stopEntry{})
+		return m.enterStop(i, stopEntry{effects: true})
 	}
 	return m, nil
 }

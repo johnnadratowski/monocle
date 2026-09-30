@@ -1254,7 +1254,13 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleTourEvent(msg)
 
 	case tourGotoMsg:
-		return m.gotoStop(msg.id, stopEntry{report: true})
+		return m.gotoStop(msg.id, stopEntry{report: true, effects: true})
+
+	case tourSettledMsg:
+		return m.settleOnStop(msg)
+
+	case relatedPaneMsg:
+		return m.handleRelatedPane(msg), nil
 
 	// Sidebar selection → load diff (focus stays where it is)
 	case sidebarSelectMsg:
@@ -2027,7 +2033,8 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.docPane.scrollUp()
 			return m, nil
 		case Matches(key, km.FocusSwap), key == "shift+tab", Matches(key, km.OpenDocRef),
-			Matches(key, km.TourNext), Matches(key, km.TourPrev), Matches(key, km.ToggleTour):
+			Matches(key, km.TourNext), Matches(key, km.TourPrev), Matches(key, km.ToggleTour),
+			Matches(key, km.CloseRelated):
 			// fall through to the shared cases — the tour keys included, since
 			// the doc pane is where the tour's note is being read
 		default:
@@ -2128,6 +2135,13 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	case Matches(key, km.ToggleTour):
 		return m.toggleTour()
+
+	case Matches(key, km.CloseRelated):
+		if !inTmux() {
+			m.statusBar.searchInfo = "no related-files pane: monocle is not running in tmux"
+			return m, nil
+		}
+		return m, closeRelatedCmd(m.tour.pane, os.Getenv("TMUX_PANE"))
 
 	case Matches(key, km.Help):
 		m.help.active = true

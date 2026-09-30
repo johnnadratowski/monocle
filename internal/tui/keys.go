@@ -66,9 +66,10 @@ type KeyMap struct {
 
 	// Guided review tour: step between the agent's stops, and switch the tour
 	// off without losing it.
-	TourNext   []string
-	TourPrev   []string
-	ToggleTour []string
+	TourNext     []string
+	TourPrev     []string
+	ToggleTour   []string
+	CloseRelated []string // close the tmux pane holding a stop's related files
 
 	// Code-structure navigation in the diff (vim %, [{ and [[)
 	BlockMatch []string // block start <-> end
@@ -175,9 +176,10 @@ func DefaultKeyMap() KeyMap {
 
 		// . and , are free, sit together under the right hand, and read as
 		// forward/back the way > and < already do for marks.
-		TourNext:   []string{"."},
-		TourPrev:   []string{","},
-		ToggleTour: []string{"W"}, // "walkthrough"
+		TourNext:     []string{"."},
+		TourPrev:     []string{","},
+		ToggleTour:   []string{"W"}, // "walkthrough"
+		CloseRelated: []string{"X"},
 
 		BlockMatch: []string{"%"},
 		BlockUp:    []string{"("},
@@ -274,6 +276,7 @@ var keyActions = map[string]func(*KeyMap) *[]string{
 	"tour_next":               func(km *KeyMap) *[]string { return &km.TourNext },
 	"tour_prev":               func(km *KeyMap) *[]string { return &km.TourPrev },
 	"toggle_tour":             func(km *KeyMap) *[]string { return &km.ToggleTour },
+	"close_related":           func(km *KeyMap) *[]string { return &km.CloseRelated },
 	"block_match":             func(km *KeyMap) *[]string { return &km.BlockMatch },
 	"block_up":                func(km *KeyMap) *[]string { return &km.BlockUp },
 	"block_top":               func(km *KeyMap) *[]string { return &km.BlockTop },

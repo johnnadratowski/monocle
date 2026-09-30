@@ -72,6 +72,10 @@ func testTour() *types.Walkthrough {
 // the initial load already processed.
 func tourApp(t *testing.T) (appModel, *tourEngine) {
 	t.Helper()
+	// Never let a test reach a real tmux server: these tests may themselves be
+	// running inside one, and a stop's side effects split and kill panes.
+	t.Setenv("TMUX", "")
+	t.Setenv("TMUX_PANE", "")
 	files := []types.ChangedFile{{Path: "a.go", Status: types.FileAdded}, {Path: "b.go", Status: types.FileAdded}}
 	e := &tourEngine{
 		stubEngine: stubEngine{
