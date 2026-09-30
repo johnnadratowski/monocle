@@ -351,16 +351,23 @@ func TestAgentMovesTheTour(t *testing.T) {
 // A refresh the agent triggered a moment before a tour jump can finish after
 // it. Landing that load would put the stop's note under the wrong file.
 func TestAStaleLoadCannotBeatTheTourJump(t *testing.T) {
-	m, e := tourApp(t)
-	m.tour.loading = "b.go"
-	m = updateApp(t, m, loadDiffMsg{path: "a.go", result: e.diffs["a.go"]})
-	if m.tour.loading != "b.go" {
-		t.Fatal("a load for another file must not clear the wait")
-	}
-	m.pendingJumpLine = 30
+	m, e := tourApp(t) // on 1.1, showing a.go
+	// A stop is waiting on a.go when a load for b.go — a refresh the agent
+	// triggered a moment earlier — finishes first.
+	m.tour.loading = "a.go"
 	m = updateApp(t, m, loadDiffMsg{path: "b.go", result: e.diffs["b.go"]})
-	if m.tour.loading != "" || m.diffView.path != "b.go" || cursorLine(m) != 30 {
+	if m.diffView.path != "a.go" || m.tour.loading != "a.go" {
+		t.Fatalf("the stale b.go load landed: showing %s, waiting on %q", m.diffView.path, m.tour.loading)
+	}
+	m.pendingJumpLine = 7
+	m = updateApp(t, m, loadDiffMsg{path: "a.go", result: e.diffs["a.go"]})
+	if m.tour.loading != "" || m.diffView.path != "a.go" || cursorLine(m) != 7 {
 		t.Errorf("after the tour's own load: loading=%q at %s:%d", m.tour.loading, m.diffView.path, cursorLine(m))
+	}
+	// With nothing waiting, loads land as they always did.
+	m = updateApp(t, m, loadDiffMsg{path: "b.go", result: e.diffs["b.go"]})
+	if m.diffView.path != "b.go" {
+		t.Errorf("an ordinary load was dropped: showing %s", m.diffView.path)
 	}
 }
 
