@@ -553,7 +553,7 @@ A tour file is a JSON object (or a bare array of stops):
 | `file` | No | Repo-relative file in the review. Omit for a stop with no code anchor (a stop that shows a recording, say). |
 | `line_start` / `line_end` | No | **New-file** line numbers. The cursor lands on `line_start` and the range is marked in the gutter; omit for the file as a whole. |
 | `note` | No | Markdown shown in the doc pane. Say what matters here: the decision, the side effect, the risk. |
-| `related` | No | Repo files to open beside the diff, each `{"doc": path, "start_line": n}`. They open together in **one reusable tmux pane** (`nvim -o` for vim/nvim, each window at its line). |
+| `related` | No | Repo files to open beside the diff, each `{"doc": path, "start_line": n}`. They open together in **one reusable tmux pane** (`nvim -R -o` — read-only — for vim/nvim, each window at its line). |
 | `views` | No | Things to show that are not code, each `{"kind", "target", "label"}`. `kind` is `image`, `video`, `markdown`, `url` or `artifact` (inferred from the target when omitted); `target` is a path (absolute or repo-relative), a URL, or an artifact id. |
 | `layout` | No | A scene name passed through to the on-stop command. monocle never interprets it. |
 

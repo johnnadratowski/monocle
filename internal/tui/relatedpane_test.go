@@ -11,9 +11,9 @@ import (
 func TestRelatedEditorArgv(t *testing.T) {
 	files := []relatedFile{{path: "src/a.ts", line: 40}, {path: "db/b.sql", line: 12}}
 
-	t.Run("nvim opens every file as a split, each at its line", func(t *testing.T) {
+	t.Run("nvim opens every file as a read-only split, each at its line", func(t *testing.T) {
 		got := relatedEditorArgv("nvim", files)
-		want := []string{"nvim", "-o", "src/a.ts", "db/b.sql",
+		want := []string{"nvim", "-R", "-o", "src/a.ts", "db/b.sql",
 			"-c", "1wincmd w|exe 'normal! 40Gzz'|2wincmd w|exe 'normal! 12Gzz'|1wincmd w"}
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("got  %q\nwant %q", got, want)
@@ -22,7 +22,7 @@ func TestRelatedEditorArgv(t *testing.T) {
 
 	t.Run("vim keeps its configured flags", func(t *testing.T) {
 		got := relatedEditorArgv("vim -u NONE", files[:1])
-		want := []string{"vim", "-u", "NONE", "-o", "src/a.ts", "-c", "1wincmd w|exe 'normal! 40Gzz'|1wincmd w"}
+		want := []string{"vim", "-u", "NONE", "-R", "-o", "src/a.ts", "-c", "1wincmd w|exe 'normal! 40Gzz'|1wincmd w"}
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("got  %q\nwant %q", got, want)
 		}
@@ -49,12 +49,23 @@ func TestRelatedEditorArgv(t *testing.T) {
 
 	t.Run("a file with no line is opened, not positioned", func(t *testing.T) {
 		got := relatedEditorArgv("nvim", []relatedFile{{path: "a"}, {path: "b", line: 3}})
-		want := []string{"nvim", "-o", "a", "b", "-c", "2wincmd w|exe 'normal! 3Gzz'|1wincmd w"}
+		want := []string{"nvim", "-R", "-o", "a", "b", "-c", "2wincmd w|exe 'normal! 3Gzz'|1wincmd w"}
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("got  %q\nwant %q", got, want)
 		}
-		if got := relatedEditorArgv("nvim", []relatedFile{{path: "a"}}); !reflect.DeepEqual(got, []string{"nvim", "-o", "a"}) {
+		if got := relatedEditorArgv("nvim", []relatedFile{{path: "a"}}); !reflect.DeepEqual(got, []string{"nvim", "-R", "-o", "a"}) {
 			t.Errorf("no lines at all should mean no -c, got %q", got)
+		}
+	})
+
+	// The pane usually sits in the worktree under review, so a writable buffer is
+	// one stray keypress from editing the change. Every vim-like opens it -R.
+	t.Run("every vim-like opens read-only", func(t *testing.T) {
+		for _, ed := range []string{"vi", "vim", "nvim", "/opt/homebrew/bin/nvim", "gvim", "mvim", "lvim"} {
+			got := relatedEditorArgv(ed, []relatedFile{{path: "docs/decisions/frontend.md", line: 12}})
+			if len(got) < 3 || got[1] != "-R" {
+				t.Errorf("%s: argv %q, want -R straight after the editor", ed, got)
+			}
 		}
 	})
 

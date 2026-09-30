@@ -59,14 +59,17 @@ func isVimLike(name string) bool {
 
 // relatedEditorArgv builds the editor invocation for a set of related files.
 //
-// vim and nvim get every file as a horizontal split (-o) and one -c that visits
+// vim and nvim open read-only (-R): the pane shows context, usually in the very
+// worktree under review, where one stray keypress in a writable buffer edits the
+// change being reviewed. They get every file as a horizontal split (-o) and one
+// -c that visits
 // each window and puts its file at its line. One -c joined with `|`, not one per
 // step as `-c '1wincmd w' -c '40' …` would be: vim runs at most ten -c commands,
 // which five files would already exceed. `exe 'normal! NGzz'` rather than a bare
 // `:N` because a range followed by `|` is not reliably a jump.
 //
 // Any other editor opens one file, so it gets the first, at its line, the same
-// way ctrl+g opens a file.
+// way ctrl+g opens a file — writable, since editors share no read-only flag.
 func relatedEditorArgv(configured string, files []relatedFile) []string {
 	if len(files) == 0 {
 		return nil
@@ -79,7 +82,7 @@ func relatedEditorArgv(configured string, files []relatedFile) []string {
 		}
 		return append(argv, files[0].path)
 	}
-	argv = append(argv, "-o")
+	argv = append(argv, "-R", "-o")
 	for _, f := range files {
 		argv = append(argv, f.path)
 	}

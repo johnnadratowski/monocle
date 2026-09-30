@@ -30,7 +30,7 @@ The tour belongs to the review. It survives a restart (you come back on the same
 
 A stop can name **related files** — typically where a change starts, when the stop shows where it lands. When you settle on such a stop, monocle opens them together in **one tmux pane** beside it, running your editor ([`editor`](/configuration/config-file), else `$VISUAL`/`$EDITOR`):
 
-- **vim / nvim** open every file as a horizontal split (`nvim -o a b`), each window at its line.
+- **vim / nvim** open every file **read-only** as a horizontal split (`nvim -R -o a b`), each window at its line. Read-only because the pane usually sits in the worktree under review, where one stray keypress would edit the change.
 - Other editors open the first file, at its line.
 
 The next stop with related files **reuses** that pane (`tmux respawn-pane`) instead of splitting another; a stop without any leaves it as it is. `X` closes it. The pane is split beside monocle's own (stacked instead with `editor_mode: "tmux_horizontal"`), and it does not take focus unless you set `editor_focus: true` — the tour is driven from monocle, and a split that took the keyboard would swallow your next `.`. Related files need monocle to be running inside tmux.
