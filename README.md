@@ -245,7 +245,7 @@ Bindings are grouped by the task they serve, and within a group ordered by key: 
 | `:stop <id>` | Jump to a stop by id, e.g. `:stop 1.2` (no id lists them) |
 | `:view [n]` | Open the stop's nth view (default the first) in the media / markdown viewer |
 
-When the agent sends a tour (`set_walkthrough`), monocle enters tour mode on its first stop: the diff cursor lands on the stop's lines, which stay marked in the gutter, the doc pane shows `1.2 · Title` and the agent's note, and the status bar shows `tour 1.2 / 7`. Ask the agent about a stop by its id. The ends of the tour clamp rather than wrap.
+When the agent sends a tour (`set_walkthrough`), monocle enters tour mode on its first stop: the diff cursor lands on the stop's lines, which stay marked in the gutter, the doc pane shows `1.2 · Title` and the agent's note, and the status bar shows `tour 1.2 · 3 of 7` (the stop id, then its position in the tour). Ask the agent about a stop by its id. The ends of the tour clamp rather than wrap.
 
 #### View & panes
 

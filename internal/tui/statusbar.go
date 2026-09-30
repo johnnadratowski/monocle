@@ -42,7 +42,7 @@ type statusBarModel struct {
 	searchInfo       string // transient "match i/N" indicator after a search
 	contextHints     string // override hints when set (e.g. comment-specific keybinds)
 	buildNotice      string // "a newer build is installed" hint; "" when current
-	tourLabel        string // "tour 1.2 / 7" while a guided tour is on; "" otherwise
+	tourLabel        string // "tour 1.2 · 3 of 7" while a guided tour is on; "" otherwise
 	diffStyle        diffStyle
 	contentMode      bool   // true when viewing content (plan/doc) in raw mode
 	contentID        string // non-empty when viewing a content item (raw or diff)

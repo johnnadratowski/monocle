@@ -70,13 +70,16 @@ func (m appModel) currentStop() (types.WalkthroughStop, bool) {
 	return m.tour.tour.Stops[m.tour.index], true
 }
 
-// tourLabel is the status-bar position: "tour 1.2 / 7".
+// tourLabel is the status-bar position: the stop's id, then where it falls in
+// the tour — "tour 3.2 · 9 of 9". Both, because the id is what the reviewer
+// quotes to the agent and is not a position: "3.2 / 9" read as a fraction, and
+// left nobody sure what the 9 counted.
 func (m appModel) tourLabel() string {
 	stop, ok := m.currentStop()
 	if !ok || !m.tour.on {
 		return ""
 	}
-	return fmt.Sprintf("tour %s / %d", stop.ID, len(m.tour.tour.Stops))
+	return fmt.Sprintf("tour %s · %d of %d", stop.ID, m.tour.index+1, len(m.tour.tour.Stops))
 }
 
 // syncTour takes the tour the engine holds. It keeps the reviewer on the stop

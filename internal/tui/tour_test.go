@@ -190,8 +190,8 @@ func TestEnteringAStopShowsIt(t *testing.T) {
 			t.Errorf("doc pane %q is missing %q", doc, want)
 		}
 	}
-	if got := stripANSISeq(m.statusBar.View()); !strings.Contains(got, "tour 1.2 / 3") {
-		t.Errorf("status bar %q should show tour 1.2 / 3", got)
+	if got := stripANSISeq(m.statusBar.View()); !strings.Contains(got, "tour 1.2 · 2 of 3") {
+		t.Errorf("status bar %q should show tour 1.2 · 2 of 3", got)
 	}
 	// The stop's range is marked, and only the range.
 	marked := map[int]bool{}
@@ -438,5 +438,24 @@ func TestInlineCommentShowsItsStop(t *testing.T) {
 	got := formatInlineComment(&types.ReviewComment{Type: types.CommentQuestion, Body: "why?", StopID: "1.2"})
 	if !strings.Contains(got, "[1.2] QUESTION") {
 		t.Errorf("inline comment %q should name its stop", got)
+	}
+}
+
+// The label carries the stop's id AND its position, because an id is not a
+// position: "3.2 / 9" read as a fraction and left the reader asking what the 9
+// counted.
+func TestTourLabelIsIDThenPosition(t *testing.T) {
+	m, _ := tourApp(t)
+	for i, want := range []string{"tour 1.1 · 1 of 3", "tour 1.2 · 2 of 3", "tour 2 · 3 of 3"} {
+		if i > 0 {
+			m = pressKey(t, m, ".")
+		}
+		if got := m.statusBar.tourLabel; got != want {
+			t.Errorf("stop %d: label %q, want %q", i+1, got, want)
+		}
+	}
+	m = pressKey(t, m, "W")
+	if m.statusBar.tourLabel != "" {
+		t.Errorf("tour off still labelled %q", m.statusBar.tourLabel)
 	}
 }
