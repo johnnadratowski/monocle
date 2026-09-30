@@ -407,3 +407,36 @@ func TestNotePaneWrapsAndSizesToItsNote(t *testing.T) {
 		t.Error("close should leave note mode")
 	}
 }
+
+// commentEngine records the targets comments were added with.
+type commentEngine struct {
+	*tourEngine
+	targets []core.CommentTarget
+}
+
+func (e *commentEngine) AddComment(target core.CommentTarget, ct types.CommentType, body string) (*types.ReviewComment, error) {
+	e.targets = append(e.targets, target)
+	return &types.ReviewComment{ID: "c", StopID: target.StopID}, nil
+}
+
+func TestCommentsAreTaggedWithTheStop(t *testing.T) {
+	m, e := tourApp(t)
+	ce := &commentEngine{tourEngine: e}
+	m.engine = ce
+	save := saveCommentMsg{path: "a.go", lineStart: 10, lineEnd: 10, targetType: types.TargetFile, commentType: types.CommentQuestion, body: "why?"}
+
+	m.handleSaveComment(save)()
+	m = pressKey(t, m, "W") // tour off
+	m.handleSaveComment(save)()
+
+	if len(ce.targets) != 2 || ce.targets[0].StopID != "1.1" || ce.targets[1].StopID != "" {
+		t.Errorf("targets = %+v, want 1.1 during the tour and nothing after it", ce.targets)
+	}
+}
+
+func TestInlineCommentShowsItsStop(t *testing.T) {
+	got := formatInlineComment(&types.ReviewComment{Type: types.CommentQuestion, Body: "why?", StopID: "1.2"})
+	if !strings.Contains(got, "[1.2] QUESTION") {
+		t.Errorf("inline comment %q should name its stop", got)
+	}
+}

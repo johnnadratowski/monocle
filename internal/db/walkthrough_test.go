@@ -129,3 +129,39 @@ func TestMigrateAddsWalkthroughsWithoutLosingData(t *testing.T) {
 		t.Errorf("schema version = %d (%v), want %d", v, err, schemaVersion)
 	}
 }
+
+// Comments gained a stop_id column; a database from before it must get the
+// column without losing the comments it already holds.
+func TestMigrateAddsCommentStopID(t *testing.T) {
+	d, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	_ = d.CreateSession(&types.ReviewSession{ID: "s", Agent: "claude", RepoRoot: "/r", BaseRef: "main"})
+	if err := d.CreateComment("s", &types.ReviewComment{ID: "old", TargetType: types.TargetFile, TargetRef: "a.go",
+		Type: types.CommentNote, Body: "staged", ReviewRound: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Exec("ALTER TABLE comments DROP COLUMN stop_id"); err != nil {
+		t.Fatalf("rewind: %v", err)
+	}
+	if err := setVersion(d.DB, 17); err != nil {
+		t.Fatal(err)
+	}
+	if err := Migrate(d.DB); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	got, err := d.GetComments("s")
+	if err != nil || len(got) != 1 || got[0].Body != "staged" || got[0].StopID != "" {
+		t.Fatalf("comments after migration = %+v (%v)", got, err)
+	}
+	if err := d.CreateComment("s", &types.ReviewComment{ID: "new", TargetType: types.TargetFile, TargetRef: "a.go",
+		Type: types.CommentQuestion, Body: "why?", ReviewRound: 1, StopID: "1.2"}); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = d.GetComments("s")
+	if len(got) != 2 || got[1].StopID != "1.2" {
+		t.Errorf("stop id did not round-trip: %+v", got)
+	}
+}

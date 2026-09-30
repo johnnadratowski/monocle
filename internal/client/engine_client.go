@@ -961,6 +961,7 @@ func (c *EngineClient) AddComment(target core.CommentTarget, commentType types.C
 		LineEnd:     target.LineEnd,
 		CommentType: commentType,
 		Body:        body,
+		StopID:      target.StopID,
 	})
 	if err != nil {
 		return nil, err

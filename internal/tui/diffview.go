@@ -4018,6 +4018,9 @@ func formatInlineComment(c *types.ReviewComment) string {
 		prefix = "│ ✓"
 		typeLabel = "✓ " + typeLabel
 	}
+	if c.StopID != "" {
+		typeLabel = "[" + c.StopID + "] " + typeLabel
+	}
 	body := c.Body
 	if hasSuggestionBlock {
 		body = "(suggested edit)"

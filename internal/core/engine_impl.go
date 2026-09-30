@@ -1231,6 +1231,7 @@ func (e *Engine) AddComment(target CommentTarget, commentType types.CommentType,
 		Type:        commentType,
 		Body:        body,
 		ReviewRound: session.ReviewRound,
+		StopID:      target.StopID,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}

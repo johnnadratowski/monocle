@@ -131,7 +131,7 @@ func (rf *ReviewFormatter) Format(session *types.ReviewSession, comments []types
 				})
 			}
 
-			b.WriteString(c.Body)
+			b.WriteString(stopTaggedBody(c))
 			b.WriteString("\n\n---\n\n")
 		}
 	}
@@ -187,7 +187,7 @@ func (rf *ReviewFormatter) Format(session *types.ReviewSession, comments []types
 				})
 			}
 
-			b.WriteString(c.Body)
+			b.WriteString(stopTaggedBody(c))
 			b.WriteString("\n\n---\n\n")
 		}
 	}
@@ -227,7 +227,7 @@ func (rf *ReviewFormatter) Format(session *types.ReviewSession, comments []types
 				})
 			}
 
-			b.WriteString(c.Body)
+			b.WriteString(stopTaggedBody(c))
 			b.WriteString("\n\n---\n\n")
 		}
 	}
@@ -331,4 +331,19 @@ func countByType(comments []types.ReviewComment) map[types.CommentType]int {
 		counts[c.Type]++
 	}
 	return counts
+}
+
+// stopTaggedBody is a comment's body led by the tour stop it was written at, so
+// "is this hoisted?" arrives as "[1.2] is this hoisted?" and the agent reads it
+// against what it said at 1.2. A body that opens with a fence (a suggestion
+// block) gets the tag on its own line, since text before ``` breaks the fence.
+func stopTaggedBody(c types.ReviewComment) string {
+	if c.StopID == "" {
+		return c.Body
+	}
+	tag := "[" + c.StopID + "]"
+	if strings.HasPrefix(c.Body, "```") {
+		return tag + "\n" + c.Body
+	}
+	return tag + " " + c.Body
 }

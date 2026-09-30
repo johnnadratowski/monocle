@@ -57,7 +57,9 @@ What the command does with it is up to you: open the recording in a browser, arr
 
 ## Asking about a stop
 
-Stop ids are what you type and what the agent answers to. When you ask about one, the agent can call `goto_stop` to put that stop in front of you while it explains. If the agent re-sends the tour — to fix a note, say — you stay on the stop you were on as long as its id survives.
+Stop ids are what you type and what the agent answers to. When you ask about one, the agent can call `goto_stop` to put that stop in front of you while it explains.
+
+A comment you write while the tour is on is tagged with the stop you were on: it shows `[1.2]` in its box, and the feedback the agent receives leads with it — `[1.2] Does x get hoisted here?` — so the agent reads it against what it said at that stop. If the agent re-sends the tour — to fix a note, say — you stay on the stop you were on as long as its id survives.
 
 ## Sending a tour
 

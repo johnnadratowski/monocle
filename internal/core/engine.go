@@ -45,6 +45,7 @@ type CommentTarget struct {
 	TargetRef  string // file path or content item ID
 	LineStart  int
 	LineEnd    int
+	StopID     string // the tour stop the comment was written at, "" outside a tour
 }
 
 // SessionOptions configures a new session.

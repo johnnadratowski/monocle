@@ -476,11 +476,11 @@ func (d *DB) GetContentVersion(sessionID, contentItemID string, version int) (*t
 // CreateComment inserts a new comment.
 func (d *DB) CreateComment(sessionID string, c *types.ReviewComment) error {
 	_, err := d.Exec(
-		`INSERT INTO comments (id, session_id, target_type, target_ref, line_start, line_end, type, body, code_snippet, resolved, outdated, review_round, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO comments (id, session_id, target_type, target_ref, line_start, line_end, type, body, code_snippet, resolved, outdated, review_round, stop_id, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		c.ID, sessionID, string(c.TargetType), c.TargetRef, c.LineStart, c.LineEnd,
 		string(c.Type), c.Body, c.CodeSnippet, boolToInt(c.Resolved), 0,
-		c.ReviewRound, c.CreatedAt, c.UpdatedAt,
+		c.ReviewRound, c.StopID, c.CreatedAt, c.UpdatedAt,
 	)
 	return err
 }
@@ -512,7 +512,7 @@ func (d *DB) DeleteCommentsByTarget(sessionID string, targetType types.TargetTyp
 // GetComments returns all comments for a session, optionally filtered.
 func (d *DB) GetComments(sessionID string) ([]types.ReviewComment, error) {
 	rows, err := d.Query(
-		`SELECT id, target_type, target_ref, line_start, line_end, type, body, code_snippet, resolved, outdated, review_round, created_at, updated_at
+		`SELECT id, target_type, target_ref, line_start, line_end, type, body, code_snippet, resolved, outdated, review_round, stop_id, created_at, updated_at
 		 FROM comments WHERE session_id = ? ORDER BY created_at`, sessionID,
 	)
 	if err != nil {
@@ -526,7 +526,7 @@ func (d *DB) GetComments(sessionID string) ([]types.ReviewComment, error) {
 		var targetType, commentType string
 		var resolved, outdated int
 		if err := rows.Scan(&c.ID, &targetType, &c.TargetRef, &c.LineStart, &c.LineEnd, &commentType,
-			&c.Body, &c.CodeSnippet, &resolved, &outdated, &c.ReviewRound, &c.CreatedAt, &c.UpdatedAt); err != nil {
+			&c.Body, &c.CodeSnippet, &resolved, &outdated, &c.ReviewRound, &c.StopID, &c.CreatedAt, &c.UpdatedAt); err != nil {
 			return nil, err
 		}
 		c.TargetType = types.TargetType(targetType)

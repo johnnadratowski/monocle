@@ -398,6 +398,7 @@ type AddCommentMsg struct {
 	LineEnd     int               `json:"line_end"`
 	CommentType types.CommentType `json:"comment_type"`
 	Body        string            `json:"body"`
+	StopID      string            `json:"stop_id,omitempty"`
 }
 
 type AddCommentResponse struct {

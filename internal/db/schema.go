@@ -151,6 +151,7 @@ CREATE TABLE IF NOT EXISTS comments (
 	resolved INTEGER NOT NULL DEFAULT 0,
 	outdated INTEGER NOT NULL DEFAULT 0,
 	review_round INTEGER NOT NULL DEFAULT 1,
+	stop_id TEXT NOT NULL DEFAULT '',
 	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -285,6 +286,9 @@ var addedColumns = map[string]map[string]string{
 		"review_sent_at":   "DATETIME",
 		"summary_overview": "TEXT NOT NULL DEFAULT ''",
 		"agent_label":      "TEXT NOT NULL DEFAULT ''",
+	},
+	"comments": {
+		"stop_id": "TEXT NOT NULL DEFAULT ''",
 	},
 }
 

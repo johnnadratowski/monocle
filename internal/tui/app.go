@@ -4103,12 +4103,18 @@ func (m appModel) handleSidebarSelect(msg sidebarSelectMsg) tea.Cmd {
 // handleSaveComment persists a new or edited comment then reloads the diff.
 func (m appModel) handleSaveComment(msg saveCommentMsg) tea.Cmd {
 	full := m.diffView.fullFile
+	// A comment written during a tour is tagged with the stop it was written at.
+	stopID := ""
+	if stop, ok := m.currentStop(); ok && m.tour.on {
+		stopID = stop.ID
+	}
 	return func() tea.Msg {
 		target := core.CommentTarget{
 			TargetType: msg.targetType,
 			TargetRef:  msg.path,
 			LineStart:  msg.lineStart,
 			LineEnd:    msg.lineEnd,
+			StopID:     stopID,
 		}
 
 		var commentID string

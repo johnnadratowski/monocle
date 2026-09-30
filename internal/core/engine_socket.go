@@ -187,6 +187,7 @@ func (e *Engine) handleAddComment(msg *protocol.AddCommentMsg) *protocol.AddComm
 			TargetRef:  msg.TargetRef,
 			LineStart:  msg.LineStart,
 			LineEnd:    msg.LineEnd,
+			StopID:     msg.StopID,
 		},
 		msg.CommentType,
 		msg.Body,

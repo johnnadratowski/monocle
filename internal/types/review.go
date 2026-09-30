@@ -196,8 +196,12 @@ type ReviewComment struct {
 	CodeSnippet string
 	Resolved    bool
 	ReviewRound int
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	// StopID is the guided-tour stop the reviewer was on when they wrote the
+	// comment, "" outside a tour. The feedback leads with it ("[1.2] …"), so the
+	// agent reads the comment against the stop it explained there.
+	StopID    string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // Annotation is an agent-authored explanation attached to a specific range of
