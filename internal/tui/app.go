@@ -318,6 +318,9 @@ type appModel struct {
 	buildWatch        buildWatch
 	relaunchRequested bool
 
+	// tour is the agent's guided tour and where the reviewer is in it.
+	tour tourState
+
 	// reviewSentAt is when the agent handed the current round over, rendered as a
 	// live age beside the title. Zero means nothing has been sent since the agent
 	// last collected feedback, and the age is omitted rather than frozen.
@@ -440,6 +443,7 @@ func NewApp(engine core.EngineAPI, opts ...AppOptions) appModel {
 		overlay:           overlayNone,
 		buildWatch:        newBuildWatch(),
 		summaryModal:      newSummaryModalModel(theme),
+		tour:              tourState{index: -1},
 		layoutConfig:      layoutCfg,
 		theme:             theme,
 		themeName:         themeName,
@@ -583,6 +587,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.setSummaryItems(session.SummaryItems)
 			m.summaryOverview = session.SummaryOverview
 			m.agentLabel = session.AgentLabel
+			m.syncTour(session)
 		}
 		m.statusBar.fileCount = len(msg.files)
 		m.statusBar.socketStarted = m.engine.GetSocketPath() != ""
@@ -591,6 +596,17 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Auto-hide sidebar when empty, auto-show when items arrive
 		if m.autoToggleSidebar() {
 			recalcPaneDimensions(&m)
+		}
+		// A tour survives a restart: come back on the stop the reviewer left, in
+		// place of the first file. Nothing is reported or re-run — the engine
+		// already has this stop, and reopening windows is for moving, not for
+		// resuming.
+		if m.hasTour() {
+			var cmd tea.Cmd
+			m, cmd = m.enterStop(m.tour.index, stopEntry{})
+			if stop, ok := m.currentStop(); ok && stop.File != "" && cmd != nil {
+				return m, cmd
+			}
 		}
 		// Auto-select the first file, or first content item if no files
 		if len(msg.files) > 0 {
@@ -719,6 +735,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.setSummaryItems(session.SummaryItems)
 			m.summaryOverview = session.SummaryOverview
 			m.agentLabel = session.AgentLabel
+			m.syncTour(session)
 		}
 		// A new review's first refresh: go back to the top. This runs ahead of
 		// the selection-preserving logic below, which exists so the agent
@@ -1051,6 +1068,9 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Diff loading
 	case loadDiffMsg:
+		if m.staleForTour(msg.path) {
+			return m, nil
+		}
 		var cmd tea.Cmd
 		m.diffView, cmd = m.diffView.Update(msg)
 		if m.pendingChunkLanding != 0 && m.diffView.LandOnChunkEdge(m.pendingChunkLanding) {
@@ -1218,9 +1238,23 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Additional file loaded
 	case loadAdditionalFileMsg:
+		if m.staleForTour(msg.path) {
+			return m, nil
+		}
 		var cmd tea.Cmd
 		m.diffView, cmd = m.diffView.Update(msg)
+		// A tour stop in an added file lands on its line the same way.
+		if m.pendingJumpLine != 0 {
+			m.diffView.GoToLine(m.pendingJumpLine)
+			m.pendingJumpLine = 0
+		}
 		return m, cmd
+
+	case tourEventMsg:
+		return m.handleTourEvent(msg)
+
+	case tourGotoMsg:
+		return m.gotoStop(msg.id, stopEntry{report: true})
 
 	// Sidebar selection → load diff (focus stays where it is)
 	case sidebarSelectMsg:
@@ -1514,6 +1548,8 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusBar.fileCount = len(session.ChangedFiles)
 			m.statusBar.baseRef = m.displayBaseRef(session)
 		}
+		// Approving drops the tour with the review it explained.
+		m.syncTour(session)
 
 		// The daemon always queues feedback for pull delivery. Clear comments
 		// (they're frozen in the submission) but don't advance the round or
@@ -1776,6 +1812,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.summaryOverview = session.SummaryOverview
 			m.agentLabel = session.AgentLabel
 			m.annotationCount = len(session.Annotations)
+			m.syncTour(session)
 		}
 		// If viewing a content item or an added file, it no longer exists —
 		// clear the view rather than trying to reload a deleted target.
@@ -1989,8 +2026,10 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		case Matches(key, km.Up) || Matches(key, km.ScrollUp):
 			m.docPane.scrollUp()
 			return m, nil
-		case Matches(key, km.FocusSwap), key == "shift+tab", Matches(key, km.OpenDocRef):
-			// fall through to the shared cases
+		case Matches(key, km.FocusSwap), key == "shift+tab", Matches(key, km.OpenDocRef),
+			Matches(key, km.TourNext), Matches(key, km.TourPrev), Matches(key, km.ToggleTour):
+			// fall through to the shared cases — the tour keys included, since
+			// the doc pane is where the tour's note is being read
 		default:
 			return m, nil
 		}
@@ -2080,6 +2119,15 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				overview: overview, openKeys: openKeys,
 			}
 		}
+
+	case Matches(key, km.TourNext):
+		return m.stepTour(+1)
+
+	case Matches(key, km.TourPrev):
+		return m.stepTour(-1)
+
+	case Matches(key, km.ToggleTour):
+		return m.toggleTour()
 
 	case Matches(key, km.Help):
 		m.help.active = true
@@ -2994,7 +3042,7 @@ var commandNames = []string{
 	"pause", "unpause", "history",
 	"mark-all-reviewed", "mark-all-unreviewed",
 	"base-artifact-version", "base-ref", "ref", "theme",
-	"relaunch",
+	"relaunch", "stop",
 }
 
 // matchingCommands returns the command names that start with prefix, in order.
@@ -3082,6 +3130,11 @@ func (m appModel) executeCommand(cmd string) tea.Cmd {
 	if trimmed == "theme" || strings.HasPrefix(trimmed, "theme ") {
 		name := strings.TrimSpace(strings.TrimPrefix(trimmed, "theme"))
 		return func() tea.Msg { return setThemeMsg{name: name} }
+	}
+	// `:stop 1.2` — jump to a tour stop (no id lists them).
+	if trimmed == "stop" || strings.HasPrefix(trimmed, "stop ") {
+		id := strings.TrimSpace(strings.TrimPrefix(trimmed, "stop"))
+		return func() tea.Msg { return tourGotoMsg{id: id} }
 	}
 	switch trimmed {
 	case "submit":
@@ -3428,6 +3481,15 @@ func reserveDocPane(m *appModel) {
 	}
 	const borderH = 2
 	docInner := m.diffView.height / 2
+	// A note is sized to itself, up to the usual half: a two-line note taking
+	// half the screen away from the code it is about is the wrong trade.
+	m.docPane.width = m.diffView.width
+	if m.docPane.note {
+		if want := m.docPane.noteHeight(m.diffView.width); want < docInner {
+			docInner = want
+		}
+		m.docPane.reflow()
+	}
 	if docInner < 3 {
 		docInner = 3
 	}
@@ -4842,6 +4904,9 @@ func BridgeEngineEvents(engine core.EngineAPI, p *tea.Program) {
 	})
 	engine.On(core.EventActivityChanged, func(e core.EventPayload) {
 		p.Send(activityPulseMsg{})
+	})
+	engine.On(core.EventWalkthroughChanged, func(e core.EventPayload) {
+		p.Send(tourEventMsg{status: e.Status, id: e.ItemID})
 	})
 }
 

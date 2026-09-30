@@ -302,6 +302,12 @@ func (m helpModel) buildContent() string {
 			{Label(km.FilterReviewed) + " / " + Label(km.SearchBackward), "Search the diff forward/backward (diff focused)"},
 			{Label(km.SearchNext) + "/" + Label(km.SearchPrev), "Next/previous search match"},
 		},
+		secTour: {
+			{Label(km.TourNext), "Next stop of the agent's tour (resumes it when off)"},
+			{Label(km.TourPrev), "Previous stop"},
+			{Label(km.ToggleTour), "Tour mode on/off (hides the note and marks, keeps your stop)"},
+			{":stop <id>", "Jump to a stop by id, e.g. :stop 1.2 (no id lists them)"},
+		},
 		secView: {
 			{Label(km.FocusSwap) + "/shift+tab", "Switch pane focus (sidebar/diff/doc)"},
 			{Label(km.PaneLeft) + "/" + Label(km.PaneDown) + "/" + Label(km.PaneUp) + "/" + Label(km.PaneRight),

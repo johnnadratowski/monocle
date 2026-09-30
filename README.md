@@ -157,6 +157,7 @@ This means you can review the agent's *thinking* before it writes code — not j
 - **Push notifications** — With Claude Code channels, feedback is pushed directly into the agent's context the moment you submit
 - **Pull-based feedback** — Agents without channel support retrieve feedback via `/get-feedback` or `monocle review get-feedback`; multiple reviews queue up and are delivered together
 - **Plan & architecture review** — Your agent can submit plans, architecture decisions, and other content for review with markdown rendering. When iterating, Monocle shows diffs between plan versions so you can see exactly what changed. Use focus mode (`F`) for distraction-free reading
+- **Guided tours** — Your agent can walk you through a change as numbered stops: `.`/`,` step, the diff lands on each stop with the agent's note beside it, and you ask about any stop by its id
 - **Review gating** — `/review-plan-wait` blocks the agent until you approve the submitted content before it proceeds
 - **Pause flow** — Ask your agent to stop and wait while you review, then release it when ready (requires MCP channel support)
 - **Live diff viewer** — Unified and split (side-by-side) views with syntax highlighting and intra-line diffs
@@ -232,6 +233,17 @@ Bindings are grouped by the task they serve, and within a group ordered by key: 
 | `{` / `}` | Previous/next file (any pane) |
 | `ctrl+i` | Forward again (vim ctrl+i) |
 | `ctrl+o` | Back to where you jumped from (vim ctrl+o) |
+
+#### Guided tour
+
+| Key | Action |
+|-----|--------|
+| `W` | Tour mode on/off (hides the note and marks, keeps your stop) |
+| `,` | Previous stop |
+| `.` | Next stop of the agent's tour (resumes it when off) |
+| `:stop <id>` | Jump to a stop by id, e.g. `:stop 1.2` (no id lists them) |
+
+When the agent sends a tour (`set_walkthrough`), monocle enters tour mode on its first stop: the diff cursor lands on the stop's lines, which stay marked in the gutter, the doc pane shows `1.2 · Title` and the agent's note, and the status bar shows `tour 1.2 / 7`. Ask the agent about a stop by its id. The ends of the tour clamp rather than wrap.
 
 #### View & panes
 
@@ -503,7 +515,7 @@ Override any action key by mapping the action name to a new key string:
 }
 ```
 
-Available action names: `answer`, `artifact_versions`, `base_ref`, `block_match`, `block_top`, `block_up`, `bottom`, `clear_review`, `collapse_all`, `command_mode`, `comment`, `cycle_layout`, `dismiss_artifact`, `down`, `expand_all`, `expand_all_comments`, `expand_comment`, `file_comment`, `filter_reviewed`, `focus_swap`, `half_down`, `half_up`, `help`, `hide_comments`, `hide_comments_back`, `jump_back`, `jump_forward`, `next_file`, `next_mark`, `next_section`, `open_doc_ref`, `open_in_editor`, `open_in_editor_takeover`, `open_in_markdown_viewer`, `open_terminal`, `open_terminal_takeover`, `pane_down`, `pane_left`, `pane_right`, `pane_up`, `pause`, `prev_file`, `prev_mark`, `prev_section`, `question`, `quit`, `refresh`, `relaunch`, `review_summary`, `reviewed`, `scroll_down`, `scroll_end`, `scroll_first_char`, `scroll_home`, `scroll_left`, `scroll_right`, `scroll_up`, `search_backward`, `search_next`, `search_prev`, `select`, `shell_command`, `submit`, `suggest`, `toggle_diff`, `toggle_focus_mode`, `toggle_full_diff`, `toggle_overlays`, `toggle_sidebar`, `top`, `tree_mode`, `up`, `visual`, `wizard_advance`, `wizard_back`, `wizard_toggle`, `wrap`, `yank_line`.
+Available action names: `answer`, `artifact_versions`, `base_ref`, `block_match`, `block_top`, `block_up`, `bottom`, `clear_review`, `collapse_all`, `command_mode`, `comment`, `cycle_layout`, `dismiss_artifact`, `down`, `expand_all`, `expand_all_comments`, `expand_comment`, `file_comment`, `filter_reviewed`, `focus_swap`, `half_down`, `half_up`, `help`, `hide_comments`, `hide_comments_back`, `jump_back`, `jump_forward`, `next_file`, `next_mark`, `next_section`, `open_doc_ref`, `open_in_editor`, `open_in_editor_takeover`, `open_in_markdown_viewer`, `open_terminal`, `open_terminal_takeover`, `pane_down`, `pane_left`, `pane_right`, `pane_up`, `pause`, `prev_file`, `prev_mark`, `prev_section`, `question`, `quit`, `refresh`, `relaunch`, `review_summary`, `reviewed`, `scroll_down`, `scroll_end`, `scroll_first_char`, `scroll_home`, `scroll_left`, `scroll_right`, `scroll_up`, `search_backward`, `search_next`, `search_prev`, `select`, `shell_command`, `submit`, `suggest`, `toggle_diff`, `toggle_focus_mode`, `toggle_full_diff`, `toggle_overlays`, `toggle_sidebar`, `toggle_tour`, `top`, `tour_next`, `tour_prev`, `tree_mode`, `up`, `visual`, `wizard_advance`, `wizard_back`, `wizard_toggle`, `wrap`, `yank_line`.
 
 The help overlay (`H`) dynamically reflects your custom bindings. Modal keys (Enter, Esc, Tab in overlays) are not configurable.
 

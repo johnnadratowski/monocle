@@ -42,6 +42,7 @@ type statusBarModel struct {
 	searchInfo       string // transient "match i/N" indicator after a search
 	contextHints     string // override hints when set (e.g. comment-specific keybinds)
 	buildNotice      string // "a newer build is installed" hint; "" when current
+	tourLabel        string // "tour 1.2 / 7" while a guided tour is on; "" otherwise
 	diffStyle        diffStyle
 	contentMode      bool   // true when viewing content (plan/doc) in raw mode
 	contentID        string // non-empty when viewing a content item (raw or diff)
@@ -198,6 +199,12 @@ func (m statusBarModel) View() string {
 	// long-running session cannot otherwise tell it is running stale code.
 	if m.buildNotice != "" {
 		parts = append(parts, lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Bold(true).Render(m.buildNotice))
+	}
+
+	// Where the reviewer is in the agent's tour, next to the connection because
+	// the stop id is what they quote back to the agent.
+	if m.tourLabel != "" {
+		parts = append(parts, lipgloss.NewStyle().Foreground(lipgloss.Color(tourGutterColor)).Bold(true).Render(m.tourLabel))
 	}
 
 	// Agent-working pulse: the agent has written files since the last review.

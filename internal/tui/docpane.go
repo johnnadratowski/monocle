@@ -33,6 +33,73 @@ type docPaneModel struct {
 	// Highlight span (1-based lines, 0-based cols); zero end means unspecified.
 	hlStartLine, hlStartCol, hlEndLine, hlEndCol int
 	rangeShifted                                 bool // true when the range was clamped (doc drifted)
+
+	// Note mode: the pane shows prose the agent wrote — a tour stop's note —
+	// rather than an excerpt of a document. There are no line numbers to show
+	// and nothing to highlight, and prose has to wrap, so it renders
+	// differently. noteSource is the markdown; lines hold it styled and wrapped
+	// for noteWidth, and are rebuilt when the width changes.
+	note       bool
+	noteSource string
+	noteWidth  int
+	styler     *markdownStyler
+}
+
+// openNote shows a block of markdown under a heading. key identifies what is
+// showing (like annotationID does for refs), so the caller can tell whether the
+// pane already holds it.
+func (m *docPaneModel) openNote(key, title, body string, styler *markdownStyler) {
+	m.active = true
+	m.note = true
+	m.annotationID = key
+	m.title = title
+	m.noteSource = body
+	m.styler = styler
+	m.refs = nil
+	m.activeRef = 0
+	m.hlStartLine, m.hlStartCol, m.hlEndLine, m.hlEndCol = 0, 0, 0, 0
+	m.rangeShifted = false
+	m.offset = 0
+	m.noteWidth = -1 // force a wrap at the next width we learn
+	m.reflow()
+}
+
+// reflow re-wraps the note for the current width. A no-op outside note mode,
+// and when the width has not changed.
+func (m *docPaneModel) reflow() {
+	if !m.note || m.noteWidth == m.width {
+		return
+	}
+	m.noteWidth = m.width
+	m.lines = wrapNote(m.noteSource, m.width, m.styler)
+	m.clamp()
+}
+
+// wrapNote styles each markdown line and wraps it to the pane, leaving a
+// one-column margin. Styling first, then wrapping, keeps a bold span that
+// crosses a wrap boundary bold on both rows.
+func wrapNote(src string, width int, styler *markdownStyler) []string {
+	textW := width - 2
+	if textW < 10 {
+		textW = 10
+	}
+	var out []string
+	for _, raw := range strings.Split(strings.TrimRight(src, "\n"), "\n") {
+		styled := raw
+		if styler != nil {
+			styled = styler.StyleLine(raw)
+		}
+		for _, row := range wrapContent(styled, textW) {
+			out = append(out, " "+row)
+		}
+	}
+	return out
+}
+
+// noteHeight is how many rows the note wants, title included, at a width —
+// so a two-line note does not take half the screen.
+func (m docPaneModel) noteHeight(width int) int {
+	return len(wrapNote(m.noteSource, width, m.styler)) + 1
 }
 
 // openRefs begins showing an annotation's refs starting at index 0. The caller
@@ -110,6 +177,9 @@ func (m *docPaneModel) close() {
 	m.focused = false
 	m.refs = nil
 	m.lines = nil
+	m.note = false
+	m.noteSource = ""
+	m.annotationID = ""
 }
 
 // viewportHeight is the number of doc lines that fit, leaving one row for the
@@ -147,6 +217,18 @@ func (m docPaneModel) View() string {
 	hlStyle := lipgloss.NewStyle().Background(accent).Foreground(lipgloss.Color("0"))
 
 	vp := m.viewportHeight()
+	if m.note {
+		// The width is only final at render time (the horizontal layout measures
+		// the rendered sidebar), so re-wrap here if it moved. m is a copy.
+		m.reflow()
+		for i := 0; i < vp; i++ {
+			b.WriteString("\n")
+			if idx := m.offset + i; idx < len(m.lines) {
+				b.WriteString(truncateToWidth(m.lines[idx], m.width))
+			}
+		}
+		return b.String()
+	}
 	for i := 0; i < vp; i++ {
 		b.WriteString("\n")
 		idx := m.offset + i

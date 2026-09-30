@@ -11,8 +11,9 @@ import (
 //
 // BY TASK: sections answer "I want to do X, what's the key". Each section is a
 // verb, and a binding belongs to exactly one. Sections run in the order you
-// reach for them: move, jump, change the view, comment, act on the review, hand
-// something to another program, commands, the app itself.
+// reach for them: move, jump, follow the agent's tour, change the view, comment,
+// act on the review, hand something to another program, commands, the app
+// itself.
 //
 // The old split was Navigation / Review / General, which failed both ways.
 // Navigation had accumulated the wrap toggle, the sidebar toggle, the tree
@@ -33,6 +34,7 @@ type helpRow struct{ key, desc string }
 const (
 	secMove    = "Move"
 	secJump    = "Jump"
+	secTour    = "Guided tour"
 	secView    = "View & panes"
 	secComment = "Comment"
 	secReview  = "Review"
@@ -44,7 +46,7 @@ const (
 
 // helpSectionOrder is the render order, and the order the docs use.
 var helpSectionOrder = []string{
-	secMove, secJump, secView, secComment, secReview, secOpen, secCommand, secApp, secEditor,
+	secMove, secJump, secTour, secView, secComment, secReview, secOpen, secCommand, secApp, secEditor,
 }
 
 // helpUnsorted names sections that keep their written order instead of the key

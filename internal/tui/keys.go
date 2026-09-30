@@ -64,6 +64,12 @@ type KeyMap struct {
 	JumpBack    []string
 	JumpForward []string
 
+	// Guided review tour: step between the agent's stops, and switch the tour
+	// off without losing it.
+	TourNext   []string
+	TourPrev   []string
+	ToggleTour []string
+
 	// Code-structure navigation in the diff (vim %, [{ and [[)
 	BlockMatch []string // block start <-> end
 	BlockUp    []string // out one level
@@ -167,6 +173,12 @@ func DefaultKeyMap() KeyMap {
 		PrevMark: []string{"<"},
 		NextMark: []string{">"},
 
+		// . and , are free, sit together under the right hand, and read as
+		// forward/back the way > and < already do for marks.
+		TourNext:   []string{"."},
+		TourPrev:   []string{","},
+		ToggleTour: []string{"W"}, // "walkthrough"
+
 		BlockMatch: []string{"%"},
 		BlockUp:    []string{"("},
 		BlockTop:   []string{")"},
@@ -259,6 +271,9 @@ var keyActions = map[string]func(*KeyMap) *[]string{
 	"search_prev":             func(km *KeyMap) *[]string { return &km.SearchPrev },
 	"prev_mark":               func(km *KeyMap) *[]string { return &km.PrevMark },
 	"next_mark":               func(km *KeyMap) *[]string { return &km.NextMark },
+	"tour_next":               func(km *KeyMap) *[]string { return &km.TourNext },
+	"tour_prev":               func(km *KeyMap) *[]string { return &km.TourPrev },
+	"toggle_tour":             func(km *KeyMap) *[]string { return &km.ToggleTour },
 	"block_match":             func(km *KeyMap) *[]string { return &km.BlockMatch },
 	"block_up":                func(km *KeyMap) *[]string { return &km.BlockUp },
 	"block_top":               func(km *KeyMap) *[]string { return &km.BlockTop },

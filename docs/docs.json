@@ -41,6 +41,7 @@
             "pages": [
               "guides/agent-setup",
               "guides/plan-review",
+              "guides/guided-tours",
               "guides/review-gating",
               "guides/sessions"
             ]

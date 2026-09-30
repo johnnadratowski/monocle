@@ -1,0 +1,33 @@
+---
+title: "Guided Tours"
+description: "Let your agent walk you through a change, one stop at a time."
+---
+
+A review lands in whatever order its files sort. Your agent knows the order it should be read in and what to say at each point — a guided tour is how it tells you. The tour is an ordered list of **stops**, each a place in the diff plus the agent's note about it. You step through with a key and ask the agent about any stop by its id: "1.2 — does `x` get hoisted here?".
+
+## Taking a tour
+
+When the agent sends a tour, monocle enters **tour mode** on its first stop. Each stop:
+
+1. Selects the stop's file and puts the diff cursor on its first line. The stop's lines stay marked in the gutter after you move off them.
+2. Opens the doc pane under the diff with the header `1.2 · Title` and the agent's note, followed by the stop's related files and views.
+3. Shows `tour 1.2 / 7` in the status bar.
+
+| Key | Action |
+|-----|--------|
+| `.` | Next stop |
+| `,` | Previous stop |
+| `W` | Tour mode on/off. Off hides the note, the marks and the status; your stop is kept, and `.`/`,` or `W` resume there. |
+| `:stop <id>` | Jump to a stop by id, e.g. `:stop 1.2`. With no id it lists the stops. |
+
+The ends clamp: `.` on the last stop tells you it is the end rather than wrapping to the first. A stop with no file — one that exists to show a recording, say — shows its note and leaves the diff where it is. `ctrl+o` returns to wherever a stop jumped you from.
+
+The tour belongs to the review. It survives a restart (you come back on the same stop), and it goes when the review is cleared or approved.
+
+## Asking about a stop
+
+Stop ids are what you type and what the agent answers to. When you ask about one, the agent can call `goto_stop` to put that stop in front of you while it explains. If the agent re-sends the tour — to fix a note, say — you stay on the stop you were on as long as its id survives.
+
+## Sending a tour
+
+Agents send tours with the `set_walkthrough` MCP tool or `monocle review set-walkthrough --file tour.json`. See [Agent commands](/reference/agent-commands#monocle-review-set-walkthrough) for the format.

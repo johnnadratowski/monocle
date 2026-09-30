@@ -194,6 +194,43 @@ type diffViewModel struct {
 	shownAt time.Time
 
 	keys *KeyMap
+
+	// stopPath / stopStart / stopEnd are the current tour stop's range, marked
+	// in the gutter so the lines the note is about stay findable after the
+	// cursor moves off them. stopPath is what m.path holds for that file (the
+	// repo-relative path, or an added file's absolute one); "" is no stop.
+	stopPath           string
+	stopStart, stopEnd int
+}
+
+// tourGutterColor marks a tour stop's lines. Magenta, because cyan is the
+// annotation rail and the summary palette owns the last gutter column.
+const tourGutterColor = "5"
+
+// inStopRange reports whether a row shows a line the current tour stop is
+// about. Only rows with a new-file number qualify: the stop's range is in
+// new-file lines, and a removed line has none.
+func (m diffViewModel) inStopRange(line diffViewLine) bool {
+	if m.stopPath == "" || m.stopStart <= 0 || m.path != m.stopPath || m.contentID != "" {
+		return false
+	}
+	if line.isHunk || line.isComment || line.isAnnotation || line.verbatim {
+		return false
+	}
+	n := line.rightLineNum
+	if n == 0 {
+		n = line.newLineNum
+	}
+	return n > 0 && n >= m.stopStart && n <= m.stopEnd
+}
+
+// stopGutter restyles a gutter for a row inside the stop's range: a solid block
+// of the tour colour, so the range reads at a glance down the side of the diff.
+func (m diffViewModel) stopGutter(line diffViewLine, base lipgloss.Style) lipgloss.Style {
+	if !m.inStopRange(line) {
+		return base
+	}
+	return base.Foreground(lipgloss.Color("0")).Background(lipgloss.Color(tourGutterColor)).Bold(true)
 }
 
 // isViewingContentItem returns true when the diff view is showing a content item,
@@ -1656,7 +1693,7 @@ func (m diffViewModel) renderContentLine(line diffViewLine, _, contentWidth int,
 	if len(gutter) < gutterWidth {
 		gutter = fmt.Sprintf("%-*s", gutterWidth, gutter)
 	}
-	renderedGutter := gutterWithRangeBar(gutter, gutterStyle, line.annotated, m.summaryBarFor(line), nil)
+	renderedGutter := gutterWithRangeBar(gutter, m.stopGutter(line, gutterStyle), line.annotated, m.summaryBarFor(line), nil)
 
 	// Faded: a source comment under the filter, or a hunk outside the selected
 	// summary item.
@@ -1744,7 +1781,7 @@ func (m diffViewModel) renderDiffLine(line diffViewLine, _, contentWidth int, se
 	}
 	// Annotated code lines get a cyan bar in the gutter's trailing column to mark
 	// the annotation's range.
-	renderedGutter := gutterWithRangeBar(gutter, gutterStyle, line.annotated, m.summaryBarFor(line), lineBg)
+	renderedGutter := gutterWithRangeBar(gutter, m.stopGutter(line, gutterStyle), line.annotated, m.summaryBarFor(line), lineBg)
 
 	// Faded: a source comment under the filter, or a hunk outside the selected
 	// summary item.
@@ -2032,7 +2069,7 @@ func (m diffViewModel) splitRow(gutter, styled string, kind types.DiffLineKind, 
 	if len(gutter) < gutterW {
 		gutter = fmt.Sprintf("%-*s", gutterW, gutter)
 	}
-	renderedGutter := gutterWithRangeBar(gutter, gutterStyle, annotated, m.summaryBarFor(line), lineBg)
+	renderedGutter := gutterWithRangeBar(gutter, m.stopGutter(line, gutterStyle), annotated, m.summaryBarFor(line), lineBg)
 	if dimmed {
 		return renderedGutter + renderDimmedComment(styled, lineBg, contentW)
 	}
@@ -2063,7 +2100,7 @@ func (m diffViewModel) renderSplitSide(gutter, content string, kind types.DiffLi
 	if len(gutter) < gutterW {
 		gutter = fmt.Sprintf("%-*s", gutterW, gutter)
 	}
-	renderedGutter := gutterWithRangeBar(gutter, gutterStyle, annotated, m.summaryBarFor(line), lineBg)
+	renderedGutter := gutterWithRangeBar(gutter, m.stopGutter(line, gutterStyle), annotated, m.summaryBarFor(line), lineBg)
 
 	// Hide-comments filter: dim comment-only lines.
 	if dimmed {
@@ -2204,7 +2241,7 @@ func (m diffViewModel) renderWrappedLine(gutter, content string, gutterWidth, co
 		if len(g) < gutterWidth {
 			g = fmt.Sprintf("%-*s", gutterWidth, g)
 		}
-		parts = append(parts, gutterWithRangeBar(g, gutterStyle, annotated, m.summaryBarFor(mdLineOrZero(mdLine)), lineBg)+
+		parts = append(parts, gutterWithRangeBar(g, m.stopGutter(mdLineOrZero(mdLine), gutterStyle), annotated, m.summaryBarFor(mdLineOrZero(mdLine)), lineBg)+
 			applyBgAndPad(row, lineBg, contentWidth))
 	}
 	return strings.Join(parts, "\n")
