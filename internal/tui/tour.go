@@ -128,6 +128,9 @@ func (m appModel) enterStop(i int, how stopEntry) (appModel, tea.Cmd) {
 	m.tour.index = i
 	m.tour.on = true
 	m.statusBar.tourLabel = m.tourLabel()
+	// A notice left from the last key ("end of tour") belongs to the stop being
+	// left. A keypress clears it anyway; a move the agent made would not.
+	m.statusBar.searchInfo = ""
 
 	m.openStopNote(stop)
 	var cmds []tea.Cmd

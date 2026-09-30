@@ -312,6 +312,20 @@ func TestAgentMovesTheTour(t *testing.T) {
 		}
 	})
 
+	// Found end to end: the agent's move arrived under the previous key's
+	// "end of tour", which only a keypress would have cleared.
+	t.Run("an agent's move clears a stale notice", func(t *testing.T) {
+		m, _ := tourApp(t)
+		m = pressKey(t, m, ",")
+		if m.statusBar.searchInfo != "start of tour" {
+			t.Fatalf("setup: notice %q", m.statusBar.searchInfo)
+		}
+		m = updateApp(t, m, tourEventMsg{status: core.WalkthroughEventGoto, id: "1.2"})
+		if m.statusBar.searchInfo != "" {
+			t.Errorf("notice %q survived the move to 1.2", m.statusBar.searchInfo)
+		}
+	})
+
 	t.Run("a replaced tour keeps the reviewer's stop and its new note", func(t *testing.T) {
 		m, e := tourApp(t)
 		m = pressKey(t, m, ".")
