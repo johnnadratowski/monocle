@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -130,6 +131,15 @@ func TestEngineClient_RoundTrip(t *testing.T) {
 	// Server engine saw the mutated value.
 	if engine.GetConfig().Wrap == origWrap {
 		t.Errorf("SaveConfig did not propagate mutation: got Wrap=%v, want %v", engine.GetConfig().Wrap, !origWrap)
+	}
+	// ...and wrote it to the throwaway config dir TestMain set up. This save
+	// used to land in the user's real ~/.config/monocle/config.json.
+	saved := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "monocle", "config.json")
+	if !strings.HasPrefix(saved, os.TempDir()) {
+		t.Fatalf("config dir %q is not a temp dir: this test would write the user's real config", saved)
+	}
+	if _, err := os.Stat(saved); err != nil {
+		t.Errorf("SaveConfig did not write the isolated config: %v", err)
 	}
 
 	// Status queries.
