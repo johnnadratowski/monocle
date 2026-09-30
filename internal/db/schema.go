@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-const schemaVersion = 17
+const schemaVersion = 18
 
 const dropSQL = `
 DROP TABLE IF EXISTS review_snapshot_files;
@@ -17,6 +17,7 @@ DROP TABLE IF EXISTS content_items;
 DROP TABLE IF EXISTS additional_files;
 DROP TABLE IF EXISTS file_metadata;
 DROP TABLE IF EXISTS annotations;
+DROP TABLE IF EXISTS walkthroughs;
 DROP TABLE IF EXISTS changed_files;
 DROP TABLE IF EXISTS sessions;
 DROP TABLE IF EXISTS schema_version;
@@ -81,6 +82,18 @@ CREATE TABLE IF NOT EXISTS summary_items (
 	sort_order INTEGER NOT NULL DEFAULT 0,
 	targets TEXT NOT NULL DEFAULT '[]',
 	UNIQUE(session_id, id)
+);
+
+-- The agent's guided tour of a review: its stops as a JSON array of
+-- WalkthroughStop, and the id of the stop the reviewer is on so a restart
+-- resumes there. One per session, replaced wholesale when the agent sends a
+-- new one.
+CREATE TABLE IF NOT EXISTS walkthroughs (
+	session_id TEXT PRIMARY KEY REFERENCES sessions(id),
+	title TEXT NOT NULL DEFAULT '',
+	stops TEXT NOT NULL DEFAULT '[]',
+	current_stop TEXT NOT NULL DEFAULT '',
+	updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Agent-supplied per-file grouping metadata. Kept in a separate table so it

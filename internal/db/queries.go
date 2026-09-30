@@ -909,3 +909,57 @@ func (d *DB) DeleteSummaryItems(sessionID string) error {
 	_, err := d.Exec(`DELETE FROM summary_items WHERE session_id = ?`, sessionID)
 	return err
 }
+
+// SaveWalkthrough stores a session's tour and the stop the reviewer is on,
+// replacing whatever tour was there: a re-send is a new tour, not an addition.
+func (d *DB) SaveWalkthrough(sessionID string, w *types.Walkthrough, currentStop string) error {
+	stops, err := json.Marshal(w.Stops)
+	if err != nil {
+		return fmt.Errorf("encode walkthrough stops: %w", err)
+	}
+	_, err = d.Exec(
+		`INSERT OR REPLACE INTO walkthroughs (session_id, title, stops, current_stop, updated_at)
+		 VALUES (?, ?, ?, ?, ?)`,
+		sessionID, w.Title, string(stops), currentStop, time.Now(),
+	)
+	if err != nil {
+		return fmt.Errorf("save walkthrough: %w", err)
+	}
+	return nil
+}
+
+// GetWalkthrough returns a session's tour and the stop the reviewer is on, or a
+// nil tour when the agent sent none.
+func (d *DB) GetWalkthrough(sessionID string) (*types.Walkthrough, string, error) {
+	var w types.Walkthrough
+	var stops, current string
+	err := d.QueryRow(
+		`SELECT title, stops, current_stop FROM walkthroughs WHERE session_id = ?`, sessionID,
+	).Scan(&w.Title, &stops, &current)
+	if err == sql.ErrNoRows {
+		return nil, "", nil
+	}
+	if err != nil {
+		return nil, "", fmt.Errorf("get walkthrough: %w", err)
+	}
+	if err := json.Unmarshal([]byte(stops), &w.Stops); err != nil {
+		return nil, "", fmt.Errorf("decode walkthrough stops: %w", err)
+	}
+	return &w, current, nil
+}
+
+// SetWalkthroughStop records which stop the reviewer is on.
+func (d *DB) SetWalkthroughStop(sessionID, stopID string) error {
+	_, err := d.Exec(
+		`UPDATE walkthroughs SET current_stop = ?, updated_at = ? WHERE session_id = ?`,
+		stopID, time.Now(), sessionID,
+	)
+	return err
+}
+
+// DeleteWalkthrough removes a session's tour, used when the review is cleared or
+// approved: a tour explains one review, and the next one needs its own.
+func (d *DB) DeleteWalkthrough(sessionID string) error {
+	_, err := d.Exec(`DELETE FROM walkthroughs WHERE session_id = ?`, sessionID)
+	return err
+}

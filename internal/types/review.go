@@ -97,12 +97,18 @@ type ReviewSession struct {
 	// name in the TUI's top-left. It identifies the PANE, not the review, so
 	// unlike ReviewName it outlives an approval and every round after it — a
 	// tiled fleet of identical headers is the problem it exists to solve.
-	AgentLabel     string
-	FileStatuses   map[string]bool // path -> reviewed
-	IgnorePatterns []string
-	ReviewRound    int
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	AgentLabel string
+	// Walkthrough is the agent's guided tour of this review, nil when it sent
+	// none. WalkthroughStop is the id of the stop the reviewer is on, kept here
+	// rather than in the TUI so a restart resumes at the same stop and the agent
+	// can ask where the reviewer is.
+	Walkthrough     *Walkthrough
+	WalkthroughStop string
+	FileStatuses    map[string]bool // path -> reviewed
+	IgnorePatterns  []string
+	ReviewRound     int
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
 }
 
 type ChangedFile struct {
