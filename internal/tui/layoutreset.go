@@ -58,8 +58,8 @@ func (m appModel) handleLayout(msg tourLayoutMsg) (appModel, tea.Cmd) {
 	}
 }
 
-// resetLayout runs the layout-reset command in the background with the stop
-// and repo in its environment.
+// resetLayout runs the layout-reset command in the background, with the same
+// environment as the view-status command: the on-stop command's.
 func (m appModel) resetLayout() (appModel, tea.Cmd) {
 	command := m.layoutResetCommand()
 	if command == "" {
@@ -67,8 +67,12 @@ func (m appModel) resetLayout() (appModel, tea.Cmd) {
 		return m, nil
 	}
 	stop, _ := m.currentStop()
-	env, root := tourCommandEnv(stop.ID, m.repoRoot), m.repoRoot
+	engine, root := m.engine, m.repoRoot
 	return m, func() tea.Msg {
+		env, err := onStopEnv(stop, root, artifactFile(engine))
+		if err != nil {
+			return layoutResetDoneMsg{err: err}
+		}
 		return layoutResetDoneMsg{err: execHook(command, root, env, layoutResetTimeout, io.Discard)}
 	}
 }

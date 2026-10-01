@@ -494,10 +494,11 @@ func TestStatusIsAskedOnRestore(t *testing.T) {
 	}
 }
 
-// The status command learns which stop and which repo, and nothing more.
+// The status command gets the on-stop command's environment: the stop, the
+// repo, and the stop as JSON.
 func TestTheStatusCommandsEnvironment(t *testing.T) {
-	status := `[ "$MONOCLE_STOP_ID" = 1.2 ] && [ "${MONOCLE_REPO_ROOT+set}" = set ] && [ -z "${MONOCLE_STOP_JSON+set}" ] &&
-		echo '{"views": {"view": "open"}}'`
+	status := `[ "$MONOCLE_STOP_ID" = 1.2 ] && [ "${MONOCLE_REPO_ROOT+set}" = set ] &&
+		case "$MONOCLE_STOP_JSON" in *'"id":"1.2"'*) echo '{"views": {"view": "open"}}';; esac`
 	m := settle(t, statusApp(t, status, ""))
 	if !strings.Contains(screenText(m), "[1] video Demo (open)") {
 		t.Errorf("the status command did not get its environment:\n%s", screenText(m))
@@ -628,7 +629,7 @@ func layoutApp(t *testing.T, reset string) (appModel, string) {
 	return settle(t, m), dir
 }
 
-const recordingReset = `printf '%s|%s\n' "$MONOCLE_STOP_ID" "${MONOCLE_REPO_ROOT+set}" >> "$(dirname STATE)/resets"; ` +
+const recordingReset = `printf '%s|%s|%s\n' "$MONOCLE_STOP_ID" "${MONOCLE_REPO_ROOT+set}" "${MONOCLE_STOP_JSON:+json}" >> "$(dirname STATE)/resets"; ` +
 	`printf '{"views": {}, "layout": "default"}' > STATE`
 
 func TestASavedLayoutOffersAReset(t *testing.T) {
@@ -657,8 +658,8 @@ func TestLayoutResetRunsTheCommandThenAsksAgain(t *testing.T) {
 	next, cmd := m.Update(tourLayoutMsg{arg: "reset"})
 	m = driveWithin(t, next.(appModel), cmd, 0, 5*time.Second)
 	runs, _ := os.ReadFile(filepath.Join(dir, "resets"))
-	if string(runs) != "1.2|set\n" {
-		t.Errorf("reset runs %q, want one with the stop and repo", runs)
+	if string(runs) != "1.2|set|json\n" {
+		t.Errorf("reset runs %q, want one with the status command's environment", runs)
 	}
 	if m.tour.statusSeq != asked+1 || m.statusBar.searchInfo != "layout reset" {
 		t.Errorf("after the reset: asked %d more times, status %q", m.tour.statusSeq-asked, m.statusBar.searchInfo)

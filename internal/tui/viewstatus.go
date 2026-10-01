@@ -15,8 +15,8 @@ import (
 
 // The on-stop command shows a stop's views in windows Monocle cannot see, so
 // whether a view is showing is something only that side can say. The
-// walkthrough_view_status command is how it says it. Run with MONOCLE_STOP_ID
-// and MONOCLE_REPO_ROOT, it prints one line of JSON:
+// walkthrough_view_status command is how it says it. Run with the on-stop
+// command's environment (onStopEnv), it prints one line of JSON:
 //
 //	{"views": {"view": "open", "view2": "hidden"}, "layout": "saved"}
 //
@@ -95,12 +95,6 @@ func parseViewStatus(out []byte, n int) (*tourStatus, error) {
 	return st, nil
 }
 
-// tourCommandEnv is the environment of the commands that ask about or change
-// the windows around a stop rather than open it: which stop, which repo.
-func tourCommandEnv(stopID, repoRoot string) []string {
-	return []string{"MONOCLE_STOP_ID=" + stopID, "MONOCLE_REPO_ROOT=" + repoRoot}
-}
-
 // viewStatusMsg is the view-status command's answer for a stop: nil status
 // when it said nothing usable. seq is the ask it answers.
 type viewStatusMsg struct {
@@ -131,11 +125,14 @@ func (m *appModel) refreshViewStatus() tea.Cmd {
 		return nil
 	}
 	m.tour.statusSeq++
-	seq, root := m.tour.statusSeq, m.repoRoot
+	seq, engine, root := m.tour.statusSeq, m.engine, m.repoRoot
 	return func() tea.Msg {
 		msg := viewStatusMsg{seq: seq, stop: stop.ID}
+		env, err := onStopEnv(stop, root, artifactFile(engine))
+		if err != nil {
+			return msg
+		}
 		var out bytes.Buffer
-		env := tourCommandEnv(stop.ID, root)
 		if err := execHook(command, root, env, viewStatusTimeout, &limitedWriter{w: &out, left: viewStatusMaxOutput}); err != nil {
 			return msg
 		}

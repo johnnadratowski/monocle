@@ -29,8 +29,8 @@ type Config struct {
 	WalkthroughOnStop string `json:"walkthrough_on_stop"`
 	// WalkthroughViewStatus is a shell command that says how the windows
 	// around the current tour stop stand, so each view's label can be marked
-	// open, hidden or not opened. Run via sh -c in the repo root with
-	// MONOCLE_STOP_ID and MONOCLE_REPO_ROOT, 500ms timeout, when a stop is
+	// open, hidden or not opened. Run via sh -c in the repo root with the
+	// WalkthroughOnStop environment, 500ms timeout, when a stop is
 	// shown and after a view is opened. It prints one line of JSON:
 	// {"views": {"view": "open"|"hidden"|"closed", "view2": …},
 	// "layout": "saved"|"default"}. Empty, or a failure, shows no marker.
@@ -39,7 +39,7 @@ type Config struct {
 	// tour back in their default layout. When the view status says
 	// "layout": "saved", the tour note shows "Layout: saved · reset", and a
 	// click on reset (or `:layout reset`) runs it via sh -c in the repo root
-	// with MONOCLE_STOP_ID and MONOCLE_REPO_ROOT, then asks the view status
+	// with the same environment as WalkthroughViewStatus, then asks the view status
 	// again. Empty runs nothing.
 	WalkthroughLayoutReset string `json:"walkthrough_layout_reset"`
 	// EditorMode controls how Ctrl+g / Ctrl+o open a file: "terminal" (take over
