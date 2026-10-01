@@ -30,10 +30,12 @@ import (
 // must not pile up behind every later stop.
 const onStopTimeout = 30 * time.Second
 
-// onStopDoneMsg reports how the on-stop command for a stop went.
+// onStopDoneMsg reports how the on-stop command for a stop went. view is the
+// view it was asked to show (1-based), or 0 for arriving at the stop.
 type onStopDoneMsg struct {
-	id  string
-	err error
+	id   string
+	view int
+	err  error
 }
 
 // onStopEnv is what the on-stop command learns about the stop, as environment
@@ -78,6 +80,23 @@ func resolveStopViews(views []types.StopView, repoRoot string, artifact func(id 
 		out[i] = v
 	}
 	return out
+}
+
+// stopViewName is what the nth view (1-based) of a stop is called outside
+// Monocle: "view", then "view2", "view3"… It is the name the on-stop command
+// is given with MONOCLE_VIEW_NAME and the key the view-status command answers
+// under, so both sides agree on which window is which view.
+func stopViewName(n int) string {
+	if n <= 1 {
+		return "view"
+	}
+	return fmt.Sprintf("view%d", n)
+}
+
+// stopViewEnv is what the on-stop command learns when it is asked for one view
+// rather than run for arriving at the stop: which view, by position and name.
+func stopViewEnv(n int) []string {
+	return []string{fmt.Sprintf("MONOCLE_VIEW_INDEX=%d", n), "MONOCLE_VIEW_NAME=" + stopViewName(n)}
 }
 
 func isURL(s string) bool {
@@ -133,6 +152,23 @@ func (m appModel) runOnStop(stop types.WalkthroughStop) tea.Cmd {
 			return onStopDoneMsg{id: stop.ID, err: err}
 		}
 		return onStopDoneMsg{id: stop.ID, err: execOnStop(command, root, env, onStopTimeout)}
+	}
+}
+
+// runStopView runs the on-stop command for one view of the stop — `:view 2`,
+// or a click on its label — with the stop's usual environment plus
+// stopViewEnv. The command opened the stop's views, in windows Monocle cannot
+// see, so it is the one that can bring back the window already showing a view
+// rather than open a second.
+func (m appModel) runStopView(command string, stop types.WalkthroughStop, n int) tea.Cmd {
+	engine, root := m.engine, m.repoRoot
+	return func() tea.Msg {
+		env, err := onStopEnv(stop, root, artifactFile(engine))
+		if err != nil {
+			return onStopDoneMsg{id: stop.ID, view: n, err: err}
+		}
+		env = append(env, stopViewEnv(n)...)
+		return onStopDoneMsg{id: stop.ID, view: n, err: execOnStop(command, root, env, onStopTimeout)}
 	}
 }
 
@@ -195,7 +231,11 @@ func lastLine(s string) string {
 // command's effect is on screen, or it is not, and either way the reviewer
 // can see it.
 func (m appModel) handleOnStopDone(msg onStopDoneMsg) appModel {
-	if msg.err != nil {
+	switch {
+	case msg.err == nil:
+	case msg.view > 0:
+		m.statusBar.searchInfo = fmt.Sprintf("view %d of %s failed: %v", msg.view, msg.id, msg.err)
+	default:
 		m.statusBar.searchInfo = fmt.Sprintf("on-stop %s failed: %v", msg.id, msg.err)
 	}
 	return m
@@ -205,8 +245,9 @@ func (m appModel) handleOnStopDone(msg onStopDoneMsg) appModel {
 type tourViewMsg struct{ arg string }
 
 // openStopView opens view n (1-based; empty means the first) of the current
-// stop in the viewer its kind calls for — the same viewers ctrl+p uses — for
-// the reviewer who has no on-stop command, or who closed the window it opened.
+// stop. With an on-stop command, the command is asked for it (runStopView):
+// it owns the windows views appear in. Without one, the view opens in the
+// viewer its kind calls for — the same viewers ctrl+p uses.
 func (m appModel) openStopView(arg string) (appModel, tea.Cmd) {
 	stop, ok := m.currentStop()
 	if !ok || !m.tour.on {
@@ -223,6 +264,9 @@ func (m appModel) openStopView(arg string) (appModel, tea.Cmd) {
 			m.statusBar.searchInfo = fmt.Sprintf("%s has views 1-%d", stop.ID, len(stop.Views))
 			return m, nil
 		}
+	}
+	if command := m.onStopCommand(); command != "" {
+		return m, m.runStopView(command, stop, n)
 	}
 	v := resolveStopViews(stop.Views[n-1:n], m.repoRoot, artifactFile(m.engine))[0]
 	if v.Kind == types.StopViewMarkdown || (v.Kind == types.StopViewArtifact && isMarkdownPath(v.Target)) {

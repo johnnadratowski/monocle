@@ -23,7 +23,9 @@ type Config struct {
 	// fire-and-forget) on every guided-tour stop the reviewer settles on, with
 	// MONOCLE_STOP_ID, MONOCLE_REPO_ROOT and MONOCLE_STOP_JSON in its
 	// environment. It is how a stop's screenshots, recordings and window layout
-	// get shown: Monocle itself knows nothing about windows. Empty runs nothing.
+	// get shown: Monocle itself knows nothing about windows. `:view N` runs it
+	// too, adding MONOCLE_VIEW_INDEX and MONOCLE_VIEW_NAME for the one view
+	// asked for. Empty runs nothing.
 	WalkthroughOnStop string `json:"walkthrough_on_stop"`
 	// EditorMode controls how Ctrl+g / Ctrl+o open a file: "terminal" (take over
 	// Monocle's screen, the default), "tmux_vertical" (side-by-side split),

@@ -243,7 +243,7 @@ Bindings are grouped by the task they serve, and within a group ordered by key: 
 | `,` | Previous stop |
 | `.` | Next stop of the agent's tour (resumes it when off) |
 | `:stop <id>` | Jump to a stop by id, e.g. `:stop 1.2` (no id lists them) |
-| `:view [n]` | Open the stop's nth view (default the first) in the media / markdown viewer |
+| `:view [n]` | Open the stop's nth view (default the first): through `walkthrough_on_stop` when set, else in the media / markdown viewer |
 
 When the agent sends a tour (`set_walkthrough`), monocle enters tour mode on its first stop: the diff cursor lands on the stop's lines, which stay marked in the gutter, the doc pane shows `1.2 · Title` and the agent's note, and the status bar shows `tour 1.2 · 3 of 7` (the stop id, then its position in the tour). Ask the agent about a stop by its id. The ends of the tour clamp rather than wrap.
 
@@ -488,7 +488,7 @@ Monocle loads settings from JSON config files:
 | `editor_focus`                       | `true`, `false`                            | `true`       | Whether a new tmux split/window takes focus                              |
 | `markdown_viewer`                    | string                                     | `""`         | Rendered-markdown viewer for `Ctrl+p` (artifacts / `.md` files); may include flags and quoted args (e.g. `open -a "Google Chrome"`). Empty falls back to `glow -p` |
 | `media_viewer`                       | string                                     | `""`         | Viewer for media artifacts / files opened with `Ctrl+p` (images, video, audio); may include flags and quoted args. Empty falls back to Google Chrome (`open -a "Google Chrome"` on macOS) |
-| `walkthrough_on_stop`                | string                                     | `""`         | Shell command run (`sh -c`, in the repo root, fire-and-forget, 30s timeout) on every guided-tour stop you settle on, with `MONOCLE_STOP_ID`, `MONOCLE_REPO_ROOT` and `MONOCLE_STOP_JSON` (the stop, view targets resolved to absolute paths) in its environment. Use it to show a stop's screenshots/recordings and arrange windows. Empty runs nothing |
+| `walkthrough_on_stop`                | string                                     | `""`         | Shell command run (`sh -c`, in the repo root, fire-and-forget, 30s timeout) on every guided-tour stop you settle on, with `MONOCLE_STOP_ID`, `MONOCLE_REPO_ROOT` and `MONOCLE_STOP_JSON` (the stop, view targets resolved to absolute paths) in its environment. Use it to show a stop's screenshots/recordings and arrange windows. `:view N` runs it too, with `MONOCLE_VIEW_INDEX` / `MONOCLE_VIEW_NAME` naming the one view asked for. Empty runs nothing |
 | `ignore_patterns`                    | string array                               | `[]`         | Glob patterns for files to exclude                                       |
 | `min_diff_width`                     | integer                                    | `80`         | Minimum character width for the diff viewer in side-by-side layout       |
 | `mouse`                              | `true`, `false`                            | `true`       | Enable mouse interactions (click, scroll, drag)                          |

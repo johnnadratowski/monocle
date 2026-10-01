@@ -308,7 +308,7 @@ func (m helpModel) buildContent() string {
 			{Label(km.ToggleTour), "Tour mode on/off (hides the note and marks, keeps your stop)"},
 			{Label(km.CloseRelated), "Close the pane holding a stop's related files"},
 			{":stop <id>", "Jump to a stop by id, e.g. :stop 1.2 (no id lists them)"},
-			{":view [n]", "Open the stop's nth view (default the first) in the media/markdown viewer"},
+			{":view [n]", "Open the stop's nth view (default 1) via walkthrough_on_stop, else the media/markdown viewer"},
 		},
 		secView: {
 			{Label(km.FocusSwap) + "/shift+tab", "Switch pane focus (sidebar/diff/doc)"},

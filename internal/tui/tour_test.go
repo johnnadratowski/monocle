@@ -72,6 +72,12 @@ func testTour() *types.Walkthrough {
 // the initial load already processed.
 func tourApp(t *testing.T) (appModel, *tourEngine) {
 	t.Helper()
+	return tourAppWith(t, testTour(), &types.Config{})
+}
+
+// tourAppWith is tourApp over another tour and config.
+func tourAppWith(t *testing.T, tour *types.Walkthrough, cfg *types.Config) (appModel, *tourEngine) {
+	t.Helper()
 	// Never let a test reach a real tmux server: these tests may themselves be
 	// running inside one, and a stop's side effects split and kill panes.
 	t.Setenv("TMUX", "")
@@ -79,9 +85,9 @@ func tourApp(t *testing.T) (appModel, *tourEngine) {
 	files := []types.ChangedFile{{Path: "a.go", Status: types.FileAdded}, {Path: "b.go", Status: types.FileAdded}}
 	e := &tourEngine{
 		stubEngine: stubEngine{
-			cfg:          &types.Config{},
+			cfg:          cfg,
 			changedFiles: files,
-			session:      &types.ReviewSession{ID: "s", ChangedFiles: files, Walkthrough: testTour(), WalkthroughStop: "1.1"},
+			session:      &types.ReviewSession{ID: "s", ChangedFiles: files, Walkthrough: tour, WalkthroughStop: tour.Stops[0].ID},
 		},
 		diffs: map[string]*types.DiffResult{"a.go": fileDiff("a.go", 40), "b.go": fileDiff("b.go", 60)},
 	}
