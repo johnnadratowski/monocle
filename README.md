@@ -173,7 +173,7 @@ This means you can review the agent's *thinking* before it writes code — not j
 - **Comment resolution** — Mark individual comments as resolved (`x`); resolved comments are excluded from submitted reviews
 - **Submission history** — View past review submissions with `:history`
 - **Themes** — Choose a color scheme (`dark`, `light`, `molokai`, `dracula`, `nord`) via the `theme` config option, or switch live with `:theme <name>` / cycle with `:theme`
-- **Mouse support** — Click to focus panes, scroll with the wheel, click files to select, drag to make visual selections, and interact with modal controls
+- **Mouse support** — Click to focus panes, scroll with the wheel, click files to select, drag to make visual selections, interact with modal controls, and click a tour stop's view to open it
 - **External editor** — Open comment or submit text in `$VISUAL`/`$EDITOR` with `Ctrl+g` for full editing power
 - **Configurable keybindings** — Override any navigation or action key via config
 - **Feedback queue** — Submit reviews while the agent is working; delivered when the agent next runs `/get-feedback`
@@ -243,7 +243,7 @@ Bindings are grouped by the task they serve, and within a group ordered by key: 
 | `,` | Previous stop |
 | `.` | Next stop of the agent's tour (resumes it when off) |
 | `:stop <id>` | Jump to a stop by id, e.g. `:stop 1.2` (no id lists them) |
-| `:view [n]` | Open the stop's nth view (default the first): through `walkthrough_on_stop` when set, else in the media / markdown viewer |
+| `:view [n]` | Open the stop's nth view (default the first): through `walkthrough_on_stop` when set, else in the media / markdown viewer. Clicking a view's label under the note does the same |
 
 When the agent sends a tour (`set_walkthrough`), monocle enters tour mode on its first stop: the diff cursor lands on the stop's lines, which stay marked in the gutter, the doc pane shows `1.2 · Title` and the agent's note, and the status bar shows `tour 1.2 · 3 of 7` (the stop id, then its position in the tour). Ask the agent about a stop by its id. The ends of the tour clamp rather than wrap.
 
@@ -491,7 +491,7 @@ Monocle loads settings from JSON config files:
 | `walkthrough_on_stop`                | string                                     | `""`         | Shell command run (`sh -c`, in the repo root, fire-and-forget, 30s timeout) on every guided-tour stop you settle on, with `MONOCLE_STOP_ID`, `MONOCLE_REPO_ROOT` and `MONOCLE_STOP_JSON` (the stop, view targets resolved to absolute paths) in its environment. Use it to show a stop's screenshots/recordings and arrange windows. `:view N` runs it too, with `MONOCLE_VIEW_INDEX` / `MONOCLE_VIEW_NAME` naming the one view asked for. Empty runs nothing |
 | `ignore_patterns`                    | string array                               | `[]`         | Glob patterns for files to exclude                                       |
 | `min_diff_width`                     | integer                                    | `80`         | Minimum character width for the diff viewer in side-by-side layout       |
-| `mouse`                              | `true`, `false`                            | `true`       | Enable mouse interactions (click, scroll, drag)                          |
+| `mouse`                              | `true`, `false`                            | `true`       | Enable mouse interactions (click, scroll, drag), including clicking a tour stop's views                          |
 | `auto_focus_mode`                    | `true`, `false`                            | `false`      | Auto-enter focus mode (hide sidebar, enable wrap) when reviewing plans   |
 | `comment_expand`                     | `true`, `false`                            | `true`       | Auto-expand comments on hover                                            |
 | `comment_expand_delay`               | integer (ms)                               | `2000`       | Delay before auto-expanding a selected comment (0 = instant)             |

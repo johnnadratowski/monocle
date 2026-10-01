@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"strconv"
+
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 )
@@ -20,10 +22,13 @@ func (r paneRegion) translate(mx, my int) (int, int) {
 	return mx - r.x, my - r.y
 }
 
-// paneLayout holds the computed regions for all major content panes.
+// paneLayout holds the computed regions for all major content panes. doc is
+// the doc pane under the diff, empty while it is closed; its first row is the
+// pane's title.
 type paneLayout struct {
 	sidebar paneRegion
 	diff    paneRegion
+	doc     paneRegion
 }
 
 const (
@@ -39,11 +44,27 @@ const (
 // between the View string content and the terminal mouse coordinates. The
 // mouseOriginY constant accounts for this.
 func computePaneLayout(m *appModel) paneLayout {
+	l := computeMainPanes(m)
+	if m.docPane.active {
+		// The doc pane is its own box directly under the diff's, so its content
+		// starts past the diff's bottom border and its own top one.
+		l.doc = paneRegion{l.diff.x, l.diff.y + l.diff.h + borderH, l.diff.w, m.docPane.height}
+	}
+	return l
+}
+
+// computeMainPanes is computePaneLayout's sidebar and diff.
+func computeMainPanes(m *appModel) paneLayout {
 	const mouseOriginY = 1 // empirical offset for Bubble Tea v2 alt-screen rendering
 
 	// Title bar occupies 1 row. Border top occupies 1 row.
 	// Content starts after: mouseOriginY + titleHeight + borderTop(1).
 	bodyY := mouseOriginY + titleHeight
+
+	if m.sidebarHidden {
+		// The diff has the body to itself: no sidebar box to its left or above.
+		return paneLayout{diff: paneRegion{1, bodyY + 1, m.diffView.width, m.diffView.height}}
+	}
 
 	if m.layout == layoutStacked {
 		// Sidebar: full width, above diff
@@ -186,6 +207,17 @@ func (m appModel) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 		_, relY := layout.diff.translate(msg.X, msg.Y)
 		m.diffView.handleMouseClick(relY)
 		return m, m.diffView.cursorMoved()
+	}
+
+	if layout.doc.contains(msg.X, msg.Y) {
+		// A tour stop's view labels are the pane's only clickable things. A
+		// click on one is `:view N` — the same message, so the same path — and
+		// nothing else: focus and the diff stay where they are.
+		relX, relY := layout.doc.translate(msg.X, msg.Y)
+		if n, ok := m.docPane.linkAt(relX, relY); ok {
+			arg := strconv.Itoa(n)
+			return m, func() tea.Msg { return tourViewMsg{arg: arg} }
+		}
 	}
 
 	return m, nil

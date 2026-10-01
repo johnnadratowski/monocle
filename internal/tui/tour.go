@@ -248,16 +248,17 @@ func (m *appModel) leaveTour() {
 
 // openStopNote puts the stop's heading and note in the doc pane, followed by
 // what else the stop carries, so the reviewer can see there is a related file
-// or a recording without having to know to look.
+// or a recording without having to know to look. The views are labels a click
+// opens.
 func (m *appModel) openStopNote(stop types.WalkthroughStop) {
 	m.docPane.theme = &m.theme
-	m.docPane.openNote(tourNoteKeyPrefix+stop.ID, stop.Heading(), stopNoteBody(stop), m.diffView.mdStyler)
+	m.docPane.openNote(tourNoteKeyPrefix+stop.ID, stop.Heading(), stopNoteBody(stop), stopLinks(stop), m.diffView.mdStyler)
 	recalcPaneDimensions(m)
 	m.diffView.ensureVisible()
 }
 
 // stopNoteBody is the doc pane's text for a stop: the note, then its related
-// files and views as a short index.
+// files. Its views follow as links (stopLinks).
 func stopNoteBody(stop types.WalkthroughStop) string {
 	var b strings.Builder
 	note := strings.TrimSpace(stop.Note)
@@ -275,18 +276,24 @@ func stopNoteBody(stop types.WalkthroughStop) string {
 		}
 		b.WriteString("\n\n**Related:** " + strings.Join(refs, " · "))
 	}
-	if len(stop.Views) > 0 {
-		views := make([]string, len(stop.Views))
-		for i, v := range stop.Views {
-			label := v.Label
-			if label == "" {
-				label = filepath.Base(v.Target)
-			}
-			views[i] = fmt.Sprintf("[%d] %s %s", i+1, v.Kind, label)
-		}
-		b.WriteString("\n**Views:** " + strings.Join(views, " · ") + "  (`:view N` opens one)")
-	}
 	return b.String()
+}
+
+// stopLinks are a stop's views as the labels under its note, numbered the way
+// :view counts them: "[2] url Spec".
+func stopLinks(stop types.WalkthroughStop) []noteLink {
+	if len(stop.Views) == 0 {
+		return nil
+	}
+	links := make([]noteLink, len(stop.Views))
+	for i, v := range stop.Views {
+		label := v.Label
+		if label == "" {
+			label = filepath.Base(v.Target)
+		}
+		links[i] = noteLink{label: fmt.Sprintf("[%d] %s %s", i+1, v.Kind, label)}
+	}
+	return links
 }
 
 // jumpToStop selects the stop's file and puts the cursor on its first line,

@@ -55,7 +55,7 @@ Structure is read from brackets where a language has them and from indentation o
 | `,` | Previous stop |
 | `.` | Next stop of the agent's tour (resumes it when off) |
 | `:stop <id>` | Jump to a stop by id, e.g. `:stop 1.2` (no id lists them) |
-| `:view [n]` | Open the stop's nth view (default the first): through `walkthrough_on_stop` when set, else in the media / markdown viewer |
+| `:view [n]` | Open the stop's nth view (default the first): through `walkthrough_on_stop` when set, else in the media / markdown viewer. Clicking a view's label under the note does the same |
 
 The agent sends a tour with `set_walkthrough` — see [Guided tours](/guides/guided-tours). Entering a stop lands the diff cursor on its first line and marks its range in the gutter, shows `1.2 · Title` and the agent's note in the doc pane, and shows `tour 1.2 · 3 of 7` (the stop id, then its position in the tour) in the status bar. The ends clamp: `.` on the last stop says so rather than wrapping to the first. With the tour off, `.` or `,` resumes it on the stop you left.
 

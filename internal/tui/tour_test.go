@@ -383,7 +383,7 @@ func TestStopNoteBody(t *testing.T) {
 		Related: []types.DocRef{{Doc: "a.go", StartLine: 4}, {Doc: "b.go"}},
 		Views:   []types.StopView{{Kind: "image", Target: "shots/x.png"}, {Kind: "url", Target: "https://x.test", Label: "Spec"}},
 	})
-	want := "why\n\n**Related:** a.go:4 · b.go\n**Views:** [1] image x.png · [2] url Spec  (`:view N` opens one)"
+	want := "why\n\n**Related:** a.go:4 · b.go"
 	if got != want {
 		t.Errorf("got  %q\nwant %q", got, want)
 	}
@@ -395,7 +395,7 @@ func TestStopNoteBody(t *testing.T) {
 func TestNotePaneWrapsAndSizesToItsNote(t *testing.T) {
 	th := DefaultTheme()
 	d := docPaneModel{width: 24, height: 10, theme: &th}
-	d.openNote("tour:1", "1 · T", "one two three four five six seven eight nine ten", nil)
+	d.openNote("tour:1", "1 · T", "one two three four five six seven eight nine ten", nil, nil)
 	d.reflow()
 	if len(d.lines) < 2 {
 		t.Fatalf("lines %q, want the note wrapped to the pane", d.lines)

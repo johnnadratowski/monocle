@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/josephschmitt/monocle/internal/types"
 )
@@ -43,17 +44,36 @@ type docPaneModel struct {
 	noteSource string
 	noteWidth  int
 	styler     *markdownStyler
+
+	// links follow the note as clickable labels (a tour stop's views), and
+	// linkHits say where reflow put each one, so a click can be mapped back.
+	links    []noteLink
+	linkHits []linkHit
 }
 
-// openNote shows a block of markdown under a heading. key identifies what is
-// showing (like annotationID does for refs), so the caller can tell whether the
-// pane already holds it.
-func (m *docPaneModel) openNote(key, title, body string, styler *markdownStyler) {
+// noteLink is a label under a note that opens something when clicked: one of a
+// tour stop's views.
+type noteLink struct {
+	label string
+}
+
+// linkHit is where a link was laid out: a row of the pane's lines and the
+// columns its label covers, [start, end). n is the link's position, 1-based.
+type linkHit struct {
+	line, start, end int
+	n                int
+}
+
+// openNote shows a block of markdown under a heading, followed by links. key
+// identifies what is showing (like annotationID does for refs), so the caller
+// can tell whether the pane already holds it.
+func (m *docPaneModel) openNote(key, title, body string, links []noteLink, styler *markdownStyler) {
 	m.active = true
 	m.note = true
 	m.annotationID = key
 	m.title = title
 	m.noteSource = body
+	m.links = links
 	m.styler = styler
 	m.refs = nil
 	m.activeRef = 0
@@ -72,7 +92,87 @@ func (m *docPaneModel) reflow() {
 	}
 	m.noteWidth = m.width
 	m.lines = wrapNote(m.noteSource, m.width, m.styler)
+	rows, hits := layoutLinks(m.links, m.width)
+	for i := range hits {
+		hits[i].line += len(m.lines)
+	}
+	m.lines = append(m.lines, rows...)
+	m.linkHits = hits
 	m.clamp()
+}
+
+// linkAt is the link (1-based) whose label is at a point in the pane — x a
+// column, y a row counting the title as 0 — or false for anywhere else.
+func (m docPaneModel) linkAt(x, y int) (int, bool) {
+	if !m.active || !m.note || y < 1 || y > m.viewportHeight() {
+		return 0, false
+	}
+	line := m.offset + y - 1
+	for _, h := range m.linkHits {
+		if h.line == line && x >= h.start && x < h.end {
+			return h.n, true
+		}
+	}
+	return 0, false
+}
+
+// linkHint follows the labels when it fits: they are live, and this is how to
+// reach them from the keyboard.
+const linkHint = "click, or :view N"
+
+// layoutLinks lays a note's links out as rows under it: "Views:", then each
+// label — bold, underlined, in the accent — moving to a new row rather than
+// splitting a label across two, since a label is clicked as one span. It
+// returns the rows, with the note's one-column margin, and where each label
+// landed, rows counted from the first of them.
+func layoutLinks(links []noteLink, width int) ([]string, []linkHit) {
+	if len(links) == 0 {
+		return nil, nil
+	}
+	textW := width - 2
+	if textW < 10 {
+		textW = 10
+	}
+	const head = "Views: "
+	indent := strings.Repeat(" ", len(head))
+	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(annotationColor)).Bold(true).Underline(true)
+	dim := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+
+	var rows []string
+	var hits []linkHit
+	row := lipgloss.NewStyle().Bold(true).Render(strings.TrimSpace(head)) + " "
+	used := len(head) // columns taken on this row, after the margin
+	for i, l := range links {
+		label := l.label
+		sep := ""
+		if used > len(indent) {
+			sep = " · "
+			if used+lipgloss.Width(sep)+lipgloss.Width(label) > textW {
+				rows = append(rows, " "+row)
+				row, used, sep = indent, len(indent), ""
+			}
+		}
+		used += lipgloss.Width(sep)
+		if room := textW - used; lipgloss.Width(label) > room {
+			label = ansi.Truncate(label, room, "…")
+		}
+		w := lipgloss.Width(label)
+		hits = append(hits, linkHit{line: len(rows), start: 1 + used, end: 1 + used + w, n: i + 1})
+		row += dim.Render(sep) + labelStyle.Render(label)
+		used += w
+	}
+	if used+2+len(linkHint) <= textW {
+		row += "  " + dim.Render(linkHint)
+	}
+	return append(rows, " "+row), hits
+}
+
+// setLinks replaces the links under the note, keeping the pane where it is
+// scrolled to.
+func (m *docPaneModel) setLinks(links []noteLink) {
+	m.links = links
+	m.noteWidth = -1
+	m.reflow()
 }
 
 // wrapNote styles each markdown line and wraps it to the pane, leaving a
@@ -99,7 +199,8 @@ func wrapNote(src string, width int, styler *markdownStyler) []string {
 // noteHeight is how many rows the note wants, title included, at a width —
 // so a two-line note does not take half the screen.
 func (m docPaneModel) noteHeight(width int) int {
-	return len(wrapNote(m.noteSource, width, m.styler)) + 1
+	rows, _ := layoutLinks(m.links, width)
+	return len(wrapNote(m.noteSource, width, m.styler)) + len(rows) + 1
 }
 
 // openRefs begins showing an annotation's refs starting at index 0. The caller
@@ -179,6 +280,8 @@ func (m *docPaneModel) close() {
 	m.lines = nil
 	m.note = false
 	m.noteSource = ""
+	m.links = nil
+	m.linkHits = nil
 	m.annotationID = ""
 }
 

@@ -78,7 +78,7 @@ Create either or both files — you only need to include the settings you want t
 | `walkthrough_on_stop` | string | `""` | Shell command run on every [guided-tour](/guides/guided-tours) stop you settle on — how a stop's screenshots, recordings and window layout get shown. Run with `sh -c` in the repo root, in the background, with a 30-second timeout; a failure shows in the status bar. Its environment carries `MONOCLE_STOP_ID`, `MONOCLE_REPO_ROOT` and `MONOCLE_STOP_JSON` (the stop as JSON, view targets resolved to absolute paths). `:view N` runs it too, with `MONOCLE_VIEW_INDEX` and `MONOCLE_VIEW_NAME` naming the one view asked for. Empty runs nothing. |
 | `ignore_patterns` | string array | `[]` | Glob patterns for files to exclude |
 | `min_diff_width` | integer | `80` | Minimum character width for the diff viewer in side-by-side layout |
-| `mouse` | `true`, `false` | `true` | Enable mouse interactions (click, scroll, drag) |
+| `mouse` | `true`, `false` | `true` | Enable mouse interactions (click, scroll, drag), including clicking a tour stop's views |
 | `auto_focus_mode` | `true`, `false` | `false` | Auto-enter focus mode (hide sidebar, enable wrap) when reviewing plans |
 | `comment_expand` | `true`, `false` | `true` | Auto-expand comments when the cursor hovers over them |
 | `comment_expand_delay` | integer (ms) | `2000` | Delay in milliseconds before a comment auto-expands on hover |

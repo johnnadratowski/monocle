@@ -10,7 +10,7 @@ A review lands in whatever order its files sort. Your agent knows the order it s
 When the agent sends a tour, monocle enters **tour mode** on its first stop. Each stop:
 
 1. Selects the stop's file and puts the diff cursor on its first line. The stop's lines stay marked in the gutter after you move off them.
-2. Opens the doc pane under the diff with the header `1.2 · Title` and the agent's note, followed by the stop's related files and views.
+2. Opens the doc pane under the diff with the header `1.2 · Title` and the agent's note, followed by the stop's related files and its views. Each view is a label — `[2] video Login flow`, underlined — and clicking it opens that view, exactly as `:view 2` does.
 3. Shows `tour 1.2 · 3 of 7` (the stop id, then its position in the tour) in the status bar.
 
 | Key | Action |
