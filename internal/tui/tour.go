@@ -36,6 +36,12 @@ type tourState struct {
 	settle int
 	// pane is the tmux pane holding the related files, "" when none is known.
 	pane string
+	// views is what the view-status command last said about stop viewsFor's
+	// views, by position (nil: nothing usable). statusSeq numbers the asks,
+	// so only the answer to the latest lands.
+	views     []viewState
+	viewsFor  string
+	statusSeq int
 }
 
 // tourSettleDelay is how long the reviewer has to rest on a stop before its
@@ -140,6 +146,11 @@ func (m appModel) enterStop(i int, how stopEntry) (appModel, tea.Cmd) {
 	if cmd := m.jumpToStop(stop); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
+	if !how.effects {
+		// Nothing is about to open this stop's views, so what is showing now
+		// is the answer. With effects, the ask waits for them (settleOnStop).
+		cmds = append(cmds, m.refreshViewStatus())
+	}
 	if how.report && m.engine != nil {
 		engine, id := m.engine, stop.ID
 		cmds = append(cmds, func() tea.Msg {
@@ -163,7 +174,14 @@ func (m appModel) settleOnStop(msg tourSettledMsg) (appModel, tea.Cmd) {
 	if !ok || !m.tour.on || msg.seq != m.tour.settle {
 		return m, nil
 	}
-	return m, m.stopEffects(stop)
+	// The on-stop command is about to open this stop's views; asking which are
+	// showing before it has would mark the last stop's windows. So with one,
+	// the ask follows it (handleOnStopDone); without one, it is now.
+	var status tea.Cmd
+	if m.onStopCommand() == "" {
+		status = m.refreshViewStatus()
+	}
+	return m, tea.Batch(m.stopEffects(stop), status)
 }
 
 // stopEffects is everything arriving at a stop does outside Monocle's own
@@ -252,7 +270,7 @@ func (m *appModel) leaveTour() {
 // opens.
 func (m *appModel) openStopNote(stop types.WalkthroughStop) {
 	m.docPane.theme = &m.theme
-	m.docPane.openNote(tourNoteKeyPrefix+stop.ID, stop.Heading(), stopNoteBody(stop), stopLinks(stop), m.diffView.mdStyler)
+	m.docPane.openNote(tourNoteKeyPrefix+stop.ID, stop.Heading(), stopNoteBody(stop), stopLinks(stop, m.stopViewStates(stop)), m.diffView.mdStyler)
 	recalcPaneDimensions(m)
 	m.diffView.ensureVisible()
 }
@@ -280,8 +298,9 @@ func stopNoteBody(stop types.WalkthroughStop) string {
 }
 
 // stopLinks are a stop's views as the labels under its note, numbered the way
-// :view counts them: "[2] url Spec".
-func stopLinks(stop types.WalkthroughStop) []noteLink {
+// :view counts them — "[2] url Spec" — each with what the view-status command
+// said about it, if anything.
+func stopLinks(stop types.WalkthroughStop, states []viewState) []noteLink {
 	if len(stop.Views) == 0 {
 		return nil
 	}
@@ -292,6 +311,9 @@ func stopLinks(stop types.WalkthroughStop) []noteLink {
 			label = filepath.Base(v.Target)
 		}
 		links[i] = noteLink{label: fmt.Sprintf("[%d] %s %s", i+1, v.Kind, label)}
+		if i < len(states) {
+			links[i].state = states[i]
+		}
 	}
 	return links
 }

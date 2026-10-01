@@ -110,6 +110,13 @@ func updateApp(t *testing.T, m appModel, msg tea.Msg) appModel {
 
 func drive(t *testing.T, m appModel, cmd tea.Cmd, depth int) appModel {
 	t.Helper()
+	return driveWithin(t, m, cmd, depth, 50*time.Millisecond)
+}
+
+// driveWithin is drive, waiting up to wait for each command: long enough for
+// one that runs a real process, which drive would take for a timer and drop.
+func driveWithin(t *testing.T, m appModel, cmd tea.Cmd, depth int, wait time.Duration) appModel {
+	t.Helper()
 	if cmd == nil {
 		return m
 	}
@@ -121,7 +128,7 @@ func drive(t *testing.T, m appModel, cmd tea.Cmd, depth int) appModel {
 	var msg tea.Msg
 	select {
 	case msg = <-done:
-	case <-time.After(50 * time.Millisecond):
+	case <-time.After(wait):
 		return m
 	}
 	switch msg := msg.(type) {
@@ -129,12 +136,12 @@ func drive(t *testing.T, m appModel, cmd tea.Cmd, depth int) appModel {
 		return m
 	case tea.BatchMsg:
 		for _, c := range msg {
-			m = drive(t, m, c, depth+1)
+			m = driveWithin(t, m, c, depth+1, wait)
 		}
 		return m
 	default:
 		next, c := m.Update(msg)
-		return drive(t, next.(appModel), c, depth+1)
+		return driveWithin(t, next.(appModel), c, depth+1, wait)
 	}
 }
 

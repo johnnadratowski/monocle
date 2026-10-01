@@ -1263,7 +1263,10 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleRelatedPane(msg), nil
 
 	case onStopDoneMsg:
-		return m.handleOnStopDone(msg), nil
+		return m.handleOnStopDone(msg)
+
+	case viewStatusMsg:
+		return m.handleViewStatus(msg), nil
 
 	case tourViewMsg:
 		return m.openStopView(msg.arg)

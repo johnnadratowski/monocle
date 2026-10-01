@@ -64,6 +64,30 @@ What the command does with it is up to you: open the recording in a browser, arr
 
 When these are set, show that one view — open it, or raise it if it is already open — and leave the rest of the screen as it is: the reviewer asked for a view, not for the stop again. Without an on-stop command, `:view N` opens the view in your `media_viewer` (or `markdown_viewer`).
 
+### Which views are showing
+
+The windows your on-stop command opens are out of monocle's sight, so it cannot tell on its own whether a view is showing. Configure [`walkthrough_view_status`](/configuration/config-file) and it will ask, then mark each view's label: `[1] video Login flow (open)`, `(hidden)` or `(not opened)`.
+
+```json
+{ "walkthrough_view_status": "stage view-status" }
+```
+
+The command runs like the on-stop command — `sh -c` in the repo root, with `MONOCLE_STOP_ID`, `MONOCLE_REPO_ROOT` and `MONOCLE_STOP_JSON` — but has 2 seconds, since it is asked often. It prints one JSON object to stdout, keyed by view name:
+
+```json
+{ "view": "open", "view2": "hidden" }
+```
+
+| Value | Marker |
+|-------|--------|
+| `"open"` | `(open)` — on screen |
+| `"hidden"` | `(hidden)` — open, but out of sight |
+| anything else, or no key for the view | `(not opened)` |
+
+Answer for the stop in the environment: a window still showing another stop's view is not this stop's view. Without the command, or when it fails, times out, or prints anything but a JSON object of strings, no marker shows — monocle does not know, so it does not say.
+
+It is asked when a stop is shown (once the on-stop command has finished with it, when there is one, so the markers describe this stop's windows rather than the last stop's) and after `:view N` or a click. Only the latest answer for the stop you are on is used.
+
 ## Asking about a stop
 
 Stop ids are what you type and what the agent answers to. When you ask about one, the agent can call `goto_stop` to put that stop in front of you while it explains.

@@ -111,12 +111,12 @@ func TestNoOnStopCommandRunsNothing(t *testing.T) {
 
 func TestOnStopFailureShowsInTheStatusBar(t *testing.T) {
 	m := appModel{}
-	m = m.handleOnStopDone(onStopDoneMsg{id: "1.2", err: os.ErrPermission})
+	m, _ = m.handleOnStopDone(onStopDoneMsg{id: "1.2", err: os.ErrPermission})
 	if !strings.Contains(m.statusBar.searchInfo, "on-stop 1.2 failed") {
 		t.Errorf("status %q", m.statusBar.searchInfo)
 	}
 	m.statusBar.searchInfo = ""
-	if m = m.handleOnStopDone(onStopDoneMsg{id: "1.2"}); m.statusBar.searchInfo != "" {
+	if m, _ = m.handleOnStopDone(onStopDoneMsg{id: "1.2"}); m.statusBar.searchInfo != "" {
 		t.Errorf("success should be silent, got %q", m.statusBar.searchInfo)
 	}
 }

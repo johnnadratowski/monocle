@@ -174,6 +174,12 @@ func (m appModel) runStopView(command string, stop types.WalkthroughStop, n int)
 
 // execOnStop runs command through the shell and waits for it, up to timeout.
 func execOnStop(command, dir string, env []string, timeout time.Duration) error {
+	return execHook(command, dir, env, timeout, io.Discard)
+}
+
+// execHook runs a configured tour command through the shell and waits for it,
+// up to timeout, writing what it prints to stdout.
+func execHook(command, dir string, env []string, timeout time.Duration, stdout io.Writer) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	shell, flag := onStopShell()
@@ -181,7 +187,7 @@ func execOnStop(command, dir string, env []string, timeout time.Duration) error 
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), env...)
 	cmd.Stdin = nil
-	cmd.Stdout = io.Discard
+	cmd.Stdout = stdout
 	var stderr bytes.Buffer
 	cmd.Stderr = &limitedWriter{w: &stderr, left: 4096}
 	// A timeout kills the whole process group, not just the shell, so a
@@ -229,8 +235,9 @@ func lastLine(s string) string {
 
 // handleOnStopDone surfaces a failed on-stop command. Success is silent: the
 // command's effect is on screen, or it is not, and either way the reviewer
-// can see it.
-func (m appModel) handleOnStopDone(msg onStopDoneMsg) appModel {
+// can see it. Either way the command may have opened or raised views, so the
+// stop's view markers are asked for again.
+func (m appModel) handleOnStopDone(msg onStopDoneMsg) (appModel, tea.Cmd) {
 	switch {
 	case msg.err == nil:
 	case msg.view > 0:
@@ -238,7 +245,10 @@ func (m appModel) handleOnStopDone(msg onStopDoneMsg) appModel {
 	default:
 		m.statusBar.searchInfo = fmt.Sprintf("on-stop %s failed: %v", msg.id, msg.err)
 	}
-	return m
+	if stop, ok := m.currentStop(); !ok || stop.ID != msg.id {
+		return m, nil
+	}
+	return m, m.refreshViewStatus()
 }
 
 // tourViewMsg asks to open one of the current stop's views — `:view 2`.
@@ -269,10 +279,13 @@ func (m appModel) openStopView(arg string) (appModel, tea.Cmd) {
 		return m, m.runStopView(command, stop, n)
 	}
 	v := resolveStopViews(stop.Views[n-1:n], m.repoRoot, artifactFile(m.engine))[0]
+	var open tea.Cmd
 	if v.Kind == types.StopViewMarkdown || (v.Kind == types.StopViewArtifact && isMarkdownPath(v.Target)) {
-		return m, openInMarkdownViewer(v.Target, m.markdownViewerCommand())
+		open = openInMarkdownViewer(v.Target, m.markdownViewerCommand())
+	} else {
+		// Images, video, URLs and media artifacts all open in the media viewer,
+		// which is a browser by default and so handles every one of them.
+		open = openInMediaViewer(v.Target, m.mediaViewerCommand())
 	}
-	// Images, video, URLs and media artifacts all open in the media viewer,
-	// which is a browser by default and so handles every one of them.
-	return m, openInMediaViewer(v.Target, m.mediaViewerCommand())
+	return m, tea.Batch(open, m.refreshViewStatus())
 }

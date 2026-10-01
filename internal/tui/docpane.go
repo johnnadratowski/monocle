@@ -52,9 +52,10 @@ type docPaneModel struct {
 }
 
 // noteLink is a label under a note that opens something when clicked: one of a
-// tour stop's views.
+// tour stop's views. state is what is known about whether it is showing.
 type noteLink struct {
 	label string
+	state viewState
 }
 
 // linkHit is where a link was laid out: a row of the pane's lines and the
@@ -116,15 +117,19 @@ func (m docPaneModel) linkAt(x, y int) (int, bool) {
 	return 0, false
 }
 
+// minLinkLabel is the narrowest a label is cut to before its marker is dropped
+// to make room: "[2]…" still says which view it is.
+const minLinkLabel = 4
+
 // linkHint follows the labels when it fits: they are live, and this is how to
 // reach them from the keyboard.
 const linkHint = "click, or :view N"
 
 // layoutLinks lays a note's links out as rows under it: "Views:", then each
-// label — bold, underlined, in the accent — moving to a new row rather than
-// splitting a label across two, since a label is clicked as one span. It
-// returns the rows, with the note's one-column margin, and where each label
-// landed, rows counted from the first of them.
+// label — bold, underlined, in the accent — and its state marker, moving to a
+// new row rather than splitting a label across two, since a label is clicked
+// as one span. It returns the rows, with the note's one-column margin, and
+// where each label landed, rows counted from the first of them.
 func layoutLinks(links []noteLink, width int) ([]string, []linkHit) {
 	if len(links) == 0 {
 		return nil, nil
@@ -144,22 +149,31 @@ func layoutLinks(links []noteLink, width int) ([]string, []linkHit) {
 	used := len(head) // columns taken on this row, after the margin
 	for i, l := range links {
 		label := l.label
+		marker := l.state.marker()
+		if marker != "" {
+			marker = " " + marker
+		}
 		sep := ""
 		if used > len(indent) {
 			sep = " · "
-			if used+lipgloss.Width(sep)+lipgloss.Width(label) > textW {
+			if used+lipgloss.Width(sep)+lipgloss.Width(label)+lipgloss.Width(marker) > textW {
 				rows = append(rows, " "+row)
 				row, used, sep = indent, len(indent), ""
 			}
 		}
 		used += lipgloss.Width(sep)
-		if room := textW - used; lipgloss.Width(label) > room {
-			label = ansi.Truncate(label, room, "…")
+		room := textW - used - lipgloss.Width(marker)
+		if room < minLinkLabel && marker != "" {
+			// Too narrow for both: the label is what can be clicked.
+			marker, room = "", textW-used
+		}
+		if lipgloss.Width(label) > room {
+			label = ansi.Truncate(label, max(room, 1), "…")
 		}
 		w := lipgloss.Width(label)
 		hits = append(hits, linkHit{line: len(rows), start: 1 + used, end: 1 + used + w, n: i + 1})
-		row += dim.Render(sep) + labelStyle.Render(label)
-		used += w
+		row += dim.Render(sep) + labelStyle.Render(label) + marker
+		used += w + lipgloss.Width(marker)
 	}
 	if used+2+len(linkHint) <= textW {
 		row += "  " + dim.Render(linkHint)

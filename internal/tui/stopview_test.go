@@ -90,7 +90,7 @@ func TestStopViewName(t *testing.T) {
 
 func TestAFailedViewRunSaysWhichView(t *testing.T) {
 	m := appModel{}
-	m = m.handleOnStopDone(onStopDoneMsg{id: "1.2", view: 2, err: os.ErrPermission})
+	m, _ = m.handleOnStopDone(onStopDoneMsg{id: "1.2", view: 2, err: os.ErrPermission})
 	if want := "view 2 of 1.2 failed: permission denied"; m.statusBar.searchInfo != want {
 		t.Errorf("status %q, want %q", m.statusBar.searchInfo, want)
 	}
@@ -100,12 +100,12 @@ func TestStopLinks(t *testing.T) {
 	got := stopLinks(types.WalkthroughStop{Views: []types.StopView{
 		{Kind: "image", Target: "shots/x.png"},
 		{Kind: "url", Target: "https://x.test", Label: "Spec"},
-	}})
-	want := []noteLink{{label: "[1] image x.png"}, {label: "[2] url Spec"}}
+	}}, []viewState{viewOpen})
+	want := []noteLink{{label: "[1] image x.png", state: viewOpen}, {label: "[2] url Spec"}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %+v, want %+v", got, want)
 	}
-	if got := stopLinks(types.WalkthroughStop{}); got != nil {
+	if got := stopLinks(types.WalkthroughStop{}, nil); got != nil {
 		t.Errorf("a stop with no views has links %+v", got)
 	}
 }
@@ -115,6 +115,14 @@ func TestStopLinks(t *testing.T) {
 // and that no row is wider than the pane.
 func TestLayoutLinksKeepsEveryLabelWhole(t *testing.T) {
 	links := []noteLink{{label: "[1] video Before / after"}, {label: "[2] url Spec"}, {label: "[3] image A much longer label for the table structure"}}
+	t.Run("unmarked", func(t *testing.T) { checkLinkLayout(t, links) })
+	marked := append([]noteLink(nil), links...)
+	marked[0].state, marked[1].state, marked[2].state = viewNotOpened, viewOpen, viewHidden
+	t.Run("marked", func(t *testing.T) { checkLinkLayout(t, marked) })
+}
+
+func checkLinkLayout(t *testing.T, links []noteLink) {
+	t.Helper()
 	for width := 12; width <= 140; width++ {
 		rows, hits := layoutLinks(links, width)
 		if len(hits) != len(links) {
@@ -136,6 +144,14 @@ func TestLayoutLinksKeepsEveryLabelWhole(t *testing.T) {
 			}
 			if got != want {
 				t.Errorf("width %d: label %d reads %q at its hit, want %q", width, i+1, got, want)
+			}
+			// Its marker follows it, on the same row and unclickable — unless
+			// the pane is too narrow for both, when the label is cut first.
+			if marker := ansi.Strip(links[i].state.marker()); marker != "" {
+				after := ansi.Strip(ansi.Cut(rows[h.line], h.end, h.end+1+len(marker)))
+				if after != " "+marker && (got == links[i].label || width >= 40) {
+					t.Errorf("width %d: label %d is followed by %q, want its marker %q", width, i+1, after, marker)
+				}
 			}
 		}
 	}
@@ -279,5 +295,158 @@ func TestMouseOffMeansNoClick(t *testing.T) {
 	x, y := onScreen(t, m, "[2] url Spec")
 	if _, cmd := m.Update(leftClick(x, y)); cmd != nil {
 		t.Errorf("with mouse off a click did something: %#v", cmd())
+	}
+}
+
+func TestParseViewStatus(t *testing.T) {
+	for _, tc := range []struct {
+		out  string
+		n    int
+		want []viewState
+	}{
+		{`{"view": "open", "view2": "hidden"}`, 3, []viewState{viewOpen, viewHidden, viewNotOpened}},
+		{"\n{\"view2\": \"open\"}\n", 2, []viewState{viewNotOpened, viewOpen}},
+		{`{"view": "closed", "view9": "open"}`, 1, []viewState{viewNotOpened}},
+		{`{}`, 2, []viewState{viewNotOpened, viewNotOpened}},
+	} {
+		got, err := parseViewStatus([]byte(tc.out), tc.n)
+		if err != nil || !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("parseViewStatus(%q) = %v, %v; want %v", tc.out, got, err, tc.want)
+		}
+	}
+	// Anything that is not a JSON object of strings says nothing.
+	for _, out := range []string{"", "open", "null", `["open"]`, `{"view": 1}`, `{"view": "open"`} {
+		if got, err := parseViewStatus([]byte(out), 1); err == nil {
+			t.Errorf("parseViewStatus(%q) = %v, want an error", out, got)
+		}
+	}
+}
+
+// statusApp is viewsAppIn with a view-status command (and, if given, an
+// on-stop command) on stop 1.2, before anything has been asked about it.
+func statusApp(t *testing.T, status, onStop string) appModel {
+	t.Helper()
+	skipWithoutSh(t)
+	return viewsAppIn(t, &types.Config{WalkthroughViewStatus: status, WalkthroughOnStop: onStop}, 140, false)
+}
+
+// settle runs what resting on the current stop runs, to completion.
+func settle(t *testing.T, m appModel) appModel {
+	t.Helper()
+	next, cmd := m.settleOnStop(tourSettledMsg{seq: m.tour.settle})
+	return driveWithin(t, next, cmd, 0, 5*time.Second)
+}
+
+// screenText is the rendered screen without styling.
+func screenText(m appModel) string { return ansi.Strip(m.View().Content) }
+
+func TestViewMarkersComeFromTheStatusCommand(t *testing.T) {
+	m := settle(t, statusApp(t, `printf '{"view": "open", "view2": "hidden"}'`, ""))
+	screen := screenText(m)
+	for _, want := range []string{"[1] video Demo (open)", "[2] url Spec (hidden)"} {
+		if !strings.Contains(screen, want) {
+			t.Errorf("screen lacks %q:\n%s", want, screen)
+		}
+	}
+	// The labels are still where a click finds them.
+	x, y := onScreen(t, m, "[2] url Spec")
+	if _, cmd := m.Update(leftClick(x, y)); cmd == nil || !reflect.DeepEqual(cmd(), tourViewMsg{arg: "2"}) {
+		t.Error("a marked label is not clickable")
+	}
+}
+
+func TestNoUsableStatusMeansNoMarker(t *testing.T) {
+	for name, status := range map[string]string{
+		"no command":      "",
+		"a failure":       `printf '{"view": "open"}'; exit 1`,
+		"not JSON":        `echo open`,
+		"a hung command":  `sleep 5`,
+		"stderr is noise": `echo '{"view": "open"}' >&2`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			m := settle(t, statusApp(t, status, ""))
+			if screen := screenText(m); strings.Contains(screen, "(open)") || strings.Contains(screen, "(not opened)") {
+				t.Errorf("a marker with %s:\n%s", name, screen)
+			}
+		})
+	}
+}
+
+func TestAFailedAskClearsTheMarkers(t *testing.T) {
+	state := filepath.Join(t.TempDir(), "state")
+	if err := os.WriteFile(state, []byte(`{"view": "open"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := settle(t, statusApp(t, "cat "+state, ""))
+	if !strings.Contains(screenText(m), "(open)") {
+		t.Fatal("no marker to begin with")
+	}
+	_ = os.Remove(state)
+	m = settle(t, m)
+	if strings.Contains(screenText(m), "(open)") {
+		t.Error("a marker outlived the status command failing")
+	}
+}
+
+// With an on-stop command, the ask waits for it: it is about to open this
+// stop's views, and asking first would mark the last stop's windows.
+func TestTheStatusAskFollowsTheOnStopCommand(t *testing.T) {
+	dir := t.TempDir()
+	state, out := filepath.Join(dir, "state"), filepath.Join(dir, "runs")
+	onStop := recordRuns(out) + `; printf '{"view": "open"}' > ` + state
+	m := statusApp(t, "cat "+state, onStop)
+	next, cmd := m.settleOnStop(tourSettledMsg{seq: m.tour.settle})
+	if next.tour.statusSeq != m.tour.statusSeq {
+		t.Error("asked for the view status before the on-stop command ran")
+	}
+	m = driveWithin(t, next, cmd, 0, 5*time.Second)
+	if got := waitForRuns(t, out, 1); !reflect.DeepEqual(got, []string{"1.2|-|-"}) {
+		t.Fatalf("on-stop runs %q", got)
+	}
+	if screen := screenText(m); !strings.Contains(screen, "[1] video Demo (open)") || !strings.Contains(screen, "[2] url Spec (not opened)") {
+		t.Errorf("markers after the on-stop command:\n%s", screen)
+	}
+}
+
+func TestClickingAViewReasksItsStatus(t *testing.T) {
+	dir := t.TempDir()
+	state := filepath.Join(dir, "state")
+	// The on-stop command opens the view it is asked for; the status command
+	// reports it open.
+	onStop := `[ -n "$MONOCLE_VIEW_NAME" ] && printf '{"%s": "open"}' "$MONOCLE_VIEW_NAME" > ` + state
+	m := settle(t, statusApp(t, "cat "+state+" 2>/dev/null || echo '{}'", onStop))
+	if !strings.Contains(screenText(m), "[2] url Spec (not opened)") {
+		t.Fatalf("before the click:\n%s", screenText(m))
+	}
+	x, y := onScreen(t, m, "[2] url Spec")
+	next, cmd := m.Update(leftClick(x, y))
+	m = driveWithin(t, next.(appModel), cmd, 0, 5*time.Second)
+	if screen := screenText(m); !strings.Contains(screen, "[1] video Demo (not opened)") || !strings.Contains(screen, "[2] url Spec (open)") {
+		t.Errorf("after clicking view 2:\n%s", screen)
+	}
+}
+
+func TestStatusIsAskedOnRestore(t *testing.T) {
+	skipWithoutSh(t)
+	tour := viewsTour()
+	tour.Stops = tour.Stops[1:] // the stop with views is the one restored
+	m, _ := tourAppWith(t, tour, inertViewers(&types.Config{WalkthroughViewStatus: "echo '{}'"}))
+	if m.tour.statusSeq != 1 {
+		t.Errorf("restoring a stop asked %d times, want once", m.tour.statusSeq)
+	}
+}
+
+func TestAStaleStatusAnswerIsDropped(t *testing.T) {
+	m := statusApp(t, "echo '{}'", "")
+	m.tour.statusSeq = 2
+	for name, msg := range map[string]viewStatusMsg{
+		"an older ask":  {seq: 1, stop: "1.2", states: []viewState{viewOpen, viewOpen}},
+		"another stop":  {seq: 2, stop: "1.1", states: []viewState{viewOpen, viewOpen}},
+		"the right one": {seq: 2, stop: "1.2", states: []viewState{viewHidden, viewHidden}},
+	} {
+		got := screenText(m.handleViewStatus(msg))
+		if marked := strings.Contains(got, "(open)") || strings.Contains(got, "(hidden)"); marked != (name == "the right one") {
+			t.Errorf("%s: marked=%v\n%s", name, marked, got)
+		}
 	}
 }
