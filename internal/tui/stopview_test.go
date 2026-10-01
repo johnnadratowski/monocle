@@ -169,14 +169,14 @@ func TestLayoutLinksStyle(t *testing.T) {
 }
 
 // onScreen finds text on the rendered screen and returns where a mouse click on
-// its first cell arrives: its column, and its row plus the one-row origin offset
-// every mouse coordinate carries (TestComputePaneLayoutMatchesRenderedView).
+// its first cell arrives: its column and row, which are the View's
+// (TestComputePaneLayoutMatchesRenderedView).
 func onScreen(t *testing.T, m appModel, text string) (x, y int) {
 	t.Helper()
 	for row, line := range strings.Split(m.View().Content, "\n") {
 		plain := ansi.Strip(line)
 		if i := strings.Index(plain, text); i >= 0 {
-			return ansi.StringWidth(plain[:i]), row + 1
+			return ansi.StringWidth(plain[:i]), row
 		}
 	}
 	t.Fatalf("%q is not on screen", text)

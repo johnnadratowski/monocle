@@ -40,9 +40,11 @@ const (
 // computePaneLayout calculates pane content regions from the app's layout state.
 // Coordinates are the content area inside each pane's border (where items render).
 //
-// Bubble Tea v2's alt-screen rendering via ultraviolet introduces a 1-row offset
-// between the View string content and the terminal mouse coordinates. The
-// mouseOriginY constant accounts for this.
+// They are the View's own rows and columns: Bubble Tea reports a mouse event
+// at the 0-based cell clicked, and the View is drawn from the screen's top-left
+// cell, so a click on a row arrives as that row. (These regions once added a
+// row, which under tmux put every click one row below where it landed; the
+// overlays never did.)
 func computePaneLayout(m *appModel) paneLayout {
 	l := computeMainPanes(m)
 	if m.docPane.active {
@@ -55,11 +57,9 @@ func computePaneLayout(m *appModel) paneLayout {
 
 // computeMainPanes is computePaneLayout's sidebar and diff.
 func computeMainPanes(m *appModel) paneLayout {
-	const mouseOriginY = 1 // empirical offset for Bubble Tea v2 alt-screen rendering
-
 	// Title bar occupies 1 row. Border top occupies 1 row.
-	// Content starts after: mouseOriginY + titleHeight + borderTop(1).
-	bodyY := mouseOriginY + titleHeight
+	// Content starts after: titleHeight + borderTop(1).
+	bodyY := titleHeight
 
 	if m.sidebarHidden {
 		// The diff has the body to itself: no sidebar box to its left or above.
@@ -227,9 +227,8 @@ func (m appModel) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 // cursor is clearly hovering over a visible sidebar; every other wheel event —
 // over the diff, over the title/borders, or outside the computed regions entirely
 // — scrolls the diff. This makes wheel scrolling work anywhere in the window
-// regardless of which pane is focused, and is robust to the empirical mouse-origin
-// offset and to layout modes (e.g. a hidden sidebar) where the computed regions
-// don't perfectly match the rendered content.
+// regardless of which pane is focused, and is robust to layout modes where the
+// computed regions don't perfectly match the rendered content.
 func (m appModel) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 	// If overlay is active, route wheel to scrollable overlay
 	if m.overlay != overlayNone {
