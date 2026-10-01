@@ -100,7 +100,7 @@ func TestStopLinks(t *testing.T) {
 	got := stopLinks(types.WalkthroughStop{Views: []types.StopView{
 		{Kind: "image", Target: "shots/x.png"},
 		{Kind: "url", Target: "https://x.test", Label: "Spec"},
-	}}, []viewState{viewOpen})
+	}}, &tourStatus{views: []viewState{viewOpen}})
 	want := []noteLink{{label: "[1] image x.png", state: viewOpen}, {label: "[2] url Spec"}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %+v, want %+v", got, want)
@@ -302,20 +302,25 @@ func TestParseViewStatus(t *testing.T) {
 	for _, tc := range []struct {
 		out  string
 		n    int
-		want []viewState
+		want *tourStatus
 	}{
-		{`{"view": "open", "view2": "hidden"}`, 3, []viewState{viewOpen, viewHidden, viewNotOpened}},
-		{"\n{\"view2\": \"open\"}\n", 2, []viewState{viewNotOpened, viewOpen}},
-		{`{"view": "closed", "view9": "open"}`, 1, []viewState{viewNotOpened}},
-		{`{}`, 2, []viewState{viewNotOpened, viewNotOpened}},
+		{`{"views": {"view": "open", "view2": "hidden", "view3": "closed"}, "layout": "saved"}`, 3,
+			&tourStatus{views: []viewState{viewOpen, viewHidden, viewNotOpened}, layoutSaved: true}},
+		{"{\"views\": {\"view2\": \"open\"}, \"layout\": \"default\"}\n", 2,
+			&tourStatus{views: []viewState{viewNotOpened, viewOpen}}},
+		{`{"views": {"view": "shut", "view9": "open"}}`, 1, &tourStatus{views: []viewState{viewNotOpened}}},
+		{`{"views": {}, "layout": "weird"}`, 2, &tourStatus{views: []viewState{viewNotOpened, viewNotOpened}}},
+		{`{"views": {}, "layout": "saved"}`, 0, &tourStatus{views: []viewState{}, layoutSaved: true}},
 	} {
 		got, err := parseViewStatus([]byte(tc.out), tc.n)
 		if err != nil || !reflect.DeepEqual(got, tc.want) {
-			t.Errorf("parseViewStatus(%q) = %v, %v; want %v", tc.out, got, err, tc.want)
+			t.Errorf("parseViewStatus(%q) = %+v, %v; want %+v", tc.out, got, err, tc.want)
 		}
 	}
-	// Anything that is not a JSON object of strings says nothing.
-	for _, out := range []string{"", "open", "null", `["open"]`, `{"view": 1}`, `{"view": "open"`} {
+	// Anything without a "views" object of strings says nothing — the flat
+	// shape of an earlier draft included, so it cannot be misread as all closed.
+	for _, out := range []string{"", "open", "null", `["open"]`, `{}`, `{"view": "open"}`, `{"layout": "saved"}`,
+		`{"views": {"view": 1}}`, `{"views": ["open"]}`, `{"views": {}, "layout": 1}`, `{"views": {}`} {
 		if got, err := parseViewStatus([]byte(out), 1); err == nil {
 			t.Errorf("parseViewStatus(%q) = %v, want an error", out, got)
 		}
@@ -341,7 +346,7 @@ func settle(t *testing.T, m appModel) appModel {
 func screenText(m appModel) string { return ansi.Strip(m.View().Content) }
 
 func TestViewMarkersComeFromTheStatusCommand(t *testing.T) {
-	m := settle(t, statusApp(t, `printf '{"view": "open", "view2": "hidden"}'`, ""))
+	m := settle(t, statusApp(t, `printf '{"views": {"view": "open", "view2": "hidden"}, "layout": "default"}'`, ""))
 	screen := screenText(m)
 	for _, want := range []string{"[1] video Demo (open)", "[2] url Spec (hidden)"} {
 		if !strings.Contains(screen, want) {
@@ -358,10 +363,12 @@ func TestViewMarkersComeFromTheStatusCommand(t *testing.T) {
 func TestNoUsableStatusMeansNoMarker(t *testing.T) {
 	for name, status := range map[string]string{
 		"no command":      "",
-		"a failure":       `printf '{"view": "open"}'; exit 1`,
+		"a failure":       `printf '{"views": {"view": "open"}}'; exit 1`,
 		"not JSON":        `echo open`,
+		"the flat shape":  `echo '{"view": "open"}'`,
 		"a hung command":  `sleep 5`,
-		"stderr is noise": `echo '{"view": "open"}' >&2`,
+		"over 500ms":      `sleep 1; echo '{"views": {"view": "open"}}'`,
+		"stderr is noise": `echo '{"views": {"view": "open"}}' >&2`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			m := settle(t, statusApp(t, status, ""))
@@ -374,7 +381,7 @@ func TestNoUsableStatusMeansNoMarker(t *testing.T) {
 
 func TestAFailedAskClearsTheMarkers(t *testing.T) {
 	state := filepath.Join(t.TempDir(), "state")
-	if err := os.WriteFile(state, []byte(`{"view": "open"}`), 0o644); err != nil {
+	if err := os.WriteFile(state, []byte(`{"views": {"view": "open"}}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	m := settle(t, statusApp(t, "cat "+state, ""))
@@ -393,7 +400,7 @@ func TestAFailedAskClearsTheMarkers(t *testing.T) {
 func TestTheStatusAskFollowsTheOnStopCommand(t *testing.T) {
 	dir := t.TempDir()
 	state, out := filepath.Join(dir, "state"), filepath.Join(dir, "runs")
-	onStop := recordRuns(out) + `; printf '{"view": "open"}' > ` + state
+	onStop := recordRuns(out) + `; printf '{"views": {"view": "open"}}' > ` + state
 	m := statusApp(t, "cat "+state, onStop)
 	next, cmd := m.settleOnStop(tourSettledMsg{seq: m.tour.settle})
 	if next.tour.statusSeq != m.tour.statusSeq {
@@ -413,8 +420,8 @@ func TestClickingAViewReasksItsStatus(t *testing.T) {
 	state := filepath.Join(dir, "state")
 	// The on-stop command opens the view it is asked for; the status command
 	// reports it open.
-	onStop := `[ -n "$MONOCLE_VIEW_NAME" ] && printf '{"%s": "open"}' "$MONOCLE_VIEW_NAME" > ` + state
-	m := settle(t, statusApp(t, "cat "+state+" 2>/dev/null || echo '{}'", onStop))
+	onStop := `[ -n "$MONOCLE_VIEW_NAME" ] && printf '{"views": {"%s": "open"}}' "$MONOCLE_VIEW_NAME" > ` + state
+	m := settle(t, statusApp(t, "cat "+state+` 2>/dev/null || echo '{"views": {}}'`, onStop))
 	if !strings.Contains(screenText(m), "[2] url Spec (not opened)") {
 		t.Fatalf("before the click:\n%s", screenText(m))
 	}
@@ -426,23 +433,34 @@ func TestClickingAViewReasksItsStatus(t *testing.T) {
 	}
 }
 
+// A restore runs no on-stop command, so the status is asked at once — on a
+// stop with no views too, since the answer also says whether the layout is
+// saved.
 func TestStatusIsAskedOnRestore(t *testing.T) {
 	skipWithoutSh(t)
-	tour := viewsTour()
-	tour.Stops = tour.Stops[1:] // the stop with views is the one restored
-	m, _ := tourAppWith(t, tour, inertViewers(&types.Config{WalkthroughViewStatus: "echo '{}'"}))
-	if m.tour.statusSeq != 1 {
-		t.Errorf("restoring a stop asked %d times, want once", m.tour.statusSeq)
+	m, _ := tourAppWith(t, viewsTour(), inertViewers(&types.Config{WalkthroughViewStatus: `echo '{"views": {}}'`}))
+	if stop, _ := m.currentStop(); len(stop.Views) != 0 || m.tour.statusSeq != 1 {
+		t.Errorf("restoring stop %s (%d views) asked %d times, want once", stop.ID, len(stop.Views), m.tour.statusSeq)
+	}
+}
+
+// The status command learns which stop and which repo, and nothing more.
+func TestTheStatusCommandsEnvironment(t *testing.T) {
+	status := `[ "$MONOCLE_STOP_ID" = 1.2 ] && [ "${MONOCLE_REPO_ROOT+set}" = set ] && [ -z "${MONOCLE_STOP_JSON+set}" ] &&
+		echo '{"views": {"view": "open"}}'`
+	m := settle(t, statusApp(t, status, ""))
+	if !strings.Contains(screenText(m), "[1] video Demo (open)") {
+		t.Errorf("the status command did not get its environment:\n%s", screenText(m))
 	}
 }
 
 func TestAStaleStatusAnswerIsDropped(t *testing.T) {
-	m := statusApp(t, "echo '{}'", "")
+	m := statusApp(t, `echo '{"views": {}}'`, "")
 	m.tour.statusSeq = 2
 	for name, msg := range map[string]viewStatusMsg{
-		"an older ask":  {seq: 1, stop: "1.2", states: []viewState{viewOpen, viewOpen}},
-		"another stop":  {seq: 2, stop: "1.1", states: []viewState{viewOpen, viewOpen}},
-		"the right one": {seq: 2, stop: "1.2", states: []viewState{viewHidden, viewHidden}},
+		"an older ask":  {seq: 1, stop: "1.2", status: &tourStatus{views: []viewState{viewOpen, viewOpen}}},
+		"another stop":  {seq: 2, stop: "1.1", status: &tourStatus{views: []viewState{viewOpen, viewOpen}}},
+		"the right one": {seq: 2, stop: "1.2", status: &tourStatus{views: []viewState{viewHidden, viewHidden}}},
 	} {
 		got := screenText(m.handleViewStatus(msg))
 		if marked := strings.Contains(got, "(open)") || strings.Contains(got, "(hidden)"); marked != (name == "the right one") {

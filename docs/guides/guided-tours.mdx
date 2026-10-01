@@ -72,19 +72,23 @@ The windows your on-stop command opens are out of monocle's sight, so it cannot 
 { "walkthrough_view_status": "stage view-status" }
 ```
 
-The command runs like the on-stop command — `sh -c` in the repo root, with `MONOCLE_STOP_ID`, `MONOCLE_REPO_ROOT` and `MONOCLE_STOP_JSON` — but has 2 seconds, since it is asked often. It prints one JSON object to stdout, keyed by view name:
+The command runs with `sh -c` in the repo root, with `MONOCLE_STOP_ID` and `MONOCLE_REPO_ROOT`, and has 500 ms, since it is asked often. It prints one line of JSON to stdout:
 
 ```json
-{ "view": "open", "view2": "hidden" }
+{ "views": { "view": "open", "view2": "hidden" }, "layout": "default" }
 ```
+
+`views` is keyed by view name — `view` for the first, then `view2`, `view3`…:
 
 | Value | Marker |
 |-------|--------|
 | `"open"` | `(open)` — on screen |
 | `"hidden"` | `(hidden)` — open, but out of sight |
-| anything else, or no key for the view | `(not opened)` |
+| `"closed"`, anything else, or no key for the view | `(not opened)` |
 
-Answer for the stop in the environment: a window still showing another stop's view is not this stop's view. Without the command, or when it fails, times out, or prints anything but a JSON object of strings, no marker shows — monocle does not know, so it does not say.
+`layout` is `"saved"` when the windows are in a layout you arranged, `"default"` otherwise.
+
+Answer for the stop in the environment: a window still showing another stop's view is not this stop's view. Without the command, or when it fails, times out, or prints anything without a `views` object, nothing shows — no markers — since monocle does not know, so it does not say.
 
 It is asked when a stop is shown (once the on-stop command has finished with it, when there is one, so the markers describe this stop's windows rather than the last stop's) and after `:view N` or a click. Only the latest answer for the stop you are on is used.
 

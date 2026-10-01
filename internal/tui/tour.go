@@ -36,11 +36,11 @@ type tourState struct {
 	settle int
 	// pane is the tmux pane holding the related files, "" when none is known.
 	pane string
-	// views is what the view-status command last said about stop viewsFor's
-	// views, by position (nil: nothing usable). statusSeq numbers the asks,
-	// so only the answer to the latest lands.
-	views     []viewState
-	viewsFor  string
+	// status is what the view-status command last said about stop statusFor
+	// (nil: nothing usable). statusSeq numbers the asks, so only the answer
+	// to the latest lands.
+	status    *tourStatus
+	statusFor string
 	statusSeq int
 }
 
@@ -270,7 +270,7 @@ func (m *appModel) leaveTour() {
 // opens.
 func (m *appModel) openStopNote(stop types.WalkthroughStop) {
 	m.docPane.theme = &m.theme
-	m.docPane.openNote(tourNoteKeyPrefix+stop.ID, stop.Heading(), stopNoteBody(stop), stopLinks(stop, m.stopViewStates(stop)), m.diffView.mdStyler)
+	m.docPane.openNote(tourNoteKeyPrefix+stop.ID, stop.Heading(), stopNoteBody(stop), stopLinks(stop, m.stopStatus(stop)), m.diffView.mdStyler)
 	recalcPaneDimensions(m)
 	m.diffView.ensureVisible()
 }
@@ -300,7 +300,7 @@ func stopNoteBody(stop types.WalkthroughStop) string {
 // stopLinks are a stop's views as the labels under its note, numbered the way
 // :view counts them — "[2] url Spec" — each with what the view-status command
 // said about it, if anything.
-func stopLinks(stop types.WalkthroughStop, states []viewState) []noteLink {
+func stopLinks(stop types.WalkthroughStop, status *tourStatus) []noteLink {
 	if len(stop.Views) == 0 {
 		return nil
 	}
@@ -311,8 +311,8 @@ func stopLinks(stop types.WalkthroughStop, states []viewState) []noteLink {
 			label = filepath.Base(v.Target)
 		}
 		links[i] = noteLink{label: fmt.Sprintf("[%d] %s %s", i+1, v.Kind, label)}
-		if i < len(states) {
-			links[i].state = states[i]
+		if status != nil && i < len(status.views) {
+			links[i].state = status.views[i]
 		}
 	}
 	return links

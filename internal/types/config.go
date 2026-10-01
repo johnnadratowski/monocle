@@ -27,13 +27,13 @@ type Config struct {
 	// too, adding MONOCLE_VIEW_INDEX and MONOCLE_VIEW_NAME for the one view
 	// asked for. Empty runs nothing.
 	WalkthroughOnStop string `json:"walkthrough_on_stop"`
-	// WalkthroughViewStatus is a shell command that says which of the current
-	// tour stop's views are showing, so each view's label can be marked open,
-	// hidden or not opened. Run like WalkthroughOnStop (same environment, 2s
-	// timeout) when a stop is shown and after a view is opened; it prints a
-	// JSON object keyed "view", "view2", … with the values "open" or
-	// "hidden" (anything else, or a missing key, is "not opened"). Empty, or
-	// a failure, shows no marker.
+	// WalkthroughViewStatus is a shell command that says how the windows
+	// around the current tour stop stand, so each view's label can be marked
+	// open, hidden or not opened. Run via sh -c in the repo root with
+	// MONOCLE_STOP_ID and MONOCLE_REPO_ROOT, 500ms timeout, when a stop is
+	// shown and after a view is opened. It prints one line of JSON:
+	// {"views": {"view": "open"|"hidden"|"closed", "view2": …},
+	// "layout": "saved"|"default"}. Empty, or a failure, shows no marker.
 	WalkthroughViewStatus string `json:"walkthrough_view_status"`
 	// EditorMode controls how Ctrl+g / Ctrl+o open a file: "terminal" (take over
 	// Monocle's screen, the default), "tmux_vertical" (side-by-side split),
