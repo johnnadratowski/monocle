@@ -22,6 +22,7 @@ func viewsTour() *types.Walkthrough {
 	return &types.Walkthrough{Title: "Tour", Stops: []types.WalkthroughStop{
 		{ID: "1.1", Title: "Where it starts", File: "a.go", LineStart: 5, Note: "The entry."},
 		{ID: "1.2", Title: "Where it lands", File: "b.go", LineStart: 30, Note: "The write.",
+			Related: []types.DocRef{{Doc: "a.go", StartLine: 5}, {Doc: "internal/deep/path/b.go", StartLine: 30}},
 			Views: []types.StopView{
 				{Kind: types.StopViewVideo, Target: "demo.webm", Label: "Demo"},
 				{Kind: types.StopViewURL, Target: "https://example.test/spec", Label: "Spec"},
@@ -96,37 +97,63 @@ func TestAFailedViewRunSaysWhichView(t *testing.T) {
 	}
 }
 
-func TestStopLinks(t *testing.T) {
-	got := stopLinks(types.WalkthroughStop{Views: []types.StopView{
-		{Kind: "image", Target: "shots/x.png"},
-		{Kind: "url", Target: "https://x.test", Label: "Spec"},
-	}}, &tourStatus{views: []viewState{viewOpen}})
-	want := []noteLink{{label: "[1] image x.png", state: viewOpen}, {label: "[2] url Spec"}}
+func TestStopLinkGroups(t *testing.T) {
+	got := stopLinkGroups(types.WalkthroughStop{
+		Related: []types.DocRef{{Doc: "a.go", StartLine: 4}, {Doc: "b.go"}},
+		Views: []types.StopView{
+			{Kind: "image", Target: "shots/x.png"},
+			{Kind: "url", Target: "https://x.test", Label: "Spec"},
+		},
+	}, &tourStatus{views: []viewState{viewOpen}})
+	want := []linkGroup{
+		{head: "Related:", hint: "click, or :related N", links: []noteLink{
+			{label: "[1] a.go:4", act: tourRelatedMsg{arg: "1"}, middle: true},
+			{label: "[2] b.go", act: tourRelatedMsg{arg: "2"}, middle: true},
+		}},
+		{head: "Views:", hint: "click, or :view N", links: []noteLink{
+			{label: "[1] image x.png", act: tourViewMsg{arg: "1"}, state: viewOpen},
+			{label: "[2] url Spec", act: tourViewMsg{arg: "2"}},
+		}},
+	}
 	if !reflect.DeepEqual(got, want) {
-		t.Errorf("got %+v, want %+v", got, want)
+		t.Errorf("got  %+v\nwant %+v", got, want)
 	}
-	if got := stopLinks(types.WalkthroughStop{}, nil); got != nil {
-		t.Errorf("a stop with no views has links %+v", got)
+	if rows, _ := layoutGroups(stopLinkGroups(types.WalkthroughStop{}, nil), 80); rows != nil {
+		t.Errorf("a stop with nothing to link has rows %q", rows)
 	}
 }
 
-// TestLayoutLinksKeepsEveryLabelWhole checks, at every width, that each label
-// lands on one row exactly where its hit says — so a click there finds it —
-// and that no row is wider than the pane.
-func TestLayoutLinksKeepsEveryLabelWhole(t *testing.T) {
-	links := []noteLink{{label: "[1] video Before / after"}, {label: "[2] url Spec"}, {label: "[3] image A much longer label for the table structure"}}
-	t.Run("unmarked", func(t *testing.T) { checkLinkLayout(t, links) })
-	marked := append([]noteLink(nil), links...)
+// TestLayoutKeepsEveryLabelWhole checks, at every width, that each label lands
+// on one row exactly where its hit says — so a click there finds it, and sends
+// what the label sends — and that no row is wider than the pane.
+func TestLayoutKeepsEveryLabelWhole(t *testing.T) {
+	views := []noteLink{
+		{label: "[1] video Before / after", act: tourViewMsg{arg: "1"}},
+		{label: "[2] url Spec", act: tourViewMsg{arg: "2"}},
+		{label: "[3] image A much longer label for the table structure", act: tourViewMsg{arg: "3"}},
+	}
+	t.Run("unmarked", func(t *testing.T) {
+		checkLinkLayout(t, linkGroup{head: "Views:", links: views, hint: "click, or :view N"})
+	})
+	marked := append([]noteLink(nil), views...)
 	marked[0].state, marked[1].state, marked[2].state = viewNotOpened, viewOpen, viewHidden
-	t.Run("marked", func(t *testing.T) { checkLinkLayout(t, marked) })
+	t.Run("marked", func(t *testing.T) { checkLinkLayout(t, linkGroup{head: "Views:", links: marked}) })
+	related := []noteLink{
+		{label: "[1] ui-web-b2b/ui/components/move-funds/move-funds.logic.js:66", act: tourRelatedMsg{arg: "1"}, middle: true},
+		{label: "[2] server/a.go:4", act: tourRelatedMsg{arg: "2"}, middle: true},
+	}
+	t.Run("paths", func(t *testing.T) { checkLinkLayout(t, linkGroup{head: "Related:", links: related}) })
+	t.Run("lead", func(t *testing.T) {
+		checkLinkLayout(t, linkGroup{head: "Layout:", lead: "saved", links: []noteLink{{label: "reset", act: tourViewMsg{arg: "x"}}}})
+	})
 }
 
-func checkLinkLayout(t *testing.T, links []noteLink) {
+func checkLinkLayout(t *testing.T, g linkGroup) {
 	t.Helper()
 	for width := 12; width <= 140; width++ {
-		rows, hits := layoutLinks(links, width)
-		if len(hits) != len(links) {
-			t.Fatalf("width %d: %d hits for %d links", width, len(hits), len(links))
+		rows, hits := layoutGroups([]linkGroup{g}, width)
+		if len(hits) != len(g.links) {
+			t.Fatalf("width %d: %d hits for %d links", width, len(hits), len(g.links))
 		}
 		for _, r := range rows {
 			if w := lipgloss.Width(r); w > width-1 && width > 12 {
@@ -134,22 +161,23 @@ func checkLinkLayout(t *testing.T, links []noteLink) {
 			}
 		}
 		for i, h := range hits {
-			if h.n != i+1 {
-				t.Errorf("width %d: hit %d is for link %d", width, i, h.n)
+			l := g.links[i]
+			if !reflect.DeepEqual(h.act, l.act) {
+				t.Errorf("width %d: hit %d sends %#v, want %#v", width, i, h.act, l.act)
 			}
 			got := ansi.Strip(ansi.Cut(rows[h.line], h.start, h.end))
-			want := links[i].label
-			if lipgloss.Width(want) > h.end-h.start {
-				want = ansi.Truncate(want, h.end-h.start, "…")
+			if got != l.label && (!strings.Contains(got, "…") || lipgloss.Width(got) != h.end-h.start) {
+				t.Errorf("width %d: label %d reads %q at its hit, want %q or a cut of it", width, i+1, got, l.label)
 			}
-			if got != want {
-				t.Errorf("width %d: label %d reads %q at its hit, want %q", width, i+1, got, want)
+			// A path cut to fit keeps its file name and line, room allowing.
+			if base := filepath.Base(l.label); l.middle && got != l.label && h.end-h.start > lipgloss.Width(base)+6 && !strings.HasSuffix(got, base) {
+				t.Errorf("width %d: path label %d was cut to %q, losing %q", width, i+1, got, base)
 			}
 			// Its marker follows it, on the same row and unclickable — unless
 			// the pane is too narrow for both, when the label is cut first.
-			if marker := ansi.Strip(links[i].state.marker()); marker != "" {
+			if marker := ansi.Strip(l.state.marker()); marker != "" {
 				after := ansi.Strip(ansi.Cut(rows[h.line], h.end, h.end+1+len(marker)))
-				if after != " "+marker && (got == links[i].label || width >= 40) {
+				if after != " "+marker && (got == l.label || width >= 40) {
 					t.Errorf("width %d: label %d is followed by %q, want its marker %q", width, i+1, after, marker)
 				}
 			}
@@ -157,14 +185,26 @@ func checkLinkLayout(t *testing.T, links []noteLink) {
 	}
 }
 
-func TestLayoutLinksStyle(t *testing.T) {
-	rows, _ := layoutLinks([]noteLink{{label: "[1] video Demo"}}, 80)
-	label := lipgloss.NewStyle().Foreground(lipgloss.Color(annotationColor)).Bold(true).Underline(true).Render("[1] video Demo")
-	if len(rows) != 1 || !strings.Contains(rows[0], label) {
-		t.Errorf("rows %q, want the label bold, underlined, in the accent", rows)
+func TestLayoutGroupsStyleAndOrder(t *testing.T) {
+	groups := []linkGroup{
+		{head: "Related:", links: []noteLink{{label: "[1] a.go:4"}}, hint: "click, or :related N"},
+		{head: "Views:", links: []noteLink{{label: "[1] video Demo"}}, hint: "click, or :view N"},
+		{head: "Layout:", lead: "saved", links: []noteLink{{label: "reset"}}},
 	}
-	if got := ansi.Strip(rows[0]); got != " Views: [1] video Demo  "+linkHint {
-		t.Errorf("row reads %q", got)
+	rows, _ := layoutGroups(groups, 80)
+	var plain []string
+	for _, r := range rows {
+		plain = append(plain, ansi.Strip(r))
+	}
+	want := []string{" Related: [1] a.go:4  click, or :related N", " Views: [1] video Demo  click, or :view N", " Layout: saved · reset"}
+	if !reflect.DeepEqual(plain, want) {
+		t.Errorf("rows read %q\nwant      %q", plain, want)
+	}
+	label := lipgloss.NewStyle().Foreground(lipgloss.Color(annotationColor)).Bold(true).Underline(true)
+	for i, l := range []string{"[1] a.go:4", "[1] video Demo", "reset"} {
+		if !strings.Contains(rows[i], label.Render(l)) {
+			t.Errorf("row %d: %q is not bold, underlined, in the accent", i, l)
+		}
 	}
 }
 
@@ -248,7 +288,7 @@ func TestClickingAViewLabelIsViewN(t *testing.T) {
 			// of one, the separator before the next, the hint, the note, the title.
 			x1, y1 := onScreen(t, m, "[1] video Demo")
 			x2, _ := onScreen(t, m, "[2] url Spec")
-			hx, hy := onScreen(t, m, linkHint)
+			hx, hy := onScreen(t, m, "click, or :view N")
 			nx, ny := onScreen(t, m, "The write.")
 			tx, ty := onScreen(t, m, "1.2 · Where it lands")
 			for _, p := range [][2]int{{x1 + lipgloss.Width("[1] video Demo"), y1}, {x2 - 2, y1}, {x2 - 1, y1}, {hx, hy}, {nx, ny}, {tx, ty}} {
@@ -466,5 +506,98 @@ func TestAStaleStatusAnswerIsDropped(t *testing.T) {
 		if marked := strings.Contains(got, "(open)") || strings.Contains(got, "(hidden)"); marked != (name == "the right one") {
 			t.Errorf("%s: marked=%v\n%s", name, marked, got)
 		}
+	}
+}
+
+func TestClickingARelatedLabelIsRelatedN(t *testing.T) {
+	for _, l := range layouts {
+		t.Run(l.name, func(t *testing.T) {
+			m := viewsAppIn(t, &types.Config{}, l.width, l.sidebarHidden)
+			focus, cursor := m.focus, m.diffView.cursor
+			for i, label := range []string{"[1] a.go:5", "[2] internal/deep/path/b.go:30"} {
+				x, y := onScreen(t, m, label)
+				want := m.executeCommand(fmt.Sprintf("related %d", i+1))()
+				for _, dx := range []int{0, lipgloss.Width(label) - 1} {
+					next, cmd := m.Update(leftClick(x+dx, y))
+					if cmd == nil {
+						t.Fatalf("a click on %q (+%d) did nothing", label, dx)
+					}
+					if got := cmd(); !reflect.DeepEqual(got, want) {
+						t.Errorf("a click on %q (+%d) sent %#v, want %#v — what :related %d sends", label, dx, got, want, i+1)
+					}
+					if app := next.(appModel); app.focus != focus || app.diffView.cursor != cursor {
+						t.Errorf("a click on %q moved focus or the diff cursor", label)
+					}
+				}
+			}
+		})
+	}
+}
+
+// captureRelated stands in for the tmux side of the related-files pane — the
+// test pretends to be inside tmux, with a server that does not exist — and
+// records each plan it is handed.
+func captureRelated(t *testing.T) *[]relatedPanePlan {
+	t.Helper()
+	t.Setenv("TMUX", filepath.Join(t.TempDir(), "no-server")+",1,0")
+	t.Setenv("TMUX_PANE", "%99")
+	var plans []relatedPanePlan
+	orig := showRelated
+	showRelated = func(_ string, p relatedPanePlan) tea.Cmd {
+		plans = append(plans, p)
+		return nil
+	}
+	t.Cleanup(func() { showRelated = orig })
+	return &plans
+}
+
+func TestRelatedNBringsUpEveryFileWithNActive(t *testing.T) {
+	m := viewsAppIn(t, &types.Config{Editor: "nvim"}, 140, false)
+	plans := captureRelated(t) // after: tourApp clears TMUX for itself
+
+	// Arriving at the stop opens its related files on the first, as before,
+	// and leaves a zoomed window as it is.
+	m = settle(t, m)
+	// Asking for file 2 opens them all again with file 2's window active, and
+	// unzooms the window so the pane can be seen.
+	m = typeCommand(t, m, "related 2")
+	if len(*plans) != 2 {
+		t.Fatalf("%d plans, want the stop's and :related 2's", len(*plans))
+	}
+	files := []string{"a.go", "internal/deep/path/b.go"}
+	for i, want := range []struct {
+		last   string
+		reveal bool
+	}{{"1wincmd w", false}, {"2wincmd w", true}} {
+		p := (*plans)[i]
+		c := p.argv[len(p.argv)-1]
+		if !reflect.DeepEqual(p.argv[3:5], files) || !strings.HasSuffix(c, "|"+want.last) || p.reveal != want.reveal {
+			t.Errorf("plan %d: argv %q reveal %v; want both files, ending %q, reveal %v", i, p.argv, p.reveal, want.last, want.reveal)
+		}
+		// Keyboard focus stays with Monocle unless editor_focus says otherwise.
+		if p.owner != "%99" || p.focus {
+			t.Errorf("plan %d: owner %q focus %v, want beside %%99 without taking focus", i, p.owner, p.focus)
+		}
+	}
+	_ = m
+}
+
+func TestRelatedCommandRefusesWhatItCannotOpen(t *testing.T) {
+	m := viewsAppIn(t, &types.Config{}, 140, false) // on 1.2, outside tmux
+	for arg, want := range map[string]string{
+		"3": "1.2 has related files 1-2",
+		"0": "1.2 has related files 1-2",
+		"x": "1.2 has related files 1-2",
+		"2": "related files: " + errRelatedNeedsTmux.Error(),
+	} {
+		if got := typeCommand(t, m, "related "+arg).statusBar.searchInfo; got != want {
+			t.Errorf(":related %s said %q, want %q", arg, got, want)
+		}
+	}
+	if got := typeCommand(t, pressKey(t, m, ","), "related").statusBar.searchInfo; got != "1.1 has no related files" {
+		t.Errorf(":related on a stop with none said %q", got)
+	}
+	if got := typeCommand(t, pressKey(t, m, "W"), "related").statusBar.searchInfo; got != "no tour stop to open a related file from" {
+		t.Errorf(":related with the tour off said %q", got)
 	}
 }

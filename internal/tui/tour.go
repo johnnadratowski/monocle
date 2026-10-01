@@ -265,57 +265,50 @@ func (m *appModel) leaveTour() {
 }
 
 // openStopNote puts the stop's heading and note in the doc pane, followed by
-// what else the stop carries, so the reviewer can see there is a related file
-// or a recording without having to know to look. The views are labels a click
-// opens.
+// what else the stop carries — its related files and views, as labels a click
+// opens — so the reviewer can see there is more without having to know to look.
 func (m *appModel) openStopNote(stop types.WalkthroughStop) {
 	m.docPane.theme = &m.theme
-	m.docPane.openNote(tourNoteKeyPrefix+stop.ID, stop.Heading(), stopNoteBody(stop), stopLinks(stop, m.stopStatus(stop)), m.diffView.mdStyler)
+	m.docPane.openNote(tourNoteKeyPrefix+stop.ID, stop.Heading(), stopNoteBody(stop), stopLinkGroups(stop, m.stopStatus(stop)), m.diffView.mdStyler)
 	recalcPaneDimensions(m)
 	m.diffView.ensureVisible()
 }
 
-// stopNoteBody is the doc pane's text for a stop: the note, then its related
-// files. Its views follow as links (stopLinks).
+// stopNoteBody is the doc pane's text for a stop: the note. What else the stop
+// carries follows as labels (stopLinkGroups).
 func stopNoteBody(stop types.WalkthroughStop) string {
-	var b strings.Builder
-	note := strings.TrimSpace(stop.Note)
-	if note == "" {
-		note = "_(no note)_"
+	if note := strings.TrimSpace(stop.Note); note != "" {
+		return note
 	}
-	b.WriteString(note)
-	if len(stop.Related) > 0 {
-		refs := make([]string, len(stop.Related))
-		for i, r := range stop.Related {
-			refs[i] = r.Doc
-			if r.StartLine > 0 {
-				refs[i] += fmt.Sprintf(":%d", r.StartLine)
-			}
-		}
-		b.WriteString("\n\n**Related:** " + strings.Join(refs, " · "))
-	}
-	return b.String()
+	return "_(no note)_"
 }
 
-// stopLinks are a stop's views as the labels under its note, numbered the way
-// :view counts them — "[2] url Spec" — each with what the view-status command
-// said about it, if anything.
-func stopLinks(stop types.WalkthroughStop, status *tourStatus) []noteLink {
-	if len(stop.Views) == 0 {
-		return nil
+// stopLinkGroups are the labels under a stop's note, numbered the way their
+// commands count them: its related files ("[1] a.go:40", `:related 1`) and its
+// views ("[2] url Spec", `:view 2`), each view with what the view-status
+// command said about it, if anything.
+func stopLinkGroups(stop types.WalkthroughStop, status *tourStatus) []linkGroup {
+	related := linkGroup{head: "Related:", hint: "click, or :related N"}
+	for i, r := range stop.Related {
+		label := fmt.Sprintf("[%d] %s", i+1, r.Doc)
+		if r.StartLine > 0 {
+			label += fmt.Sprintf(":%d", r.StartLine)
+		}
+		related.links = append(related.links, noteLink{label: label, act: tourRelatedMsg{arg: fmt.Sprint(i + 1)}, middle: true})
 	}
-	links := make([]noteLink, len(stop.Views))
+	views := linkGroup{head: "Views:", hint: "click, or :view N"}
 	for i, v := range stop.Views {
 		label := v.Label
 		if label == "" {
 			label = filepath.Base(v.Target)
 		}
-		links[i] = noteLink{label: fmt.Sprintf("[%d] %s %s", i+1, v.Kind, label)}
+		link := noteLink{label: fmt.Sprintf("[%d] %s %s", i+1, v.Kind, label), act: tourViewMsg{arg: fmt.Sprint(i + 1)}}
 		if status != nil && i < len(status.views) {
-			links[i].state = status.views[i]
+			link.state = status.views[i]
 		}
+		views.links = append(views.links, link)
 	}
-	return links
+	return []linkGroup{related, views}
 }
 
 // jumpToStop selects the stop's file and puts the cursor on its first line,

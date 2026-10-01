@@ -12,7 +12,7 @@ func TestRelatedEditorArgv(t *testing.T) {
 	files := []relatedFile{{path: "src/a.ts", line: 40}, {path: "db/b.sql", line: 12}}
 
 	t.Run("nvim opens every file as a read-only split, each at its line", func(t *testing.T) {
-		got := relatedEditorArgv("nvim", files)
+		got := relatedEditorArgv("nvim", files, 1)
 		want := []string{"nvim", "-R", "-o", "src/a.ts", "db/b.sql",
 			"-c", "1wincmd w|exe 'normal! 40Gzz'|2wincmd w|exe 'normal! 12Gzz'|1wincmd w"}
 		if !reflect.DeepEqual(got, want) {
@@ -21,7 +21,7 @@ func TestRelatedEditorArgv(t *testing.T) {
 	})
 
 	t.Run("vim keeps its configured flags", func(t *testing.T) {
-		got := relatedEditorArgv("vim -u NONE", files[:1])
+		got := relatedEditorArgv("vim -u NONE", files[:1], 1)
 		want := []string{"vim", "-u", "NONE", "-R", "-o", "src/a.ts", "-c", "1wincmd w|exe 'normal! 40Gzz'|1wincmd w"}
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("got  %q\nwant %q", got, want)
@@ -35,7 +35,7 @@ func TestRelatedEditorArgv(t *testing.T) {
 		for i := 1; i <= 7; i++ {
 			many = append(many, relatedFile{path: "f.go", line: i})
 		}
-		got := relatedEditorArgv("/usr/local/bin/nvim", many)
+		got := relatedEditorArgv("/usr/local/bin/nvim", many, 1)
 		n := 0
 		for _, a := range got {
 			if a == "-c" {
@@ -48,12 +48,12 @@ func TestRelatedEditorArgv(t *testing.T) {
 	})
 
 	t.Run("a file with no line is opened, not positioned", func(t *testing.T) {
-		got := relatedEditorArgv("nvim", []relatedFile{{path: "a"}, {path: "b", line: 3}})
+		got := relatedEditorArgv("nvim", []relatedFile{{path: "a"}, {path: "b", line: 3}}, 1)
 		want := []string{"nvim", "-R", "-o", "a", "b", "-c", "2wincmd w|exe 'normal! 3Gzz'|1wincmd w"}
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("got  %q\nwant %q", got, want)
 		}
-		if got := relatedEditorArgv("nvim", []relatedFile{{path: "a"}}); !reflect.DeepEqual(got, []string{"nvim", "-R", "-o", "a"}) {
+		if got := relatedEditorArgv("nvim", []relatedFile{{path: "a"}}, 1); !reflect.DeepEqual(got, []string{"nvim", "-R", "-o", "a"}) {
 			t.Errorf("no lines at all should mean no -c, got %q", got)
 		}
 	})
@@ -62,26 +62,49 @@ func TestRelatedEditorArgv(t *testing.T) {
 	// one stray keypress from editing the change. Every vim-like opens it -R.
 	t.Run("every vim-like opens read-only", func(t *testing.T) {
 		for _, ed := range []string{"vi", "vim", "nvim", "/opt/homebrew/bin/nvim", "gvim", "mvim", "lvim"} {
-			got := relatedEditorArgv(ed, []relatedFile{{path: "docs/decisions/frontend.md", line: 12}})
+			got := relatedEditorArgv(ed, []relatedFile{{path: "docs/decisions/frontend.md", line: 12}}, 1)
 			if len(got) < 3 || got[1] != "-R" {
 				t.Errorf("%s: argv %q, want -R straight after the editor", ed, got)
 			}
 		}
 	})
 
+	// Asking for file N (a click on its label) opens them all the same, and
+	// leaves N's window the active one.
+	t.Run("the asked-for file's window is left active", func(t *testing.T) {
+		got := relatedEditorArgv("nvim", files, 2)
+		want := []string{"nvim", "-R", "-o", "src/a.ts", "db/b.sql",
+			"-c", "1wincmd w|exe 'normal! 40Gzz'|2wincmd w|exe 'normal! 12Gzz'|2wincmd w"}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("got  %q\nwant %q", got, want)
+		}
+		got = relatedEditorArgv("nvim", []relatedFile{{path: "a"}, {path: "b"}}, 2)
+		if want := []string{"nvim", "-R", "-o", "a", "b", "-c", "2wincmd w"}; !reflect.DeepEqual(got, want) {
+			t.Errorf("with no lines: got %q, want %q", got, want)
+		}
+		for _, out := range []int{0, 3} {
+			if got := relatedEditorArgv("nvim", files, out); got[len(got)-1] != "1wincmd w|exe 'normal! 40Gzz'|2wincmd w|exe 'normal! 12Gzz'|1wincmd w" {
+				t.Errorf("active %d (out of range) ended %q, want the first window", out, got[len(got)-1])
+			}
+		}
+		if got := relatedEditorArgv("hx", files, 2); !reflect.DeepEqual(got, []string{"hx", "+12", "db/b.sql"}) {
+			t.Errorf("another editor asked for file 2 got %q, want that file at its line", got)
+		}
+	})
+
 	t.Run("another editor opens only the first file", func(t *testing.T) {
-		got := relatedEditorArgv("hx", files)
+		got := relatedEditorArgv("hx", files, 1)
 		if want := []string{"hx", "+40", "src/a.ts"}; !reflect.DeepEqual(got, want) {
 			t.Errorf("got %q, want %q", got, want)
 		}
-		got = relatedEditorArgv("code --wait", []relatedFile{{path: "x.go"}})
+		got = relatedEditorArgv("code --wait", []relatedFile{{path: "x.go"}}, 1)
 		if want := []string{"code", "--wait", "x.go"}; !reflect.DeepEqual(got, want) {
 			t.Errorf("got %q, want %q", got, want)
 		}
 	})
 
 	t.Run("nothing to open is nothing to run", func(t *testing.T) {
-		if got := relatedEditorArgv("nvim", nil); got != nil {
+		if got := relatedEditorArgv("nvim", nil, 1); got != nil {
 			t.Errorf("got %q", got)
 		}
 	})
@@ -204,5 +227,24 @@ func TestSettleRunsOnlyForTheLatestStop(t *testing.T) {
 	m = pressKey(t, m, ".")
 	if _, cmd := m.settleOnStop(tourSettledMsg{seq: m.tour.settle}); cmd == nil {
 		t.Error("the current stop's settle should run its side effects")
+	}
+}
+
+func TestUnzoomArgs(t *testing.T) {
+	want := [][]string{
+		{"resize-pane", "-Z", "-t", "%3"},
+		{"set-option", "-w", "-u", "-t", "%3", "@stage_zoomed"},
+	}
+	if got := unzoomArgs("%3", "1\n"); !reflect.DeepEqual(got, want) {
+		t.Errorf("zoomed: got %q, want %q", got, want)
+	}
+	// resize-pane -Z toggles: on a window that is not zoomed it would zoom it.
+	for _, flag := range []string{"0", "", "garbage"} {
+		if got := unzoomArgs("%3", flag); got != nil {
+			t.Errorf("flag %q: got %q, want nothing", flag, got)
+		}
+	}
+	if got := unzoomArgs("", "1"); got != nil {
+		t.Errorf("no owner pane: got %q, want nothing", got)
 	}
 }

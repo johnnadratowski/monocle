@@ -57,7 +57,8 @@ func isVimLike(name string) bool {
 	return false
 }
 
-// relatedEditorArgv builds the editor invocation for a set of related files.
+// relatedEditorArgv builds the editor invocation for a set of related files,
+// with file active (1-based) the one the editor is left on.
 //
 // vim and nvim open read-only (-R): the pane shows context, usually in the very
 // worktree under review, where one stray keypress in a writable buffer edits the
@@ -68,19 +69,24 @@ func isVimLike(name string) bool {
 // which five files would already exceed. `exe 'normal! NGzz'` rather than a bare
 // `:N` because a range followed by `|` is not reliably a jump.
 //
-// Any other editor opens one file, so it gets the first, at its line, the same
-// way ctrl+g opens a file — writable, since editors share no read-only flag.
-func relatedEditorArgv(configured string, files []relatedFile) []string {
+// Any other editor opens one file, so it gets the active one, at its line, the
+// same way ctrl+g opens a file — writable, since editors share no read-only
+// flag.
+func relatedEditorArgv(configured string, files []relatedFile, active int) []string {
 	if len(files) == 0 {
 		return nil
+	}
+	if active < 1 || active > len(files) {
+		active = 1
 	}
 	name, args := resolveEditor(configured)
 	argv := append([]string{name}, args...)
 	if !isVimLike(name) {
-		if files[0].line > 0 {
-			argv = append(argv, fmt.Sprintf("+%d", files[0].line))
+		f := files[active-1]
+		if f.line > 0 {
+			argv = append(argv, fmt.Sprintf("+%d", f.line))
 		}
-		return append(argv, files[0].path)
+		return append(argv, f.path)
 	}
 	argv = append(argv, "-R", "-o")
 	for _, f := range files {
@@ -92,8 +98,8 @@ func relatedEditorArgv(configured string, files []relatedFile) []string {
 			steps = append(steps, fmt.Sprintf("%dwincmd w", i+1), fmt.Sprintf("exe 'normal! %dGzz'", f.line))
 		}
 	}
-	if len(steps) > 0 {
-		steps = append(steps, "1wincmd w")
+	if len(steps) > 0 || active > 1 {
+		steps = append(steps, fmt.Sprintf("%dwincmd w", active))
 		argv = append(argv, "-c", strings.Join(steps, "|"))
 	}
 	return argv
@@ -107,7 +113,27 @@ type relatedPanePlan struct {
 	dir      string // the editor's working directory (the repo root)
 	mode     string // editor_mode: "tmux_horizontal" stacks the split, anything else puts it beside
 	focus    bool   // whether a NEW split takes focus (a respawn never moves focus)
+	reveal   bool   // unzoom Monocle's window first, so the pane can be seen
 	argv     []string
+}
+
+// stageZoomedOption is the window option a setup that hides a window's splits
+// by zooming Monocle's pane (stage's "hide" key) sets while it is hidden. It
+// is cleared when Monocle unzooms, so that setup does not go on thinking the
+// window is hidden.
+const stageZoomedOption = "@stage_zoomed"
+
+// unzoomArgs are the tmux commands that unzoom the window holding Monocle's
+// pane, given that window's #{window_zoomed_flag}: none when it is not zoomed.
+// resize-pane -Z toggles, so it must only run on a zoomed window.
+func unzoomArgs(owner, zoomedFlag string) [][]string {
+	if owner == "" || strings.TrimSpace(zoomedFlag) != "1" {
+		return nil
+	}
+	return [][]string{
+		{"resize-pane", "-Z", "-t", owner},
+		{"set-option", "-w", "-u", "-t", owner, stageZoomedOption},
+	}
 }
 
 // relatedPaneArgs builds the tmux arguments that put argv in the related-files
@@ -189,11 +215,24 @@ func findRelatedPane(tracked, owner string) string {
 	return ownedRelatedPane(listing, owner)
 }
 
+// showRelated is showRelatedCmd, as a variable so a test can see the plan
+// without a tmux server.
+var showRelated = showRelatedCmd
+
 // showRelatedCmd opens files in the related-files pane, reusing it when live.
 func showRelatedCmd(tracked string, plan relatedPanePlan) tea.Cmd {
 	return func() tea.Msg {
 		relatedPaneMu.Lock()
 		defer relatedPaneMu.Unlock()
+		if plan.reveal {
+			// Best effort: if the window stays zoomed the pane still updates,
+			// it is just not in sight.
+			if flag, err := tmux("display-message", "-p", "-t", plan.owner, "#{window_zoomed_flag}"); err == nil {
+				for _, args := range unzoomArgs(plan.owner, flag) {
+					_, _ = tmux(args...)
+				}
+			}
+		}
 		plan.existing = findRelatedPane(tracked, plan.owner)
 		out, err := tmux(relatedPaneArgs(plan)...)
 		if err != nil {
@@ -232,19 +271,57 @@ func (m appModel) openRelated(stop types.WalkthroughStop) tea.Cmd {
 	if len(files) == 0 {
 		return nil
 	}
+	return m.showRelatedFiles(files, 1, false)
+}
+
+// errRelatedNeedsTmux is what showing related files says outside tmux.
+var errRelatedNeedsTmux = errors.New("related files open in a tmux pane; monocle is not running in tmux")
+
+// showRelatedFiles puts files in the related-files pane — respawning it when
+// live, splitting it when not — with file active (1-based) the one the editor
+// is left on. reveal unzooms Monocle's window first.
+func (m appModel) showRelatedFiles(files []relatedFile, active int, reveal bool) tea.Cmd {
 	if !inTmux() {
-		return func() tea.Msg {
-			return relatedPaneMsg{err: errors.New("related files open in a tmux pane; monocle is not running in tmux")}
-		}
+		return func() tea.Msg { return relatedPaneMsg{err: errRelatedNeedsTmux} }
 	}
 	plan := relatedPanePlan{
-		owner: os.Getenv("TMUX_PANE"),
-		dir:   m.repoRoot,
-		mode:  m.editorMode(),
-		focus: m.relatedFocus(),
-		argv:  relatedEditorArgv(m.editorCommand(), files),
+		owner:  os.Getenv("TMUX_PANE"),
+		dir:    m.repoRoot,
+		mode:   m.editorMode(),
+		focus:  m.relatedFocus(),
+		reveal: reveal,
+		argv:   relatedEditorArgv(m.editorCommand(), files, active),
 	}
-	return showRelatedCmd(m.tour.pane, plan)
+	return showRelated(m.tour.pane, plan)
+}
+
+// tourRelatedMsg asks to bring up one of the current stop's related files —
+// `:related 2`, or a click on its label.
+type tourRelatedMsg struct{ arg string }
+
+// openStopRelated brings up the related-files pane with all of the current
+// stop's related files, as arriving at the stop does, but with file n
+// (1-based; empty means the first) the active one — and unzooms Monocle's
+// window if it is zoomed, since asking for a file means wanting to see it.
+// Keyboard focus follows the same rule as on arriving: a respawn never moves
+// it, a new split takes it only with editor_focus.
+func (m appModel) openStopRelated(arg string) (appModel, tea.Cmd) {
+	stop, ok := m.currentStop()
+	if !ok || !m.tour.on {
+		m.statusBar.searchInfo = "no tour stop to open a related file from"
+		return m, nil
+	}
+	files := relatedFilesFor(stop)
+	if len(files) == 0 {
+		m.statusBar.searchInfo = stop.ID + " has no related files"
+		return m, nil
+	}
+	n, ok := stopItemNumber(arg, len(files))
+	if !ok {
+		m.statusBar.searchInfo = fmt.Sprintf("%s has related files 1-%d", stop.ID, len(files))
+		return m, nil
+	}
+	return m, m.showRelatedFiles(files, n, true)
 }
 
 // relatedFocus is whether a new related-files split takes focus. It follows

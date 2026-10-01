@@ -390,7 +390,7 @@ func TestStopNoteBody(t *testing.T) {
 		Related: []types.DocRef{{Doc: "a.go", StartLine: 4}, {Doc: "b.go"}},
 		Views:   []types.StopView{{Kind: "image", Target: "shots/x.png"}, {Kind: "url", Target: "https://x.test", Label: "Spec"}},
 	})
-	want := "why\n\n**Related:** a.go:4 · b.go"
+	want := "why" // the related files and views follow as labels
 	if got != want {
 		t.Errorf("got  %q\nwant %q", got, want)
 	}

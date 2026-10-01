@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -251,6 +252,20 @@ func (m appModel) handleOnStopDone(msg onStopDoneMsg) (appModel, tea.Cmd) {
 	return m, m.refreshViewStatus()
 }
 
+// stopItemNumber reads the n of `:view n` / `:related n`: 1-based, at most
+// count, and the first when arg is empty.
+func stopItemNumber(arg string, count int) (int, bool) {
+	arg = strings.TrimSpace(arg)
+	if arg == "" {
+		return 1, count > 0
+	}
+	n, err := strconv.Atoi(arg)
+	if err != nil || n < 1 || n > count {
+		return 0, false
+	}
+	return n, true
+}
+
 // tourViewMsg asks to open one of the current stop's views — `:view 2`.
 type tourViewMsg struct{ arg string }
 
@@ -268,12 +283,10 @@ func (m appModel) openStopView(arg string) (appModel, tea.Cmd) {
 		m.statusBar.searchInfo = stop.ID + " has no views"
 		return m, nil
 	}
-	n := 1
-	if arg = strings.TrimSpace(arg); arg != "" {
-		if _, err := fmt.Sscanf(arg, "%d", &n); err != nil || n < 1 || n > len(stop.Views) {
-			m.statusBar.searchInfo = fmt.Sprintf("%s has views 1-%d", stop.ID, len(stop.Views))
-			return m, nil
-		}
+	n, ok := stopItemNumber(arg, len(stop.Views))
+	if !ok {
+		m.statusBar.searchInfo = fmt.Sprintf("%s has views 1-%d", stop.ID, len(stop.Views))
+		return m, nil
 	}
 	if command := m.onStopCommand(); command != "" {
 		return m, m.runStopView(command, stop, n)

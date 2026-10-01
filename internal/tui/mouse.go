@@ -1,8 +1,6 @@
 package tui
 
 import (
-	"strconv"
-
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 )
@@ -210,13 +208,13 @@ func (m appModel) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	}
 
 	if layout.doc.contains(msg.X, msg.Y) {
-		// A tour stop's view labels are the pane's only clickable things. A
-		// click on one is `:view N` — the same message, so the same path — and
-		// nothing else: focus and the diff stay where they are.
+		// A tour note's labels are the pane's only clickable things. A click on
+		// one sends what its command sends (`:view 2`, `:related 2`), so both
+		// run the same code, and does nothing else: focus and the diff stay
+		// where they are.
 		relX, relY := layout.doc.translate(msg.X, msg.Y)
-		if n, ok := m.docPane.linkAt(relX, relY); ok {
-			arg := strconv.Itoa(n)
-			return m, func() tea.Msg { return tourViewMsg{arg: arg} }
+		if act, ok := m.docPane.linkAt(relX, relY); ok {
+			return m, func() tea.Msg { return act }
 		}
 	}
 
