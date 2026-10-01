@@ -9,9 +9,9 @@ import (
 )
 
 // A tour note ends with what else the stop carries — its related files, its
-// views — as rows of labels the reviewer can click. Each label carries the
-// message its keyboard command sends (`:related 2`, `:view 2`), so a click
-// and the command run the same code.
+// views, a saved layout to reset — as rows of labels the reviewer can click.
+// Each label carries the message its keyboard command sends (`:related 2`,
+// `:view 2`, `:layout reset`), so a click and the command run the same code.
 
 // noteLink is one clickable label under a note. act is the message a click on
 // it sends; state is a view's marker, if known; middle cuts a label too wide

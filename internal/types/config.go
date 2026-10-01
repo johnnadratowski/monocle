@@ -35,6 +35,13 @@ type Config struct {
 	// {"views": {"view": "open"|"hidden"|"closed", "view2": …},
 	// "layout": "saved"|"default"}. Empty, or a failure, shows no marker.
 	WalkthroughViewStatus string `json:"walkthrough_view_status"`
+	// WalkthroughLayoutReset is a shell command that puts the windows around a
+	// tour back in their default layout. When the view status says
+	// "layout": "saved", the tour note shows "Layout: saved · reset", and a
+	// click on reset (or `:layout reset`) runs it via sh -c in the repo root
+	// with MONOCLE_STOP_ID and MONOCLE_REPO_ROOT, then asks the view status
+	// again. Empty runs nothing.
+	WalkthroughLayoutReset string `json:"walkthrough_layout_reset"`
 	// EditorMode controls how Ctrl+g / Ctrl+o open a file: "terminal" (take over
 	// Monocle's screen, the default), "tmux_vertical" (side-by-side split),
 	// "tmux_horizontal" (stacked split), or "tmux_window" (new tmux window/tab).

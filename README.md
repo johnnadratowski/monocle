@@ -245,6 +245,7 @@ Bindings are grouped by the task they serve, and within a group ordered by key: 
 | `:stop <id>` | Jump to a stop by id, e.g. `:stop 1.2` (no id lists them) |
 | `:view [n]` | Open the stop's nth view (default the first): through `walkthrough_on_stop` when set, else in the media / markdown viewer. Clicking a view's label under the note does the same |
 | `:related [n]` | Bring up the related-files pane — every related file of the stop, as on arriving — with file n (default the first) the active window, unzooming monocle's tmux window if it is zoomed. Clicking a related file's label does the same |
+| `:layout [reset]` | Say whether the tour's windows are in a saved layout; `reset` runs `walkthrough_layout_reset` to put back the default. Clicking `reset` in the note's `Layout: saved · reset` does the same |
 
 When the agent sends a tour (`set_walkthrough`), monocle enters tour mode on its first stop: the diff cursor lands on the stop's lines, which stay marked in the gutter, the doc pane shows `1.2 · Title` and the agent's note, and the status bar shows `tour 1.2 · 3 of 7` (the stop id, then its position in the tour). Ask the agent about a stop by its id. The ends of the tour clamp rather than wrap.
 
@@ -457,6 +458,7 @@ Monocle loads settings from JSON config files:
   "media_viewer": "",
   "walkthrough_on_stop": "",
   "walkthrough_view_status": "",
+  "walkthrough_layout_reset": "",
   "ignore_patterns": [],
   "keybindings": {},
   "mouse": true,
@@ -492,6 +494,7 @@ Monocle loads settings from JSON config files:
 | `media_viewer`                       | string                                     | `""`         | Viewer for media artifacts / files opened with `Ctrl+p` (images, video, audio); may include flags and quoted args. Empty falls back to Google Chrome (`open -a "Google Chrome"` on macOS) |
 | `walkthrough_on_stop`                | string                                     | `""`         | Shell command run (`sh -c`, in the repo root, fire-and-forget, 30s timeout) on every guided-tour stop you settle on, with `MONOCLE_STOP_ID`, `MONOCLE_REPO_ROOT` and `MONOCLE_STOP_JSON` (the stop, view targets resolved to absolute paths) in its environment. Use it to show a stop's screenshots/recordings and arrange windows. `:view N` runs it too, with `MONOCLE_VIEW_INDEX` / `MONOCLE_VIEW_NAME` naming the one view asked for. Empty runs nothing |
 | `walkthrough_view_status`            | string                                     | `""`         | Shell command that says how the windows around the current tour stop stand, so each view's label is marked `(open)`, `(hidden)` or `(not opened)`. Run with `sh -c` in the repo root with `MONOCLE_STOP_ID` and `MONOCLE_REPO_ROOT`, 500ms timeout, when a stop is shown and after a view is opened; prints one line of JSON: `{"views": {"view": "open"\|"hidden"\|"closed", "view2": …}, "layout": "saved"\|"default"}`. Empty or a failure shows nothing |
+| `walkthrough_layout_reset`           | string                                     | `""`         | Shell command that puts the windows around a tour back in their default layout. When `walkthrough_view_status` says `"layout": "saved"`, the tour note shows `Layout: saved · reset`; clicking `reset`, or `:layout reset`, runs it (`sh -c`, in the repo root, with `MONOCLE_STOP_ID` and `MONOCLE_REPO_ROOT`, 10s timeout) and then asks the view status again. Empty runs nothing |
 | `ignore_patterns`                    | string array                               | `[]`         | Glob patterns for files to exclude                                       |
 | `min_diff_width`                     | integer                                    | `80`         | Minimum character width for the diff viewer in side-by-side layout       |
 | `mouse`                              | `true`, `false`                            | `true`       | Enable mouse interactions (click, scroll, drag), including clicking a tour stop's views                          |

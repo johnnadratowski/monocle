@@ -286,7 +286,8 @@ func stopNoteBody(stop types.WalkthroughStop) string {
 // stopLinkGroups are the labels under a stop's note, numbered the way their
 // commands count them: its related files ("[1] a.go:40", `:related 1`) and its
 // views ("[2] url Spec", `:view 2`), each view with what the view-status
-// command said about it, if anything.
+// command said about it, if anything — and, when it said the windows are in a
+// saved layout, "Layout: saved · reset" (`:layout reset`).
 func stopLinkGroups(stop types.WalkthroughStop, status *tourStatus) []linkGroup {
 	related := linkGroup{head: "Related:", hint: "click, or :related N"}
 	for i, r := range stop.Related {
@@ -308,7 +309,12 @@ func stopLinkGroups(stop types.WalkthroughStop, status *tourStatus) []linkGroup 
 		}
 		views.links = append(views.links, link)
 	}
-	return []linkGroup{related, views}
+	groups := []linkGroup{related, views}
+	if status != nil && status.layoutSaved {
+		groups = append(groups, linkGroup{head: "Layout:", lead: "saved", hint: ":layout reset",
+			links: []noteLink{{label: "reset", act: tourLayoutMsg{arg: "reset"}}}})
+	}
+	return groups
 }
 
 // jumpToStop selects the stop's file and puts the cursor on its first line,

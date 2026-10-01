@@ -22,6 +22,7 @@ When the agent sends a tour, monocle enters **tour mode** on its first stop. Eac
 | `:stop <id>` | Jump to a stop by id, e.g. `:stop 1.2`. With no id it lists the stops. |
 | `:view [n]` | Open the stop's nth view (default the first): through your on-stop command when you have one (see [below](#screenshots-recordings-and-layouts)), else in your [`media_viewer`](/configuration/config-file) — or `markdown_viewer` for a markdown view. |
 | `:related [n]` | Bring up the stop's related files with the nth (default the first) active — see [Related files](#related-files). |
+| `:layout [reset]` | Say whether the tour's windows are in a saved layout; `reset` puts back the default — see [Which views are showing](#which-views-are-showing). |
 
 The ends clamp: `.` on the last stop tells you it is the end rather than wrapping to the first. A stop with no file — one that exists to show a recording, say — shows its note and leaves the diff where it is. `ctrl+o` returns to wherever a stop jumped you from.
 
@@ -89,9 +90,13 @@ The command runs with `sh -c` in the repo root, with `MONOCLE_STOP_ID` and `MONO
 | `"hidden"` | `(hidden)` — open, but out of sight |
 | `"closed"`, anything else, or no key for the view | `(not opened)` |
 
-`layout` is `"saved"` when the windows are in a layout you arranged, `"default"` otherwise.
+`layout` is `"saved"` when the windows are in a layout you arranged, `"default"` otherwise. While it is saved, the note ends with **`Layout: saved · reset`**. Clicking `reset` — or typing `:layout reset` — runs [`walkthrough_layout_reset`](/configuration/config-file) (`sh -c` in the repo root, with `MONOCLE_STOP_ID` and `MONOCLE_REPO_ROOT`, 10-second timeout) and then asks the status again, so the label goes once the layout is back to the default:
 
-Answer for the stop in the environment: a window still showing another stop's view is not this stop's view. Without the command, or when it fails, times out, or prints anything without a `views` object, nothing shows — no markers — since monocle does not know, so it does not say.
+```json
+{ "walkthrough_layout_reset": "stage layout-reset" }
+```
+
+Answer for the stop in the environment: a window still showing another stop's view is not this stop's view. Without the command, or when it fails, times out, or prints anything without a `views` object, nothing shows — no markers, no layout label — since monocle does not know, so it does not say.
 
 It is asked when a stop is shown (once the on-stop command has finished with it, when there is one, so the markers describe this stop's windows rather than the last stop's) and after `:view N` or a click. Only the latest answer for the stop you are on is used.
 

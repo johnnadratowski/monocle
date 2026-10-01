@@ -1274,6 +1274,12 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tourRelatedMsg:
 		return m.openStopRelated(msg.arg)
 
+	case tourLayoutMsg:
+		return m.handleLayout(msg)
+
+	case layoutResetDoneMsg:
+		return m.handleLayoutResetDone(msg)
+
 	// Sidebar selection → load diff (focus stays where it is)
 	case sidebarSelectMsg:
 		return m, m.handleSidebarSelect(msg)
@@ -3068,7 +3074,7 @@ var commandNames = []string{
 	"pause", "unpause", "history",
 	"mark-all-reviewed", "mark-all-unreviewed",
 	"base-artifact-version", "base-ref", "ref", "theme",
-	"relaunch", "stop", "view", "related",
+	"relaunch", "stop", "view", "related", "layout",
 }
 
 // matchingCommands returns the command names that start with prefix, in order.
@@ -3171,6 +3177,11 @@ func (m appModel) executeCommand(cmd string) tea.Cmd {
 	if trimmed == "related" || strings.HasPrefix(trimmed, "related ") {
 		arg := strings.TrimSpace(strings.TrimPrefix(trimmed, "related"))
 		return func() tea.Msg { return tourRelatedMsg{arg: arg} }
+	}
+	// `:layout reset` — put the tour's windows back in their default layout.
+	if trimmed == "layout" || strings.HasPrefix(trimmed, "layout ") {
+		arg := strings.TrimSpace(strings.TrimPrefix(trimmed, "layout"))
+		return func() tea.Msg { return tourLayoutMsg{arg: arg} }
 	}
 	switch trimmed {
 	case "submit":

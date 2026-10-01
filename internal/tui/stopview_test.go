@@ -121,6 +121,16 @@ func TestStopLinkGroups(t *testing.T) {
 	if rows, _ := layoutGroups(stopLinkGroups(types.WalkthroughStop{}, nil), 80); rows != nil {
 		t.Errorf("a stop with nothing to link has rows %q", rows)
 	}
+	// A saved layout adds the label that resets it; a default one does not.
+	layout := linkGroup{head: "Layout:", lead: "saved", hint: ":layout reset",
+		links: []noteLink{{label: "reset", act: tourLayoutMsg{arg: "reset"}}}}
+	saved := stopLinkGroups(types.WalkthroughStop{}, &tourStatus{layoutSaved: true})
+	if len(saved) != 3 || !reflect.DeepEqual(saved[2], layout) {
+		t.Errorf("with a saved layout: %+v", saved)
+	}
+	if got := stopLinkGroups(types.WalkthroughStop{}, &tourStatus{}); len(got) != 2 {
+		t.Errorf("with the default layout: %+v", got)
+	}
 }
 
 // TestLayoutKeepsEveryLabelWhole checks, at every width, that each label lands
@@ -403,17 +413,17 @@ func TestViewMarkersComeFromTheStatusCommand(t *testing.T) {
 func TestNoUsableStatusMeansNoMarker(t *testing.T) {
 	for name, status := range map[string]string{
 		"no command":      "",
-		"a failure":       `printf '{"views": {"view": "open"}}'; exit 1`,
+		"a failure":       `printf '{"views": {"view": "open"}, "layout": "saved"}'; exit 1`,
 		"not JSON":        `echo open`,
 		"the flat shape":  `echo '{"view": "open"}'`,
 		"a hung command":  `sleep 5`,
-		"over 500ms":      `sleep 1; echo '{"views": {"view": "open"}}'`,
+		"over 500ms":      `sleep 1; echo '{"views": {"view": "open"}, "layout": "saved"}'`,
 		"stderr is noise": `echo '{"views": {"view": "open"}}' >&2`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			m := settle(t, statusApp(t, status, ""))
-			if screen := screenText(m); strings.Contains(screen, "(open)") || strings.Contains(screen, "(not opened)") {
-				t.Errorf("a marker with %s:\n%s", name, screen)
+			if screen := screenText(m); strings.Contains(screen, "(open)") || strings.Contains(screen, "(not opened)") || strings.Contains(screen, "Layout:") {
+				t.Errorf("a marker or the layout label with %s:\n%s", name, screen)
 			}
 		})
 	}
@@ -421,17 +431,17 @@ func TestNoUsableStatusMeansNoMarker(t *testing.T) {
 
 func TestAFailedAskClearsTheMarkers(t *testing.T) {
 	state := filepath.Join(t.TempDir(), "state")
-	if err := os.WriteFile(state, []byte(`{"views": {"view": "open"}}`), 0o644); err != nil {
+	if err := os.WriteFile(state, []byte(`{"views": {"view": "open"}, "layout": "saved"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	m := settle(t, statusApp(t, "cat "+state, ""))
-	if !strings.Contains(screenText(m), "(open)") {
-		t.Fatal("no marker to begin with")
+	if !strings.Contains(screenText(m), "(open)") || !strings.Contains(screenText(m), "Layout: saved") {
+		t.Fatalf("no marker and layout label to begin with:\n%s", screenText(m))
 	}
 	_ = os.Remove(state)
 	m = settle(t, m)
-	if strings.Contains(screenText(m), "(open)") {
-		t.Error("a marker outlived the status command failing")
+	if strings.Contains(screenText(m), "(open)") || strings.Contains(screenText(m), "Layout:") {
+		t.Errorf("a marker or the layout label outlived the status command failing:\n%s", screenText(m))
 	}
 }
 
@@ -599,5 +609,85 @@ func TestRelatedCommandRefusesWhatItCannotOpen(t *testing.T) {
 	}
 	if got := typeCommand(t, pressKey(t, m, "W"), "related").statusBar.searchInfo; got != "no tour stop to open a related file from" {
 		t.Errorf(":related with the tour off said %q", got)
+	}
+}
+
+// layoutApp is statusApp on stop 1.2 with a view status read from a file, a
+// layout-reset command that records its runs and puts the layout back, and
+// the status asked once: the layout is saved.
+func layoutApp(t *testing.T, reset string) (appModel, string) {
+	t.Helper()
+	dir := t.TempDir()
+	state := filepath.Join(dir, "state")
+	if err := os.WriteFile(state, []byte(`{"views": {}, "layout": "saved"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := statusApp(t, "cat "+state, "")
+	cfg := m.engine.GetConfig()
+	cfg.WalkthroughLayoutReset = strings.ReplaceAll(reset, "STATE", state)
+	return settle(t, m), dir
+}
+
+const recordingReset = `printf '%s|%s\n' "$MONOCLE_STOP_ID" "${MONOCLE_REPO_ROOT+set}" >> "$(dirname STATE)/resets"; ` +
+	`printf '{"views": {}, "layout": "default"}' > STATE`
+
+func TestASavedLayoutOffersAReset(t *testing.T) {
+	m, _ := layoutApp(t, recordingReset)
+	if !strings.Contains(screenText(m), "Layout: saved · reset  :layout reset") {
+		t.Fatalf("no reset label:\n%s", screenText(m))
+	}
+	x, y := onScreen(t, m, "· reset")
+	_, cmd := m.Update(leftClick(x+2, y))
+	if cmd == nil {
+		t.Fatal("a click on reset did nothing")
+	}
+	if got, want := cmd(), m.executeCommand("layout reset")(); !reflect.DeepEqual(got, want) {
+		t.Errorf("a click on reset sent %#v, want %#v — what :layout reset sends", got, want)
+	}
+	// "Layout: saved" itself is not a label.
+	lx, ly := onScreen(t, m, "Layout: saved")
+	if _, cmd := m.Update(leftClick(lx+9, ly)); cmd != nil {
+		t.Errorf("a click on \"saved\" did something: %#v", cmd())
+	}
+}
+
+func TestLayoutResetRunsTheCommandThenAsksAgain(t *testing.T) {
+	m, dir := layoutApp(t, recordingReset)
+	asked := m.tour.statusSeq
+	next, cmd := m.Update(tourLayoutMsg{arg: "reset"})
+	m = driveWithin(t, next.(appModel), cmd, 0, 5*time.Second)
+	runs, _ := os.ReadFile(filepath.Join(dir, "resets"))
+	if string(runs) != "1.2|set\n" {
+		t.Errorf("reset runs %q, want one with the stop and repo", runs)
+	}
+	if m.tour.statusSeq != asked+1 || m.statusBar.searchInfo != "layout reset" {
+		t.Errorf("after the reset: asked %d more times, status %q", m.tour.statusSeq-asked, m.statusBar.searchInfo)
+	}
+	if strings.Contains(screenText(m), "Layout:") {
+		t.Errorf("the label outlived the layout going back to the default:\n%s", screenText(m))
+	}
+}
+
+func TestLayoutCommand(t *testing.T) {
+	m, _ := layoutApp(t, `echo "no such scene" >&2; exit 4`)
+	for arg, want := range map[string]string{
+		"":        "layout: saved — :layout reset puts it back",
+		"frobble": "usage: :layout [reset]",
+	} {
+		if got := typeCommand(t, m, strings.TrimSpace("layout "+arg)).statusBar.searchInfo; got != want {
+			t.Errorf(":layout %s said %q, want %q", arg, got, want)
+		}
+	}
+	next, cmd := m.Update(tourLayoutMsg{arg: "reset"})
+	failed := driveWithin(t, next.(appModel), cmd, 0, 5*time.Second)
+	if want := "layout reset failed: exit status 4: no such scene"; failed.statusBar.searchInfo != want {
+		t.Errorf("a failed reset said %q, want %q", failed.statusBar.searchInfo, want)
+	}
+	if failed.tour.statusSeq != m.tour.statusSeq+1 {
+		t.Error("a failed reset did not ask the view status again")
+	}
+	m.engine.GetConfig().WalkthroughLayoutReset = ""
+	if got := typeCommand(t, m, "layout reset").statusBar.searchInfo; got != "no walkthrough_layout_reset command configured" {
+		t.Errorf("without a reset command :layout reset said %q", got)
 	}
 }
