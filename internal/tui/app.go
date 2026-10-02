@@ -2054,9 +2054,12 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case Matches(key, km.FocusSwap), key == "shift+tab", Matches(key, km.OpenDocRef),
 			Matches(key, km.TourNext), Matches(key, km.TourPrev), Matches(key, km.ToggleTour),
-			Matches(key, km.CloseRelated), Matches(key, km.PaneSize):
+			Matches(key, km.CloseRelated), Matches(key, km.PaneSize),
+			Matches(key, km.PaneLeft), Matches(key, km.PaneDown), Matches(key, km.PaneUp), Matches(key, km.PaneRight),
+			Matches(key, km.ToggleSidebar), Matches(key, km.Help), Matches(key, km.CommandMode):
 			// fall through to the shared cases — the tour keys included, since
-			// the doc pane is where the tour's note is being read
+			// the doc pane is where the tour's note is being read. ctrl+h/j/k/l
+			// too: they leave the pane (John 2026-10-02: they did nothing here).
 		default:
 			return m, nil
 		}

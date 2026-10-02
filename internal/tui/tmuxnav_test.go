@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/josephschmitt/monocle/internal/types"
 )
 
@@ -170,5 +172,34 @@ func TestEdgeRunsTheNavigateCommand(t *testing.T) {
 	m.setFocus(focusSidebar)
 	if _, cmd := m.navigatePane(paneRight); cmd != nil {
 		t.Error("a move Monocle makes itself ran the command")
+	}
+}
+
+// From the doc pane, ctrl+k goes up to the diff, and ctrl+l at its edge reaches
+// the edge command: the pane does not swallow them.
+func TestDocPaneLetsPaneKeysThrough(t *testing.T) {
+	skipWithoutSh(t)
+	out := filepath.Join(t.TempDir(), "dirs")
+	m := viewsAppIn(t, &types.Config{WalkthroughNavigate: `printf '%s\n' "$MONOCLE_NAV_DIR" >> ` + out}, 140, false)
+	// After building the app: its setup clears TMUX so nothing reaches a real tmux.
+	t.Setenv("TMUX", "/tmp/tmux-501/default,123,0")
+	t.Setenv("TMUX_PANE", "%42")
+	m = pressKey(t, m, ".")
+	if !m.docPane.active {
+		t.Fatal("the stop's note is not open")
+	}
+	m.setFocus(focusDoc)
+	m = updateApp(t, m, tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl})
+	if m.focus != focusMain {
+		t.Fatalf("ctrl+k from the doc pane left focus at %v, want the diff", m.focus)
+	}
+	m.setFocus(focusDoc)
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'l', Mod: tea.ModCtrl})
+	if cmd == nil {
+		t.Fatal("ctrl+l from the doc pane did nothing")
+	}
+	cmd()
+	if got, _ := os.ReadFile(out); string(got) != "right\n" {
+		t.Errorf("the edge command saw %q, want right", got)
 	}
 }
