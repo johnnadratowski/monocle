@@ -852,3 +852,16 @@ func TestANoteHasARuleUnderItsTitle(t *testing.T) {
 	}
 	t.Fatal("note title not on screen")
 }
+
+// The note's scroll hint is right-justified in the title bar, apart from the title.
+func TestTheScrollHintSitsAtTheRightOfTheTitle(t *testing.T) {
+	m := longNoteApp(t)
+	row := rowWith(screenText(m), "1.2 · Where it lands")
+	inner := strings.TrimRight(strings.TrimSuffix(strings.TrimRight(row, " "), "│"), " ")
+	if !strings.HasSuffix(inner, "lines") {
+		t.Errorf("the hint is not at the right end of the title bar: %q", row)
+	}
+	if i := strings.Index(row, "Where it lands"); !strings.Contains(row[i:], "     ↓") {
+		t.Errorf("the hint is not set apart from the title: %q", row)
+	}
+}

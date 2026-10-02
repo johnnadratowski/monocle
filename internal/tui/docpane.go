@@ -298,14 +298,21 @@ func (m docPaneModel) View() string {
 	if m.rangeShifted {
 		title += "  · range may have shifted"
 	}
+	// A note's scroll hint sits at the right end of the title bar, apart from the
+	// title (John 2026-10-01: in line, it read as part of the title).
+	hint := ""
 	if m.note {
-		if hint := m.noteScrollHint(); hint != "" {
-			title += "  " + hint
-		}
+		hint = m.noteScrollHint()
 	}
 
 	var b strings.Builder
-	b.WriteString(titleStyle.Render(" " + truncateToWidth(title, m.width-1)))
+	if hint == "" {
+		b.WriteString(titleStyle.Render(" " + truncateToWidth(title, m.width-1)))
+	} else {
+		left := " " + truncateToWidth(title, max(m.width-lipgloss.Width(hint)-4, 1))
+		gap := max(m.width-lipgloss.Width(left)-lipgloss.Width(hint)-1, 1)
+		b.WriteString(titleStyle.Render(left + strings.Repeat(" ", gap) + hint + " "))
+	}
 	if m.note {
 		b.WriteString("\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(strings.Repeat("─", max(m.width, 0))))
 	}
