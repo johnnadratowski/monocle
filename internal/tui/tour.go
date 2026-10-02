@@ -315,6 +315,9 @@ func stopLinkGroups(stop types.WalkthroughStop, status *tourStatus) []linkGroup 
 		related.links = append(related.links, noteLink{label: label, act: tourRelatedMsg{arg: fmt.Sprint(i + 1)}, middle: true})
 	}
 	views := linkGroup{head: "Views:", hint: "click, or :view N"}
+	if len(stop.Views) == 1 {
+		views.head = "View:" // John's tours have one view per stop (2026-10-01)
+	}
 	for i, v := range stop.Views {
 		label := v.Label
 		if label == "" {

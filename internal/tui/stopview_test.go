@@ -865,3 +865,19 @@ func TestTheScrollHintSitsAtTheRightOfTheTitle(t *testing.T) {
 		t.Errorf("the hint is not set apart from the title: %q", row)
 	}
 }
+
+// A stop with one view labels it "View:", not "Views:".
+func TestOneViewIsLabelledSingular(t *testing.T) {
+	tour := viewsTour()
+	for i := range tour.Stops {
+		if len(tour.Stops[i].Views) > 1 {
+			tour.Stops[i].Views = tour.Stops[i].Views[:1]
+		}
+	}
+	m, _ := tourAppWith(t, tour, inertViewers(&types.Config{}))
+	m = pressKey(t, m, ".")
+	screen := screenText(m)
+	if strings.Contains(screen, "Views:") || !strings.Contains(screen, "View:") {
+		t.Errorf("a one-view stop should read \"View:\":\n%s", screen)
+	}
+}
