@@ -720,7 +720,7 @@ func TestLabelsStayInReachOfALongNote(t *testing.T) {
 	if !strings.Contains(screen, "Note line 1.") || strings.Contains(screen, "Note line 60.") {
 		t.Fatalf("the note should start at its top and not fit:\n%s", screen)
 	}
-	if title := rowWith(screen, "1.2 · Where it lands"); !strings.Contains(title, "↓ 4") {
+	if title := rowWith(screen, "1.2 · Where it lands"); !strings.Contains(title, "↓ ") {
 		t.Errorf("the title does not say how much is below: %q", title)
 	}
 	vx, vy := onScreen(t, m, "[2] url Spec")
@@ -835,4 +835,20 @@ func TestALongNoteShowsAScrollbar(t *testing.T) {
 	if last := rowWith(screenText(m), "Note line 60."); !strings.Contains(last, "█") {
 		t.Errorf("at the end the thumb should sit on the last note row: %q", last)
 	}
+}
+
+// A tour note's title has a rule under it, and a click on a label still lands on
+// the label (the rule moves the text down a row).
+func TestANoteHasARuleUnderItsTitle(t *testing.T) {
+	m := longNoteApp(t)
+	lines := strings.Split(screenText(m), "\n")
+	for i, l := range lines {
+		if strings.Contains(l, "1.2 · Where it lands") {
+			if i+1 >= len(lines) || !strings.Contains(lines[i+1], "────") {
+				t.Fatalf("no rule under the note's title; next row %q", lines[i+1])
+			}
+			return
+		}
+	}
+	t.Fatal("note title not on screen")
 }

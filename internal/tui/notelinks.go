@@ -49,10 +49,10 @@ const minLinkLabel = 4
 // counting the title as 0 — or false when the point is not on a label. Labels
 // are pinned to the bottom of the pane, so the note's scroll does not move them.
 func (m docPaneModel) linkAt(x, y int) (tea.Msg, bool) {
-	if !m.active || !m.note || y < 1 || y > m.viewportHeight() {
+	if !m.active || !m.note || y < m.headRows() || y >= m.headRows()+m.viewportHeight() {
 		return nil, false
 	}
-	line := y - 1 - m.pinnedTop()
+	line := y - m.headRows() - m.pinnedTop()
 	if line < 0 {
 		return nil, false
 	}

@@ -167,7 +167,7 @@ func (m docPaneModel) noteHeight(width int) int {
 	if len(rows) > 0 {
 		rows = append(rows, "") // the blank row before them
 	}
-	return len(wrapNote(m.noteSource, width, m.styler)) + len(rows) + 1
+	return len(wrapNote(m.noteSource, width, m.styler)) + len(rows) + 2 // + the title and its rule
 }
 
 // pinnedTop is the viewport row (0-based, under the title) the pinned rows
@@ -259,10 +259,19 @@ func (m *docPaneModel) close() {
 	m.annotationID = ""
 }
 
-// viewportHeight is the number of doc lines that fit, leaving one row for the
-// title bar.
+// headRows is the title bar, plus, for a tour note, the rule under it (John
+// 2026-10-01: a line between the title and the text).
+func (m docPaneModel) headRows() int {
+	if m.note {
+		return 2
+	}
+	return 1
+}
+
+// viewportHeight is the number of doc lines that fit under the title bar (and a
+// note's rule).
 func (m docPaneModel) viewportHeight() int {
-	h := m.height - 1
+	h := m.height - m.headRows()
 	if h < 1 {
 		h = 1
 	}
@@ -297,6 +306,9 @@ func (m docPaneModel) View() string {
 
 	var b strings.Builder
 	b.WriteString(titleStyle.Render(" " + truncateToWidth(title, m.width-1)))
+	if m.note {
+		b.WriteString("\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(strings.Repeat("─", max(m.width, 0))))
+	}
 
 	lineNumStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 	hlStyle := lipgloss.NewStyle().Background(accent).Foreground(lipgloss.Color("0"))

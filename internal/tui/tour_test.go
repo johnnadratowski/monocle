@@ -412,8 +412,8 @@ func TestNotePaneWrapsAndSizesToItsNote(t *testing.T) {
 			t.Errorf("row %q is %d wide in a 24-column pane", l, w)
 		}
 	}
-	if got := d.noteHeight(24); got != len(d.lines)+1 {
-		t.Errorf("noteHeight = %d, want its rows plus the title", got)
+	if got := d.noteHeight(24); got != len(d.lines)+2 {
+		t.Errorf("noteHeight = %d, want its rows plus the title and its rule", got)
 	}
 	d.close()
 	if d.note || d.active {
