@@ -45,9 +45,13 @@ type docPaneModel struct {
 	styler     *markdownStyler
 
 	// groups follow the note as rows of clickable labels (a tour stop's
-	// related files, views, layout), and linkHits say where reflow put each
-	// label, so a click can be mapped back.
+	// related files, views, layout). They are laid out into pinned, which
+	// stays at the bottom of the pane while only the note above it scrolls —
+	// a long note must not push the labels out of reach — and linkHits say
+	// where each label is among the pinned rows, so a click can be mapped
+	// back.
 	groups   []linkGroup
+	pinned   []string
 	linkHits []linkHit
 }
 
@@ -79,17 +83,39 @@ func (m *docPaneModel) reflow() {
 	}
 	m.noteWidth = m.width
 	m.lines = wrapNote(m.noteSource, m.width, m.styler)
-	rows, hits := layoutGroups(m.groups, m.width)
-	if len(rows) > 0 {
-		// A blank row between the prose and the labels under it.
-		m.lines = append(m.lines, "")
-	}
-	for i := range hits {
-		hits[i].line += len(m.lines)
-	}
-	m.lines = append(m.lines, rows...)
-	m.linkHits = hits
+	m.pinned, m.linkHits = layoutGroups(m.groups, m.width)
 	m.clamp()
+}
+
+// pinnedShown is how many pinned rows fit: all of them, unless the pane is
+// shorter than they are.
+func (m docPaneModel) pinnedShown() int {
+	return min(len(m.pinned), m.viewportHeight())
+}
+
+// noteRows is how many rows the note itself gets: what the pinned rows leave,
+// less a blank row between the two when there is room for one.
+func (m docPaneModel) noteRows() int {
+	rows := m.viewportHeight() - m.pinnedShown()
+	if m.pinnedShown() > 0 && rows > 1 {
+		rows-- // the blank row above the labels
+	}
+	return max(rows, 0)
+}
+
+// noteScrollHint says how much of the note is out of sight, for the title:
+// "↓ 12 lines", "↑ 3 · ↓ 9 lines", or "" when it all fits.
+func (m docPaneModel) noteScrollHint() string {
+	above, below := m.offset, len(m.lines)-m.offset-m.noteRows()
+	switch {
+	case above > 0 && below > 0:
+		return fmt.Sprintf("↑ %d · ↓ %d lines", above, below)
+	case below > 0:
+		return fmt.Sprintf("↓ %d lines", below)
+	case above > 0:
+		return fmt.Sprintf("↑ %d lines", above)
+	}
+	return ""
 }
 
 // wrapNote styles each markdown line and wraps it to the pane, leaving a
@@ -121,6 +147,12 @@ func (m docPaneModel) noteHeight(width int) int {
 		rows = append(rows, "") // the blank row before them
 	}
 	return len(wrapNote(m.noteSource, width, m.styler)) + len(rows) + 1
+}
+
+// pinnedTop is the viewport row (0-based, under the title) the pinned rows
+// start on.
+func (m docPaneModel) pinnedTop() int {
+	return m.viewportHeight() - m.pinnedShown()
 }
 
 // openRefs begins showing an annotation's refs starting at index 0. The caller
@@ -178,7 +210,7 @@ func (m *docPaneModel) scrollToRange() {
 }
 
 func (m *docPaneModel) clamp() {
-	max := len(m.lines) - m.viewportHeight()
+	max := len(m.lines) - m.noteRows()
 	if max < 0 {
 		max = 0
 	}
@@ -201,6 +233,7 @@ func (m *docPaneModel) close() {
 	m.note = false
 	m.noteSource = ""
 	m.groups = nil
+	m.pinned = nil
 	m.linkHits = nil
 	m.annotationID = ""
 }
@@ -223,6 +256,9 @@ func (m docPaneModel) View() string {
 	}
 	accent := lipgloss.Color(annotationColor)
 	titleStyle := lipgloss.NewStyle().Foreground(accent).Bold(true).Width(m.width)
+	// The width is only final at render time (the horizontal layout measures
+	// the rendered sidebar), so re-wrap a note here if it moved. m is a copy.
+	m.reflow()
 
 	title := m.title
 	if r, ok := m.currentRef(); ok && len(m.refs) > 1 {
@@ -231,6 +267,11 @@ func (m docPaneModel) View() string {
 	}
 	if m.rangeShifted {
 		title += "  · range may have shifted"
+	}
+	if m.note {
+		if hint := m.noteScrollHint(); hint != "" {
+			title += "  " + hint
+		}
 	}
 
 	var b strings.Builder
@@ -241,13 +282,15 @@ func (m docPaneModel) View() string {
 
 	vp := m.viewportHeight()
 	if m.note {
-		// The width is only final at render time (the horizontal layout measures
-		// the rendered sidebar), so re-wrap here if it moved. m is a copy.
-		m.reflow()
+		// The note scrolls; the label rows stay pinned to the bottom.
+		top, rows := m.pinnedTop(), m.noteRows()
 		for i := 0; i < vp; i++ {
 			b.WriteString("\n")
-			if idx := m.offset + i; idx < len(m.lines) {
-				b.WriteString(truncateToWidth(m.lines[idx], m.width))
+			switch {
+			case i >= top:
+				b.WriteString(truncateToWidth(m.pinned[i-top], m.width))
+			case i < rows && m.offset+i < len(m.lines):
+				b.WriteString(truncateToWidth(m.lines[m.offset+i], m.width))
 			}
 		}
 		return b.String()

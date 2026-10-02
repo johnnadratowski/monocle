@@ -34,7 +34,7 @@ type linkGroup struct {
 	hint  string
 }
 
-// linkHit is where a label was laid out — a row of the pane's lines and the
+// linkHit is where a label was laid out — a row of the pinned rows and the
 // columns it covers, [start, end) — and what a click there sends.
 type linkHit struct {
 	line, start, end int
@@ -46,12 +46,16 @@ type linkHit struct {
 const minLinkLabel = 4
 
 // linkAt is what a click at a point in the pane sends — x a column, y a row
-// counting the title as 0 — or false when the point is not on a label.
+// counting the title as 0 — or false when the point is not on a label. Labels
+// are pinned to the bottom of the pane, so the note's scroll does not move them.
 func (m docPaneModel) linkAt(x, y int) (tea.Msg, bool) {
 	if !m.active || !m.note || y < 1 || y > m.viewportHeight() {
 		return nil, false
 	}
-	line := m.offset + y - 1
+	line := y - 1 - m.pinnedTop()
+	if line < 0 {
+		return nil, false
+	}
 	for _, h := range m.linkHits {
 		if h.line == line && x >= h.start && x < h.end {
 			return h.act, true

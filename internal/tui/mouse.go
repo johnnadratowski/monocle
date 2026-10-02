@@ -221,8 +221,9 @@ func (m appModel) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleMouseWheel routes scroll wheel events. The sidebar scrolls only when the
-// cursor is clearly hovering over a visible sidebar; every other wheel event —
+// handleMouseWheel routes scroll wheel events. Over the doc pane the wheel
+// scrolls it. The sidebar scrolls only when the cursor is clearly hovering over
+// a visible sidebar; every other wheel event —
 // over the diff, over the title/borders, or outside the computed regions entirely
 // — scrolls the diff. This makes wheel scrolling work anywhere in the window
 // regardless of which pane is focused, and is robust to layout modes where the
@@ -234,6 +235,19 @@ func (m appModel) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 	}
 
 	layout := computePaneLayout(&m)
+
+	if layout.doc.contains(msg.X, msg.Y) {
+		// Over the doc pane the wheel scrolls it — a tour note too long for
+		// the pane, or a document — and not the diff above it.
+		for i := 0; i < mouseScrollLines; i++ {
+			if msg.Button == tea.MouseWheelDown {
+				m.docPane.scrollDown()
+			} else if msg.Button == tea.MouseWheelUp {
+				m.docPane.scrollUp()
+			}
+		}
+		return m, nil
+	}
 
 	if !m.sidebarHidden && layout.sidebar.contains(msg.X, msg.Y) {
 		// Allow scrolling until the last item can reach the top. Header/group

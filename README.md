@@ -173,7 +173,7 @@ This means you can review the agent's *thinking* before it writes code — not j
 - **Comment resolution** — Mark individual comments as resolved (`x`); resolved comments are excluded from submitted reviews
 - **Submission history** — View past review submissions with `:history`
 - **Themes** — Choose a color scheme (`dark`, `light`, `molokai`, `dracula`, `nord`) via the `theme` config option, or switch live with `:theme <name>` / cycle with `:theme`
-- **Mouse support** — Click to focus panes, scroll with the wheel, click files to select, drag to make visual selections, interact with modal controls, and click a tour stop's view to open it
+- **Mouse support** — Click to focus panes, scroll with the wheel, click files to select, drag to make visual selections, interact with modal controls, click a tour stop's labels, and scroll a long tour note
 - **External editor** — Open comment or submit text in `$VISUAL`/`$EDITOR` with `Ctrl+g` for full editing power
 - **Configurable keybindings** — Override any navigation or action key via config
 - **Feedback queue** — Submit reviews while the agent is working; delivered when the agent next runs `/get-feedback`

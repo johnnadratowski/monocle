@@ -692,3 +692,88 @@ func TestLayoutCommand(t *testing.T) {
 		t.Errorf("without a reset command :layout reset said %q", got)
 	}
 }
+
+// longNoteApp is viewsAppIn's stop 1.2 with a note far longer than the pane.
+func longNoteApp(t *testing.T) appModel {
+	t.Helper()
+	tour := viewsTour()
+	var note strings.Builder
+	for i := 1; i <= 60; i++ {
+		fmt.Fprintf(&note, "Note line %d.\n", i)
+	}
+	tour.Stops[1].Note = note.String()
+	m, _ := tourAppWith(t, tour, inertViewers(&types.Config{}))
+	return pressKey(t, m, ".")
+}
+
+func wheel(x, y int, down bool) tea.MouseWheelMsg {
+	b := tea.MouseWheelUp
+	if down {
+		b = tea.MouseWheelDown
+	}
+	return tea.MouseWheelMsg{X: x, Y: y, Button: b}
+}
+
+func TestLabelsStayInReachOfALongNote(t *testing.T) {
+	m := longNoteApp(t)
+	screen := screenText(m)
+	if !strings.Contains(screen, "Note line 1.") || strings.Contains(screen, "Note line 60.") {
+		t.Fatalf("the note should start at its top and not fit:\n%s", screen)
+	}
+	if title := rowWith(screen, "1.2 · Where it lands"); !strings.Contains(title, "↓ 4") {
+		t.Errorf("the title does not say how much is below: %q", title)
+	}
+	vx, vy := onScreen(t, m, "[2] url Spec")
+	rx, ry := onScreen(t, m, "[1] a.go:5")
+	// The labels are the pane's last rows: the box's bottom border is next.
+	lines := strings.Split(screen, "\n")
+	if ry != vy-1 || !strings.Contains(lines[vy+1], "└") {
+		t.Errorf("labels at rows %d and %d; the row under them is %q, want the pane's bottom border", ry, vy, lines[vy+1])
+	}
+
+	// The wheel over the note scrolls the note, not the diff, and the labels
+	// stay where they are, still clickable.
+	nx, ny := onScreen(t, m, "Note line 2.")
+	diffOffset := m.diffView.offset
+	for i := 0; i < 30; i++ {
+		m = updateApp(t, m, wheel(nx, ny, true))
+	}
+	screen = screenText(m)
+	if !strings.Contains(screen, "Note line 60.") || strings.Contains(screen, "Note line 1.") {
+		t.Fatalf("the wheel did not scroll the note to its end:\n%s", screen)
+	}
+	if m.diffView.offset != diffOffset {
+		t.Error("the wheel over the note scrolled the diff")
+	}
+	if x, y := onScreen(t, m, "[2] url Spec"); x != vx || y != vy {
+		t.Errorf("the labels moved with the note: (%d,%d) → (%d,%d)", vx, vy, x, y)
+	}
+	if title := rowWith(screen, "1.2 · Where it lands"); !strings.Contains(title, "↑ ") || strings.Contains(title, "↓") {
+		t.Errorf("at the end the title should say only what is above: %q", title)
+	}
+	for label, want := range map[[2]int]tea.Msg{{vx, vy}: tourViewMsg{arg: "2"}, {rx, ry}: tourRelatedMsg{arg: "1"}} {
+		if _, cmd := m.Update(leftClick(label[0], label[1])); cmd == nil || !reflect.DeepEqual(cmd(), want) {
+			t.Errorf("after scrolling, a click at %v did not send %#v", label, want)
+		}
+	}
+	// The last note line sits just above the labels' blank row, not under them.
+	if _, ly := onScreen(t, m, "Note line 60."); ly != ry-2 {
+		t.Errorf("the note's last line is on row %d, want %d (above the blank row over the labels)", ly, ry-2)
+	}
+	for i := 0; i < 30; i++ {
+		m = updateApp(t, m, wheel(nx, ny, false))
+	}
+	if !strings.Contains(screenText(m), "Note line 1.") {
+		t.Error("the wheel did not scroll the note back up")
+	}
+}
+
+// rowWith is the screen row holding text.
+func rowWith(screen, text string) string {
+	for _, l := range strings.Split(screen, "\n") {
+		if strings.Contains(l, text) {
+			return l
+		}
+	}
+	return ""
+}
