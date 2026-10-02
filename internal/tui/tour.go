@@ -252,6 +252,23 @@ func (m appModel) toggleTour() (appModel, tea.Cmd) {
 	return m.enterStop(m.tour.index, stopEntry{report: true, effects: true})
 }
 
+// hideFileListForTour hides the file list as a tour starts — a tour arriving
+// where there was none, or tour mode restored on launch. The tour moves between
+// files itself, so the list is the exception, and the toggle shows it again. A
+// re-sent tour (a note fixed mid-review) and W leave it as the reviewer set it.
+func (m *appModel) hideFileListForTour() {
+	if m.sidebarHidden {
+		return
+	}
+	m.sidebarHidden = true
+	m.sidebarAutoHidden = false // ours, not the empty-review auto-hide: items arriving must not undo it
+	m.sidebarUserShown = false
+	if m.focus == focusSidebar {
+		m.setFocus(focusMain)
+	}
+	recalcPaneDimensions(m)
+}
+
 // leaveTour takes the tour off screen: its note, its position, its marked
 // lines. The stop is kept.
 func (m *appModel) leaveTour() {
@@ -406,7 +423,11 @@ func (m appModel) handleTourEvent(msg tourEventMsg) (appModel, tea.Cmd) {
 	if m.engine == nil {
 		return m, nil
 	}
+	starting := !m.hasTour()
 	m.syncTour(m.engine.GetSession())
+	if starting && msg.status == core.WalkthroughEventSet && m.hasTour() {
+		m.hideFileListForTour()
+	}
 	switch msg.status {
 	case core.WalkthroughEventCleared:
 		return m, nil

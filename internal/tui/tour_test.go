@@ -472,3 +472,81 @@ func TestTourLabelIsIDThenPosition(t *testing.T) {
 		t.Errorf("tour off still labelled %q", m.statusBar.tourLabel)
 	}
 }
+
+// noTourApp is tourApp's review with no tour yet: the agent sends one later.
+func noTourApp(t *testing.T) (appModel, *tourEngine) {
+	t.Helper()
+	t.Setenv("TMUX", "")
+	t.Setenv("TMUX_PANE", "")
+	files := []types.ChangedFile{{Path: "a.go", Status: types.FileAdded}, {Path: "b.go", Status: types.FileAdded}}
+	e := &tourEngine{
+		stubEngine: stubEngine{
+			cfg:          &types.Config{},
+			changedFiles: files,
+			session:      &types.ReviewSession{ID: "s", ChangedFiles: files},
+		},
+		diffs: map[string]*types.DiffResult{"a.go": fileDiff("a.go", 40), "b.go": fileDiff("b.go", 60)},
+	}
+	m := NewApp(e)
+	m = updateApp(t, m, tea.WindowSizeMsg{Width: 140, Height: 44})
+	m = updateApp(t, m, initialLoadMsg{files: files})
+	return m, e
+}
+
+func TestATourStartingHidesTheFileList(t *testing.T) {
+	m, e := noTourApp(t)
+	m.setFocus(focusSidebar)
+	if m.sidebarHidden {
+		t.Fatal("the file list is hidden before any tour")
+	}
+	sendTour := func(m appModel) appModel {
+		e.session.Walkthrough, e.session.WalkthroughStop = testTour(), "1.1"
+		return updateApp(t, m, tourEventMsg{status: core.WalkthroughEventSet, id: "1.1"})
+	}
+	m = sendTour(m)
+	if !m.sidebarHidden || m.focus == focusSidebar {
+		t.Fatalf("a tour starting left the file list hidden=%v, focus %v", m.sidebarHidden, m.focus)
+	}
+	// Items arriving must not bring it back: that is the empty-review
+	// auto-hide's undo, not ours.
+	if m.autoToggleSidebar(); m.sidebarHidden != true {
+		t.Error("a refresh brought the file list back")
+	}
+	// The reviewer's toggle shows it, and from then on it is theirs: a
+	// re-sent tour, a goto, and W off and on all leave it shown.
+	m = pressKey(t, m, ";")
+	if m.sidebarHidden {
+		t.Fatal("; did not show the file list")
+	}
+	m = sendTour(m)
+	m = updateApp(t, m, tourEventMsg{status: core.WalkthroughEventGoto, id: "1.2"})
+	m = pressKey(t, pressKey(t, m, "W"), "W")
+	if m.sidebarHidden {
+		t.Error("a re-sent tour, a goto or W hid the file list again")
+	}
+	// W off does not hide it either.
+	if m = pressKey(t, m, "W"); m.sidebarHidden {
+		t.Error("W off hid the file list")
+	}
+}
+
+func TestATourRestoredOnLaunchHidesTheFileList(t *testing.T) {
+	if m, _ := tourApp(t); !m.sidebarHidden {
+		t.Error("restoring a tour left the file list shown")
+	}
+	if m, _ := noTourApp(t); m.sidebarHidden {
+		t.Error("a review with no tour hid the file list")
+	}
+}
+
+// A stop with no file does not move focus to the diff, so hiding the list must:
+// focus left on a hidden list would swallow every key.
+func TestHidingTheFileListTakesFocusOffIt(t *testing.T) {
+	m, e := noTourApp(t)
+	m.setFocus(focusSidebar)
+	e.session.Walkthrough, e.session.WalkthroughStop = testTour(), "2"
+	m = updateApp(t, m, tourEventMsg{status: core.WalkthroughEventSet, id: "2"})
+	if stop, _ := m.currentStop(); stop.File != "" || !m.sidebarHidden || m.focus == focusSidebar {
+		t.Errorf("on stop %q (file %q): hidden=%v focus=%v, want hidden and focus off it", stop.ID, stop.File, m.sidebarHidden, m.focus)
+	}
+}

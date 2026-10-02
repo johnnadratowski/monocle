@@ -602,6 +602,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// already has this stop, and reopening windows is for moving, not for
 		// resuming.
 		if m.hasTour() {
+			m.hideFileListForTour()
 			var cmd tea.Cmd
 			m, cmd = m.enterStop(m.tour.index, stopEntry{})
 			if stop, ok := m.currentStop(); ok && stop.File != "" && cmd != nil {

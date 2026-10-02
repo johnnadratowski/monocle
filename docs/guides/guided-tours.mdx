@@ -7,7 +7,7 @@ A review lands in whatever order its files sort. Your agent knows the order it s
 
 ## Taking a tour
 
-When the agent sends a tour, monocle enters **tour mode** on its first stop. Each stop:
+When the agent sends a tour, monocle enters **tour mode** on its first stop and **hides the file list**: the tour moves between files for you, so the list is the exception. `;` (`toggle_sidebar`) shows it again, and it stays as you leave it — a re-sent tour, `goto_stop` or `W` do not hide it again. A tour restored on launch hides it too. Each stop:
 
 1. Selects the stop's file and puts the diff cursor on its first line. The stop's lines stay marked in the gutter after you move off them.
 2. Opens the doc pane under the diff with the header `1.2 · Title` and the agent's note, followed by the stop's related files and its views as labels — `[1] src/auth/idp.ts:12`, `[2] video Login flow`, underlined. Clicking a label does exactly what its command does: `:related 1`, `:view 2`.
