@@ -90,7 +90,7 @@ The command runs like the on-stop command — `sh -c` in the repo root, with `MO
 | `"hidden"` | `(hidden)` — open, but out of sight |
 | `"closed"`, anything else, or no key for the view | `(not opened)` |
 
-`layout` is `"saved"` when the windows are in a layout you arranged, `"default"` otherwise. While it is saved, the note ends with **`Layout: saved · reset`**. Clicking `reset` — or typing `:layout reset` — runs [`walkthrough_layout_reset`](/configuration/config-file) (`sh -c` in the repo root, with the same environment as the status command, 10-second timeout) and then asks the status again, so the label goes once the layout is back to the default:
+`layout` is `"saved"` when the windows are in a layout you arranged, `"default"` otherwise. The note always shows it flush right on the view's row: **`layout default`**, or **`layout saved · reset`**. Clicking `reset` — or typing `:layout reset` — runs [`walkthrough_layout_reset`](/configuration/config-file) (`sh -c` in the repo root, with the same environment as the status command, 10-second timeout) and then asks the status again, so the label goes once the layout is back to the default:
 
 ```json
 { "walkthrough_layout_reset": "stage layout-reset" }

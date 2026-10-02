@@ -1,7 +1,11 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
+
+	"github.com/josephschmitt/monocle/internal/types"
 )
 
 func navModel(focus focusTarget, layout layoutMode, sidebar, doc bool) appModel {
@@ -141,5 +145,30 @@ func TestSelectPaneFlags(t *testing.T) {
 		if got := dir.selectPaneFlag(); got != want {
 			t.Errorf("dir %v -> %q, want %q", dir, got, want)
 		}
+	}
+}
+
+// With walkthrough_navigate set, an edge runs it with the direction, in place of
+// tmux; a move inside Monocle still never does; and a command that fails hands
+// the key to tmux after all, so it is never dropped.
+func TestEdgeRunsTheNavigateCommand(t *testing.T) {
+	skipWithoutSh(t)
+	t.Setenv("TMUX", "/tmp/tmux-501/default,123,0")
+	t.Setenv("TMUX_PANE", "%42")
+	out := filepath.Join(t.TempDir(), "dirs")
+	m := viewsAppIn(t, &types.Config{WalkthroughNavigate: `printf '%s\n' "$MONOCLE_NAV_DIR" >> ` + out}, 140, false)
+	m.sidebarHidden = false
+	m.setFocus(focusMain)
+	_, cmd := m.navigatePane(paneRight)
+	if cmd == nil {
+		t.Fatal("the right edge did nothing")
+	}
+	cmd()
+	if got, _ := os.ReadFile(out); string(got) != "right\n" {
+		t.Errorf("the command saw %q, want right", got)
+	}
+	m.setFocus(focusSidebar)
+	if _, cmd := m.navigatePane(paneRight); cmd != nil {
+		t.Error("a move Monocle makes itself ran the command")
 	}
 }

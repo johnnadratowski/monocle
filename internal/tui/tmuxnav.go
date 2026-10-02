@@ -3,6 +3,7 @@ package tui
 import (
 	"os"
 	"os/exec"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -128,5 +129,39 @@ func (m appModel) navigatePane(d paneDir) (appModel, tea.Cmd) {
 		m.setFocus(target)
 		return m, nil
 	}
+	if cmd := m.navigateCommand(); cmd != "" {
+		return m, handOffToCommand(cmd, d)
+	}
 	return m, handOffToTmux(d)
+}
+
+// navigateCommand is the configured edge command (walkthrough_navigate), or ""
+// for none.
+func (m appModel) navigateCommand() string {
+	if m.engine == nil {
+		return ""
+	}
+	if cfg := m.engine.GetConfig(); cfg != nil {
+		return strings.TrimSpace(cfg.WalkthroughNavigate)
+	}
+	return ""
+}
+
+// name is a direction as the edge command reads it in MONOCLE_NAV_DIR.
+func (d paneDir) name() string {
+	return [...]string{"left", "down", "up", "right"}[d]
+}
+
+// handOffToCommand runs the edge command for a direction. The key is never
+// dropped: a command that fails hands the key to tmux after all.
+func handOffToCommand(command string, d paneDir) tea.Cmd {
+	tmux := handOffToTmux(d)
+	return func() tea.Msg {
+		c := exec.Command("sh", "-c", command)
+		c.Env = append(os.Environ(), "MONOCLE_NAV_DIR="+d.name())
+		if err := c.Run(); err != nil && tmux != nil {
+			return tmux()
+		}
+		return nil
+	}
 }

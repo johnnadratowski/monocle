@@ -42,6 +42,13 @@ type Config struct {
 	// with the same environment as WalkthroughViewStatus, then asks the view status
 	// again. Empty runs nothing.
 	WalkthroughLayoutReset string `json:"walkthrough_layout_reset"`
+	// WalkthroughNavigate is a shell command that takes over when ctrl+h/j/k/l
+	// reaches the edge of Monocle's panes, in place of tmux select-pane. It runs
+	// via sh -c with MONOCLE_NAV_DIR (left, down, up or right) and TMUX_PANE in
+	// its environment, and moves focus itself: a tour's windows sit beside
+	// Monocle but outside tmux. If it fails, the key goes to tmux as before.
+	// Empty hands every edge to tmux.
+	WalkthroughNavigate string `json:"walkthrough_navigate"`
 	// EditorMode controls how Ctrl+g / Ctrl+o open a file: "terminal" (take over
 	// Monocle's screen, the default), "tmux_vertical" (side-by-side split),
 	// "tmux_horizontal" (stacked split), or "tmux_window" (new tmux window/tab).
