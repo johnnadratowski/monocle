@@ -27,6 +27,7 @@ type KeyMap struct {
 	PaneRight     []string
 	FocusPaneN    map[string]int // key → pane number (1=sidebar, 2=diff)
 	ToggleSidebar []string
+	PaneSize      []string // cycle the doc pane against the diff: focused one biggest, smallest, equal
 
 	// Diff view
 	ScrollDown       []string
@@ -141,6 +142,7 @@ func DefaultKeyMap() KeyMap {
 		PaneRight:     []string{"ctrl+l"},
 		FocusPaneN:    map[string]int{"1": 1, "2": 2},
 		ToggleSidebar: []string{";"},
+		PaneSize:      []string{"="},
 
 		ScrollDown:      []string{"J"},
 		ScrollUp:        []string{"K"},
@@ -251,6 +253,7 @@ var keyActions = map[string]func(*KeyMap) *[]string{
 	"pane_up":                 func(km *KeyMap) *[]string { return &km.PaneUp },
 	"pane_right":              func(km *KeyMap) *[]string { return &km.PaneRight },
 	"toggle_sidebar":          func(km *KeyMap) *[]string { return &km.ToggleSidebar },
+	"pane_size":               func(km *KeyMap) *[]string { return &km.PaneSize },
 	"scroll_down":             func(km *KeyMap) *[]string { return &km.ScrollDown },
 	"scroll_up":               func(km *KeyMap) *[]string { return &km.ScrollUp },
 	"scroll_left":             func(km *KeyMap) *[]string { return &km.ScrollLeft },

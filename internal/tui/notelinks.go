@@ -32,6 +32,23 @@ type linkGroup struct {
 	lead  string
 	links []noteLink
 	hint  string
+	trail *noteTrail
+}
+
+// noteTrail is set flush right on a group's last row: the stop's layout, always
+// shown (John 2026-10-02), "layout default" or "layout saved · reset" with
+// "reset" a label. It wins the row's room over the keyboard hint.
+type noteTrail struct {
+	text string
+	link *noteLink
+}
+
+func (t noteTrail) width() int {
+	w := lipgloss.Width(t.text)
+	if t.link != nil {
+		w += 3 + lipgloss.Width(t.link.label)
+	}
+	return w
 }
 
 // linkHit is where a label was laid out — a row of the pinned rows and the
@@ -52,7 +69,7 @@ func (m docPaneModel) linkAt(x, y int) (tea.Msg, bool) {
 	if !m.active || !m.note || y < m.headRows() || y >= m.headRows()+m.viewportHeight() {
 		return nil, false
 	}
-	line := y - m.headRows() - m.pinnedTop()
+	line := y - m.headRows() - m.pinnedTop() + m.pinOffset
 	if line < 0 {
 		return nil, false
 	}
@@ -93,7 +110,7 @@ func layoutGroups(groups []linkGroup, width int) ([]string, []linkHit) {
 // span. Rows carry the note's one-column margin. A group with no labels has no
 // rows.
 func layoutGroup(g linkGroup, width int) ([]string, []linkHit) {
-	if len(g.links) == 0 {
+	if len(g.links) == 0 && g.trail == nil {
 		return nil, nil
 	}
 	textW := max(width-2, 10)
@@ -136,8 +153,26 @@ func layoutGroup(g linkGroup, width int) ([]string, []linkHit) {
 		row += dim.Render(sep) + labelStyle.Render(label) + marker
 		used += w + lipgloss.Width(marker)
 	}
-	if g.hint != "" && used+2+lipgloss.Width(g.hint) <= textW {
+	tw := 0
+	if g.trail != nil {
+		tw = g.trail.width() + 2
+	}
+	if g.hint != "" && used+2+lipgloss.Width(g.hint)+tw <= textW {
 		row += "  " + dim.Render(g.hint)
+		used += 2 + lipgloss.Width(g.hint)
+	}
+	if g.trail != nil {
+		if used+tw > textW && len(g.links) > 0 {
+			rows = append(rows, " "+row)
+			row, used = "", 0
+		}
+		pad := max(textW-used-g.trail.width(), 1)
+		row += strings.Repeat(" ", pad) + dim.Render(g.trail.text)
+		col := used + pad + lipgloss.Width(g.trail.text)
+		if l := g.trail.link; l != nil {
+			row += dim.Render(" · ") + labelStyle.Render(l.label)
+			hits = append(hits, linkHit{line: len(rows), start: 1 + col + 3, end: 1 + col + 3 + lipgloss.Width(l.label), act: l.act})
+		}
 	}
 	return append(rows, " "+row), hits
 }

@@ -320,6 +320,7 @@ func (m helpModel) buildContent() string {
 			{"1/2", "Jump straight to a pane"},
 			{Label(km.Select), "Focus the diff pane / toggle a directory open"},
 			{Label(km.ToggleSidebar), "Show/hide the sidebar"},
+			{Label(km.PaneSize), "Doc pane size: focused biggest, smallest, back"},
 			{Label(km.CycleLayout), "Cycle layout (auto/side-by-side/stacked)"},
 			{Label(km.ToggleFocusMode), "Toggle focus mode (hide sidebar, wrap lines)"},
 			{Label(km.Wrap), "Toggle line wrapping (any pane)"},

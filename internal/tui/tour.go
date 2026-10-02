@@ -330,9 +330,21 @@ func stopLinkGroups(stop types.WalkthroughStop, status *tourStatus) []linkGroup 
 		views.links = append(views.links, link)
 	}
 	groups := []linkGroup{related, views}
-	if status != nil && status.layoutSaved {
-		groups = append(groups, linkGroup{head: "Layout:", lead: "saved", hint: ":layout reset",
-			links: []noteLink{{label: "reset", act: tourLayoutMsg{arg: "reset"}}}})
+	if status != nil {
+		// The layout, always, flush right beside the view (John 2026-10-02): a row that
+		// came and went with "saved" was easy to miss.
+		trail := &noteTrail{text: "layout default"}
+		if status.layoutSaved {
+			trail = &noteTrail{text: "layout saved", link: &noteLink{label: "reset", act: tourLayoutMsg{arg: "reset"}}}
+		}
+		switch {
+		case len(views.links) > 0:
+			groups[1].trail = trail
+		case len(related.links) > 0:
+			groups[0].trail = trail
+		default:
+			groups = append(groups, linkGroup{trail: trail})
+		}
 	}
 	return groups
 }

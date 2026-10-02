@@ -202,6 +202,7 @@ type appModel struct {
 	sidebar        sidebarModel
 	diffView       diffViewModel
 	docPane        docPaneModel // annotation doc pane (bottom split, when open)
+	docSize        docSize      // the doc pane's size against the diff (the PaneSize key)
 	statusBar      statusBarModel
 	commentEditor  commentEditorModel
 	reviewSummary  reviewSummaryModel
@@ -2053,7 +2054,7 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case Matches(key, km.FocusSwap), key == "shift+tab", Matches(key, km.OpenDocRef),
 			Matches(key, km.TourNext), Matches(key, km.TourPrev), Matches(key, km.ToggleTour),
-			Matches(key, km.CloseRelated):
+			Matches(key, km.CloseRelated), Matches(key, km.PaneSize):
 			// fall through to the shared cases — the tour keys included, since
 			// the doc pane is where the tour's note is being read
 		default:
@@ -2181,6 +2182,11 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	case key == "shift+tab":
 		m = m.cycleFocus(-1)
+		return m, nil
+
+	case Matches(key, km.PaneSize) && m.docPane.active:
+		m.docSize = nextDocSize(m.docSize, m.focus == focusDoc)
+		recalcPaneDimensions(&m)
 		return m, nil
 
 	case Matches(key, km.ToggleSidebar):
@@ -3526,6 +3532,24 @@ func recalcPaneDimensions(m *appModel) {
 // noteMaxPercent caps a tour note's pane, as a share of Monocle's height.
 const noteMaxPercent = 40
 
+// docSize is the doc pane's size against the diff, cycled by the PaneSize key
+// (John 2026-10-02): the focused pane biggest first, then smallest, then back to
+// the usual split.
+type docSize int
+
+const (
+	docSizeDefault docSize = iota
+	docSizeMax             // the doc pane takes all but a few rows of the diff
+	docSizeMin             // the doc pane shrinks to its title and one row
+)
+
+func nextDocSize(cur docSize, docFocused bool) docSize {
+	if docFocused {
+		return [...]docSize{docSizeMax, docSizeMin, docSizeDefault}[cur]
+	}
+	return [...]docSize{docSizeMin, docSizeDefault, docSizeMax}[cur]
+}
+
 func reserveDocPane(m *appModel) {
 	if !m.docPane.active {
 		return
@@ -3545,6 +3569,12 @@ func reserveDocPane(m *appModel) {
 			docInner = want
 		}
 		m.docPane.reflow()
+	}
+	switch m.docSize {
+	case docSizeMax:
+		docInner = m.diffView.height - 3
+	case docSizeMin:
+		docInner = m.docPane.headRows() + 1
 	}
 	if docInner < 3 {
 		docInner = 3

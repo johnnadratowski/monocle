@@ -53,6 +53,9 @@ type docPaneModel struct {
 	groups   []linkGroup
 	pinned   []string
 	linkHits []linkHit
+	// pinOffset scrolls the label rows when there are more than pinCap: a stop
+	// with many related files must not take the note's room (John 2026-10-02).
+	pinOffset int
 }
 
 // openNote shows a block of markdown under a heading, followed by rows of
@@ -71,6 +74,7 @@ func (m *docPaneModel) openNote(key, title, body string, groups []linkGroup, sty
 	m.hlStartLine, m.hlStartCol, m.hlEndLine, m.hlEndCol = 0, 0, 0, 0
 	m.rangeShifted = false
 	m.offset = 0
+	m.pinOffset = 0
 	m.noteWidth = -1 // force a wrap at the next width we learn
 	m.reflow()
 }
@@ -85,12 +89,31 @@ func (m *docPaneModel) reflow() {
 	m.lines = wrapNote(m.noteSource, m.width, m.styler)
 	m.pinned, m.linkHits = layoutGroups(m.groups, m.width)
 	m.clamp()
+	m.clampPins()
 }
 
-// pinnedShown is how many pinned rows fit: all of them, unless the pane is
-// shorter than they are.
+// pinCap is the most rows the labels take: a third of the pane, at least two.
+// More scroll in place (the wheel over them, with their own scrollbar).
+func (m docPaneModel) pinCap() int {
+	return max(2, m.viewportHeight()/3)
+}
+
+// pinnedShown is how many pinned rows show: all of them, up to pinCap and the
+// pane's height.
 func (m docPaneModel) pinnedShown() int {
-	return min(len(m.pinned), m.viewportHeight())
+	return min(len(m.pinned), m.viewportHeight(), m.pinCap())
+}
+
+func (m *docPaneModel) clampPins() {
+	m.pinOffset = min(max(m.pinOffset, 0), max(len(m.pinned)-m.pinnedShown(), 0))
+}
+
+func (m *docPaneModel) scrollPinsDown() { m.pinOffset++; m.clampPins() }
+func (m *docPaneModel) scrollPinsUp()   { m.pinOffset--; m.clampPins() }
+
+// overPins reports whether a pane row (the title is row 0) is one of the label rows.
+func (m docPaneModel) overPins(y int) bool {
+	return m.note && y >= m.headRows()+m.pinnedTop() && y < m.headRows()+m.viewportHeight()
 }
 
 // noteRows is how many rows the note itself gets: what the pinned rows leave,
@@ -326,13 +349,24 @@ func (m docPaneModel) View() string {
 		// than its rows gets a scrollbar in its last column.
 		top, rows := m.pinnedTop(), m.noteRows()
 		thumb := noteThumb(rows, len(m.lines), m.offset)
+		pinThumb := noteThumb(m.pinnedShown(), len(m.pinned), m.pinOffset)
 		trackStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 		thumbStyle := lipgloss.NewStyle().Foreground(accent)
 		for i := 0; i < vp; i++ {
 			b.WriteString("\n")
 			switch {
+			case i >= top && pinThumb != nil:
+				row := truncateToWidth(m.pinned[m.pinOffset+i-top], m.width-2)
+				if pad := m.width - 1 - lipgloss.Width(row); pad > 0 {
+					row += strings.Repeat(" ", pad)
+				}
+				bar := trackStyle.Render("│")
+				if pinThumb[i-top] {
+					bar = thumbStyle.Render("█")
+				}
+				b.WriteString(row + bar)
 			case i >= top:
-				b.WriteString(truncateToWidth(m.pinned[i-top], m.width))
+				b.WriteString(truncateToWidth(m.pinned[m.pinOffset+i-top], m.width))
 			case i < rows && thumb != nil:
 				line := ""
 				if m.offset+i < len(m.lines) {

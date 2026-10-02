@@ -113,7 +113,7 @@ func TestStopLinkGroups(t *testing.T) {
 		{head: "Views:", hint: "click, or :view N", links: []noteLink{
 			{label: "[1] image x.png", act: tourViewMsg{arg: "1"}, state: viewOpen},
 			{label: "[2] url Spec", act: tourViewMsg{arg: "2"}},
-		}},
+		}, trail: &noteTrail{text: "layout default"}},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got  %+v\nwant %+v", got, want)
@@ -121,15 +121,19 @@ func TestStopLinkGroups(t *testing.T) {
 	if rows, _ := layoutGroups(stopLinkGroups(types.WalkthroughStop{}, nil), 80); rows != nil {
 		t.Errorf("a stop with nothing to link has rows %q", rows)
 	}
-	// A saved layout adds the label that resets it; a default one does not.
-	layout := linkGroup{head: "Layout:", lead: "saved", hint: ":layout reset",
-		links: []noteLink{{label: "reset", act: tourLayoutMsg{arg: "reset"}}}}
+	// The layout always shows, flush right on the last group: "layout saved ·
+	// reset" with reset a label, or "layout default". On a stop with no view or
+	// related file it is a row of its own. An unknown status shows none.
+	savedTrail := &noteTrail{text: "layout saved", link: &noteLink{label: "reset", act: tourLayoutMsg{arg: "reset"}}}
 	saved := stopLinkGroups(types.WalkthroughStop{}, &tourStatus{layoutSaved: true})
-	if len(saved) != 3 || !reflect.DeepEqual(saved[2], layout) {
+	if len(saved) != 3 || !reflect.DeepEqual(saved[2], linkGroup{trail: savedTrail}) {
 		t.Errorf("with a saved layout: %+v", saved)
 	}
-	if got := stopLinkGroups(types.WalkthroughStop{}, &tourStatus{}); len(got) != 2 {
+	if got := stopLinkGroups(types.WalkthroughStop{}, &tourStatus{}); len(got) != 3 || got[2].trail.text != "layout default" {
 		t.Errorf("with the default layout: %+v", got)
+	}
+	if got := stopLinkGroups(types.WalkthroughStop{}, nil); len(got) != 2 {
+		t.Errorf("with no status: %+v", got)
 	}
 }
 
@@ -422,7 +426,7 @@ func TestNoUsableStatusMeansNoMarker(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			m := settle(t, statusApp(t, status, ""))
-			if screen := screenText(m); strings.Contains(screen, "(open)") || strings.Contains(screen, "(not opened)") || strings.Contains(screen, "Layout:") {
+			if screen := screenText(m); strings.Contains(screen, "(open)") || strings.Contains(screen, "(not opened)") || strings.Contains(screen, "layout ") {
 				t.Errorf("a marker or the layout label with %s:\n%s", name, screen)
 			}
 		})
@@ -435,12 +439,12 @@ func TestAFailedAskClearsTheMarkers(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := settle(t, statusApp(t, "cat "+state, ""))
-	if !strings.Contains(screenText(m), "(open)") || !strings.Contains(screenText(m), "Layout: saved") {
+	if !strings.Contains(screenText(m), "(open)") || !strings.Contains(screenText(m), "layout saved") {
 		t.Fatalf("no marker and layout label to begin with:\n%s", screenText(m))
 	}
 	_ = os.Remove(state)
 	m = settle(t, m)
-	if strings.Contains(screenText(m), "(open)") || strings.Contains(screenText(m), "Layout:") {
+	if strings.Contains(screenText(m), "(open)") || strings.Contains(screenText(m), "layout ") {
 		t.Errorf("a marker or the layout label outlived the status command failing:\n%s", screenText(m))
 	}
 }
@@ -634,8 +638,8 @@ const recordingReset = `printf '%s|%s|%s\n' "$MONOCLE_STOP_ID" "${MONOCLE_REPO_R
 
 func TestASavedLayoutOffersAReset(t *testing.T) {
 	m, _ := layoutApp(t, recordingReset)
-	if !strings.Contains(screenText(m), "Layout: saved · reset  :layout reset") {
-		t.Fatalf("no reset label:\n%s", screenText(m))
+	if row := rowWith(screenText(m), "layout saved · reset"); !strings.HasSuffix(strings.TrimRight(strings.TrimSuffix(strings.TrimRight(row, " "), "│"), " "), "layout saved · reset") {
+		t.Fatalf("no reset label flush right:\n%s", screenText(m))
 	}
 	x, y := onScreen(t, m, "· reset")
 	_, cmd := m.Update(leftClick(x+2, y))
@@ -645,9 +649,9 @@ func TestASavedLayoutOffersAReset(t *testing.T) {
 	if got, want := cmd(), m.executeCommand("layout reset")(); !reflect.DeepEqual(got, want) {
 		t.Errorf("a click on reset sent %#v, want %#v — what :layout reset sends", got, want)
 	}
-	// "Layout: saved" itself is not a label.
-	lx, ly := onScreen(t, m, "Layout: saved")
-	if _, cmd := m.Update(leftClick(lx+9, ly)); cmd != nil {
+	// "layout saved" itself is not a label.
+	lx, ly := onScreen(t, m, "layout saved")
+	if _, cmd := m.Update(leftClick(lx+8, ly)); cmd != nil {
 		t.Errorf("a click on \"saved\" did something: %#v", cmd())
 	}
 }
@@ -879,5 +883,58 @@ func TestOneViewIsLabelledSingular(t *testing.T) {
 	screen := screenText(m)
 	if strings.Contains(screen, "Views:") || !strings.Contains(screen, "View:") {
 		t.Errorf("a one-view stop should read \"View:\":\n%s", screen)
+	}
+}
+
+// Many related files take at most a third of the notes pane; the rest scroll in
+// place with the wheel over them, and a click after scrolling still lands on the
+// label under it.
+func TestManyRelatedFilesScrollInPlace(t *testing.T) {
+	tour := viewsTour()
+	var refs []types.DocRef
+	for i := 1; i <= 24; i++ {
+		refs = append(refs, types.DocRef{Doc: fmt.Sprintf("pkg/file%02d.go", i), StartLine: i})
+	}
+	tour.Stops[1].Related = refs
+	m, _ := tourAppWith(t, tour, inertViewers(&types.Config{}))
+	m = pressKey(t, m, ".")
+	d := m.docPane
+	if len(d.pinned) <= d.pinCap() || d.pinnedShown() != d.pinCap() {
+		t.Fatalf("pinned %d rows, cap %d, shown %d: the labels should be capped", len(d.pinned), d.pinCap(), d.pinnedShown())
+	}
+	if strings.Contains(screenText(m), "file24.go") {
+		t.Fatal("the last related file should be out of sight before scrolling")
+	}
+	x, y := onScreen(t, m, "[1] pkg/file01.go")
+	for i := 0; i < 30; i++ {
+		m = updateApp(t, m, wheel(x, y, true))
+	}
+	if !strings.Contains(screenText(m), "file24.go") {
+		t.Fatalf("the wheel over the labels did not scroll them:\n%s", screenText(m))
+	}
+	lx, ly := onScreen(t, m, "file24.go")
+	if _, cmd := m.Update(leftClick(lx, ly)); cmd == nil || !reflect.DeepEqual(cmd(), tourRelatedMsg{arg: "24"}) {
+		t.Error("a click on a scrolled label did not open that file")
+	}
+}
+
+// = cycles the doc pane against the diff: from the diff, the diff biggest (the
+// doc smallest), then the doc biggest, then the usual split; from the doc pane,
+// the doc biggest first.
+func TestPaneSizeCycles(t *testing.T) {
+	m := longNoteApp(t)
+	usual := m.docPane.height
+	m = pressKey(t, m, "=")
+	small := m.docPane.height
+	m = pressKey(t, m, "=")
+	big := m.docPane.height
+	m = pressKey(t, m, "=")
+	if !(small < usual && big > usual && m.docPane.height == usual) {
+		t.Errorf("from the diff: usual %d → %d → %d → %d, want smaller, bigger, usual", usual, small, big, m.docPane.height)
+	}
+	m.focus = focusDoc
+	m = pressKey(t, m, "=")
+	if m.docPane.height <= usual {
+		t.Errorf("from the doc pane the first press should make it biggest: %d (usual %d)", m.docPane.height, usual)
 	}
 }
