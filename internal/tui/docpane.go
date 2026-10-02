@@ -355,6 +355,10 @@ func (m docPaneModel) View() string {
 		for i := 0; i < vp; i++ {
 			b.WriteString("\n")
 			switch {
+			case i == top-1 && rows == top-1 && m.pinnedShown() > 0:
+				// The row between the note and its labels is a rule, like the one
+				// under the title (John 2026-10-02, a trial).
+				b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(strings.Repeat("─", max(m.width, 0))))
 			case i >= top && pinThumb != nil:
 				row := truncateToWidth(m.pinned[m.pinOffset+i-top], m.width-2)
 				if pad := m.width - 1 - lipgloss.Width(row); pad > 0 {

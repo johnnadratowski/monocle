@@ -938,3 +938,13 @@ func TestPaneSizeCycles(t *testing.T) {
 		t.Errorf("from the doc pane the first press should make it biggest: %d (usual %d)", m.docPane.height, usual)
 	}
 }
+
+// A rule separates the note from its labels.
+func TestARuleSitsAboveTheLabels(t *testing.T) {
+	m := longNoteApp(t)
+	lines := strings.Split(screenText(m), "\n")
+	_, ry := onScreen(t, m, "[1] a.go:5")
+	if ry < 1 || !strings.Contains(lines[ry-1], "────") {
+		t.Errorf("no rule above the labels; the row above reads %q", lines[ry-1])
+	}
+}
