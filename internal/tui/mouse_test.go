@@ -597,3 +597,43 @@ func TestMouseWheelHiddenSidebarScrollsDiff(t *testing.T) {
 		t.Errorf("diff offset = %d, want %d", resultApp.diffView.offset, mouseScrollLines)
 	}
 }
+
+// A sideways wheel, or shift+wheel, scrolls an unwrapped diff sideways one tab stop
+// per event and leaves the vertical position alone; a wrapped diff ignores it.
+func TestMouseWheelScrollsDiffSideways(t *testing.T) {
+	setup := func(wrap bool) appModel {
+		m := NewApp(nil)
+		updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+		app := updated.(appModel)
+		app.diffView.lines = make([]diffViewLine, 100)
+		for i := range app.diffView.lines {
+			app.diffView.lines[i] = diffViewLine{content: strings.Repeat("x", 300), newLineNum: i + 1}
+		}
+		app.diffView.wrap = wrap
+		return app
+	}
+	cases := []struct {
+		name  string
+		wrap  bool
+		msgs  []tea.MouseWheelMsg
+		wantH int
+	}{
+		{"right", false, []tea.MouseWheelMsg{{Button: tea.MouseWheelRight}}, 4},
+		{"right then left", false, []tea.MouseWheelMsg{{Button: tea.MouseWheelRight}, {Button: tea.MouseWheelRight}, {Button: tea.MouseWheelLeft}}, 4},
+		{"shift+wheel down", false, []tea.MouseWheelMsg{{Button: tea.MouseWheelDown, Mod: tea.ModShift}}, 4},
+		{"wrapped ignores it", true, []tea.MouseWheelMsg{{Button: tea.MouseWheelRight}}, 0},
+	}
+	for _, c := range cases {
+		app := setup(c.wrap)
+		layout := computePaneLayout(&app)
+		var model tea.Model = app
+		for _, msg := range c.msgs {
+			msg.X, msg.Y = layout.diff.x+5, layout.diff.y+5
+			model, _ = model.Update(msg)
+		}
+		got := model.(appModel).diffView
+		if got.hOffset != c.wantH || (!c.wrap && got.offset != 0) {
+			t.Errorf("%s: hOffset = %d (want %d), offset = %d (want 0)", c.name, got.hOffset, c.wantH, got.offset)
+		}
+	}
+}
