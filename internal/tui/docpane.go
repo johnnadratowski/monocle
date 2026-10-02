@@ -118,6 +118,27 @@ func (m docPaneModel) noteScrollHint() string {
 	return ""
 }
 
+// noteThumb marks which of the note's rows carry the scrollbar's thumb: sized by how
+// much of the note is in view, placed by where the view is. nil when it all fits.
+// John (2026-10-01) asked for a scrubber on the right: the title's "↓ N lines" hint
+// alone "looks like it is part of the title".
+func noteThumb(rows, total, offset int) []bool {
+	if rows <= 0 || total <= rows {
+		return nil
+	}
+	size := max(1, rows*rows/total)
+	start := offset * rows / total
+	if offset+rows >= total {
+		start = rows - size // the end of the note puts the thumb at the bottom
+	}
+	start = min(max(start, 0), rows-size)
+	marks := make([]bool, rows)
+	for i := start; i < start+size; i++ {
+		marks[i] = true
+	}
+	return marks
+}
+
 // wrapNote styles each markdown line and wraps it to the pane, leaving a
 // one-column margin. Styling first, then wrapping, keeps a bold span that
 // crosses a wrap boundary bold on both rows.
@@ -282,13 +303,30 @@ func (m docPaneModel) View() string {
 
 	vp := m.viewportHeight()
 	if m.note {
-		// The note scrolls; the label rows stay pinned to the bottom.
+		// The note scrolls; the label rows stay pinned to the bottom. A note taller
+		// than its rows gets a scrollbar in its last column.
 		top, rows := m.pinnedTop(), m.noteRows()
+		thumb := noteThumb(rows, len(m.lines), m.offset)
+		trackStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+		thumbStyle := lipgloss.NewStyle().Foreground(accent)
 		for i := 0; i < vp; i++ {
 			b.WriteString("\n")
 			switch {
 			case i >= top:
 				b.WriteString(truncateToWidth(m.pinned[i-top], m.width))
+			case i < rows && thumb != nil:
+				line := ""
+				if m.offset+i < len(m.lines) {
+					line = truncateToWidth(m.lines[m.offset+i], m.width-2)
+				}
+				if pad := m.width - 1 - lipgloss.Width(line); pad > 0 {
+					line += strings.Repeat(" ", pad)
+				}
+				bar := trackStyle.Render("│")
+				if thumb[i] {
+					bar = thumbStyle.Render("█")
+				}
+				b.WriteString(line + bar)
 			case i < rows && m.offset+i < len(m.lines):
 				b.WriteString(truncateToWidth(m.lines[m.offset+i], m.width))
 			}

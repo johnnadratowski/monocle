@@ -793,3 +793,46 @@ func TestTheNotePaneIsCappedAtFortyPercent(t *testing.T) {
 		t.Errorf("a short note's pane is %d rows, want its own %d", m.docPane.height, want)
 	}
 }
+
+// TestNoteThumb pins the notes pane's scrollbar: none when the note fits; a thumb
+// sized by the share in view; at the top, the middle and the very bottom as the
+// note scrolls.
+func TestNoteThumb(t *testing.T) {
+	cases := []struct {
+		name                string
+		rows, total, offset int
+		want                []bool
+	}{
+		{"fits", 4, 4, 0, nil},
+		{"top", 4, 8, 0, []bool{true, true, false, false}},
+		{"middle", 4, 8, 2, []bool{false, true, true, false}},
+		{"end", 4, 8, 4, []bool{false, false, true, true}},
+		{"tiny share keeps one row", 4, 100, 0, []bool{true, false, false, false}},
+	}
+	for _, c := range cases {
+		got := noteThumb(c.rows, c.total, c.offset)
+		if fmt.Sprint(got) != fmt.Sprint(c.want) {
+			t.Errorf("%s: noteThumb(%d,%d,%d) = %v, want %v", c.name, c.rows, c.total, c.offset, got, c.want)
+		}
+	}
+}
+
+// A note taller than its pane shows a scrollbar thumb on the row it is at; a note
+// that fits shows none.
+func TestALongNoteShowsAScrollbar(t *testing.T) {
+	m := longNoteApp(t)
+	top := rowWith(screenText(m), "Note line 1.")
+	if !strings.HasSuffix(strings.TrimRight(top, " │"), "█") && !strings.Contains(top, "█") {
+		t.Errorf("the note's first row has no scrollbar thumb at the top: %q", top)
+	}
+	nx, ny := onScreen(t, m, "Note line 2.")
+	for i := 0; i < 30; i++ {
+		m = updateApp(t, m, wheel(nx, ny, true))
+	}
+	if row := rowWith(screenText(m), "Note line 1."); row != "" {
+		t.Fatalf("the note did not scroll: %q", row)
+	}
+	if last := rowWith(screenText(m), "Note line 60."); !strings.Contains(last, "█") {
+		t.Errorf("at the end the thumb should sit on the last note row: %q", last)
+	}
+}
