@@ -537,6 +537,7 @@ A tour file is a JSON object (or a bare array of stops):
       "note": "The refresh is **scheduled**, not awaited — a slow IdP no longer blocks the request.",
       "related": [{"doc": "src/auth/idp.ts", "start_line": 12}],
       "views": [{"kind": "video", "target": "recordings/refresh.webm", "label": "Before/after"}],
+      "calls": [{"stop": "1.2", "symbol": "saveToken", "line": 48}],
       "layout": "review"
     },
     {"id": "1.2", "title": "Where it lands", "file": "src/db/tokens.sql", "line_start": 8}
@@ -555,6 +556,7 @@ A tour file is a JSON object (or a bare array of stops):
 | `note` | No | Markdown shown in the doc pane. Say what matters here: the decision, the side effect, the risk. |
 | `related` | No | Repo files to open beside the diff, each `{"doc": path, "start_line": n}`. They open together in **one reusable tmux pane** (`nvim -R -o` — read-only — for vim/nvim, each window at its line). |
 | `views` | No | Things to show that are not code, each `{"kind", "target", "label"}`. `kind` is `image`, `video`, `markdown`, `url` or `artifact` (inferred from the target when omitted); `target` is a path (absolute or repo-relative), a URL, or an artifact id. |
+| `calls` | No | The other stops this stop's code calls into, each `{"stop": id, "symbol": name, "line": n}` — a route stop calling the function the next stop is about, say. Each shows as a label under the note (`[1] → 1.2 saveToken`, the arrow marking the call that leads to the next stop) that enters that stop. `symbol` is the function called (the target stop's title shows when it is empty); `line` is the call site's **new-file** line in this stop's file. A call to an id the tour does not have is dropped. |
 | `layout` | No | A scene name passed through to the on-stop command. monocle never interprets it. |
 
 Notes:

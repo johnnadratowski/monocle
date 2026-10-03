@@ -74,6 +74,29 @@ func TestNormalizeWalkthrough(t *testing.T) {
 		}
 	})
 
+	// A call is a label that enters the stop it names, so one naming a stop the
+	// tour does not have would be a label that goes nowhere: dropped, the way a
+	// view with no target is. Calls may lead forwards, to a stop not yet read.
+	t.Run("calls lead to stops of the tour", func(t *testing.T) {
+		got, err := NormalizeWalkthrough(Walkthrough{Stops: []WalkthroughStop{
+			{ID: "2.1", Calls: []StopCall{
+				{Stop: " 2.2 ", Symbol: " requestWalletWithdrawal ", Line: 48},
+				{Stop: "9.9", Symbol: "gone"},
+				{Stop: "1.1", Line: -3},
+				{Stop: ""},
+			}},
+			{ID: "2.2"},
+			{ID: "1.1"},
+		}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := []StopCall{{Stop: "2.2", Symbol: "requestWalletWithdrawal", Line: 48}, {Stop: "1.1"}}
+		if !reflect.DeepEqual(got.Stops[0].Calls, want) {
+			t.Errorf("calls = %+v, want %+v", got.Stops[0].Calls, want)
+		}
+	})
+
 	t.Run("no stops is not an error", func(t *testing.T) {
 		got, err := NormalizeWalkthrough(Walkthrough{})
 		if err != nil || !got.Empty() {
@@ -109,13 +132,15 @@ func TestWalkthroughJSONRoundTrip(t *testing.T) {
 		ID: "1.2", Title: "t", File: "a.go", LineStart: 3, LineEnd: 9, Note: "**n**",
 		Related: []DocRef{{Kind: DocRefFile, Doc: "b.go", StartLine: 7}},
 		Views:   []StopView{{Kind: StopViewVideo, Target: "demo.webm", Label: "Demo"}},
+		Calls:   []StopCall{{Stop: "2.2", Symbol: "requestWalletWithdrawal", Line: 48}},
 		Layout:  "review",
 	}}}
 	data, err := json.Marshal(in)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, key := range []string{`"id":"1.2"`, `"line_start":3`, `"line_end":9`, `"related":`, `"views":`, `"layout":"review"`, `"doc":"b.go"`} {
+	for _, key := range []string{`"id":"1.2"`, `"line_start":3`, `"line_end":9`, `"related":`, `"views":`, `"layout":"review"`, `"doc":"b.go"`,
+		`"calls":[{"stop":"2.2","symbol":"requestWalletWithdrawal","line":48}]`} {
 		if !strings.Contains(string(data), key) {
 			t.Errorf("encoded tour %s is missing %s", data, key)
 		}

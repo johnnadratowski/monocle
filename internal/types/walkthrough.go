@@ -32,6 +32,11 @@ type WalkthroughStop struct {
 	// typically where a change starts when the stop shows where it lands.
 	Related []DocRef   `json:"related,omitempty"`
 	Views   []StopView `json:"views,omitempty"`
+	// Calls are the other stops this stop's code calls into: 2.1 is the
+	// route, and it calls requestWalletWithdrawal, which is what 2.2 is about.
+	// Each is a label under the note that enters the stop it names (John
+	// 2026-10-03).
+	Calls []StopCall `json:"calls,omitempty"`
 	// Layout is an opaque scene name, passed through to the on-stop command.
 	// Monocle itself never interprets it.
 	Layout string `json:"layout,omitempty"`
@@ -45,6 +50,15 @@ type StopView struct {
 	Kind   string `json:"kind"`   // one of the StopView* kinds
 	Target string `json:"target"` // path (absolute or repo-relative), URL, or artifact id
 	Label  string `json:"label,omitempty"`
+}
+
+// StopCall is one function a stop's code calls that another stop is about.
+// Line places the call in this stop's file, so the call site itself can later
+// be marked in the diff; the label under the note does not need it.
+type StopCall struct {
+	Stop   string `json:"stop"`           // the id of the stop the call leads to
+	Symbol string `json:"symbol"`         // the function called; empty shows the stop's title
+	Line   int    `json:"line,omitempty"` // the call site's new-file line in this stop's file
 }
 
 // The view kinds a stop can carry.
@@ -97,9 +111,12 @@ func (w *Walkthrough) Empty() bool { return w == nil || len(w.Stops) == 0 }
 
 // NormalizeWalkthrough trims what the agent sent into something the rest of
 // the system can rely on: every stop has a unique id, ranges run forwards,
-// related files are file refs, and views have a kind. It refuses rather than
-// repairs a duplicate id, because the id is what the reviewer types and the
-// agent answers to — two stops called "1.2" would make both ambiguous.
+// related files are file refs, views have a kind, and every call leads to a
+// stop. It refuses rather than repairs a duplicate id, because the id is what
+// the reviewer types and the agent answers to — two stops called "1.2" would
+// make both ambiguous. An entry with nothing to act on — a related file with
+// no path, a view with no target, a call to a stop the tour does not have —
+// is dropped.
 func NormalizeWalkthrough(w Walkthrough) (Walkthrough, error) {
 	out := Walkthrough{Title: strings.TrimSpace(w.Title), Stops: make([]WalkthroughStop, 0, len(w.Stops))}
 	seen := make(map[string]bool, len(w.Stops))
@@ -150,6 +167,23 @@ func NormalizeWalkthrough(w Walkthrough) (Walkthrough, error) {
 		}
 		s.Views = views
 		out.Stops = append(out.Stops, s)
+	}
+	// Calls can lead forwards, so they are checked once every id is known.
+	for i := range out.Stops {
+		s := &out.Stops[i]
+		calls := make([]StopCall, 0, len(s.Calls))
+		for _, c := range s.Calls {
+			c.Stop = strings.TrimSpace(c.Stop)
+			if !seen[c.Stop] {
+				continue
+			}
+			c.Symbol = strings.TrimSpace(c.Symbol)
+			if c.Line < 0 {
+				c.Line = 0
+			}
+			calls = append(calls, c)
+		}
+		s.Calls = calls
 	}
 	return out, nil
 }

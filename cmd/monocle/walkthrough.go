@@ -19,7 +19,7 @@ import (
 type ReviewSetWalkthroughCmd struct {
 	WorkDirFlag
 	Socket string `help:"Override socket path" env:"MONOCLE_SOCKET" default:""`
-	File   string `help:"Tour JSON: {\"title\":\"...\",\"stops\":[{\"id\":\"1.1\",\"title\":\"...\",\"file\":\"a.go\",\"line_start\":10,\"line_end\":20,\"note\":\"...\",\"related\":[{\"doc\":\"b.go\",\"start_line\":5}],\"views\":[{\"kind\":\"video\",\"target\":\"demo.webm\"}],\"layout\":\"review\"}]}. A bare array of stops also works. Reads stdin when omitted or -." short:"f" default:""`
+	File   string `help:"Tour JSON: {\"title\":\"...\",\"stops\":[{\"id\":\"1.1\",\"title\":\"...\",\"file\":\"a.go\",\"line_start\":10,\"line_end\":20,\"note\":\"...\",\"related\":[{\"doc\":\"b.go\",\"start_line\":5}],\"views\":[{\"kind\":\"video\",\"target\":\"demo.webm\"}],\"calls\":[{\"stop\":\"1.2\",\"symbol\":\"save\",\"line\":14}],\"layout\":\"review\"}]}. A bare array of stops also works. Reads stdin when omitted or -." short:"f" default:""`
 	Clear  bool   `help:"Withdraw the tour (equivalent to sending no stops)" default:"false"`
 	JSON   bool   `help:"Output as JSON" default:"false"`
 }

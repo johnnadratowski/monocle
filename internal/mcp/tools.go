@@ -133,6 +133,13 @@ type stopViewParam struct {
 	Label  string `json:"label,omitempty"`
 }
 
+// stopCallParam is a function a stop's code calls that another stop is about.
+type stopCallParam struct {
+	Stop   string `json:"stop"`             // the id of the stop the call leads to
+	Symbol string `json:"symbol,omitempty"` // the function called; the stop's title shows when omitted
+	Line   int    `json:"line,omitempty"`   // the call site's new-file line in this stop's file
+}
+
 type walkthroughStopParam struct {
 	ID        string          `json:"id"`
 	Title     string          `json:"title,omitempty"`
@@ -142,6 +149,7 @@ type walkthroughStopParam struct {
 	Note      string          `json:"note,omitempty"`
 	Related   []relatedParam  `json:"related,omitempty"`
 	Views     []stopViewParam `json:"views,omitempty"`
+	Calls     []stopCallParam `json:"calls,omitempty"`
 	Layout    string          `json:"layout,omitempty"`
 }
 
@@ -165,6 +173,9 @@ func walkthroughFromParams(p setWalkthroughParams) types.Walkthrough {
 		}
 		for _, v := range s.Views {
 			stop.Views = append(stop.Views, types.StopView{Kind: v.Kind, Target: v.Target, Label: v.Label})
+		}
+		for _, c := range s.Calls {
+			stop.Calls = append(stop.Calls, types.StopCall{Stop: c.Stop, Symbol: c.Symbol, Line: c.Line})
 		}
 		w.Stops = append(w.Stops, stop)
 	}
