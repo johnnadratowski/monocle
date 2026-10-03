@@ -14,9 +14,9 @@ import (
 // its parent was still holding it, and the shell would see the pane's job end.
 //
 // Nothing needs saving first. The review, its comments and what is marked
-// reviewed all live in the engine's database, and the fresh process re-runs the
-// version check that reaps the now-stale engine, so both halves come back
-// current.
+// reviewed all live in the engine's database. The caller stops the engine
+// first (restartServeForRelaunch), so the fresh process spawns one from the
+// new build and both halves come back current.
 func relaunchSelf() error {
 	exe, err := os.Executable()
 	if err != nil {

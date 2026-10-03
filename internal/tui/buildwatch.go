@@ -67,13 +67,13 @@ func (w buildWatch) check() (buildWatch, bool) {
 	}
 	w.size, w.modTime = info.Size(), info.ModTime()
 	w.pending = true
-	w.version = binaryVersion(w.path)
+	w.version = BinaryVersion(w.path)
 	return w, true
 }
 
-// binaryVersion asks the binary on disk what it is. Best-effort and bounded: a
+// BinaryVersion asks the binary on disk what it is. Best-effort and bounded: a
 // half-written file, or one that is not executable yet, simply goes unnamed.
-func binaryVersion(path string) string {
+func BinaryVersion(path string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, path, "--version").Output()

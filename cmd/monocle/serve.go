@@ -28,23 +28,62 @@ const serveHealthTimeout = 3 * time.Second
 // It returns (true, "") when the serve replies within timeout — and, when
 // checkVersion is set, reports wantVersion — otherwise (false, reason).
 func serveIsHealthy(socketPath, wantVersion string, checkVersion bool, timeout time.Duration) (bool, string) {
-	c, err := client.Connect(socketPath)
-	if err != nil {
-		return false, "connect failed"
-	}
-	defer c.Close()
-	resp, err := c.Request(&protocol.GetServerInfoMsg{Type: protocol.TypeGetServerInfo}, timeout)
-	if err != nil {
-		return false, "no response within " + timeout.String()
-	}
-	info, ok := resp.(*protocol.GetServerInfoResponse)
-	if !ok {
-		return false, "unexpected response"
+	info, reason := serveInfo(socketPath, timeout)
+	if info == nil {
+		return false, reason
 	}
 	if checkVersion && info.Version != "" && wantVersion != "" && info.Version != wantVersion {
 		return false, fmt.Sprintf("version mismatch (serve %q, this %q)", info.Version, wantVersion)
 	}
 	return true, ""
+}
+
+// serveInfo asks the serve at socketPath what it is, or says why it could not.
+func serveInfo(socketPath string, timeout time.Duration) (*protocol.GetServerInfoResponse, string) {
+	c, err := client.Connect(socketPath)
+	if err != nil {
+		return nil, "connect failed"
+	}
+	defer c.Close()
+	resp, err := c.Request(&protocol.GetServerInfoMsg{Type: protocol.TypeGetServerInfo}, timeout)
+	if err != nil {
+		return nil, "no response within " + timeout.String()
+	}
+	info, ok := resp.(*protocol.GetServerInfoResponse)
+	if !ok {
+		return nil, "unexpected response"
+	}
+	return info, ""
+}
+
+// restartServeForRelaunch stops the serve on socketPath before the TUI execs
+// the build that reports newVersion, so the relaunched TUI spawns a serve from
+// that build too. Re-exec replaces only the TUI: the serve it spawned is a
+// separate, detached process, and it kept running the old binary — which
+// dropped a tour's calls when the tour was re-sent (John 2026-10-03). The
+// startup check does not catch it on an explicit --socket, where it checks
+// only that the serve answers.
+//
+// The serve is left up only when it already runs the new build — another TUI
+// relaunched first — which needs it to report newVersion, and newVersion to
+// differ from oldVersion, the build this TUI is leaving. Two builds reporting
+// the same version cannot be told apart, so that case restarts it too: the
+// review lives in the database, so a restart costs a reconnect, not state.
+func restartServeForRelaunch(socketPath, oldVersion, newVersion string) {
+	if serveRunsBuild(socketPath, oldVersion, newVersion) {
+		return
+	}
+	stopServe(socketPath)
+}
+
+// serveRunsBuild reports whether the serve on socketPath provably runs the
+// build reporting newVersion rather than the one reporting oldVersion.
+func serveRunsBuild(socketPath, oldVersion, newVersion string) bool {
+	if newVersion == "" || newVersion == oldVersion {
+		return false
+	}
+	info, _ := serveInfo(socketPath, serveHealthTimeout)
+	return info != nil && info.Version == newVersion
 }
 
 // reapUnhealthyServe terminates an existing serve on socketPath when it is
@@ -59,14 +98,29 @@ func reapUnhealthyServe(socketPath string, checkVersion bool) {
 	if ok, _ := serveIsHealthy(socketPath, version, checkVersion, serveHealthTimeout); ok {
 		return
 	}
+	stopServe(socketPath)
+}
+
+// stopServe terminates the serve recorded as owning socketPath, if it is a live
+// monocle, and removes the socket and pid files so the next EnsureServe spawns
+// a fresh serve.
+func stopServe(socketPath string) {
 	pidPath := pidFilePath(socketPath)
 	if pid, err := readPIDFile(pidPath); err == nil && pidIsAlive(pid) && pidLooksLikeMonocle(pid) {
 		if proc, err := os.FindProcess(pid); err == nil {
+			// A serve this process spawned stays a zombie once it exits — still
+			// there to signal 0 — because nothing here waits on it, and a TUI
+			// relaunched by exec is still its parent. Its pid file goes as the
+			// last thing it does, so that says it has finished too.
+			exited := func() bool {
+				held, err := readPIDFile(pidPath)
+				return !pidIsAlive(pid) || err != nil || held != pid
+			}
 			_ = proc.Signal(syscall.SIGTERM)
-			for i := 0; i < 40 && pidIsAlive(pid); i++ {
+			for i := 0; i < 40 && !exited(); i++ {
 				time.Sleep(50 * time.Millisecond)
 			}
-			if pidIsAlive(pid) {
+			if !exited() {
 				_ = proc.Signal(syscall.SIGKILL) // last resort if it ignored SIGTERM
 			}
 		}

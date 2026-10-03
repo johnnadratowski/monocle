@@ -96,3 +96,69 @@ func TestServeToClientE2E(t *testing.T) {
 		t.Errorf("unexpected comment: %+v", c)
 	}
 }
+
+// ctrl+r execs only the TUI. The serve it spawned is a separate process, and it
+// kept running the old binary, which dropped a tour's calls when the tour was
+// re-sent (John 2026-10-03). This spawns a real serve from a build reporting v2
+// and checks what a relaunch does to it.
+func TestRelaunchRestartsAServeOnTheOldBuild(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix sockets unavailable on windows")
+	}
+	binary := filepath.Join(t.TempDir(), "monocle")
+	build := exec.Command("go", "build", "-ldflags", "-X main.version=v2", "-o", binary, "./")
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build: %v\n%s", err, out)
+	}
+	t.Setenv("MONOCLE_DB", filepath.Join(t.TempDir(), "relaunch.db"))
+	repoRoot := t.TempDir()
+	if err := os.WriteFile(filepath.Join(repoRoot, "a.go"), []byte("package a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	hash := sha256.Sum256([]byte(t.Name() + repoRoot))
+	socketPath := fmt.Sprintf("/tmp/monocle-e2e-%s.sock", hex.EncodeToString(hash[:])[:10])
+	_ = os.Remove(socketPath)
+	t.Cleanup(func() {
+		stopServe(socketPath)
+		_ = os.Remove(socketPath + ".log")
+	})
+
+	spawn := func() int {
+		t.Helper()
+		if _, _, err := adapters.EnsureServe(adapters.AutoSpawnOptions{
+			RepoRoot: repoRoot, Socket: socketPath, Binary: binary, ReadyTimeout: 5 * time.Second,
+		}); err != nil {
+			t.Fatalf("ensure serve: %v", err)
+		}
+		pid, err := readPIDFile(pidFilePath(socketPath))
+		if err != nil {
+			t.Fatalf("the serve wrote no pid file: %v", err)
+		}
+		return pid
+	}
+	answers := func() bool { info, _ := serveInfo(socketPath, time.Second); return info != nil }
+
+	pid := spawn()
+	// Another TUI already relaunched onto v2: the serve is current and stays.
+	restartServeForRelaunch(socketPath, "v1", "v2")
+	if held, err := readPIDFile(pidFilePath(socketPath)); err != nil || held != pid || !answers() {
+		t.Fatalf("a serve already on the new build was restarted (pid file %d %v, answers %v)", held, err, answers())
+	}
+
+	// This TUI is leaving v2 for v3, and the serve runs v2: it goes. The serve
+	// is this test's child, so once it exits it is a zombie until the test
+	// ends, as it is a relaunched TUI's: the stop must see it finish rather
+	// than wait out the two seconds before its SIGKILL fallback.
+	start := time.Now()
+	restartServeForRelaunch(socketPath, "v2", "v3")
+	if took := time.Since(start); took >= 1900*time.Millisecond {
+		t.Errorf("stopping the serve took %s: it waited out the SIGKILL fallback", took)
+	}
+	if _, err := readPIDFile(pidFilePath(socketPath)); err == nil || answers() {
+		t.Fatalf("a serve on the build being left survived the relaunch (pid file err %v, answers %v)", err, answers())
+	}
+	// The relaunched TUI's own EnsureServe then starts a fresh one.
+	if next := spawn(); next == pid || !answers() {
+		t.Errorf("after the relaunch the serve is pid %d (was %d), answers %v: want a new one", next, pid, answers())
+	}
+}

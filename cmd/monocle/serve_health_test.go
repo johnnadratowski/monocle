@@ -98,3 +98,33 @@ func TestServeIsHealthy(t *testing.T) {
 		}
 	})
 }
+
+// A relaunch keeps the serve only when it provably runs the build being
+// relaunched onto; anything less restarts it.
+func TestServeRunsBuild(t *testing.T) {
+	for _, c := range []struct {
+		name, serve, old, new string
+		want                  bool
+	}{
+		{"already on the new build", "v2", "v1", "v2", true},
+		{"still on the build being left", "v1", "v1", "v2", false},
+		{"on some other build", "v0", "v1", "v2", false},
+		{"two builds reporting the same version", "v1", "v1", "v1", false},
+		{"a new build that does not say what it is", "v1", "v1", "", false},
+		{"neither the new build nor the serve says", "", "v1", "", false},
+		{"a serve that does not say what it is", "", "v1", "v2", false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			sock := shortSock(t)
+			startMockServe(t, sock, respondVersion(c.serve))
+			if got := serveRunsBuild(sock, c.old, c.new); got != c.want {
+				t.Errorf("serveRunsBuild(serve %q, old %q, new %q) = %v, want %v", c.serve, c.old, c.new, got, c.want)
+			}
+		})
+	}
+	t.Run("nothing listening", func(t *testing.T) {
+		if serveRunsBuild(shortSock(t), "v1", "v2") {
+			t.Error("no serve cannot be running the new build")
+		}
+	})
+}

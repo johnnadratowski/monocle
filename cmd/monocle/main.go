@@ -1361,6 +1361,9 @@ func runTUI(socketOverride string, workdir string, additionalPaths []string, con
 	}
 	// Bubble Tea has restored the terminal by now, so exec lands in a clean one.
 	if tui.WantsRelaunch(final) {
+		if exe, err := os.Executable(); err == nil {
+			restartServeForRelaunch(socketPath, version, tui.BinaryVersion(exe))
+		}
 		return relaunchSelf()
 	}
 	// Note: don't call engine.Shutdown() — serve owns its own lifecycle
