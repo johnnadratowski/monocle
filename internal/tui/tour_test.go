@@ -34,6 +34,9 @@ func (e *tourEngine) GetFileDiff(path string) (*types.DiffResult, error) {
 func (e *tourEngine) GetFileDiffFull(path string) (*types.DiffResult, error) {
 	return e.GetFileDiff(path)
 }
+func (e *tourEngine) GetFileContent(path string) (string, error) {
+	return "the contents of " + path, nil
+}
 func (e *tourEngine) GetSocketPath() string   { return "" }
 func (e *tourEngine) GetSubscriberCount() int { return 0 }
 func (e *tourEngine) SetWalkthroughStop(id string) error {
@@ -765,4 +768,71 @@ func TestF18AndF19BytesAreTheTourKeys(t *testing.T) {
 	if len(rec.keys) != 2 || !Matches(rec.keys[0], km.TourBack) || !Matches(rec.keys[1], km.TourForward) {
 		t.Errorf("ESC[32~ ESC[33~ arrived as %q, want the tour's back then forward keys", rec.keys)
 	}
+}
+
+// In tour mode o toggles the stop's note (John 2026-10-03: once o had closed
+// it, nothing brought it back). Bringing it back is not arriving: nothing is
+// reported and no side effects are scheduled.
+func TestOTogglesTheStopsNote(t *testing.T) {
+	noteOpen := func(m appModel, id string) bool {
+		return m.docPane.active && m.docPane.note && m.docPane.annotationID == tourNoteKeyPrefix+id
+	}
+	for _, from := range []struct {
+		name  string
+		focus focusTarget
+	}{{"from the diff", focusMain}, {"from the note pane", focusDoc}} {
+		t.Run(from.name, func(t *testing.T) {
+			m, e := tourApp(t)
+			m = pressKey(t, m, ".") // 1.2
+			reports, settle := len(e.reports()), m.tour.settle
+			m.setFocus(from.focus)
+			if m = pressKey(t, m, "o"); m.docPane.active {
+				t.Fatal("o did not close the stop's note")
+			}
+			if m = pressKey(t, m, "o"); !noteOpen(m, "1.2") {
+				t.Fatalf("o did not bring back 1.2's note: active=%v note=%v id=%q", m.docPane.active, m.docPane.note, m.docPane.annotationID)
+			}
+			if !strings.Contains(stripANSISeq(m.docPane.View()), "The write.") || m.tour.index != 1 {
+				t.Errorf("the note brought back is not 1.2's, or the stop moved (index %d)", m.tour.index)
+			}
+			if len(e.reports()) != reports || m.tour.settle != settle {
+				t.Errorf("bringing the note back reported %v and scheduled %d settles: it is not arriving", e.reports()[reports:], m.tour.settle-settle)
+			}
+		})
+	}
+
+	t.Run("outside tour mode o is unchanged", func(t *testing.T) {
+		m, _ := tourApp(t)
+		m = pressKey(t, m, "W")
+		if m = pressKey(t, m, "o"); m.docPane.active {
+			t.Error("o opened a note with the tour off")
+		}
+	})
+
+	// The cursor on an annotation is the narrower ask, so o opens its doc
+	// links there, tour or not; off it, o is the note's toggle again.
+	t.Run("an annotation under the cursor wins", func(t *testing.T) {
+		m, _ := tourApp(t) // 1.1, cursor on a.go:5
+		m.diffView.annotations = []types.Annotation{{ID: "x1", TargetRef: "a.go", LineStart: 5, LineEnd: 5, Summary: "why",
+			Refs: []types.DocRef{{Kind: types.DocRefFile, Doc: "NOTES.md"}}}}
+		m.diffView.buildLines()
+		m.diffView.GoToLine(5)
+		if m = pressKey(t, m, "o"); m.docPane.annotationID != "x1" {
+			t.Fatalf("o on an annotation showed %q, want its doc links", m.docPane.annotationID)
+		}
+		m.diffView.GoToLine(20)
+		if m = pressKey(t, m, "o"); m.docPane.active {
+			t.Fatal("o off the annotation did not close its doc pane")
+		}
+		// With the pane closed, on the annotation, o still means its links.
+		m.diffView.GoToLine(5)
+		if m = pressKey(t, m, "o"); m.docPane.annotationID != "x1" {
+			t.Fatalf("o on an annotation with the pane closed showed %q, want its doc links", m.docPane.annotationID)
+		}
+		m.diffView.GoToLine(20)
+		m = pressKey(t, m, "o")
+		if m = pressKey(t, m, "o"); !noteOpen(m, "1.1") {
+			t.Errorf("o with the pane closed did not bring back 1.1's note: id=%q", m.docPane.annotationID)
+		}
+	})
 }

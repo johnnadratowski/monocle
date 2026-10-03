@@ -2607,6 +2607,14 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				m.closeDocPane()
 				return m, nil
 			}
+			// In tour mode o toggles the stop's note: closed, it comes back,
+			// without the arriving side effects (John 2026-10-03: once o had
+			// closed it, nothing brought it back). An annotation under the
+			// cursor still wins above: the cursor on it is the narrower ask.
+			if stop, ok := m.currentStop(); ok && m.tour.on {
+				m.openStopNote(stop)
+				return m, nil
+			}
 		case focusDoc:
 			// Already in the pane: cycle to the next ref, closing after the last.
 			return m.cycleDocRefOrClose(), nil

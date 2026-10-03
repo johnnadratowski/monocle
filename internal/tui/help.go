@@ -360,7 +360,7 @@ func (m helpModel) buildContent() string {
 			{"ctrl+y", "Copy the review to the clipboard without submitting"},
 		},
 		secOpen: {
-			{Label(km.OpenDocRef), "Open/cycle an annotation's doc links in the doc pane"},
+			{Label(km.OpenDocRef), "Open/cycle an annotation's doc links in the doc pane; in a tour, show/hide the stop's note"},
 			{Label(km.ShellCommand), "Run a shell command on the current file"},
 			{Label(km.OpenInEditor), "Open in your editor — the path on this line, else the file under review"},
 			{Label(km.OpenInEditorTakeover), "Same, always taking over the screen"},

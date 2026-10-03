@@ -310,7 +310,7 @@ When the agent sends a tour (`set_walkthrough`), monocle enters tour mode on its
 
 | Key | Action |
 |-----|--------|
-| `o` | Open/cycle an annotation's doc links in the doc pane |
+| `o` | Open/cycle an annotation's doc links in the doc pane. In tour mode, off an annotation, it shows and hides the stop's note |
 | `!` | Run a shell command on the current file |
 | `ctrl+g` | Open in your editor — the path on this line, else the file under review |
 | `ctrl+shift+g` | Same, always taking over the screen |
