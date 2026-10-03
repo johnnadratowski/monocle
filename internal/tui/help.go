@@ -310,8 +310,9 @@ func (m helpModel) buildContent() string {
 			{":stop <id>", "Jump to a stop by id, e.g. :stop 1.2 (no id lists them)"},
 			{":view [n]", "Open the stop's nth view (default 1) via walkthrough_on_stop, else the media/markdown viewer"},
 			{":related [n]", "Bring up the related-files pane with file n (default 1) active in it"},
+			{":call [n]", "Go to the stop that the stop's nth call (default 1) leads to"},
 			{":layout [reset]", "Say whether the tour's windows are in a saved layout; reset puts back the default"},
-			{"click a label", "Clicking a related file's or view's label is :related N / :view N for it"},
+			{"click a label", "Clicking a call's, related file's or view's label is :call N / :related N / :view N for it"},
 		},
 		secView: {
 			{Label(km.FocusSwap) + "/shift+tab", "Switch pane focus (sidebar/diff/doc)"},

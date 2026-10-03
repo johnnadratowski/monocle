@@ -8,19 +8,22 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// A tour note ends with what else the stop carries — its related files, its
-// views, a saved layout to reset — as rows of labels the reviewer can click.
-// Each label carries the message its keyboard command sends (`:related 2`,
-// `:view 2`, `:layout reset`), so a click and the command run the same code.
+// A tour note ends with what else the stop carries — the stops its code calls,
+// its related files, its views, a saved layout to reset — as rows of labels
+// the reviewer can click. Each label carries the message its keyboard command
+// sends (`:call 1`, `:related 2`, `:view 2`, `:layout reset`), so a click and
+// the command run the same code.
 
 // noteLink is one clickable label under a note. act is the message a click on
-// it sends; state is a view's marker, if known; middle cuts a label too wide
-// for the pane in the middle rather than at the end, so a path keeps its file
-// name and line.
+// it sends; state is a view's marker, if known; accent is the label's colour
+// when it is not the usual one (the call leading to the next stop); middle
+// cuts a label too wide for the pane in the middle rather than at the end, so
+// a path keeps its file name and line.
 type noteLink struct {
 	label  string
 	act    tea.Msg
 	state  viewState
+	accent string
 	middle bool
 }
 
@@ -150,7 +153,11 @@ func layoutGroup(g linkGroup, width int) ([]string, []linkHit) {
 		label = cutLabel(label, max(room, 1), l.middle)
 		w := lipgloss.Width(label)
 		hits = append(hits, linkHit{line: len(rows), start: 1 + used, end: 1 + used + w, act: l.act})
-		row += dim.Render(sep) + labelStyle.Render(label) + marker
+		style := labelStyle
+		if l.accent != "" {
+			style = style.Foreground(lipgloss.Color(l.accent))
+		}
+		row += dim.Render(sep) + style.Render(label) + marker
 		used += w + lipgloss.Width(marker)
 	}
 	tw := 0

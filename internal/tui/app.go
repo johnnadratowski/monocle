@@ -1276,6 +1276,9 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tourRelatedMsg:
 		return m.openStopRelated(msg.arg)
 
+	case tourCallMsg:
+		return m.followStopCall(msg.arg)
+
 	case tourLayoutMsg:
 		return m.handleLayout(msg)
 
@@ -3084,7 +3087,7 @@ var commandNames = []string{
 	"pause", "unpause", "history",
 	"mark-all-reviewed", "mark-all-unreviewed",
 	"base-artifact-version", "base-ref", "ref", "theme",
-	"relaunch", "stop", "view", "related", "layout",
+	"relaunch", "stop", "view", "related", "call", "layout",
 }
 
 // matchingCommands returns the command names that start with prefix, in order.
@@ -3187,6 +3190,11 @@ func (m appModel) executeCommand(cmd string) tea.Cmd {
 	if trimmed == "related" || strings.HasPrefix(trimmed, "related ") {
 		arg := strings.TrimSpace(strings.TrimPrefix(trimmed, "related"))
 		return func() tea.Msg { return tourRelatedMsg{arg: arg} }
+	}
+	// `:call 1` — enter the stop one of the current stop's calls leads to.
+	if trimmed == "call" || strings.HasPrefix(trimmed, "call ") {
+		arg := strings.TrimSpace(strings.TrimPrefix(trimmed, "call"))
+		return func() tea.Msg { return tourCallMsg{arg: arg} }
 	}
 	// `:layout reset` — put the tour's windows back in their default layout.
 	if trimmed == "layout" || strings.HasPrefix(trimmed, "layout ") {

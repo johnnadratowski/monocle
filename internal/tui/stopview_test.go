@@ -104,8 +104,9 @@ func TestStopLinkGroups(t *testing.T) {
 			{Kind: "image", Target: "shots/x.png"},
 			{Kind: "url", Target: "https://x.test", Label: "Spec"},
 		},
-	}, &tourStatus{views: []viewState{viewOpen}})
+	}, nil, &tourStatus{views: []viewState{viewOpen}})
 	want := []linkGroup{
+		{head: "Calls:", hint: "click, or :call N"},
 		{head: "Related:", hint: "click, or :related N", links: []noteLink{
 			{label: "[1] a.go:4", act: tourRelatedMsg{arg: "1"}, middle: true},
 			{label: "[2] b.go", act: tourRelatedMsg{arg: "2"}, middle: true},
@@ -118,22 +119,164 @@ func TestStopLinkGroups(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got  %+v\nwant %+v", got, want)
 	}
-	if rows, _ := layoutGroups(stopLinkGroups(types.WalkthroughStop{}, nil), 80); rows != nil {
+	if rows, _ := layoutGroups(stopLinkGroups(types.WalkthroughStop{}, nil, nil), 80); rows != nil {
 		t.Errorf("a stop with nothing to link has rows %q", rows)
 	}
 	// The layout always shows, flush right on the last group: "layout saved ·
 	// reset" with reset a label, or "layout default". On a stop with no view or
 	// related file it is a row of its own. An unknown status shows none.
 	savedTrail := &noteTrail{text: "layout saved", link: &noteLink{label: "reset", act: tourLayoutMsg{arg: "reset"}}}
-	saved := stopLinkGroups(types.WalkthroughStop{}, &tourStatus{layoutSaved: true})
-	if len(saved) != 3 || !reflect.DeepEqual(saved[2], linkGroup{trail: savedTrail}) {
+	saved := stopLinkGroups(types.WalkthroughStop{}, nil, &tourStatus{layoutSaved: true})
+	if len(saved) != 4 || !reflect.DeepEqual(saved[3], linkGroup{trail: savedTrail}) {
 		t.Errorf("with a saved layout: %+v", saved)
 	}
-	if got := stopLinkGroups(types.WalkthroughStop{}, &tourStatus{}); len(got) != 3 || got[2].trail.text != "layout default" {
+	if got := stopLinkGroups(types.WalkthroughStop{}, nil, &tourStatus{}); len(got) != 4 || got[3].trail.text != "layout default" {
 		t.Errorf("with the default layout: %+v", got)
 	}
-	if got := stopLinkGroups(types.WalkthroughStop{}, nil); len(got) != 2 {
+	if got := stopLinkGroups(types.WalkthroughStop{}, nil, nil); len(got) != 3 {
 		t.Errorf("with no status: %+v", got)
+	}
+}
+
+// callsTour is a withdrawal tour whose route stop calls into three others: the
+// next stop, a later one, and one sent without a symbol.
+func callsTour() *types.Walkthrough {
+	return &types.Walkthrough{Stops: []types.WalkthroughStop{
+		{ID: "2.1", Title: "The withdrawal route", Calls: []types.StopCall{
+			{Stop: "4.1", Symbol: "dispatchHold"},
+			{Stop: "2.2", Symbol: "requestWalletWithdrawal", Line: 48},
+			{Stop: "3"},
+		}},
+		{ID: "2.2", Title: "Requesting the withdrawal"},
+		{ID: "3", Title: "The ledger write"},
+		{ID: "4.1", Title: "The hold"},
+	}}
+}
+
+// A stop's calls are the first row under its note, above Related (John
+// 2026-10-03). The call leading to the next stop reads "→" and has its own
+// colour; a call sent without a symbol shows the stop's title.
+func TestStopLinkGroupsCalls(t *testing.T) {
+	tour := callsTour()
+	stop := tour.Stops[0]
+	stop.Related = []types.DocRef{{Doc: "a.go", StartLine: 4}}
+	got := stopLinkGroups(stop, tour, nil)
+	wantCalls := linkGroup{head: "Calls:", hint: "click, or :call N", links: []noteLink{
+		{label: "[1] 4.1 dispatchHold", act: tourCallMsg{arg: "1"}},
+		{label: "[2] → 2.2 requestWalletWithdrawal", act: tourCallMsg{arg: "2"}, accent: nextCallColor},
+		{label: "[3] 3 The ledger write", act: tourCallMsg{arg: "3"}},
+	}}
+	if len(got) != 3 || !reflect.DeepEqual(got[0], wantCalls) || got[1].head != "Related:" || got[2].head != "Views:" {
+		t.Fatalf("groups %+v, want Calls %+v then Related then the views", got, wantCalls)
+	}
+
+	// From the last stop nothing is next, so no call is marked.
+	last := tour.Stops[3]
+	last.Calls = []types.StopCall{{Stop: "2.2", Symbol: "requestWalletWithdrawal"}}
+	if l := stopLinkGroups(last, tour, nil)[0].links[0]; l.accent != "" || strings.Contains(l.label, "→") {
+		t.Errorf("a call from the last stop is marked as the next: %+v", l)
+	}
+
+	// The layout trail stays where it was: on the views row, else the related
+	// row, else a row of its own — never on the calls row.
+	status := &tourStatus{}
+	onlyCalls := stopLinkGroups(tour.Stops[0], tour, status)
+	if len(onlyCalls) != 4 || onlyCalls[0].trail != nil || onlyCalls[3].trail == nil {
+		t.Errorf("a stop with only calls: trail on %+v, want a row of its own", onlyCalls)
+	}
+	withRelated := stopLinkGroups(stop, tour, status)
+	if len(withRelated) != 3 || withRelated[0].trail != nil || withRelated[1].trail == nil {
+		t.Errorf("a stop with calls and related files: trail on %+v, want the related row", withRelated)
+	}
+	stop.Views = []types.StopView{{Kind: "url", Target: "https://x.test"}}
+	withViews := stopLinkGroups(stop, tour, status)
+	if withViews[0].trail != nil || withViews[1].trail != nil || withViews[2].trail == nil {
+		t.Errorf("a stop with calls, related files and a view: trail on %+v, want the views row", withViews)
+	}
+}
+
+// The call to the next stop is drawn in its own colour; the rest in the usual
+// label accent.
+func TestTheNextStopsCallIsStyledApart(t *testing.T) {
+	tour := callsTour()
+	rows, _ := layoutGroups(stopLinkGroups(tour.Stops[0], tour, nil), 140)
+	label := lipgloss.NewStyle().Foreground(lipgloss.Color(annotationColor)).Bold(true).Underline(true)
+	next := label.Foreground(lipgloss.Color(nextCallColor))
+	if len(rows) != 1 || ansi.Strip(rows[0]) != " Calls: [1] 4.1 dispatchHold · [2] → 2.2 requestWalletWithdrawal · [3] 3 The ledger write  click, or :call N" {
+		t.Fatalf("rows %q", rows)
+	}
+	if !strings.Contains(rows[0], next.Render("[2] → 2.2 requestWalletWithdrawal")) || !strings.Contains(rows[0], label.Render("[1] 4.1 dispatchHold")) {
+		t.Errorf("the next stop's call is not styled apart from the others: %q", rows[0])
+	}
+}
+
+// anchoredCallsTour is callsTour with every stop on a line of the review.
+func anchoredCallsTour() *types.Walkthrough {
+	tour := callsTour()
+	for i, at := range []struct {
+		file string
+		line int
+	}{{"a.go", 5}, {"b.go", 30}, {"b.go", 50}, {"a.go", 20}} {
+		tour.Stops[i].File, tour.Stops[i].LineStart = at.file, at.line
+	}
+	tour.Stops[0].Related = []types.DocRef{{Doc: "b.go", StartLine: 30}}
+	return tour
+}
+
+// Clicking a call's label is `:call N`, and both enter the stop it leads to.
+// The Calls row sits above the Related row.
+func TestClickingACallEntersItsStop(t *testing.T) {
+	for _, l := range layouts {
+		t.Run(l.name, func(t *testing.T) {
+			m, e := tourAppWith(t, anchoredCallsTour(), inertViewers(&types.Config{}))
+			m = updateApp(t, m, tea.WindowSizeMsg{Width: l.width, Height: 44})
+			m.sidebarHidden = l.sidebarHidden
+			recalcPaneDimensions(&m)
+
+			// In a short pane the Related row can be scrolled below the cap on
+			// label rows, so the order is read from the rows themselves.
+			calls, related := -1, -1
+			for i, r := range m.docPane.pinned {
+				switch plain := ansi.Strip(r); {
+				case strings.Contains(plain, "Calls:"):
+					calls = i
+				case strings.Contains(plain, "Related:"):
+					related = i
+				}
+			}
+			if calls < 0 || related <= calls {
+				t.Errorf("label rows %q: Calls at %d, Related at %d, want Calls above", m.docPane.pinned, calls, related)
+			}
+			cx, cy := onScreen(t, m, "[2] → 2.2 requestWalletWithdrawal")
+			want := m.executeCommand("call 2")()
+			_, cmd := m.Update(leftClick(cx+3, cy))
+			if cmd == nil || !reflect.DeepEqual(cmd(), want) {
+				t.Fatalf("a click on the call did not send what :call 2 sends (%#v)", want)
+			}
+			m = updateApp(t, m, leftClick(cx+3, cy))
+			if stop, _ := m.currentStop(); stop.ID != "2.2" || m.diffView.path != "b.go" || cursorLine(m) != 30 {
+				t.Errorf("the click left the tour on %s at %s:%d, want 2.2 at b.go:30", stop.ID, m.diffView.path, cursorLine(m))
+			}
+			if got := e.reports(); got[len(got)-1] != "2.2" {
+				t.Errorf("reported %v, want the move to 2.2", got)
+			}
+		})
+	}
+}
+
+func TestCallCommand(t *testing.T) {
+	m, _ := tourAppWith(t, anchoredCallsTour(), inertViewers(&types.Config{}))
+	for _, c := range []struct{ arg, notice string }{{"9", "2.1 has calls 1-3"}, {"x", "2.1 has calls 1-3"}} {
+		if m = typeCommand(t, m, "call "+c.arg); m.tour.index != 0 || m.statusBar.searchInfo != c.notice {
+			t.Errorf(":call %s gave index %d %q, want no move and %q", c.arg, m.tour.index, m.statusBar.searchInfo, c.notice)
+		}
+	}
+	m = typeCommand(t, m, "call") // the first call: 4.1
+	if stop, _ := m.currentStop(); stop.ID != "4.1" || m.diffView.path != "a.go" || cursorLine(m) != 20 {
+		t.Fatalf(":call left the tour on %s at %s:%d, want 4.1 at a.go:20", stop.ID, m.diffView.path, cursorLine(m))
+	}
+	if m = typeCommand(t, m, "call 1"); m.statusBar.searchInfo != "4.1 calls no other stop" {
+		t.Errorf(":call from a stop with no calls said %q", m.statusBar.searchInfo)
 	}
 }
 

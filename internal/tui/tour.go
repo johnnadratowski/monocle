@@ -286,7 +286,7 @@ func (m *appModel) leaveTour() {
 // opens — so the reviewer can see there is more without having to know to look.
 func (m *appModel) openStopNote(stop types.WalkthroughStop) {
 	m.docPane.theme = &m.theme
-	m.docPane.openNote(tourNoteKeyPrefix+stop.ID, stop.Heading(), stopNoteBody(stop), stopLinkGroups(stop, m.stopStatus(stop)), m.diffView.mdStyler)
+	m.docPane.openNote(tourNoteKeyPrefix+stop.ID, stop.Heading(), stopNoteBody(stop), stopLinkGroups(stop, m.tour.tour, m.stopStatus(stop)), m.diffView.mdStyler)
 	recalcPaneDimensions(m)
 	m.diffView.ensureVisible()
 }
@@ -300,12 +300,42 @@ func stopNoteBody(stop types.WalkthroughStop) string {
 	return "_(no note)_"
 }
 
+// nextCallColor marks the call that leads to the next stop, the one a reader
+// following the code is most likely to want (John 2026-10-03).
+const nextCallColor = "3" // yellow
+
 // stopLinkGroups are the labels under a stop's note, numbered the way their
-// commands count them: its related files ("[1] a.go:40", `:related 1`) and its
-// views ("[2] url Spec", `:view 2`), each view with what the view-status
-// command said about it, if anything — and, when it said the windows are in a
-// saved layout, "Layout: saved · reset" (`:layout reset`).
-func stopLinkGroups(stop types.WalkthroughStop, status *tourStatus) []linkGroup {
+// commands count them: the stops its code calls ("[1] → 2.2 save", `:call 1`),
+// its related files ("[1] a.go:40", `:related 1`) and its views ("[2] url
+// Spec", `:view 2`), each view with what the view-status command said about
+// it, if anything — and, when it said the windows are in a saved layout,
+// "Layout: saved · reset" (`:layout reset`). Calls come first, above the
+// related files (John 2026-10-03). tour is the stop's tour: it says which
+// stop is next and names a call sent without a symbol.
+func stopLinkGroups(stop types.WalkthroughStop, tour *types.Walkthrough, status *tourStatus) []linkGroup {
+	calls := linkGroup{head: "Calls:", hint: "click, or :call N"}
+	next := ""
+	if i := tour.StopIndex(stop.ID); i >= 0 && i+1 < len(tour.Stops) {
+		next = tour.Stops[i+1].ID
+	}
+	for i, c := range stop.Calls {
+		name := c.Symbol
+		if name == "" {
+			if j := tour.StopIndex(c.Stop); j >= 0 {
+				name = tour.Stops[j].Title
+			}
+		}
+		link := noteLink{act: tourCallMsg{arg: fmt.Sprint(i + 1)}}
+		if c.Stop == next {
+			link.label, link.accent = fmt.Sprintf("[%d] → %s", i+1, c.Stop), nextCallColor
+		} else {
+			link.label = fmt.Sprintf("[%d] %s", i+1, c.Stop)
+		}
+		if name != "" {
+			link.label += " " + name
+		}
+		calls.links = append(calls.links, link)
+	}
 	related := linkGroup{head: "Related:", hint: "click, or :related N"}
 	for i, r := range stop.Related {
 		label := fmt.Sprintf("[%d] %s", i+1, r.Doc)
@@ -329,7 +359,6 @@ func stopLinkGroups(stop types.WalkthroughStop, status *tourStatus) []linkGroup 
 		}
 		views.links = append(views.links, link)
 	}
-	groups := []linkGroup{related, views}
 	if status != nil {
 		// The layout, always, flush right beside the view (John 2026-10-02): a row that
 		// came and went with "saved" was easy to miss.
@@ -339,14 +368,38 @@ func stopLinkGroups(stop types.WalkthroughStop, status *tourStatus) []linkGroup 
 		}
 		switch {
 		case len(views.links) > 0:
-			groups[1].trail = trail
+			views.trail = trail
 		case len(related.links) > 0:
-			groups[0].trail = trail
+			related.trail = trail
 		default:
-			groups = append(groups, linkGroup{trail: trail})
+			return []linkGroup{calls, related, views, {trail: trail}}
 		}
 	}
-	return groups
+	return []linkGroup{calls, related, views}
+}
+
+// tourCallMsg asks to enter the stop one of the current stop's calls leads to
+// — `:call 2`, or a click on its label.
+type tourCallMsg struct{ arg string }
+
+// followStopCall enters the stop that call n (1-based; empty means the first)
+// of the current stop leads to, as `:stop` would.
+func (m appModel) followStopCall(arg string) (appModel, tea.Cmd) {
+	stop, ok := m.currentStop()
+	if !ok || !m.tour.on {
+		m.statusBar.searchInfo = "no tour stop to follow a call from"
+		return m, nil
+	}
+	if len(stop.Calls) == 0 {
+		m.statusBar.searchInfo = stop.ID + " calls no other stop"
+		return m, nil
+	}
+	n, ok := stopItemNumber(arg, len(stop.Calls))
+	if !ok {
+		m.statusBar.searchInfo = fmt.Sprintf("%s has calls 1-%d", stop.ID, len(stop.Calls))
+		return m, nil
+	}
+	return m.gotoStop(stop.Calls[n-1].Stop, stopEntry{report: true, effects: true})
 }
 
 // jumpToStop selects the stop's file and puts the cursor on its first line,

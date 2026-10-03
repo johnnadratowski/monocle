@@ -159,7 +159,7 @@ func (m appModel) handleViewStatus(msg viewStatusMsg) appModel {
 	}
 	m.tour.status, m.tour.statusFor = msg.status, stop.ID
 	if m.tour.on && m.docPane.active && m.docPane.annotationID == tourNoteKeyPrefix+stop.ID {
-		m.docPane.setGroups(stopLinkGroups(stop, msg.status))
+		m.docPane.setGroups(stopLinkGroups(stop, m.tour.tour, msg.status))
 		recalcPaneDimensions(&m)
 		m.diffView.ensureVisible()
 	}
