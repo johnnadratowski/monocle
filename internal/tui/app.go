@@ -1258,6 +1258,9 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tourGotoMsg:
 		return m.gotoStop(msg.id, stopEntry{report: true, effects: true})
 
+	case tourWalkMsg:
+		return m.walkStops(msg.dir)
+
 	case tourSettledMsg:
 		return m.settleOnStop(msg)
 
@@ -2059,7 +2062,8 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			Matches(key, km.TourNext), Matches(key, km.TourPrev), Matches(key, km.ToggleTour),
 			Matches(key, km.CloseRelated), Matches(key, km.PaneSize),
 			Matches(key, km.PaneLeft), Matches(key, km.PaneDown), Matches(key, km.PaneUp), Matches(key, km.PaneRight),
-			Matches(key, km.ToggleSidebar), Matches(key, km.Help), Matches(key, km.CommandMode):
+			Matches(key, km.ToggleSidebar), Matches(key, km.Help), Matches(key, km.CommandMode),
+			m.tour.on && (Matches(key, km.TourBack) || Matches(key, km.TourForward)):
 			// fall through to the shared cases — the tour keys included, since
 			// the doc pane is where the tour's note is being read. ctrl+h/j/k/l
 			// too: they leave the pane (John 2026-10-02: they did nothing here).
@@ -2152,6 +2156,16 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				overview: overview, openKeys: openKeys,
 			}
 		}
+
+	// Back and forward through the stops entered, in tour mode only: off, the
+	// tour is not what the reviewer is reading. Never while typing: every
+	// text input — the comment editor, a search, a command, the shell
+	// prompt, the help filter — has taken its keys above.
+	case m.tour.on && Matches(key, km.TourBack):
+		return m.walkStops(-1)
+
+	case m.tour.on && Matches(key, km.TourForward):
+		return m.walkStops(+1)
 
 	case Matches(key, km.TourNext):
 		return m.stepTour(+1)
@@ -3087,7 +3101,7 @@ var commandNames = []string{
 	"pause", "unpause", "history",
 	"mark-all-reviewed", "mark-all-unreviewed",
 	"base-artifact-version", "base-ref", "ref", "theme",
-	"relaunch", "stop", "view", "related", "call", "layout",
+	"relaunch", "stop", "view", "related", "call", "back", "forward", "layout",
 }
 
 // matchingCommands returns the command names that start with prefix, in order.
@@ -3195,6 +3209,14 @@ func (m appModel) executeCommand(cmd string) tea.Cmd {
 	if trimmed == "call" || strings.HasPrefix(trimmed, "call ") {
 		arg := strings.TrimSpace(strings.TrimPrefix(trimmed, "call"))
 		return func() tea.Msg { return tourCallMsg{arg: arg} }
+	}
+	// `:back` / `:forward` — walk the stops entered, as a browser walks pages.
+	if trimmed == "back" || trimmed == "forward" {
+		dir := -1
+		if trimmed == "forward" {
+			dir = +1
+		}
+		return func() tea.Msg { return tourWalkMsg{dir: dir} }
 	}
 	// `:layout reset` — put the tour's windows back in their default layout.
 	if trimmed == "layout" || strings.HasPrefix(trimmed, "layout ") {

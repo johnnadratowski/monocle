@@ -69,6 +69,8 @@ type KeyMap struct {
 	// off without losing it.
 	TourNext     []string
 	TourPrev     []string
+	TourBack     []string // back through the stops entered, as a browser goes back
+	TourForward  []string
 	ToggleTour   []string
 	CloseRelated []string // close the tmux pane holding a stop's related files
 
@@ -178,8 +180,14 @@ func DefaultKeyMap() KeyMap {
 
 		// . and , are free, sit together under the right hand, and read as
 		// forward/back the way > and < already do for marks.
-		TourNext:     []string{"."},
-		TourPrev:     []string{","},
+		TourNext: []string{"."},
+		TourPrev: []string{","},
+		// backspace is a browser's back. F18 and F19 are what John's
+		// Hammerspoon sends for cmd+backspace and cmd+shift+backspace from
+		// other windows, and for shift+backspace in Monocle's own, since a
+		// terminal cannot tell that from backspace (2026-10-03).
+		TourBack:     []string{"backspace", "f18"},
+		TourForward:  []string{"f19"},
 		ToggleTour:   []string{"W"}, // "walkthrough"
 		CloseRelated: []string{"X"},
 
@@ -278,6 +286,8 @@ var keyActions = map[string]func(*KeyMap) *[]string{
 	"next_mark":               func(km *KeyMap) *[]string { return &km.NextMark },
 	"tour_next":               func(km *KeyMap) *[]string { return &km.TourNext },
 	"tour_prev":               func(km *KeyMap) *[]string { return &km.TourPrev },
+	"tour_back":               func(km *KeyMap) *[]string { return &km.TourBack },
+	"tour_forward":            func(km *KeyMap) *[]string { return &km.TourForward },
 	"toggle_tour":             func(km *KeyMap) *[]string { return &km.ToggleTour },
 	"close_related":           func(km *KeyMap) *[]string { return &km.CloseRelated },
 	"block_match":             func(km *KeyMap) *[]string { return &km.BlockMatch },

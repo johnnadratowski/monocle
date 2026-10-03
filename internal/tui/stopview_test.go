@@ -278,6 +278,10 @@ func TestCallCommand(t *testing.T) {
 	if m = typeCommand(t, m, "call 1"); m.statusBar.searchInfo != "4.1 calls no other stop" {
 		t.Errorf(":call from a stop with no calls said %q", m.statusBar.searchInfo)
 	}
+	// A call followed is a detour: back returns from it.
+	if m = updateApp(t, m, backspaceKey); m.tour.index != 0 {
+		t.Errorf("back after following a call left index %d, want the stop that called", m.tour.index)
+	}
 }
 
 // TestLayoutKeepsEveryLabelWhole checks, at every width, that each label lands

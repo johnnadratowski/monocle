@@ -42,6 +42,59 @@ type tourState struct {
 	status    *tourStatus
 	statusFor string
 	statusSeq int
+	// history is the stops entered, for back and forward (stopHistory).
+	history stopHistory
+}
+
+// A tour is read in order, but following a call to the stop about the function
+// it calls is a detour, and a detour wants a way back (John 2026-10-03). The
+// stop history is the browser's back and forward over every stop entered — by
+// stepping, `:stop`, a call followed, the agent's goto — kept for the session.
+
+// maxStopHistory bounds the history, as maxJumpList bounds the jump list.
+const maxStopHistory = 100
+
+// stopHistory is the stops entered, oldest first, and which of them is the
+// current one. Entries after it are the ones back came from, reachable again
+// with forward until another stop is entered.
+type stopHistory struct {
+	ids []string
+	at  int // the current stop's index in ids, when ids is not empty
+}
+
+// visit records entering a stop. Re-entering the current one records nothing;
+// any other drops what forward could reach and goes on the end, as a link
+// followed after going back does in a browser.
+func (h *stopHistory) visit(id string) {
+	if len(h.ids) > 0 {
+		if h.ids[h.at] == id {
+			return
+		}
+		h.ids = h.ids[:h.at+1]
+	}
+	h.ids = append(h.ids, id)
+	if len(h.ids) > maxStopHistory {
+		h.ids = h.ids[len(h.ids)-maxStopHistory:]
+	}
+	h.at = len(h.ids) - 1
+}
+
+// walk moves back (dir -1) or forward (+1) to the nearest entry that is still a
+// stop of the tour and not the one the reviewer is on, and returns it; false
+// when there is none that way. A re-sent tour can drop stops the history
+// holds, and dropping one can leave the same stop on both sides of it.
+func (h *stopHistory) walk(dir int, exists func(string) bool) (string, bool) {
+	if len(h.ids) == 0 {
+		return "", false
+	}
+	current := h.ids[h.at]
+	for i := h.at + dir; i >= 0 && i < len(h.ids); i += dir {
+		if id := h.ids[i]; id != current && exists(id) {
+			h.at = i
+			return id, true
+		}
+	}
+	return "", false
 }
 
 // tourSettleDelay is how long the reviewer has to rest on a stop before its
@@ -60,6 +113,10 @@ type tourEventMsg struct {
 
 // tourGotoMsg asks for a stop by id — `:stop 1.2`.
 type tourGotoMsg struct{ id string }
+
+// tourWalkMsg asks to go back (dir -1) or forward (+1) through the stops
+// entered — `:back`, `:forward`.
+type tourWalkMsg struct{ dir int }
 
 // tourNoteKeyPrefix marks the doc pane as showing a tour note rather than an
 // annotation's refs, so closing the tour closes only what it opened.
@@ -136,6 +193,9 @@ func (m appModel) enterStop(i int, how stopEntry) (appModel, tea.Cmd) {
 	stop := m.tour.tour.Stops[i]
 	m.tour.index = i
 	m.tour.on = true
+	// A walk back or forward has already moved the history to this stop, so
+	// for it this records nothing, as re-entering a stop does not.
+	m.tour.history.visit(stop.ID)
 	m.statusBar.tourLabel = m.tourLabel()
 	// A notice left from the last key ("end of tour") belongs to the stop being
 	// left. A keypress clears it anyway; a move the agent made would not.
@@ -235,6 +295,31 @@ func (m appModel) gotoStop(id string, how stopEntry) (appModel, tea.Cmd) {
 		return m, nil
 	}
 	return m.enterStop(i, how)
+}
+
+// walkStops goes back (dir -1) or forward (+1) through the stops entered,
+// saying where it went, or that there was nowhere to go.
+func (m appModel) walkStops(dir int) (appModel, tea.Cmd) {
+	if !m.hasTour() {
+		m.statusBar.searchInfo = "no tour — the agent has not sent one"
+		return m, nil
+	}
+	id, ok := m.tour.history.walk(dir, func(id string) bool { return m.tour.tour.StopIndex(id) >= 0 })
+	if !ok {
+		if dir < 0 {
+			m.statusBar.searchInfo = "no earlier stop"
+		} else {
+			m.statusBar.searchInfo = "no later stop"
+		}
+		return m, nil
+	}
+	m, cmd := m.enterStop(m.tour.tour.StopIndex(id), stopEntry{report: true, effects: true})
+	if dir < 0 {
+		m.statusBar.searchInfo = "back to " + id
+	} else {
+		m.statusBar.searchInfo = "forward to " + id
+	}
+	return m, cmd
 }
 
 // toggleTour switches tour mode. Off hides the tour — note, status, marked

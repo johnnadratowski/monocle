@@ -54,6 +54,9 @@ Structure is read from brackets where a language has them and from indentation o
 | `X` | Close the pane holding a stop's related files |
 | `,` | Previous stop |
 | `.` | Next stop of the agent's tour (resumes it when off) |
+| `backspace` / `f18` | Back to the stop you came from, as a browser goes back — through every stop entered, however you got there. Tour mode only |
+| `f19` | Forward again, until you enter another stop |
+| `:back` / `:forward` | The same as `backspace` / `f19` |
 | `:stop <id>` | Jump to a stop by id, e.g. `:stop 1.2` (no id lists them) |
 | `:view [n]` | Open the stop's nth view (default the first): through `walkthrough_on_stop` when set, else in the media / markdown viewer. Clicking a view's label under the note does the same |
 | `:related [n]` | Bring up the related-files pane — every related file of the stop, as on arriving — with file n (default the first) the active window, unzooming monocle's tmux window if it is zoomed. Clicking a related file's label does the same |

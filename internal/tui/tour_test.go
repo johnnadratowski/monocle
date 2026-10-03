@@ -2,6 +2,8 @@ package tui
 
 import (
 	"fmt"
+	"io"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -548,5 +550,219 @@ func TestHidingTheFileListTakesFocusOffIt(t *testing.T) {
 	m = updateApp(t, m, tourEventMsg{status: core.WalkthroughEventSet, id: "2"})
 	if stop, _ := m.currentStop(); stop.File != "" || !m.sidebarHidden || m.focus == focusSidebar {
 		t.Errorf("on stop %q (file %q): hidden=%v focus=%v, want hidden and focus off it", stop.ID, stop.File, m.sidebarHidden, m.focus)
+	}
+}
+
+func TestStopHistory(t *testing.T) {
+	exists := func(string) bool { return true }
+	var h stopHistory
+	if _, ok := h.walk(-1, exists); ok {
+		t.Fatal("an empty history went back")
+	}
+	for _, id := range []string{"1.1", "1.2", "1.2", "2.1"} {
+		h.visit(id)
+	}
+	if want := []string{"1.1", "1.2", "2.1"}; !reflect.DeepEqual(h.ids, want) {
+		t.Fatalf("history %v, want %v (re-entering the current stop records nothing)", h.ids, want)
+	}
+	walk := func(dir int) string {
+		id, ok := h.walk(dir, exists)
+		if !ok {
+			return "-"
+		}
+		return id
+	}
+	if got := []string{walk(-1), walk(-1), walk(-1), walk(+1), walk(+1), walk(+1)}; !reflect.DeepEqual(got, []string{"1.2", "1.1", "-", "1.2", "2.1", "-"}) {
+		t.Errorf("back, back, back, forward, forward, forward walked %v", got)
+	}
+
+	// A stop entered after going back drops what forward could reach.
+	walk(-1)
+	walk(-1)
+	h.visit("3")
+	if want := []string{"1.1", "3"}; !reflect.DeepEqual(h.ids, want) || walk(+1) != "-" {
+		t.Errorf("history %v after a new stop from 1.1, want %v and nothing forward", h.ids, want)
+	}
+	// Going back to a stop and entering it again is not a new stop.
+	walk(-1)
+	h.visit("1.1")
+	if walk(+1) != "3" {
+		t.Error("re-entering the stop went back to dropped the forward side")
+	}
+
+	// A stop a re-sent tour dropped is stepped over, and so is the stop the
+	// reviewer is on when dropping one left it on both sides.
+	h = stopHistory{}
+	for _, id := range []string{"1.1", "gone", "1.1", "gone", "2"} {
+		h.visit(id)
+	}
+	alive := func(id string) bool { return id != "gone" }
+	if id, ok := h.walk(-1, alive); !ok || id != "1.1" {
+		t.Errorf("back from 2 over a dropped stop gave %q %v, want 1.1", id, ok)
+	}
+	if id, ok := h.walk(-1, alive); ok {
+		t.Errorf("back from 1.1 gave %q: the only earlier stops are dropped or 1.1 itself", id)
+	}
+
+	h = stopHistory{}
+	for i := 0; i < maxStopHistory+20; i++ {
+		h.visit(fmt.Sprint(i))
+	}
+	if len(h.ids) != maxStopHistory || h.ids[h.at] != fmt.Sprint(maxStopHistory+19) {
+		t.Errorf("history of %d holding %q, want the newest %d", len(h.ids), h.ids[h.at], maxStopHistory)
+	}
+}
+
+var (
+	backspaceKey = tea.KeyPressMsg{Code: tea.KeyBackspace}
+	f18Key       = tea.KeyPressMsg{Code: tea.KeyF18}
+	f19Key       = tea.KeyPressMsg{Code: tea.KeyF19}
+)
+
+// Every way of entering a stop is recorded — stepping, :stop, the agent's goto
+// — and backspace and F19 walk them, saying where they went.
+func TestBackAndForwardWalkTheStopsEntered(t *testing.T) {
+	m, e := tourApp(t) // restored on 1.1
+	m = pressKey(t, m, ".")
+	m = typeCommand(t, m, "stop 2")
+	m = updateApp(t, m, tourEventMsg{status: core.WalkthroughEventGoto, id: "1.1"})
+
+	type step struct {
+		key   tea.Msg
+		stop  string
+		where string
+	}
+	for _, s := range []step{
+		{backspaceKey, "2", "back to 2"},
+		{f18Key, "1.2", "back to 1.2"},
+		{backspaceKey, "1.1", "back to 1.1"},
+		{backspaceKey, "1.1", "no earlier stop"},
+		{f19Key, "1.2", "forward to 1.2"},
+		{f19Key, "2", "forward to 2"},
+		{f19Key, "1.1", "forward to 1.1"},
+		{f19Key, "1.1", "no later stop"},
+	} {
+		m = updateApp(t, m, s.key)
+		if stop, _ := m.currentStop(); stop.ID != s.stop || m.statusBar.searchInfo != s.where {
+			t.Fatalf("%s: on %s saying %q, want %s saying %q", s.key, stop.ID, m.statusBar.searchInfo, s.stop, s.where)
+		}
+	}
+	// A walk is a move like any other: the stop shows and the engine hears of it.
+	m = updateApp(t, updateApp(t, m, backspaceKey), backspaceKey) // 1.1 → 2 → 1.2
+	if m.diffView.path != "b.go" || cursorLine(m) != 30 {
+		t.Errorf("back on 1.2 shows %s:%d, want its b.go:30", m.diffView.path, cursorLine(m))
+	}
+	if got := e.reports(); got[len(got)-1] != "1.2" {
+		t.Errorf("reported %v, want the walk back to 1.2 last", got)
+	}
+
+	// The commands do what the keys do.
+	m = typeCommand(t, m, "back")
+	if stop, _ := m.currentStop(); stop.ID != "1.1" || m.statusBar.searchInfo != "back to 1.1" {
+		t.Errorf(":back left %s saying %q", stop.ID, m.statusBar.searchInfo)
+	}
+	m = typeCommand(t, m, "forward")
+	if stop, _ := m.currentStop(); stop.ID != "1.2" || m.statusBar.searchInfo != "forward to 1.2" {
+		t.Errorf(":forward left %s saying %q", stop.ID, m.statusBar.searchInfo)
+	}
+}
+
+// The keys belong to tour mode, and to no text input: in each, backspace still
+// deletes and F18/F19 do nothing to the tour.
+func TestBackKeysOnlyInTourModeAndNeverWhileTyping(t *testing.T) {
+	on := func(t *testing.T) appModel {
+		m, _ := tourApp(t)
+		return pressKey(t, pressKey(t, m, "."), ".") // 1.1 → 1.2 → 2
+	}
+	stopID := func(m appModel) string { s, _ := m.currentStop(); return s.ID }
+
+	t.Run("the note pane passes them through", func(t *testing.T) {
+		m := on(t)
+		m.setFocus(focusDoc)
+		if m = updateApp(t, m, backspaceKey); stopID(m) != "1.2" {
+			t.Errorf("backspace from the note pane left the tour on %s", stopID(m))
+		}
+	})
+
+	t.Run("tour off", func(t *testing.T) {
+		m := pressKey(t, on(t), "W")
+		for _, k := range []tea.Msg{backspaceKey, f18Key, f19Key} {
+			if m = updateApp(t, m, k); m.tour.on || stopID(m) != "2" {
+				t.Errorf("%s with the tour off: on=%v at %s", k, m.tour.on, stopID(m))
+			}
+		}
+	})
+
+	inputs := []struct {
+		name  string
+		opens string // the key that starts typing
+		typed func(appModel) string
+	}{
+		{"command", ":", func(m appModel) string { return m.commandBuffer }},
+		{"search", "/", func(m appModel) string { return m.searchBuffer }},
+		{"shell", "!", func(m appModel) string { return m.shellBuffer }},
+		{"comment", "c", func(m appModel) string { return m.commentEditor.body }},
+	}
+	for _, in := range inputs {
+		t.Run(in.name, func(t *testing.T) {
+			m := pressKey(t, on(t), in.opens)
+			m = pressKey(t, pressKey(t, m, "x"), "y")
+			before := in.typed(m)
+			for _, k := range []tea.Msg{f18Key, f19Key} {
+				m = updateApp(t, m, k)
+			}
+			m = updateApp(t, m, backspaceKey)
+			if stopID(m) != "2" {
+				t.Errorf("a key typed into the %s moved the tour to %s", in.name, stopID(m))
+			}
+			if after := in.typed(m); len(after) != len(before)-1 {
+				t.Errorf("backspace in the %s: %q → %q, want one character deleted", in.name, before, after)
+			}
+		})
+	}
+}
+
+// keyRecorder is a Bubble Tea model that keeps the keys it is sent and quits
+// once it has want of them.
+type keyRecorder struct {
+	want int
+	keys []string
+}
+
+func (r *keyRecorder) Init() tea.Cmd { return nil }
+func (r *keyRecorder) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if k, ok := msg.(tea.KeyPressMsg); ok {
+		r.keys = append(r.keys, k.String())
+		if len(r.keys) == r.want {
+			return r, tea.Quit
+		}
+	}
+	return r, nil
+}
+func (r *keyRecorder) View() tea.View { return tea.NewView("") }
+
+// F18 and F19 come from John's Hammerspoon as the vt220 sequences ESC[32~ and
+// ESC[33~. Fed through Bubble Tea's own input reader, they must arrive as the
+// keys the tour binds to back and forward.
+func TestF18AndF19BytesAreTheTourKeys(t *testing.T) {
+	r, w := io.Pipe()
+	defer w.Close()
+	rec := &keyRecorder{want: 2}
+	p := tea.NewProgram(rec, tea.WithInput(r), tea.WithOutput(io.Discard), tea.WithoutSignals(), tea.WithoutRenderer())
+	done := make(chan error, 1)
+	go func() { _, err := p.Run(); done <- err }()
+	go func() { _, _ = w.Write([]byte("\x1b[32~\x1b[33~")) }()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		p.Kill()
+		t.Fatalf("the program never saw two keys; it saw %v", rec.keys)
+	}
+	km := DefaultKeyMap()
+	if len(rec.keys) != 2 || !Matches(rec.keys[0], km.TourBack) || !Matches(rec.keys[1], km.TourForward) {
+		t.Errorf("ESC[32~ ESC[33~ arrived as %q, want the tour's back then forward keys", rec.keys)
 	}
 }

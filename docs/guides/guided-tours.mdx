@@ -17,12 +17,15 @@ When the agent sends a tour, monocle enters **tour mode** on its first stop and 
 |-----|--------|
 | `.` | Next stop |
 | `,` | Previous stop |
+| `backspace` | Back to the stop you came from — see [Calls](#calls). |
+| `f19` | Forward again. |
 | `W` | Tour mode on/off. Off hides the note, the marks and the status; your stop is kept, and `.`/`,` or `W` resume there. |
 | `X` | Close the related-files pane. |
 | `:stop <id>` | Jump to a stop by id, e.g. `:stop 1.2`. With no id it lists the stops. |
 | `:view [n]` | Open the stop's nth view (default the first): through your on-stop command when you have one (see [below](#screenshots-recordings-and-layouts)), else in your [`media_viewer`](/configuration/config-file) — or `markdown_viewer` for a markdown view. |
 | `:related [n]` | Bring up the stop's related files with the nth (default the first) active — see [Related files](#related-files). |
 | `:call [n]` | Go to the stop the stop's nth call (default the first) leads to — see [Calls](#calls). |
+| `:back` / `:forward` | The same as `backspace` / `f19`. |
 | `:layout [reset]` | Say whether the tour's windows are in a saved layout; `reset` puts back the default — see [Which views are showing](#which-views-are-showing). |
 
 The ends clamp: `.` on the last stop tells you it is the end rather than wrapping to the first. A stop with no file — one that exists to show a recording, say — shows its note and leaves the diff where it is. `ctrl+o` returns to wherever a stop jumped you from.
@@ -32,6 +35,8 @@ The tour belongs to the review. It survives a restart (you come back on the same
 ## Calls
 
 A stop's code often calls the function a later stop is about: 2.1 is the withdrawal route, and it calls `requestWalletWithdrawal`, which is what 2.2 explains. The agent says so with the stop's `calls`, and each shows in a **Calls:** row, the first under the note: `[1] → 2.2 requestWalletWithdrawal`, `[2] 4.1 dispatchHold`. The call that leads to the **next** stop reads `→` and is coloured apart from the rest. Clicking one, or `:call N`, enters that stop as `:stop` would.
+
+Following a call is a detour, so the tour keeps a **history** of the stops you enter — by `.`/`,`, `:stop`, a call, or the agent moving you — and walks it the way a browser walks pages. `backspace` (or `f18`) goes back to the stop you came from, `f19` goes forward again, and entering another stop after going back drops the stops forward would have reached. The status bar says where you went: `back to 2.1`, or `no earlier stop`. These keys work in tour mode only, and never while you are typing a comment, a search or a command. The history lasts as long as monocle runs.
 
 ## Related files
 

@@ -305,6 +305,8 @@ func (m helpModel) buildContent() string {
 		secTour: {
 			{Label(km.TourNext), "Next stop of the agent's tour (resumes it when off)"},
 			{Label(km.TourPrev), "Previous stop"},
+			{Label(km.TourBack), "Back to the stop you came from, as a browser goes back (also :back)"},
+			{Label(km.TourForward), "Forward again (also :forward)"},
 			{Label(km.ToggleTour), "Tour mode on/off (hides the note and marks, keeps your stop)"},
 			{Label(km.CloseRelated), "Close the pane holding a stop's related files"},
 			{":stop <id>", "Jump to a stop by id, e.g. :stop 1.2 (no id lists them)"},

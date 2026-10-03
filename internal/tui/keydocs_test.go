@@ -149,8 +149,9 @@ func TestDocsMentionEveryDefaultKey(t *testing.T) {
 
 	// The register/unregister wizard is a separate TUI. Its keys are documented
 	// on the reference page but deliberately left out of README's table, which
-	// covers the review TUI.
-	wizardOnly := map[string]bool{"backspace": true}
+	// covers the review TUI. backspace was one until it became the tour's back
+	// key (2026-10-03).
+	wizardOnly := map[string]bool{}
 
 	for _, rel := range []string{"README.md", "docs/reference/keybindings.mdx"} {
 		t.Run(rel, func(t *testing.T) {
