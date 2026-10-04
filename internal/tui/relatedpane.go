@@ -181,11 +181,11 @@ type relatedPanePlan struct {
 	selectPane bool
 }
 
-// stageZoomedOption is the window option a setup that hides a window's splits
-// by zooming Monocle's pane (a "hide" key) sets while it is hidden. It is
-// cleared when Monocle unzooms, so that setup does not go on thinking the
-// window is hidden. The option's name is the contract with such a setup.
-const stageZoomedOption = "@stage_zoomed"
+// zoomedOption is Monocle's window option for a hidden window: a setup that
+// hides a window's splits by zooming Monocle's pane sets it while hidden, and
+// Monocle clears it when it unzooms, so that setup does not go on thinking the
+// window is hidden.
+const zoomedOption = "@monocle_zoomed"
 
 // unzoomArgs are the tmux commands that unzoom the window holding Monocle's
 // pane, given that window's #{window_zoomed_flag}: none when it is not zoomed.
@@ -196,7 +196,7 @@ func unzoomArgs(owner, zoomedFlag string) [][]string {
 	}
 	return [][]string{
 		{"resize-pane", "-Z", "-t", owner},
-		{"set-option", "-w", "-u", "-t", owner, stageZoomedOption},
+		{"set-option", "-w", "-u", "-t", owner, zoomedOption},
 	}
 }
 

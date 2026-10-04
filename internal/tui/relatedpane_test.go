@@ -233,7 +233,7 @@ func TestSettleRunsOnlyForTheLatestStop(t *testing.T) {
 func TestUnzoomArgs(t *testing.T) {
 	want := [][]string{
 		{"resize-pane", "-Z", "-t", "%3"},
-		{"set-option", "-w", "-u", "-t", "%3", "@stage_zoomed"},
+		{"set-option", "-w", "-u", "-t", "%3", "@monocle_zoomed"},
 	}
 	if got := unzoomArgs("%3", "1\n"); !reflect.DeepEqual(got, want) {
 		t.Errorf("zoomed: got %q, want %q", got, want)
