@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -26,7 +27,11 @@ type Engine struct {
 	// MarkReviewedOnSubmit) don't race with SaveConfig swapping a new
 	// value in. Always go through cfgPtr / setCfgPtr — never embed
 	// types.Config directly.
-	cfg       atomic.Pointer[types.Config]
+	cfg atomic.Pointer[types.Config]
+	// cfgStamp is what the config files looked like when cfg was last read
+	// from them or written to them; cfgMu guards it and the re-read.
+	cfgMu     sync.Mutex
+	cfgStamp  []fileStamp
 	database  *db.DB
 	git       GitAPI
 	server    *SocketServer
@@ -103,6 +108,7 @@ func NewEngine(cfg *types.Config, database *db.DB, repoRoot string, nonGitMode b
 		subscribers:    make(map[EventKind]map[int]EventCallback),
 	}
 	e.cfg.Store(cfg)
+	e.cfgStamp = stampConfigFiles()
 
 	e.formatter = NewReviewFormatter(func(path string, start, end int) string {
 		content, err := git.FileContent("", path)
@@ -439,7 +445,7 @@ func (e *Engine) getFileDiff(path string, full bool) (*types.DiffResult, error) 
 	}
 
 	ctxLines := 0
-	if cfg := e.cfg.Load(); cfg != nil {
+	if cfg := e.config(); cfg != nil {
 		ctxLines = cfg.ContextLines
 	}
 	if full {
@@ -2220,7 +2226,7 @@ func (e *Engine) deleteSnapshots() {
 // markReviewedOnSubmit marks files as reviewed based on the config setting.
 func (e *Engine) markReviewedOnSubmit(session *types.ReviewSession) {
 	var mode string
-	if cfg := e.cfg.Load(); cfg != nil {
+	if cfg := e.config(); cfg != nil {
 		mode = cfg.MarkReviewedOnSubmit
 	}
 	if mode == "" {
@@ -2923,12 +2929,45 @@ func (e *Engine) emit(event EventKind, payload EventPayload) {
 // hold the returned pointer indefinitely without racing against SaveConfig
 // because the engine swaps in a fresh pointer rather than mutating in place.
 func (e *Engine) GetConfig() *types.Config {
+	return e.config()
+}
+
+// config is the current configuration, read again first when a config file
+// has changed since it was last read or written. The engine outlives the TUIs
+// that attach to it, so a setting added to config.json while it runs must not
+// wait for it to restart. A stat of each file per call is cheap; a file that
+// does not parse — caught mid-write, say — leaves the last good config in
+// place and is tried again on the next call.
+func (e *Engine) config() *types.Config {
+	e.cfgMu.Lock()
+	defer e.cfgMu.Unlock()
+	now := stampConfigFiles()
+	switch {
+	case e.cfgStamp == nil:
+		// An engine built without NewEngine has no stamp: the config it was
+		// given stands for the files as they are now.
+		e.cfgStamp = now
+	case !slices.Equal(now, e.cfgStamp):
+		if cfg, err := readConfig(); err == nil {
+			e.cfg.Store(cfg)
+			e.cfgStamp = now
+		}
+	}
 	return e.cfg.Load()
+}
+
+// storeConfig makes cfg current after the engine itself wrote it to disk, so
+// the write is not mistaken for an outside change and read back.
+func (e *Engine) storeConfig(cfg *types.Config) {
+	e.cfgMu.Lock()
+	defer e.cfgMu.Unlock()
+	e.cfg.Store(cfg)
+	e.cfgStamp = stampConfigFiles()
 }
 
 // IsReviewTrackingEnabled returns true when review state tracking is active.
 func (e *Engine) IsReviewTrackingEnabled() bool {
-	cfg := e.cfg.Load()
+	cfg := e.config()
 	return cfg != nil && cfg.ReviewTracking
 }
 
@@ -2942,7 +2981,11 @@ func (e *Engine) SaveConfig() error {
 	if cfg == nil {
 		return errors.New("engine: SaveConfig called with no config loaded")
 	}
-	return SaveConfig(cfg)
+	if err := SaveConfig(cfg); err != nil {
+		return err
+	}
+	e.storeConfig(cfg)
+	return nil
 }
 
 func (e *Engine) Shutdown() {

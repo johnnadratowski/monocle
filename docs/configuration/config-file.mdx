@@ -6,11 +6,16 @@ description: "Customize monocle's layout, diff style, and behavior with a JSON c
 Monocle loads settings from JSON config files at startup. You can maintain a global config for personal preferences and a project config for repository-specific settings.
 
 <Note>
-  Config is read once when the background engine (`monocle serve`) starts, not
-  each time the TUI launches. Because the engine is long-lived and shared across
-  TUI sessions, editing a config file and relaunching `monocle` alone will not
-  pick up the change. To apply config changes, run `monocle stop` and then start
-  `monocle` again — this restarts the engine and reloads the config.
+  The background engine (`monocle serve`) reads the config files again whenever
+  they change, and a running `monocle` picks the change up within a second.
+  Settings monocle reads when it uses them — the `walkthrough_*` commands,
+  `related_editor_args`, the editor and viewers, `context_lines`,
+  `mark_reviewed_on_submit` — apply straight away. Settings applied when the TUI
+  starts — the theme, keybindings, layout, diff and sidebar style and other
+  display settings — apply the next time `monocle` starts. `ignore_patterns` and
+  `idle_timeout` apply the next time the engine starts: run `monocle stop`, then
+  `monocle`. A file that does not parse, such as one caught half-written, is
+  skipped and the last good config kept.
 </Note>
 
 ## File locations

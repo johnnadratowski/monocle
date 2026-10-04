@@ -59,17 +59,29 @@ type EngineClient struct {
 	noTimeoutMu    sync.Mutex
 	noTimeoutConns map[net.Conn]struct{}
 
-	// cfg is the cached config snapshot. Cache-on-first-call is the only
-	// way to preserve the documented "GetConfig() -> mutate -> SaveConfig()"
-	// round-trip: refreshing on every GetConfig would let an interleaving
-	// fetch overwrite the pointer the caller is still mutating, silently
-	// dropping the user's edits at save time. The trade-off is that
-	// changes made by another client (a second TUI, monocle register) are
-	// not visible until the EngineClient is reconstructed — a smaller bug
-	// than losing live mutations.
-	cfgMu sync.Mutex
-	cfg   *types.Config
+	// cfg is the cached config snapshot, the pointer GetConfig hands out.
+	// The documented "GetConfig() -> mutate -> SaveConfig()" round-trip
+	// needs that pointer to stay put between the two calls, so a newer
+	// config is never swapped in underneath it: it is fetched in the
+	// background (cfgNext) and only handed out by the next GetConfig. That
+	// keeps a setting added to config.json while the TUI runs from staying
+	// invisible — the engine re-reads the file when it changes — without a
+	// fetch ever dropping an edit in progress.
+	//
+	// cfgAt is when cfg was last fetched or saved; cfgFetching marks a
+	// background fetch in flight; cfgGen counts saves, so a fetch that began
+	// before one, and so may predate it, is dropped.
+	cfgMu       sync.Mutex
+	cfg         *types.Config
+	cfgNext     *types.Config
+	cfgAt       time.Time
+	cfgFetching bool
+	cfgGen      int
 }
+
+// configRefreshInterval is how long the client trusts its config before
+// asking the engine again, in the background.
+const configRefreshInterval = time.Second
 
 // clientConn bundles all per-connection state. By scoping closed/once to
 // the bundle and letting readLoop hold its OWN bundle pointer, a stale
@@ -1540,20 +1552,40 @@ func (c *EngineClient) ServerVersion() string {
 
 // --- EngineAPI: config ---
 
-// GetConfig returns a cached pointer. The caller's documented flow is
-// GetConfig() -> mutate -> SaveConfig(), so we cache the first fetch and
-// return the same pointer on subsequent calls; refreshing would let an
-// interleaving GetConfig overwrite the in-progress mutation pointer and
-// silently drop user edits. The trade-off: changes made by a different
-// client (a second TUI, `monocle register`) aren't visible until this
-// EngineClient is reconstructed.
+// GetConfig returns the cached config pointer, first swapping in a newer one
+// a background fetch brought back. When the cache is older than
+// configRefreshInterval it starts that fetch; the swap waits for the next
+// call, so the pointer a caller is mutating never changes under it.
 func (c *EngineClient) GetConfig() *types.Config {
 	c.cfgMu.Lock()
-	cached := c.cfg
-	c.cfgMu.Unlock()
-	if cached != nil {
+	if c.cfgNext != nil {
+		c.cfg, c.cfgNext = c.cfgNext, nil
+	}
+	if cached := c.cfg; cached != nil {
+		if !c.cfgFetching && time.Since(c.cfgAt) >= configRefreshInterval {
+			c.cfgFetching = true
+			go c.refreshConfig(c.cfgGen)
+		}
+		c.cfgMu.Unlock()
 		return cached
 	}
+	c.cfgMu.Unlock()
+
+	fetched := c.fetchConfig()
+	if fetched == nil {
+		return nil
+	}
+	c.cfgMu.Lock()
+	defer c.cfgMu.Unlock()
+	// Re-check in case of race; first writer wins.
+	if c.cfg == nil {
+		c.cfg, c.cfgAt = fetched, time.Now()
+	}
+	return c.cfg
+}
+
+// fetchConfig asks the engine for its config, nil when it cannot.
+func (c *EngineClient) fetchConfig() *types.Config {
 	resp, err := c.request(&protocol.GetConfigMsg{Type: protocol.TypeGetConfig})
 	if err != nil {
 		return nil
@@ -1562,15 +1594,21 @@ func (c *EngineClient) GetConfig() *types.Config {
 	if !ok {
 		return nil
 	}
+	return r.Config
+}
+
+// refreshConfig fetches the config in the background for the next GetConfig
+// to hand out — unless a save happened meanwhile (gen moved on), when what it
+// fetched may predate the save.
+func (c *EngineClient) refreshConfig(gen int) {
+	fetched := c.fetchConfig()
 	c.cfgMu.Lock()
-	// Re-check in case of race; first writer wins so the caller's
-	// pointer identity is stable.
-	if c.cfg == nil {
-		c.cfg = r.Config
+	defer c.cfgMu.Unlock()
+	c.cfgFetching = false
+	c.cfgAt = time.Now() // a failed fetch waits out another interval too
+	if fetched != nil && gen == c.cfgGen {
+		c.cfgNext = fetched
 	}
-	cfg := c.cfg
-	c.cfgMu.Unlock()
-	return cfg
 }
 
 // SaveConfig persists the cached config snapshot. Deep-copies via a JSON
@@ -1603,6 +1641,11 @@ func (c *EngineClient) SaveConfig() error {
 	if r.Error != "" {
 		return errors.New(r.Error)
 	}
+	// What was just saved is the newest config there is.
+	c.cfgMu.Lock()
+	c.cfgGen++
+	c.cfgNext, c.cfgAt = nil, time.Now()
+	c.cfgMu.Unlock()
 	return nil
 }
 

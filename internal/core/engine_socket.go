@@ -466,7 +466,7 @@ func (e *Engine) handleSaveConfig(msg *protocol.SaveConfigMsg) *protocol.SaveCon
 			Error: err.Error(),
 		}
 	}
-	e.cfg.Store(&cfgCopy)
+	e.storeConfig(&cfgCopy)
 	return &protocol.SaveConfigResponse{
 		Type: protocol.TypeSaveConfigResponse,
 	}

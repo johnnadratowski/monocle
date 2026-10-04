@@ -13,19 +13,55 @@ import (
 // It checks ~/.config/monocle/config.json first, then .monocle/config.json in cwd.
 func LoadConfig() (*types.Config, error) {
 	cfg := DefaultConfig()
-
-	// Global config
-	globalPath := configPath()
-	if data, err := os.ReadFile(globalPath); err == nil {
-		json.Unmarshal(data, cfg) //nolint:errcheck
+	for _, path := range configFiles() {
+		if data, err := os.ReadFile(path); err == nil {
+			json.Unmarshal(data, cfg) //nolint:errcheck
+		}
 	}
-
-	// Project-level config
-	if data, err := os.ReadFile(".monocle/config.json"); err == nil {
-		json.Unmarshal(data, cfg) //nolint:errcheck
-	}
-
 	return cfg, nil
+}
+
+// configFiles are the files a config is read from, later ones overriding
+// earlier: the global config, then the project's.
+func configFiles() []string {
+	return []string{configPath(), filepath.Join(".monocle", "config.json")}
+}
+
+// readConfig builds the config from configFiles as LoadConfig does, but fails
+// on a file that does not parse rather than skipping it: re-reading a file
+// caught half-written must not swap every setting back to its default.
+func readConfig() (*types.Config, error) {
+	cfg := DefaultConfig()
+	for _, path := range configFiles() {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		if err := json.Unmarshal(data, cfg); err != nil {
+			return nil, fmt.Errorf("parse %s: %w", path, err)
+		}
+	}
+	return cfg, nil
+}
+
+// fileStamp is enough of a file's state to tell it changed: whether it is
+// there, its size and its modification time.
+type fileStamp struct {
+	exists bool
+	size   int64
+	mod    int64 // UnixNano
+}
+
+// stampConfigFiles stamps each of configFiles, in order.
+func stampConfigFiles() []fileStamp {
+	files := configFiles()
+	out := make([]fileStamp, len(files))
+	for i, path := range files {
+		if info, err := os.Stat(path); err == nil {
+			out[i] = fileStamp{exists: true, size: info.Size(), mod: info.ModTime().UnixNano()}
+		}
+	}
+	return out
 }
 
 // DefaultConfig returns sensible defaults.

@@ -254,3 +254,69 @@ func TestEngineClient_SurvivesForcedRedial(t *testing.T) {
 		}
 	}
 }
+
+// A setting added to config.json while the TUI runs reaches it: the engine
+// re-reads the changed file, and the client asks again in the background.
+func TestEngineClient_SeesAChangedConfigFile(t *testing.T) {
+	_, socketPath := setupEngine(t)
+	ec, err := NewEngineClient(socketPath)
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+	defer ec.Close()
+	if got := ec.GetConfig().WalkthroughResolve; got != "" {
+		t.Fatalf("walkthrough_resolve %q before it is set", got)
+	}
+	path := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "monocle", "config.json")
+	if !strings.HasPrefix(path, os.TempDir()) {
+		t.Fatalf("config dir %q is not a temp dir", path)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`{"walkthrough_resolve": "resolve-refs"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Remove(path) })
+	deadline := time.Now().Add(5 * time.Second)
+	for ec.GetConfig().WalkthroughResolve != "resolve-refs" {
+		if time.Now().After(deadline) {
+			t.Fatal("the client never saw walkthrough_resolve set in config.json")
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// A config fetched in the background is never swapped in under an edit in
+// progress, and one fetched before a save is never handed out after it.
+func TestEngineClient_BackgroundFetchKeepsEdits(t *testing.T) {
+	engine, socketPath := setupEngine(t)
+	ec, err := NewEngineClient(socketPath)
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+	defer ec.Close()
+
+	cfg := ec.GetConfig()
+	cfg.Theme = "light"
+	ec.refreshConfig(ec.cfgGen) // a fetch lands between the edit and the save
+	if err := ec.SaveConfig(); err != nil {
+		t.Fatal(err)
+	}
+	if got := engine.GetConfig().Theme; got != "light" {
+		t.Errorf("the engine has theme %q: the edit was dropped", got)
+	}
+	if got := ec.GetConfig(); got != cfg || got.Theme != "light" {
+		t.Errorf("after the save the client hands out theme %q: the fetch from before the save replaced it", got.Theme)
+	}
+
+	gen := ec.cfgGen
+	cfg.Theme = "dark"
+	if err := ec.SaveConfig(); err != nil {
+		t.Fatal(err)
+	}
+	ec.refreshConfig(gen) // began before that save
+	if got := ec.GetConfig(); got != cfg {
+		t.Error("a fetch begun before a save was handed out after it")
+	}
+}

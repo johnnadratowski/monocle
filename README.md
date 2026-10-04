@@ -447,7 +447,7 @@ Monocle loads settings from JSON config files:
 1. **Global:** `~/.config/monocle/config.json` (or `$XDG_CONFIG_HOME/monocle/config.json`)
 2. **Project:** `.monocle/config.json` in the working directory (overrides global)
 
-> **Note:** Config is read once when the background engine (`monocle serve`) starts, not each time the TUI launches. To apply config changes, run `monocle stop` and then start `monocle` again to restart the engine and reload the config.
+> **Note:** The background engine (`monocle serve`) reads the config files again whenever they change, and a running `monocle` picks the change up within a second. Settings read when they are used (the `walkthrough_*` commands, `related_editor_args`, the editor and viewers, `context_lines`, `mark_reviewed_on_submit`) apply straight away; those applied when the TUI starts (theme, keybindings, layout, display settings) apply the next time `monocle` starts; `ignore_patterns` and `idle_timeout` apply after `monocle stop` restarts the engine. A file that does not parse is skipped and the last good config kept.
 
 ```json
 {
