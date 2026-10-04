@@ -196,6 +196,11 @@ func TestThePanesFilesAreRecorded(t *testing.T) {
 	if m.tour.pane != "%5" || !reflect.DeepEqual(m.tour.paneFiles, files) {
 		t.Errorf("pane %q files %+v, want %%5 holding %+v", m.tour.pane, m.tour.paneFiles, files)
 	}
+	// Files added to the live editor go on the end of what it holds.
+	more := relatedFile{"/repo/r.sql", 3}
+	if m = m.handleRelatedPane(relatedPaneMsg{pane: "%5", files: []relatedFile{more}, added: true}); !reflect.DeepEqual(m.tour.paneFiles, append(files, more)) {
+		t.Errorf("after an add the pane holds %+v, want %+v and r.sql", m.tour.paneFiles, files)
+	}
 	if m = m.handleRelatedPane(relatedPaneMsg{closed: true}); m.tour.pane != "" || m.tour.paneFiles != nil {
 		t.Errorf("after X: pane %q files %+v, want both gone", m.tour.pane, m.tour.paneFiles)
 	}

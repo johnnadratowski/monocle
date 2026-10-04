@@ -132,6 +132,9 @@ func (m appModel) handleResolveDone(msg resolveDoneMsg) (appModel, tea.Cmd) {
 		m.statusBar.searchInfo = "nothing to open on these lines"
 		return m, nil
 	}
+	if m.relatedAddCommand() != "" {
+		return m.addResolved(msg.files)
+	}
 	have := m.tour.paneFiles
 	if stop, ok := m.currentStop(); len(have) == 0 && ok && m.tour.on {
 		have = absRelated(m.repoRoot, relatedFilesFor(stop))
@@ -160,4 +163,30 @@ func (m appModel) handleResolveDone(msg resolveDoneMsg) (appModel, tea.Cmd) {
 		}
 	}
 	return m, m.showRelatedFiles(files, active, true, true)
+}
+
+// addResolved opens what walkthrough_resolve found through related_editor_add:
+// every file, in order, added to the editor in the live pane, which knows what
+// is open in it. Should the pane not be alive, it is spawned with the current
+// stop's related files and the files found — not with what it last held,
+// which the reviewer may have closed — at most maxRelatedFiles of them.
+func (m appModel) addResolved(found []relatedFile) (appModel, tea.Cmd) {
+	var base []relatedFile
+	if stop, ok := m.currentStop(); ok && m.tour.on {
+		base = absRelated(m.repoRoot, relatedFilesFor(stop))
+	}
+	spawn, _, _ := mergeRelated(base, found, maxRelatedFiles)
+	active := 1
+	for i, f := range spawn {
+		if f.path == found[0].path {
+			active = i + 1
+			break
+		}
+	}
+	names := make([]string, len(found))
+	for i, f := range found {
+		names[i] = filepath.Base(f.path)
+	}
+	m.statusBar.searchInfo = fmt.Sprintf("opened %d: %s", len(found), strings.Join(names, ", "))
+	return m, m.addOrShowRelated(found, spawn, active, true, true)
 }

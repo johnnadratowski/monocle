@@ -72,6 +72,14 @@ type Config struct {
 	// left out, with a status-bar note, when they would take +cmd, -c and -S
 	// past vim's limit of ten.
 	RelatedEditorArgs []string `json:"related_editor_args"`
+	// RelatedEditorAdd is a shell command that adds one file to the editor
+	// already running in the related-files pane, so files the reviewer closed
+	// there stay closed. With it set and the pane alive, a file opened from
+	// Monocle (ctrl+], `:related N`, a click on a related file) is added by
+	// running it once per file, instead of respawning the pane. {file} is the
+	// file's absolute path, {line} its line (0 for none), {owner} Monocle's
+	// tmux pane id; each is substituted shell-quoted. Empty respawns.
+	RelatedEditorAdd string `json:"related_editor_add"`
 	// EditorMode controls how Ctrl+g / Ctrl+o open a file: "terminal" (take over
 	// Monocle's screen, the default), "tmux_vertical" (side-by-side split),
 	// "tmux_horizontal" (stacked split), or "tmux_window" (new tmux window/tab).

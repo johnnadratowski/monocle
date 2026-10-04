@@ -3,11 +3,14 @@ package tui
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -244,7 +247,8 @@ func ownedRelatedPane(listing, owner string) string {
 // relatedPaneMsg reports what happened to the related-files pane.
 type relatedPaneMsg struct {
 	pane   string        // the pane now holding the related files ("" after a close)
-	files  []relatedFile // the files it now holds
+	files  []relatedFile // the files it now holds — or, with added, the files added to it
+	added  bool          // files went to the live pane through related_editor_add
 	closed bool          // this was X
 	none   bool          // X found no pane to close
 	err    error
@@ -280,6 +284,17 @@ func findRelatedPane(tracked, owner string) string {
 	return ownedRelatedPane(listing, owner)
 }
 
+// revealOwner unzooms the window holding Monocle's pane, if it is zoomed, so
+// the related pane beside it can be seen. Best effort: if the window stays
+// zoomed the pane still updates, it is just not in sight.
+func revealOwner(owner string) {
+	if flag, err := tmux("display-message", "-p", "-t", owner, "#{window_zoomed_flag}"); err == nil {
+		for _, args := range unzoomArgs(owner, flag) {
+			_, _ = tmux(args...)
+		}
+	}
+}
+
 // showRelated is showRelatedCmd, as a variable so a test can see the plan
 // without a tmux server.
 var showRelated = showRelatedCmd
@@ -290,13 +305,7 @@ func showRelatedCmd(tracked string, plan relatedPanePlan) tea.Cmd {
 		relatedPaneMu.Lock()
 		defer relatedPaneMu.Unlock()
 		if plan.reveal {
-			// Best effort: if the window stays zoomed the pane still updates,
-			// it is just not in sight.
-			if flag, err := tmux("display-message", "-p", "-t", plan.owner, "#{window_zoomed_flag}"); err == nil {
-				for _, args := range unzoomArgs(plan.owner, flag) {
-					_, _ = tmux(args...)
-				}
-			}
+			revealOwner(plan.owner)
 		}
 		plan.existing = findRelatedPane(tracked, plan.owner)
 		out, err := tmux(relatedPaneArgs(plan)...)
@@ -425,7 +434,81 @@ func (m appModel) openStopRelated(arg string) (appModel, tea.Cmd) {
 		m.statusBar.searchInfo = fmt.Sprintf("%s has related files 1-%d", stop.ID, len(files))
 		return m, nil
 	}
-	return m, m.showRelatedFiles(files, n, true, false)
+	return m, m.addOrShowRelated(files[n-1:n], files, n, true, false)
+}
+
+// A file the reviewer closed in the related pane's editor should stay closed
+// until they open it again or reset the layout. Respawning the pane with every
+// file it was given brings closed ones back, so when related_editor_add is set
+// and the pane is alive, files are added to the editor already there, one run
+// of the command per file, and only the editor knows — or needs to know — what
+// is open in it.
+
+// relatedAddTimeout bounds one run of related_editor_add.
+const relatedAddTimeout = 10 * time.Second
+
+// relatedAddCommand is the configured related_editor_add, or "" for none.
+func (m appModel) relatedAddCommand() string {
+	if m.engine == nil {
+		return ""
+	}
+	if cfg := m.engine.GetConfig(); cfg != nil {
+		return strings.TrimSpace(cfg.RelatedEditorAdd)
+	}
+	return ""
+}
+
+// expandAddCommand fills related_editor_add's placeholders for one file:
+// {file} its absolute path, {line} its line (0 for none), {owner} Monocle's
+// own tmux pane id. Values go in shell-quoted, so the template writes them
+// bare.
+func expandAddCommand(template string, f relatedFile, owner string) string {
+	return strings.NewReplacer(
+		"{file}", shellQuote(f.path),
+		"{line}", strconv.Itoa(f.line),
+		"{owner}", shellQuote(owner),
+	).Replace(template)
+}
+
+// findPane is findRelatedPane, as a variable so a test can stand in for tmux.
+var findPane = findRelatedPane
+
+// addOrShowRelated adds files to the live related pane through
+// related_editor_add, in order, without deduplicating against anything
+// recorded: the command brings a file already open forward rather than
+// splitting it again. With no add command, or no live pane, it spawns the
+// pane with spawn, file active the one left active, as showRelatedFiles does.
+func (m appModel) addOrShowRelated(add, spawn []relatedFile, active int, reveal, takeFocus bool) tea.Cmd {
+	template := m.relatedAddCommand()
+	if template == "" || !inTmux() {
+		return m.showRelatedFiles(spawn, active, reveal, takeFocus)
+	}
+	add = absRelated(m.repoRoot, add)
+	owner, tracked, root := os.Getenv("TMUX_PANE"), m.tour.pane, m.repoRoot
+	return func() tea.Msg {
+		relatedPaneMu.Lock()
+		pane := findPane(tracked, owner)
+		if pane == "" {
+			relatedPaneMu.Unlock()
+			if show := m.showRelatedFiles(spawn, active, reveal, takeFocus); show != nil {
+				return show()
+			}
+			return nil
+		}
+		defer relatedPaneMu.Unlock()
+		if reveal {
+			revealOwner(owner)
+		}
+		for _, f := range add {
+			if err := execHook(expandAddCommand(template, f, owner), root, nil, relatedAddTimeout, io.Discard); err != nil {
+				return relatedPaneMsg{err: fmt.Errorf("related_editor_add: %w", err)}
+			}
+		}
+		if takeFocus {
+			_, _ = tmux("select-pane", "-t", pane)
+		}
+		return relatedPaneMsg{pane: pane, files: add, added: true}
+	}
 }
 
 // relatedFocus is whether a new related-files split takes focus. It follows
@@ -451,6 +534,8 @@ func (m appModel) handleRelatedPane(msg relatedPaneMsg) appModel {
 		m.statusBar.searchInfo = "no related-files pane open"
 	case msg.closed:
 		m.tour.pane, m.tour.paneFiles = "", nil
+	case msg.added:
+		m.tour.pane, m.tour.paneFiles = msg.pane, append(m.tour.paneFiles, msg.files...)
 	default:
 		m.tour.pane, m.tour.paneFiles = msg.pane, msg.files
 	}
