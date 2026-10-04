@@ -345,6 +345,7 @@ func (m helpModel) buildContent() string {
 			{Label(km.YankLine), "Yank the line / selection to the clipboard"},
 			{Label(km.TagLines), "Tag the line / selection to send to the agent (again untags)"},
 			{Label(km.SendLines), "Send the selection and tags (else the line) to the agent via walkthrough_ask"},
+			{Label(km.OpenRefs), "Open what those lines reference in the related pane, via walkthrough_resolve"},
 			{"x", "Toggle a comment resolved (on a comment)"},
 			{"d", "Delete a comment (on a comment)"},
 			{Label(km.ExpandComment), "Expand/collapse a comment under the cursor"},

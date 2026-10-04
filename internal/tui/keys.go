@@ -104,6 +104,7 @@ type KeyMap struct {
 	// to walkthrough_ask.
 	TagLines  []string
 	SendLines []string
+	OpenRefs  []string // open what those lines reference in the related pane, via walkthrough_resolve
 
 	// General
 	OpenInEditor         []string
@@ -219,6 +220,8 @@ func DefaultKeyMap() KeyMap {
 		// message at someone (2026-10-04).
 		TagLines:  []string{"+"},
 		SendLines: []string{"@"},
+		// vim's jump to definition (2026-10-04).
+		OpenRefs: []string{"ctrl+]"},
 
 		OpenInEditor:         []string{"ctrl+g"},
 		OpenInEditorTakeover: []string{"ctrl+shift+g"},
@@ -321,6 +324,7 @@ var keyActions = map[string]func(*KeyMap) *[]string{
 	"toggle_focus_mode":       func(km *KeyMap) *[]string { return &km.ToggleFocusMode },
 	"tag_lines":               func(km *KeyMap) *[]string { return &km.TagLines },
 	"send_lines":              func(km *KeyMap) *[]string { return &km.SendLines },
+	"open_refs":               func(km *KeyMap) *[]string { return &km.OpenRefs },
 	"open_in_editor":          func(km *KeyMap) *[]string { return &km.OpenInEditor },
 	"open_in_editor_takeover": func(km *KeyMap) *[]string { return &km.OpenInEditorTakeover },
 	"jump_back":               func(km *KeyMap) *[]string { return &km.JumpBack },

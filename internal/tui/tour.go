@@ -34,8 +34,10 @@ type tourState struct {
 	// opening windows, running the on-stop command — happen once the reviewer
 	// stops moving rather than for every stop they skipped past on the way.
 	settle int
-	// pane is the tmux pane holding the related files, "" when none is known.
-	pane string
+	// pane is the tmux pane holding the related files, "" when none is known,
+	// and paneFiles the files it was last given, so more can be added to them.
+	pane      string
+	paneFiles []relatedFile
 	// status is what the view-status command last said about stop statusFor
 	// (nil: nothing usable). statusSeq numbers the asks, so only the answer
 	// to the latest lands.

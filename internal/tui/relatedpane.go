@@ -175,6 +175,10 @@ type relatedPanePlan struct {
 	focus    bool   // whether a NEW split takes focus (a respawn never moves focus)
 	reveal   bool   // unzoom Monocle's window first, so the pane can be seen
 	argv     []string
+	files    []relatedFile // what argv opens, recorded once it has
+	// selectPane moves focus to the pane, respawned or new: the reviewer asked
+	// to go and read something there.
+	selectPane bool
 }
 
 // stageZoomedOption is the window option a setup that hides a window's splits
@@ -239,9 +243,10 @@ func ownedRelatedPane(listing, owner string) string {
 
 // relatedPaneMsg reports what happened to the related-files pane.
 type relatedPaneMsg struct {
-	pane   string // the pane now holding the related files ("" after a close)
-	closed bool   // this was X
-	none   bool   // X found no pane to close
+	pane   string        // the pane now holding the related files ("" after a close)
+	files  []relatedFile // the files it now holds
+	closed bool          // this was X
+	none   bool          // X found no pane to close
 	err    error
 }
 
@@ -305,7 +310,10 @@ func showRelatedCmd(tracked string, plan relatedPanePlan) tea.Cmd {
 			// Monocle runs; it is only lost across a restart.
 			_, _ = tmux("set-option", "-p", "-t", pane, relatedPaneOption, plan.owner)
 		}
-		return relatedPaneMsg{pane: pane}
+		if plan.selectPane {
+			_, _ = tmux("select-pane", "-t", pane)
+		}
+		return relatedPaneMsg{pane: pane, files: plan.files}
 	}
 }
 
@@ -331,7 +339,7 @@ func (m appModel) openRelated(stop types.WalkthroughStop) tea.Cmd {
 	if len(files) == 0 {
 		return nil
 	}
-	return m.showRelatedFiles(files, 1, false)
+	return m.showRelatedFiles(files, 1, false, false)
 }
 
 // errRelatedNeedsTmux is what showing related files says outside tmux.
@@ -339,19 +347,23 @@ var errRelatedNeedsTmux = errors.New("related files open in a tmux pane; monocle
 
 // showRelatedFiles puts files in the related-files pane — respawning it when
 // live, splitting it when not — with file active (1-based) the one the editor
-// is left on. reveal unzooms Monocle's window first.
-func (m appModel) showRelatedFiles(files []relatedFile, active int, reveal bool) tea.Cmd {
+// is left on. reveal unzooms Monocle's window first; takeFocus moves focus to
+// the pane even when it is respawned.
+func (m appModel) showRelatedFiles(files []relatedFile, active int, reveal, takeFocus bool) tea.Cmd {
 	if !inTmux() {
 		return func() tea.Msg { return relatedPaneMsg{err: errRelatedNeedsTmux} }
 	}
-	argv, argsErr := withEditorArgs(relatedEditorArgv(m.editorCommand(), absRelated(m.repoRoot, files), active), m.relatedEditorArgs())
+	files = absRelated(m.repoRoot, files)
+	argv, argsErr := withEditorArgs(relatedEditorArgv(m.editorCommand(), files, active), m.relatedEditorArgs())
 	plan := relatedPanePlan{
-		owner:  os.Getenv("TMUX_PANE"),
-		dir:    m.repoRoot,
-		mode:   m.editorMode(),
-		focus:  m.relatedFocus(),
-		reveal: reveal,
-		argv:   argv,
+		owner:      os.Getenv("TMUX_PANE"),
+		dir:        m.repoRoot,
+		mode:       m.editorMode(),
+		focus:      m.relatedFocus() || takeFocus,
+		reveal:     reveal,
+		argv:       argv,
+		files:      files,
+		selectPane: takeFocus,
 	}
 	show := showRelated(m.tour.pane, plan)
 	if argsErr != nil {
@@ -398,7 +410,7 @@ func (m appModel) openStopRelated(arg string) (appModel, tea.Cmd) {
 		m.statusBar.searchInfo = fmt.Sprintf("%s has related files 1-%d", stop.ID, len(files))
 		return m, nil
 	}
-	return m, m.showRelatedFiles(files, n, true)
+	return m, m.showRelatedFiles(files, n, true, false)
 }
 
 // relatedFocus is whether a new related-files split takes focus. It follows
@@ -423,9 +435,9 @@ func (m appModel) handleRelatedPane(msg relatedPaneMsg) appModel {
 	case msg.none:
 		m.statusBar.searchInfo = "no related-files pane open"
 	case msg.closed:
-		m.tour.pane = ""
+		m.tour.pane, m.tour.paneFiles = "", nil
 	default:
-		m.tour.pane = msg.pane
+		m.tour.pane, m.tour.paneFiles = msg.pane, msg.files
 	}
 	return m
 }

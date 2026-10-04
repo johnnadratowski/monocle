@@ -254,10 +254,27 @@ func (m appModel) sendLines() (appModel, tea.Cmd) {
 		m.statusBar.searchInfo = "set walkthrough_ask to send lines to the agent"
 		return m, nil
 	}
+	payload, data, ok := m.takeRefs("send")
+	if !ok {
+		return m, nil
+	}
+	what := askLabel(payload)
+	env := []string{"MONOCLE_ASK_JSON=" + string(data), "MONOCLE_REPO_ROOT=" + m.repoRoot}
+	root := m.repoRoot
+	return m, func() tea.Msg {
+		return askDoneMsg{what: what, err: execOnStop(command, root, env, askTimeout)}
+	}
+}
+
+// takeRefs is what the reviewer points at — the selection and the tags, else
+// the tags, else the cursor's line — as MONOCLE_ASK_JSON, and leaves visual
+// mode and clears the tags. verb names the action in the status bar when there
+// is nothing to take.
+func (m *appModel) takeRefs(verb string) (askPayload, []byte, bool) {
 	tags := m.diffView.sendTags()
 	if len(tags) == 0 {
-		m.statusBar.searchInfo = "no file line here to send"
-		return m, nil
+		m.statusBar.searchInfo = "no file line here to " + verb
+		return askPayload{}, nil, false
 	}
 	for i := range tags {
 		tags[i].path = repoRelative(m.repoRoot, tags[i].path)
@@ -268,18 +285,12 @@ func (m appModel) sendLines() (appModel, tea.Cmd) {
 	}
 	m.diffView.visualMode = false
 	m.diffView.tags = nil
-
 	data, err := json.Marshal(payload)
 	if err != nil {
-		m.statusBar.searchInfo = "sending to the agent failed: " + err.Error()
-		return m, nil
+		m.statusBar.searchInfo = verb + " failed: " + err.Error()
+		return askPayload{}, nil, false
 	}
-	what := askLabel(payload)
-	env := []string{"MONOCLE_ASK_JSON=" + string(data), "MONOCLE_REPO_ROOT=" + m.repoRoot}
-	root := m.repoRoot
-	return m, func() tea.Msg {
-		return askDoneMsg{what: what, err: execOnStop(command, root, env, askTimeout)}
-	}
+	return payload, data, true
 }
 
 // handleAskDone says what was sent, or why it was not.

@@ -57,6 +57,14 @@ type Config struct {
 	// reference in the agent's prompt and moves focus there. Empty sends
 	// nothing (John 2026-10-04).
 	WalkthroughAsk string `json:"walkthrough_ask"`
+	// WalkthroughResolve is a shell command that says what the lines the
+	// reviewer points at with the open-references key reference: the SQL file
+	// a query is loaded from, the file a function lives in. It runs via sh -c
+	// in the repo root with MONOCLE_RESOLVE_JSON (the shape of
+	// MONOCLE_ASK_JSON) and MONOCLE_REPO_ROOT in its environment, and prints a
+	// JSON array of {"path", "line"}, which Monocle opens in the related-files
+	// pane. Empty opens nothing (John 2026-10-04).
+	WalkthroughResolve string `json:"walkthrough_resolve"`
 	// RelatedEditorArgs are extra arguments appended to the editor command of
 	// a tour stop's related-files pane — `["-S", "/path/stage.vim"]`, say — so
 	// whatever runs the tour can set the editor up. With vim and nvim they are

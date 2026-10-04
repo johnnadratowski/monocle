@@ -229,6 +229,7 @@ When the agent sends groupings (`set_file_groups`), the sidebar switches to grou
 | `Q` | Ask a question at the cursor (a comment that wants an answer) |
 | `+` | Tag the line, or every line of the selection, to send to the agent; on lines all tagged, untag them. Tagged lines are marked yellow in the gutter and stay tagged across files and stops until sent |
 | `@` | Send the selection and the tagged lines — else the tags, else the cursor's line — to the agent through `walkthrough_ask`, then clear them |
+| `ctrl+]` | Open what the lines `@` would send reference — the SQL file a query loads, the file a function lives in — in the related-files pane, through `walkthrough_resolve`, beside what it already holds (at most 8 files), and move focus there |
 | `space` | Expand/collapse a comment under the cursor |
 | `E` | Expand/collapse **all** comments in the open file (any view) |
 
