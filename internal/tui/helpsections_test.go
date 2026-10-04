@@ -18,6 +18,13 @@ func TestKeyRankOrdering(t *testing.T) {
 		}
 	})
 
+	// + is a key of its own (tag_lines), not a modifier joining two others.
+	t.Run("a bare + is punctuation", func(t *testing.T) {
+		if got := keyClass("+"); got != keyClass("%") {
+			t.Errorf("keyClass(+) = %d, want punctuation's %d", got, keyClass("%"))
+		}
+	})
+
 	t.Run("a modified key sorts beside its shift variant", func(t *testing.T) {
 		rows := sortHelpRows([]helpRow{
 			{"ctrl+t", "terminal"},

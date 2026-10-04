@@ -73,8 +73,8 @@ func keyClass(k string) int {
 		return 9
 	case strings.HasPrefix(k, ":"):
 		return 6 // command-mode names
-	case strings.ContainsAny(k, "+") || len(k) > 1:
-		return 5 // ctrl+/alt+/shift+ and named keys (tab, enter, space, esc)
+	case len(k) > 1:
+		return 5 // ctrl+/alt+/shift+ and named keys (tab, enter, space, esc); a bare + is punctuation
 	case k[0] >= 'a' && k[0] <= 'z':
 		return 0
 	case k[0] >= 'A' && k[0] <= 'Z':

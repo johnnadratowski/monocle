@@ -49,6 +49,14 @@ type Config struct {
 	// Monocle but outside tmux. If it fails, the key goes to tmux as before.
 	// Empty hands every edge to tmux.
 	WalkthroughNavigate string `json:"walkthrough_navigate"`
+	// WalkthroughAsk is a shell command that hands the agent a reference to the
+	// lines the reviewer sent with the send key: the selection and the tagged
+	// lines, else the cursor's line. It runs via sh -c in the repo root with
+	// MONOCLE_ASK_JSON ({"tour", "stop", "repo", "refs": [{"path", "start",
+	// "end", "side"}]}) and MONOCLE_REPO_ROOT in its environment, puts the
+	// reference in the agent's prompt and moves focus there. Empty sends
+	// nothing (John 2026-10-04).
+	WalkthroughAsk string `json:"walkthrough_ask"`
 	// EditorMode controls how Ctrl+g / Ctrl+o open a file: "terminal" (take over
 	// Monocle's screen, the default), "tmux_vertical" (side-by-side split),
 	// "tmux_horizontal" (stacked split), or "tmux_window" (new tmux window/tab).

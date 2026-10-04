@@ -136,6 +136,9 @@ type diffViewModel struct {
 	// Visual mode
 	visualMode  bool
 	visualStart int
+	// tags are the lines tagged to send to the agent, in every file, kept until
+	// they are sent (ask.go).
+	tags map[lineTag]bool
 
 	// Search
 	searchQuery    string // active query; matched substrings are highlighted while set
@@ -224,13 +227,21 @@ func (m diffViewModel) inStopRange(line diffViewLine) bool {
 	return n > 0 && n >= m.stopStart && n <= m.stopEnd
 }
 
-// stopGutter restyles a gutter for a row inside the stop's range: a solid block
-// of the tour colour, so the range reads at a glance down the side of the diff.
-func (m diffViewModel) stopGutter(line diffViewLine, base lipgloss.Style) lipgloss.Style {
-	if !m.inStopRange(line) {
-		return base
+// tagGutterColor marks a line tagged to send to the agent: yellow, apart from
+// the tour's magenta, the annotation rail's cyan and the summary palette.
+const tagGutterColor = "3"
+
+// markGutter restyles a gutter for a row the reviewer tagged, or one inside the
+// stop's range: a solid block of the tag or tour colour, so either reads at a
+// glance down the side of the diff. A tag wins: it is the reviewer's own mark.
+func (m diffViewModel) markGutter(line diffViewLine, base lipgloss.Style) lipgloss.Style {
+	switch {
+	case m.isTagged(line):
+		return base.Foreground(lipgloss.Color("0")).Background(lipgloss.Color(tagGutterColor)).Bold(true)
+	case m.inStopRange(line):
+		return base.Foreground(lipgloss.Color("0")).Background(lipgloss.Color(tourGutterColor)).Bold(true)
 	}
-	return base.Foreground(lipgloss.Color("0")).Background(lipgloss.Color(tourGutterColor)).Bold(true)
+	return base
 }
 
 // isViewingContentItem returns true when the diff view is showing a content item,
@@ -1693,7 +1704,7 @@ func (m diffViewModel) renderContentLine(line diffViewLine, _, contentWidth int,
 	if len(gutter) < gutterWidth {
 		gutter = fmt.Sprintf("%-*s", gutterWidth, gutter)
 	}
-	renderedGutter := gutterWithRangeBar(gutter, m.stopGutter(line, gutterStyle), line.annotated, m.summaryBarFor(line), nil)
+	renderedGutter := gutterWithRangeBar(gutter, m.markGutter(line, gutterStyle), line.annotated, m.summaryBarFor(line), nil)
 
 	// Faded: a source comment under the filter, or a hunk outside the selected
 	// summary item.
@@ -1781,7 +1792,7 @@ func (m diffViewModel) renderDiffLine(line diffViewLine, _, contentWidth int, se
 	}
 	// Annotated code lines get a cyan bar in the gutter's trailing column to mark
 	// the annotation's range.
-	renderedGutter := gutterWithRangeBar(gutter, m.stopGutter(line, gutterStyle), line.annotated, m.summaryBarFor(line), lineBg)
+	renderedGutter := gutterWithRangeBar(gutter, m.markGutter(line, gutterStyle), line.annotated, m.summaryBarFor(line), lineBg)
 
 	// Faded: a source comment under the filter, or a hunk outside the selected
 	// summary item.
@@ -2069,7 +2080,7 @@ func (m diffViewModel) splitRow(gutter, styled string, kind types.DiffLineKind, 
 	if len(gutter) < gutterW {
 		gutter = fmt.Sprintf("%-*s", gutterW, gutter)
 	}
-	renderedGutter := gutterWithRangeBar(gutter, m.stopGutter(line, gutterStyle), annotated, m.summaryBarFor(line), lineBg)
+	renderedGutter := gutterWithRangeBar(gutter, m.markGutter(line, gutterStyle), annotated, m.summaryBarFor(line), lineBg)
 	if dimmed {
 		return renderedGutter + renderDimmedComment(styled, lineBg, contentW)
 	}
@@ -2100,7 +2111,7 @@ func (m diffViewModel) renderSplitSide(gutter, content string, kind types.DiffLi
 	if len(gutter) < gutterW {
 		gutter = fmt.Sprintf("%-*s", gutterW, gutter)
 	}
-	renderedGutter := gutterWithRangeBar(gutter, m.stopGutter(line, gutterStyle), annotated, m.summaryBarFor(line), lineBg)
+	renderedGutter := gutterWithRangeBar(gutter, m.markGutter(line, gutterStyle), annotated, m.summaryBarFor(line), lineBg)
 
 	// Hide-comments filter: dim comment-only lines.
 	if dimmed {
@@ -2241,7 +2252,7 @@ func (m diffViewModel) renderWrappedLine(gutter, content string, gutterWidth, co
 		if len(g) < gutterWidth {
 			g = fmt.Sprintf("%-*s", gutterWidth, g)
 		}
-		parts = append(parts, gutterWithRangeBar(g, m.stopGutter(mdLineOrZero(mdLine), gutterStyle), annotated, m.summaryBarFor(mdLineOrZero(mdLine)), lineBg)+
+		parts = append(parts, gutterWithRangeBar(g, m.markGutter(mdLineOrZero(mdLine), gutterStyle), annotated, m.summaryBarFor(mdLineOrZero(mdLine)), lineBg)+
 			applyBgAndPad(row, lineBg, contentWidth))
 	}
 	return strings.Join(parts, "\n")

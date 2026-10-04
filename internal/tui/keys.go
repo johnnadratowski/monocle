@@ -100,6 +100,10 @@ type KeyMap struct {
 	ClearReview     []string
 	DismissArtifact []string
 	ToggleFocusMode []string
+	// Point the agent at code: tag lines, then send them, with the selection,
+	// to walkthrough_ask.
+	TagLines  []string
+	SendLines []string
 
 	// General
 	OpenInEditor         []string
@@ -211,6 +215,10 @@ func DefaultKeyMap() KeyMap {
 		ClearReview:     []string{"D"},
 		DismissArtifact: []string{"x"},
 		ToggleFocusMode: []string{"F"},
+		// + adds a line to what is sent; @ sends it, as an @-mention points a
+		// message at someone (2026-10-04).
+		TagLines:  []string{"+"},
+		SendLines: []string{"@"},
 
 		OpenInEditor:         []string{"ctrl+g"},
 		OpenInEditorTakeover: []string{"ctrl+shift+g"},
@@ -311,6 +319,8 @@ var keyActions = map[string]func(*KeyMap) *[]string{
 	"clear_review":            func(km *KeyMap) *[]string { return &km.ClearReview },
 	"dismiss_artifact":        func(km *KeyMap) *[]string { return &km.DismissArtifact },
 	"toggle_focus_mode":       func(km *KeyMap) *[]string { return &km.ToggleFocusMode },
+	"tag_lines":               func(km *KeyMap) *[]string { return &km.TagLines },
+	"send_lines":              func(km *KeyMap) *[]string { return &km.SendLines },
 	"open_in_editor":          func(km *KeyMap) *[]string { return &km.OpenInEditor },
 	"open_in_editor_takeover": func(km *KeyMap) *[]string { return &km.OpenInEditorTakeover },
 	"jump_back":               func(km *KeyMap) *[]string { return &km.JumpBack },

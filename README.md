@@ -288,6 +288,8 @@ When the agent sends a tour (`set_walkthrough`), monocle enters tour mode on its
 | `A` | Answer at the cursor (replies to the agent; asks nothing back) |
 | `C` | Add a file-level comment |
 | `Q` | Ask a question at the cursor (a comment that wants an answer) |
+| `+` | Tag the line, or every line of the selection, to send to the agent; on lines all tagged, untag them. Tagged lines are marked yellow in the gutter and stay tagged across files and stops until sent |
+| `@` | Send the selection and the tagged lines — else the tags, else the cursor's line — to the agent through `walkthrough_ask`, then clear them |
 | `space` | Expand/collapse a comment under the cursor |
 | `E` | Expand/collapse **all** comments in the open file (any view) |
 
@@ -464,6 +466,7 @@ Monocle loads settings from JSON config files:
   "walkthrough_on_stop": "",
   "walkthrough_view_status": "",
   "walkthrough_layout_reset": "",
+  "walkthrough_ask": "",
   "ignore_patterns": [],
   "keybindings": {},
   "mouse": true,
@@ -500,6 +503,7 @@ Monocle loads settings from JSON config files:
 | `walkthrough_on_stop`                | string                                     | `""`         | Shell command run (`sh -c`, in the repo root, fire-and-forget, 30s timeout) on every guided-tour stop you settle on, with `MONOCLE_STOP_ID`, `MONOCLE_REPO_ROOT` and `MONOCLE_STOP_JSON` (the stop, view targets resolved to absolute paths) in its environment. Use it to show a stop's screenshots/recordings and arrange windows. `:view N` runs it too, with `MONOCLE_VIEW_INDEX` / `MONOCLE_VIEW_NAME` naming the one view asked for. Empty runs nothing |
 | `walkthrough_view_status`            | string                                     | `""`         | Shell command that says how the windows around the current tour stop stand, so each view's label is marked `(open)`, `(hidden)` or `(not opened)`. Run like `walkthrough_on_stop` (same environment) but with a 500ms timeout, when a stop is shown and after a view is opened; prints one line of JSON: `{"views": {"view": "open"\|"hidden"\|"closed", "view2": …}, "layout": "saved"\|"default"}`. Empty or a failure shows nothing |
 | `walkthrough_layout_reset`           | string                                     | `""`         | Shell command that puts the windows around a tour back in their default layout. When `walkthrough_view_status` says `"layout": "saved"`, the tour note shows `Layout: saved · reset`; clicking `reset`, or `:layout reset`, runs it (`sh -c`, in the repo root, with the same environment as the status command, 10s timeout) and then asks the view status again. Empty runs nothing |
+| `walkthrough_ask`                    | string                                     | `""`         | Shell command that hands the agent the lines you send with `@`: the selection and the tagged lines, else the cursor's line. Runs `sh -c` in the repo root, 10s timeout, with `MONOCLE_REPO_ROOT` and `MONOCLE_ASK_JSON` — `{"tour", "stop", "repo", "refs": [{"path", "start", "end", "side"}]}`, `side` `"old"` for removed lines in old-file numbers, `tour`/`stop` empty outside tour mode — in its environment. It puts the reference in the agent's prompt and moves focus there. Empty sends nothing |
 | `ignore_patterns`                    | string array                               | `[]`         | Glob patterns for files to exclude                                       |
 | `min_diff_width`                     | integer                                    | `80`         | Minimum character width for the diff viewer in side-by-side layout       |
 | `mouse`                              | `true`, `false`                            | `true`       | Enable mouse interactions (click, scroll, drag), including clicking a tour stop's views                          |
@@ -530,7 +534,7 @@ Override any action key by mapping the action name to a new key string:
 }
 ```
 
-Available action names: `answer`, `artifact_versions`, `base_ref`, `block_match`, `block_top`, `block_up`, `bottom`, `clear_review`, `close_related`, `collapse_all`, `command_mode`, `comment`, `cycle_layout`, `dismiss_artifact`, `down`, `expand_all`, `expand_all_comments`, `expand_comment`, `file_comment`, `filter_reviewed`, `focus_swap`, `half_down`, `half_up`, `help`, `hide_comments`, `hide_comments_back`, `jump_back`, `jump_forward`, `next_file`, `next_mark`, `next_section`, `open_doc_ref`, `open_in_editor`, `open_in_editor_takeover`, `open_in_markdown_viewer`, `open_terminal`, `open_terminal_takeover`, `pane_down`, `pane_size`, `pane_left`, `pane_right`, `pane_up`, `pause`, `prev_file`, `prev_mark`, `prev_section`, `question`, `quit`, `refresh`, `relaunch`, `review_summary`, `reviewed`, `scroll_down`, `scroll_end`, `scroll_first_char`, `scroll_home`, `scroll_left`, `scroll_right`, `scroll_up`, `search_backward`, `search_next`, `search_prev`, `select`, `shell_command`, `submit`, `suggest`, `toggle_diff`, `toggle_focus_mode`, `toggle_full_diff`, `toggle_overlays`, `toggle_sidebar`, `toggle_tour`, `top`, `tour_back`, `tour_forward`, `tour_next`, `tour_prev`, `tree_mode`, `up`, `visual`, `wizard_advance`, `wizard_back`, `wizard_toggle`, `wrap`, `yank_line`.
+Available action names: `answer`, `artifact_versions`, `base_ref`, `block_match`, `block_top`, `block_up`, `bottom`, `clear_review`, `close_related`, `collapse_all`, `command_mode`, `comment`, `cycle_layout`, `dismiss_artifact`, `down`, `expand_all`, `expand_all_comments`, `expand_comment`, `file_comment`, `filter_reviewed`, `focus_swap`, `half_down`, `half_up`, `help`, `hide_comments`, `hide_comments_back`, `jump_back`, `jump_forward`, `next_file`, `next_mark`, `next_section`, `open_doc_ref`, `open_in_editor`, `open_in_editor_takeover`, `open_in_markdown_viewer`, `open_terminal`, `open_terminal_takeover`, `pane_down`, `pane_size`, `pane_left`, `pane_right`, `pane_up`, `pause`, `prev_file`, `prev_mark`, `prev_section`, `question`, `quit`, `refresh`, `relaunch`, `review_summary`, `reviewed`, `scroll_down`, `scroll_end`, `scroll_first_char`, `scroll_home`, `scroll_left`, `scroll_right`, `scroll_up`, `search_backward`, `search_next`, `search_prev`, `select`, `send_lines`, `shell_command`, `submit`, `suggest`, `tag_lines`, `toggle_diff`, `toggle_focus_mode`, `toggle_full_diff`, `toggle_overlays`, `toggle_sidebar`, `toggle_tour`, `top`, `tour_back`, `tour_forward`, `tour_next`, `tour_prev`, `tree_mode`, `up`, `visual`, `wizard_advance`, `wizard_back`, `wizard_toggle`, `wrap`, `yank_line`.
 
 The help overlay (`H`) dynamically reflects your custom bindings. Modal keys (Enter, Esc, Tab in overlays) are not configurable.
 
