@@ -744,9 +744,9 @@ func (r *keyRecorder) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 func (r *keyRecorder) View() tea.View { return tea.NewView("") }
 
-// F18 and F19 come from John's Hammerspoon as the vt220 sequences ESC[32~ and
-// ESC[33~. Fed through Bubble Tea's own input reader, they must arrive as the
-// keys the tour binds to back and forward.
+// F18 and F19, as a key remapper sends them, are the vt220 sequences ESC[32~
+// and ESC[33~. Fed through Bubble Tea's own input reader, they must arrive as
+// the keys the tour binds to back and forward.
 func TestF18AndF19BytesAreTheTourKeys(t *testing.T) {
 	r, w := io.Pipe()
 	defer w.Close()
@@ -770,9 +770,9 @@ func TestF18AndF19BytesAreTheTourKeys(t *testing.T) {
 	}
 }
 
-// In tour mode o toggles the stop's note (John 2026-10-03: once o had closed
-// it, nothing brought it back). Bringing it back is not arriving: nothing is
-// reported and no side effects are scheduled.
+// In tour mode o toggles the stop's note, so a note o closed is never out of
+// reach. Bringing it back is not arriving: nothing is reported and no side
+// effects are scheduled.
 func TestOTogglesTheStopsNote(t *testing.T) {
 	noteOpen := func(m appModel, id string) bool {
 		return m.docPane.active && m.docPane.note && m.docPane.annotationID == tourNoteKeyPrefix+id

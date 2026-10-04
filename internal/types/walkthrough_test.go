@@ -80,7 +80,7 @@ func TestNormalizeWalkthrough(t *testing.T) {
 	t.Run("calls lead to stops of the tour", func(t *testing.T) {
 		got, err := NormalizeWalkthrough(Walkthrough{Stops: []WalkthroughStop{
 			{ID: "2.1", Calls: []StopCall{
-				{Stop: " 2.2 ", Symbol: " requestWalletWithdrawal ", Line: 48},
+				{Stop: " 2.2 ", Symbol: " createOrder ", Line: 48},
 				{Stop: "9.9", Symbol: "gone"},
 				{Stop: "1.1", Line: -3},
 				{Stop: ""},
@@ -91,7 +91,7 @@ func TestNormalizeWalkthrough(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		want := []StopCall{{Stop: "2.2", Symbol: "requestWalletWithdrawal", Line: 48}, {Stop: "1.1"}}
+		want := []StopCall{{Stop: "2.2", Symbol: "createOrder", Line: 48}, {Stop: "1.1"}}
 		if !reflect.DeepEqual(got.Stops[0].Calls, want) {
 			t.Errorf("calls = %+v, want %+v", got.Stops[0].Calls, want)
 		}
@@ -132,7 +132,7 @@ func TestWalkthroughJSONRoundTrip(t *testing.T) {
 		ID: "1.2", Title: "t", File: "a.go", LineStart: 3, LineEnd: 9, Note: "**n**",
 		Related: []DocRef{{Kind: DocRefFile, Doc: "b.go", StartLine: 7}},
 		Views:   []StopView{{Kind: StopViewVideo, Target: "demo.webm", Label: "Demo"}},
-		Calls:   []StopCall{{Stop: "2.2", Symbol: "requestWalletWithdrawal", Line: 48}},
+		Calls:   []StopCall{{Stop: "2.2", Symbol: "createOrder", Line: 48}},
 		Layout:  "review",
 	}}}
 	data, err := json.Marshal(in)
@@ -140,7 +140,7 @@ func TestWalkthroughJSONRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, key := range []string{`"id":"1.2"`, `"line_start":3`, `"line_end":9`, `"related":`, `"views":`, `"layout":"review"`, `"doc":"b.go"`,
-		`"calls":[{"stop":"2.2","symbol":"requestWalletWithdrawal","line":48}]`} {
+		`"calls":[{"stop":"2.2","symbol":"createOrder","line":48}]`} {
 		if !strings.Contains(string(data), key) {
 			t.Errorf("encoded tour %s is missing %s", data, key)
 		}

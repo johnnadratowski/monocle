@@ -250,7 +250,7 @@ func TestUnzoomArgs(t *testing.T) {
 }
 
 // related_editor_args go on the end of the editor's argv, so whatever runs the
-// tour can set the editor up (John 2026-10-04: stage adds -S <script>).
+// tour can set the editor up, with -S <script>, say.
 func TestRelatedEditorArgs(t *testing.T) {
 	files := []relatedFile{{path: "a.go", line: 4}}
 	base := relatedEditorArgv("nvim", files, 1) // one -c of monocle's own
@@ -262,8 +262,8 @@ func TestRelatedEditorArgs(t *testing.T) {
 		return out
 	}
 
-	got, err := withEditorArgs(base, []string{"-S", "/x/stage.vim"})
-	if want := append(append([]string(nil), base...), "-S", "/x/stage.vim"); err != nil || !reflect.DeepEqual(got, want) {
+	got, err := withEditorArgs(base, []string{"-S", "/x/setup.vim"})
+	if want := append(append([]string(nil), base...), "-S", "/x/setup.vim"); err != nil || !reflect.DeepEqual(got, want) {
 		t.Errorf("got %q %v, want %q", got, err, want)
 	}
 	if got, err := withEditorArgs([]string{"code", "a.go"}, []string{"--wait"}); err != nil || !reflect.DeepEqual(got, []string{"code", "a.go", "--wait"}) {
@@ -296,15 +296,15 @@ func TestRelatedEditorArgs(t *testing.T) {
 
 // The pane's argv carries related_editor_args from the config.
 func TestRelatedPaneCarriesTheConfiguredArgs(t *testing.T) {
-	m := viewsAppIn(t, &types.Config{Editor: "nvim", RelatedEditorArgs: []string{"-S", "/x/stage.vim"}}, 140, false)
+	m := viewsAppIn(t, &types.Config{Editor: "nvim", RelatedEditorArgs: []string{"-S", "/x/setup.vim"}}, 140, false)
 	plans := captureRelated(t)
 	m = settle(t, m)
 	if len(*plans) != 1 {
 		t.Fatalf("%d plans", len(*plans))
 	}
 	argv := (*plans)[0].argv
-	if n := len(argv); n < 2 || argv[n-2] != "-S" || argv[n-1] != "/x/stage.vim" {
-		t.Errorf("argv %q does not end with the configured -S /x/stage.vim", argv)
+	if n := len(argv); n < 2 || argv[n-2] != "-S" || argv[n-1] != "/x/setup.vim" {
+		t.Errorf("argv %q does not end with the configured -S /x/setup.vim", argv)
 	}
 	_ = m
 }

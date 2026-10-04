@@ -55,7 +55,7 @@ type Config struct {
 	// MONOCLE_ASK_JSON ({"tour", "stop", "repo", "refs": [{"path", "start",
 	// "end", "side"}]}) and MONOCLE_REPO_ROOT in its environment, puts the
 	// reference in the agent's prompt and moves focus there. Empty sends
-	// nothing (John 2026-10-04).
+	// nothing.
 	WalkthroughAsk string `json:"walkthrough_ask"`
 	// WalkthroughResolve is a shell command that says what the lines the
 	// reviewer points at with the open-references key reference: the SQL file
@@ -63,13 +63,13 @@ type Config struct {
 	// in the repo root with MONOCLE_RESOLVE_JSON (the shape of
 	// MONOCLE_ASK_JSON) and MONOCLE_REPO_ROOT in its environment, and prints a
 	// JSON array of {"path", "line"}, which Monocle opens in the related-files
-	// pane. Empty opens nothing (John 2026-10-04).
+	// pane. Empty opens nothing.
 	WalkthroughResolve string `json:"walkthrough_resolve"`
 	// RelatedEditorArgs are extra arguments appended to the editor command of
-	// a tour stop's related-files pane — `["-S", "/path/stage.vim"]`, say — so
+	// a tour stop's related-files pane — `["-S", "/path/setup.vim"]`, say — so
 	// whatever runs the tour can set the editor up. With vim and nvim they are
 	// left out, with a status-bar note, when they would take +cmd, -c and -S
-	// past vim's limit of ten (John 2026-10-04).
+	// past vim's limit of ten.
 	RelatedEditorArgs []string `json:"related_editor_args"`
 	// EditorMode controls how Ctrl+g / Ctrl+o open a file: "terminal" (take over
 	// Monocle's screen, the default), "tmux_vertical" (side-by-side split),

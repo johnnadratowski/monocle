@@ -49,7 +49,7 @@ type tourState struct {
 }
 
 // A tour is read in order, but following a call to the stop about the function
-// it calls is a detour, and a detour wants a way back (John 2026-10-03). The
+// it calls is a detour, and a detour wants a way back. The
 // stop history is the browser's back and forward over every stop entered — by
 // stepping, `:stop`, a call followed, the agent's goto — kept for the session.
 
@@ -388,7 +388,7 @@ func stopNoteBody(stop types.WalkthroughStop) string {
 }
 
 // nextCallColor marks the call that leads to the next stop, the one a reader
-// following the code is most likely to want (John 2026-10-03).
+// following the code is most likely to want.
 const nextCallColor = "3" // yellow
 
 // stopLinkGroups are the labels under a stop's note, numbered the way their
@@ -397,8 +397,8 @@ const nextCallColor = "3" // yellow
 // Spec", `:view 2`), each view with what the view-status command said about
 // it, if anything — and, when it said the windows are in a saved layout,
 // "Layout: saved · reset" (`:layout reset`). Calls come first, above the
-// related files (John 2026-10-03). tour is the stop's tour: it says which
-// stop is next and names a call sent without a symbol.
+// related files: they lead on through the tour. tour is the stop's tour: it
+// says which stop is next and names a call sent without a symbol.
 func stopLinkGroups(stop types.WalkthroughStop, tour *types.Walkthrough, status *tourStatus) []linkGroup {
 	calls := linkGroup{head: "Calls:", hint: "click, or :call N"}
 	next := ""
@@ -433,7 +433,7 @@ func stopLinkGroups(stop types.WalkthroughStop, tour *types.Walkthrough, status 
 	}
 	views := linkGroup{head: "Views:", hint: "click, or :view N"}
 	if len(stop.Views) == 1 {
-		views.head = "View:" // John's tours have one view per stop (2026-10-01)
+		views.head = "View:" // the common case: one view per stop
 	}
 	for i, v := range stop.Views {
 		label := v.Label
@@ -447,8 +447,8 @@ func stopLinkGroups(stop types.WalkthroughStop, tour *types.Walkthrough, status 
 		views.links = append(views.links, link)
 	}
 	if status != nil {
-		// The layout, always, flush right beside the view (John 2026-10-02): a row that
-		// came and went with "saved" was easy to miss.
+		// The layout, always, flush right beside the view: a row that came and
+		// went with "saved" would be easy to miss.
 		trail := &noteTrail{text: "layout default"}
 		if status.layoutSaved {
 			trail = &noteTrail{text: "layout saved", link: &noteLink{label: "reset", act: tourLayoutMsg{arg: "reset"}}}

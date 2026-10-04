@@ -138,23 +138,23 @@ func TestStopLinkGroups(t *testing.T) {
 	}
 }
 
-// callsTour is a withdrawal tour whose route stop calls into three others: the
+// callsTour is an order tour whose route stop calls into three others: the
 // next stop, a later one, and one sent without a symbol.
 func callsTour() *types.Walkthrough {
 	return &types.Walkthrough{Stops: []types.WalkthroughStop{
-		{ID: "2.1", Title: "The withdrawal route", Calls: []types.StopCall{
-			{Stop: "4.1", Symbol: "dispatchHold"},
-			{Stop: "2.2", Symbol: "requestWalletWithdrawal", Line: 48},
+		{ID: "2.1", Title: "The order route", Calls: []types.StopCall{
+			{Stop: "4.1", Symbol: "reserveStock"},
+			{Stop: "2.2", Symbol: "createOrder", Line: 48},
 			{Stop: "3"},
 		}},
-		{ID: "2.2", Title: "Requesting the withdrawal"},
-		{ID: "3", Title: "The ledger write"},
-		{ID: "4.1", Title: "The hold"},
+		{ID: "2.2", Title: "Creating the order"},
+		{ID: "3", Title: "The stock update"},
+		{ID: "4.1", Title: "The reservation"},
 	}}
 }
 
-// A stop's calls are the first row under its note, above Related (John
-// 2026-10-03). The call leading to the next stop reads "→" and has its own
+// A stop's calls are the first row under its note, above Related. The call
+// leading to the next stop reads "→" and has its own
 // colour; a call sent without a symbol shows the stop's title.
 func TestStopLinkGroupsCalls(t *testing.T) {
 	tour := callsTour()
@@ -162,9 +162,9 @@ func TestStopLinkGroupsCalls(t *testing.T) {
 	stop.Related = []types.DocRef{{Doc: "a.go", StartLine: 4}}
 	got := stopLinkGroups(stop, tour, nil)
 	wantCalls := linkGroup{head: "Calls:", hint: "click, or :call N", links: []noteLink{
-		{label: "[1] 4.1 dispatchHold", act: tourCallMsg{arg: "1"}},
-		{label: "[2] → 2.2 requestWalletWithdrawal", act: tourCallMsg{arg: "2"}, accent: nextCallColor},
-		{label: "[3] 3 The ledger write", act: tourCallMsg{arg: "3"}},
+		{label: "[1] 4.1 reserveStock", act: tourCallMsg{arg: "1"}},
+		{label: "[2] → 2.2 createOrder", act: tourCallMsg{arg: "2"}, accent: nextCallColor},
+		{label: "[3] 3 The stock update", act: tourCallMsg{arg: "3"}},
 	}}
 	if len(got) != 3 || !reflect.DeepEqual(got[0], wantCalls) || got[1].head != "Related:" || got[2].head != "Views:" {
 		t.Fatalf("groups %+v, want Calls %+v then Related then the views", got, wantCalls)
@@ -172,7 +172,7 @@ func TestStopLinkGroupsCalls(t *testing.T) {
 
 	// From the last stop nothing is next, so no call is marked.
 	last := tour.Stops[3]
-	last.Calls = []types.StopCall{{Stop: "2.2", Symbol: "requestWalletWithdrawal"}}
+	last.Calls = []types.StopCall{{Stop: "2.2", Symbol: "createOrder"}}
 	if l := stopLinkGroups(last, tour, nil)[0].links[0]; l.accent != "" || strings.Contains(l.label, "→") {
 		t.Errorf("a call from the last stop is marked as the next: %+v", l)
 	}
@@ -202,10 +202,10 @@ func TestTheNextStopsCallIsStyledApart(t *testing.T) {
 	rows, _ := layoutGroups(stopLinkGroups(tour.Stops[0], tour, nil), 140)
 	label := lipgloss.NewStyle().Foreground(lipgloss.Color(annotationColor)).Bold(true).Underline(true)
 	next := label.Foreground(lipgloss.Color(nextCallColor))
-	if len(rows) != 1 || ansi.Strip(rows[0]) != " Calls: [1] 4.1 dispatchHold · [2] → 2.2 requestWalletWithdrawal · [3] 3 The ledger write  click, or :call N" {
+	if len(rows) != 1 || ansi.Strip(rows[0]) != " Calls: [1] 4.1 reserveStock · [2] → 2.2 createOrder · [3] 3 The stock update  click, or :call N" {
 		t.Fatalf("rows %q", rows)
 	}
-	if !strings.Contains(rows[0], next.Render("[2] → 2.2 requestWalletWithdrawal")) || !strings.Contains(rows[0], label.Render("[1] 4.1 dispatchHold")) {
+	if !strings.Contains(rows[0], next.Render("[2] → 2.2 createOrder")) || !strings.Contains(rows[0], label.Render("[1] 4.1 reserveStock")) {
 		t.Errorf("the next stop's call is not styled apart from the others: %q", rows[0])
 	}
 }
@@ -247,7 +247,7 @@ func TestClickingACallEntersItsStop(t *testing.T) {
 			if calls < 0 || related <= calls {
 				t.Errorf("label rows %q: Calls at %d, Related at %d, want Calls above", m.docPane.pinned, calls, related)
 			}
-			cx, cy := onScreen(t, m, "[2] → 2.2 requestWalletWithdrawal")
+			cx, cy := onScreen(t, m, "[2] → 2.2 createOrder")
 			want := m.executeCommand("call 2")()
 			_, cmd := m.Update(leftClick(cx+3, cy))
 			if cmd == nil || !reflect.DeepEqual(cmd(), want) {
@@ -300,7 +300,7 @@ func TestLayoutKeepsEveryLabelWhole(t *testing.T) {
 	marked[0].state, marked[1].state, marked[2].state = viewNotOpened, viewOpen, viewHidden
 	t.Run("marked", func(t *testing.T) { checkLinkLayout(t, linkGroup{head: "Views:", links: marked}) })
 	related := []noteLink{
-		{label: "[1] ui-web-b2b/ui/components/move-funds/move-funds.logic.js:66", act: tourRelatedMsg{arg: "1"}, middle: true},
+		{label: "[1] web-client/src/components/cart-items/cart-items.logic.js:66", act: tourRelatedMsg{arg: "1"}, middle: true},
 		{label: "[2] server/a.go:4", act: tourRelatedMsg{arg: "2"}, middle: true},
 	}
 	t.Run("paths", func(t *testing.T) { checkLinkLayout(t, linkGroup{head: "Related:", links: related}) })

@@ -59,10 +59,10 @@ func serveInfo(socketPath string, timeout time.Duration) (*protocol.GetServerInf
 // restartServeForRelaunch stops the serve on socketPath before the TUI execs
 // the build that reports newVersion, so the relaunched TUI spawns a serve from
 // that build too. Re-exec replaces only the TUI: the serve it spawned is a
-// separate, detached process, and it kept running the old binary — which
-// dropped a tour's calls when the tour was re-sent (John 2026-10-03). The
-// startup check does not catch it on an explicit --socket, where it checks
-// only that the serve answers.
+// separate, detached process, and it would keep running the old binary,
+// silently dropping whatever the new build added (a field of a re-sent tour,
+// say). The startup check does not catch it on an explicit --socket, where it
+// checks only that the serve answers.
 //
 // The serve is left up only when it already runs the new build — another TUI
 // relaunched first — which needs it to report newVersion, and newVersion to

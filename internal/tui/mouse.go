@@ -235,7 +235,7 @@ func (m appModel) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 	}
 
 	// A sideways wheel (a trackpad swipe, or shift+wheel) scrolls the diff sideways,
-	// like h / L, when lines are not wrapped (John 2026-10-01). One step per event:
+	// like h / L, when lines are not wrapped. One step per event:
 	// a trackpad sends many.
 	if !m.diffView.wrap {
 		sideways := msg.Button == tea.MouseWheelLeft || msg.Button == tea.MouseWheelRight

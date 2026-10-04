@@ -13,10 +13,10 @@ import (
 
 // Code names things that live elsewhere: a SQL file loaded by name, a function
 // in another file. Opening what the lines under the cursor reference, in the
-// related pane beside Monocle, is a jump to definition across that gap (John
-// 2026-10-04: "see the sql files referenced by the code"). Which file a line
-// means is project knowledge Monocle does not have, so a configured command,
-// walkthrough_resolve, works it out; Monocle runs it and opens what it says.
+// related pane beside Monocle, is a jump to definition across that gap. Which
+// file a line means is project knowledge Monocle does not have, so a
+// configured command, walkthrough_resolve, works it out; Monocle runs it and
+// opens what it says.
 
 // maxRelatedFiles caps the files in the related pane: past this many split
 // windows nothing in any of them can be read.

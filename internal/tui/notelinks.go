@@ -39,8 +39,8 @@ type linkGroup struct {
 }
 
 // noteTrail is set flush right on a group's last row: the stop's layout, always
-// shown (John 2026-10-02), "layout default" or "layout saved · reset" with
-// "reset" a label. It wins the row's room over the keyboard hint.
+// shown, "layout default" or "layout saved · reset" with "reset" a label. It
+// wins the row's room over the keyboard hint.
 type noteTrail struct {
 	text string
 	link *noteLink

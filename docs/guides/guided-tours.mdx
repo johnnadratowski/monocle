@@ -35,7 +35,7 @@ The tour belongs to the review. It survives a restart (you come back on the same
 
 ## Calls
 
-A stop's code often calls the function a later stop is about: 2.1 is the withdrawal route, and it calls `requestWalletWithdrawal`, which is what 2.2 explains. The agent says so with the stop's `calls`, and each shows in a **Calls:** row, the first under the note: `[1] → 2.2 requestWalletWithdrawal`, `[2] 4.1 dispatchHold`. The call that leads to the **next** stop reads `→` and is coloured apart from the rest. Clicking one, or `:call N`, enters that stop as `:stop` would.
+A stop's code often calls the function a later stop is about: 2.1 is the order route, and it calls `createOrder`, which is what 2.2 explains. The agent says so with the stop's `calls`, and each shows in a **Calls:** row, the first under the note: `[1] → 2.2 createOrder`, `[2] 4.1 reserveStock`. The call that leads to the **next** stop reads `→` and is coloured apart from the rest. Clicking one, or `:call N`, enters that stop as `:stop` would.
 
 Following a call is a detour, so the tour keeps a **history** of the stops you enter — by `.`/`,`, `:stop`, a call, or the agent moving you — and walks it the way a browser walks pages. `backspace` (or `f18`) goes back to the stop you came from, `f19` goes forward again, and entering another stop after going back drops the stops forward would have reached. The status bar says where you went: `back to 2.1`, or `no earlier stop`. These keys work in tour mode only, and never while you are typing a comment, a search or a command. The history lasts as long as monocle runs.
 
@@ -59,7 +59,7 @@ Side effects wait until you rest on a stop for a moment, so holding `.` to skip 
 A stop can carry **views** — screenshots, screen recordings, rendered documents, pages, artifacts — and a **layout** name. monocle does not open windows itself on a stop. It hands the stop to one command you configure, [`walkthrough_on_stop`](/configuration/config-file), which it runs on every stop you settle on:
 
 ```json
-{ "walkthrough_on_stop": "stage on-stop" }
+{ "walkthrough_on_stop": "tour-hook on-stop" }
 ```
 
 The command runs with `sh -c` in the repo root, in the background and with a 30-second timeout, so it never blocks the TUI; a failure shows in the status bar with the last line it wrote to stderr. It gets the stop in its environment:
@@ -86,7 +86,7 @@ When these are set, show that one view — open it, or raise it if it is already
 The windows your on-stop command opens are out of monocle's sight, so it cannot tell on its own whether a view is showing. Configure [`walkthrough_view_status`](/configuration/config-file) and it will ask, then mark each view's label: `[1] video Login flow (open)`, `(hidden)` or `(not opened)`.
 
 ```json
-{ "walkthrough_view_status": "stage view-status" }
+{ "walkthrough_view_status": "tour-hook view-status" }
 ```
 
 The command runs like the on-stop command — `sh -c` in the repo root, with `MONOCLE_STOP_ID`, `MONOCLE_REPO_ROOT` and `MONOCLE_STOP_JSON` — but has only 500 ms, since it is asked often and a slow answer must never be felt. It prints one line of JSON to stdout:
@@ -106,7 +106,7 @@ The command runs like the on-stop command — `sh -c` in the repo root, with `MO
 `layout` is `"saved"` when the windows are in a layout you arranged, `"default"` otherwise. The note always shows it flush right on the view's row: **`layout default`**, or **`layout saved · reset`**. Clicking `reset` — or typing `:layout reset` — runs [`walkthrough_layout_reset`](/configuration/config-file) (`sh -c` in the repo root, with the same environment as the status command, 10-second timeout) and then asks the status again, so the label goes once the layout is back to the default:
 
 ```json
-{ "walkthrough_layout_reset": "stage layout-reset" }
+{ "walkthrough_layout_reset": "tour-hook layout-reset" }
 ```
 
 Answer for the stop in the environment: a window still showing another stop's view is not this stop's view. Without the command, or when it fails, times out, or prints anything without a `views` object, nothing shows — no markers, no layout label — since monocle does not know, so it does not say.
@@ -117,9 +117,9 @@ It is asked when a stop is shown (once the on-stop command has finished with it,
 
 Stop ids are what you type and what the agent answers to. When you ask about one, the agent can call `goto_stop` to put that stop in front of you while it explains.
 
-To ask about particular lines, point at them and send them: select with `v` or a mouse drag, or tag lines one at a time with `+` (yellow in the gutter; they stay tagged across files and stops), then press `@`. monocle hands the tour, the stop and the file lines — the selection and the tags, else the cursor's line — to your [`walkthrough_ask`](/configuration/config-file) command, which puts them in the agent's prompt and moves you there to type the question. The status bar says what went: `sent 2.2 walletWithdrawals.ts:312-316 to the agent`.
+To ask about particular lines, point at them and send them: select with `v` or a mouse drag, or tag lines one at a time with `+` (yellow in the gutter; they stay tagged across files and stops), then press `@`. monocle hands the tour, the stop and the file lines — the selection and the tags, else the cursor's line — to your [`walkthrough_ask`](/configuration/config-file) command, which puts them in the agent's prompt and moves you there to type the question. The status bar says what went: `sent 2.2 orders.ts:120-124 to the agent`.
 
-`ctrl+]` works out the same lines and asks your [`walkthrough_resolve`](/configuration/config-file) command what they reference — the SQL file a query is loaded from, say — then opens the answer in the related-files pane beside what it already holds (at most 8 files) and moves you there: `opened 2: find_by_client_key.sql, …`, or `nothing to open on these lines`.
+`ctrl+]` works out the same lines and asks your [`walkthrough_resolve`](/configuration/config-file) command what they reference — the SQL file a query is loaded from, say — then opens the answer in the related-files pane beside what it already holds (at most 8 files) and moves you there: `opened 2: find_by_email.sql, …`, or `nothing to open on these lines`.
 
 A comment you write while the tour is on is tagged with the stop you were on: it shows `[1.2]` in its box, and the feedback the agent receives leads with it — `[1.2] Does x get hoisted here?` — so the agent reads it against what it said at that stop. If the agent re-sends the tour — to fix a note, say — you stay on the stop you were on as long as its id survives.
 

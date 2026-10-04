@@ -33,9 +33,9 @@ type WalkthroughStop struct {
 	Related []DocRef   `json:"related,omitempty"`
 	Views   []StopView `json:"views,omitempty"`
 	// Calls are the other stops this stop's code calls into: 2.1 is the
-	// route, and it calls requestWalletWithdrawal, which is what 2.2 is about.
-	// Each is a label under the note that enters the stop it names (John
-	// 2026-10-03).
+	// route, and it calls createOrder, which is what 2.2 is about. Each is a
+	// label under the note that enters the stop it names, so the reviewer can
+	// follow the code from caller to callee.
 	Calls []StopCall `json:"calls,omitempty"`
 	// Layout is an opaque scene name, passed through to the on-stop command.
 	// Monocle itself never interprets it.

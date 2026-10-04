@@ -54,7 +54,7 @@ type docPaneModel struct {
 	pinned   []string
 	linkHits []linkHit
 	// pinOffset scrolls the label rows when there are more than pinCap: a stop
-	// with many related files must not take the note's room (John 2026-10-02).
+	// with many related files must not take the note's room.
 	pinOffset int
 }
 
@@ -143,8 +143,8 @@ func (m docPaneModel) noteScrollHint() string {
 
 // noteThumb marks which of the note's rows carry the scrollbar's thumb: sized by how
 // much of the note is in view, placed by where the view is. nil when it all fits.
-// John (2026-10-01) asked for a scrubber on the right: the title's "↓ N lines" hint
-// alone "looks like it is part of the title".
+// A scrubber on the right says there is more at a glance: the title's "↓ N lines"
+// hint alone reads as part of the title.
 func noteThumb(rows, total, offset int) []bool {
 	if rows <= 0 || total <= rows {
 		return nil
@@ -282,8 +282,8 @@ func (m *docPaneModel) close() {
 	m.annotationID = ""
 }
 
-// headRows is the title bar, plus, for a tour note, the rule under it (John
-// 2026-10-01: a line between the title and the text).
+// headRows is the title bar, plus, for a tour note, the rule under it, which
+// keeps the title apart from the text.
 func (m docPaneModel) headRows() int {
 	if m.note {
 		return 2
@@ -322,7 +322,7 @@ func (m docPaneModel) View() string {
 		title += "  · range may have shifted"
 	}
 	// A note's scroll hint sits at the right end of the title bar, apart from the
-	// title (John 2026-10-01: in line, it read as part of the title).
+	// title: in line, it reads as part of the title.
 	hint := ""
 	if m.note {
 		hint = m.noteScrollHint()
@@ -357,7 +357,7 @@ func (m docPaneModel) View() string {
 			switch {
 			case i == top-1 && rows == top-1 && m.pinnedShown() > 0:
 				// The row between the note and its labels is a rule, like the one
-				// under the title (John 2026-10-02, a trial).
+				// under the title.
 				b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(strings.Repeat("─", max(m.width, 0))))
 			case i >= top && pinThumb != nil:
 				row := truncateToWidth(m.pinned[m.pinOffset+i-top], m.width-2)

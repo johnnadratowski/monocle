@@ -2074,7 +2074,7 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.tour.on && (Matches(key, km.TourBack) || Matches(key, km.TourForward)):
 			// fall through to the shared cases — the tour keys included, since
 			// the doc pane is where the tour's note is being read. ctrl+h/j/k/l
-			// too: they leave the pane (John 2026-10-02: they did nothing here).
+			// too: they leave the pane, rather than doing nothing here.
 		default:
 			return m, nil
 		}
@@ -2627,9 +2627,9 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			// In tour mode o toggles the stop's note: closed, it comes back,
-			// without the arriving side effects (John 2026-10-03: once o had
-			// closed it, nothing brought it back). An annotation under the
-			// cursor still wins above: the cursor on it is the narrower ask.
+			// without the arriving side effects, so a note o closed is never
+			// out of reach. An annotation under the cursor still wins above:
+			// the cursor on it is the narrower ask.
 			if stop, ok := m.currentStop(); ok && m.tour.on {
 				m.openStopNote(stop)
 				return m, nil
@@ -3592,9 +3592,8 @@ func recalcPaneDimensions(m *appModel) {
 // noteMaxPercent caps a tour note's pane, as a share of Monocle's height.
 const noteMaxPercent = 40
 
-// docSize is the doc pane's size against the diff, cycled by the PaneSize key
-// (John 2026-10-02): the focused pane biggest first, then smallest, then back to
-// the usual split.
+// docSize is the doc pane's size against the diff, cycled by the PaneSize key:
+// the focused pane biggest first, then smallest, then back to the usual split.
 type docSize int
 
 const (
@@ -5082,8 +5081,8 @@ func (m appModel) currentJumpPos() jumpPos {
 // --socket, and every path it opens, runs or hands on — the related-files
 // pane, ctrl+g, a terminal, the tour commands — belongs to the review's
 // checkout, not to where the TUI was started. Started from the main clone
-// against a worktree's engine, the related pane opened the main clone's files,
-// where the PR's new files do not exist (John 2026-10-04).
+// against a worktree's engine, the related pane would otherwise open the main
+// clone's files, where a branch's new files do not exist.
 func (m *appModel) adoptSessionRoot(session *types.ReviewSession) {
 	if session == nil || session.RepoRoot == "" {
 		return

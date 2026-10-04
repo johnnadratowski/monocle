@@ -187,10 +187,10 @@ func DefaultKeyMap() KeyMap {
 		// forward/back the way > and < already do for marks.
 		TourNext: []string{"."},
 		TourPrev: []string{","},
-		// backspace is a browser's back. F18 and F19 are what John's
-		// Hammerspoon sends for cmd+backspace and cmd+shift+backspace from
-		// other windows, and for shift+backspace in Monocle's own, since a
-		// terminal cannot tell that from backspace (2026-10-03).
+		// backspace is a browser's back. F18 and F19 are keys a terminal can
+		// tell apart from everything else, for a key remapper to send: from
+		// another window, or for shift+backspace, which a terminal cannot tell
+		// from backspace.
 		TourBack:     []string{"backspace", "f18"},
 		TourForward:  []string{"f19"},
 		ToggleTour:   []string{"W"}, // "walkthrough"
@@ -217,10 +217,10 @@ func DefaultKeyMap() KeyMap {
 		DismissArtifact: []string{"x"},
 		ToggleFocusMode: []string{"F"},
 		// + adds a line to what is sent; @ sends it, as an @-mention points a
-		// message at someone (2026-10-04).
+		// message at someone.
 		TagLines:  []string{"+"},
 		SendLines: []string{"@"},
-		// vim's jump to definition (2026-10-04).
+		// vim's jump to definition.
 		OpenRefs: []string{"ctrl+]"},
 
 		OpenInEditor:         []string{"ctrl+g"},

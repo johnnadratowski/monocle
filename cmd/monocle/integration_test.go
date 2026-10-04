@@ -97,10 +97,10 @@ func TestServeToClientE2E(t *testing.T) {
 	}
 }
 
-// ctrl+r execs only the TUI. The serve it spawned is a separate process, and it
-// kept running the old binary, which dropped a tour's calls when the tour was
-// re-sent (John 2026-10-03). This spawns a real serve from a build reporting v2
-// and checks what a relaunch does to it.
+// ctrl+r execs only the TUI. The serve it spawned is a separate process, and
+// left alone it keeps running the old binary, silently dropping what the new
+// build added. This spawns a real serve from a build reporting v2 and checks
+// what a relaunch does to it.
 func TestRelaunchRestartsAServeOnTheOldBuild(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("unix sockets unavailable on windows")

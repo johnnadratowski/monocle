@@ -16,9 +16,9 @@ import (
 )
 
 func TestParseResolved(t *testing.T) {
-	got, err := parseResolved([]byte(` [{"path": "server/sql/a.sql", "line": 12}, {"path": "/abs/b.go"},
+	got, err := parseResolved([]byte(` [{"path": "db/queries/a.sql", "line": 12}, {"path": "/abs/b.go"},
 		{"path": "  "}, {"path": "c.sql", "line": -4}] `), "/repo")
-	want := []relatedFile{{"/repo/server/sql/a.sql", 12}, {"/abs/b.go", 0}, {"/repo/c.sql", 0}}
+	want := []relatedFile{{"/repo/db/queries/a.sql", 12}, {"/abs/b.go", 0}, {"/repo/c.sql", 0}}
 	if err != nil || !reflect.DeepEqual(got, want) {
 		t.Errorf("got %+v %v, want %+v", got, err, want)
 	}
@@ -84,7 +84,7 @@ func openRefs(t *testing.T, m appModel) appModel {
 // answer beside the stop's related files, focus moving there with the editor
 // on the first file found.
 func TestOpenReferences(t *testing.T) {
-	m, asked, plans := resolveApp(t, `[{"path": "server/sql/find_by_client_key.sql", "line": 12}, {"path": "server/sql/hold.sql"}]`)
+	m, asked, plans := resolveApp(t, `[{"path": "db/queries/find_by_email.sql", "line": 12}, {"path": "db/queries/reserve.sql"}]`)
 	m = pressKey(t, m, "+")                   // b.go:30
 	m = pressKey(t, pressKey(t, m, "v"), "j") // b.go:30-31
 	m = openRefs(t, m)
@@ -101,14 +101,14 @@ func TestOpenReferences(t *testing.T) {
 	}
 	p := (*plans)[0]
 	root := m.repoRoot
-	wantFiles := []relatedFile{{filepath.Join(root, "a.go"), 5}, {filepath.Join(root, "server/sql/find_by_client_key.sql"), 12}, {filepath.Join(root, "server/sql/hold.sql"), 0}}
+	wantFiles := []relatedFile{{filepath.Join(root, "a.go"), 5}, {filepath.Join(root, "db/queries/find_by_email.sql"), 12}, {filepath.Join(root, "db/queries/reserve.sql"), 0}}
 	if !reflect.DeepEqual(p.files, wantFiles) {
 		t.Errorf("pane files %+v\nwant the stop's a.go, then what was found: %+v", p.files, wantFiles)
 	}
 	if !p.selectPane || !p.focus || !p.reveal || !strings.HasSuffix(p.argv[len(p.argv)-1], "|2wincmd w") {
 		t.Errorf("plan focus=%v select=%v reveal=%v ending %q: want focus on the pane, the editor on file 2", p.focus, p.selectPane, p.reveal, p.argv[len(p.argv)-1])
 	}
-	if want := "opened 2: find_by_client_key.sql, hold.sql"; m.statusBar.searchInfo != want {
+	if want := "opened 2: find_by_email.sql, reserve.sql"; m.statusBar.searchInfo != want {
 		t.Errorf("status %q, want %q", m.statusBar.searchInfo, want)
 	}
 }

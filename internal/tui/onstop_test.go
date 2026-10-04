@@ -82,8 +82,8 @@ func TestExecOnStop(t *testing.T) {
 	})
 
 	t.Run("a failure says why, from stderr", func(t *testing.T) {
-		err := execOnStop(`echo noise >&2; echo "stage: no such scene" >&2; exit 3`, dir, nil, 5*time.Second)
-		if err == nil || !strings.Contains(err.Error(), "exit status 3") || !strings.Contains(err.Error(), "stage: no such scene") {
+		err := execOnStop(`echo noise >&2; echo "hook: no such scene" >&2; exit 3`, dir, nil, 5*time.Second)
+		if err == nil || !strings.Contains(err.Error(), "exit status 3") || !strings.Contains(err.Error(), "hook: no such scene") {
 			t.Errorf("err = %v, want the exit status and the last stderr line", err)
 		}
 	})

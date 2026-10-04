@@ -155,13 +155,13 @@ func TestWalkthroughFromParams(t *testing.T) {
 		ID: "1.2", Title: "t", File: "a.go", LineStart: 3, LineEnd: 5, Note: "n", Layout: "review",
 		Related: []relatedParam{{Doc: "b.go", StartLine: 7, Label: "caller"}},
 		Views:   []stopViewParam{{Kind: "video", Target: "d.webm", Label: "demo"}},
-		Calls:   []stopCallParam{{Stop: "2.2", Symbol: "requestWalletWithdrawal", Line: 48}},
+		Calls:   []stopCallParam{{Stop: "2.2", Symbol: "createOrder", Line: 48}},
 	}}})
 	want := types.Walkthrough{Title: "T", Stops: []types.WalkthroughStop{{
 		ID: "1.2", Title: "t", File: "a.go", LineStart: 3, LineEnd: 5, Note: "n", Layout: "review",
 		Related: []types.DocRef{{Kind: types.DocRefFile, Doc: "b.go", StartLine: 7, Label: "caller"}},
 		Views:   []types.StopView{{Kind: "video", Target: "d.webm", Label: "demo"}},
-		Calls:   []types.StopCall{{Stop: "2.2", Symbol: "requestWalletWithdrawal", Line: 48}},
+		Calls:   []types.StopCall{{Stop: "2.2", Symbol: "createOrder", Line: 48}},
 	}}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got  %+v\nwant %+v", got, want)

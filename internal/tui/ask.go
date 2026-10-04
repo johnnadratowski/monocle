@@ -14,8 +14,8 @@ import (
 )
 
 // Asking the agent about code starts in Monocle, where the code is, and ends in
-// the agent's window, where the question is typed (John 2026-10-04): select
-// lines with v or a drag, or tag them one by one, then send. Monocle sends a
+// the agent's window, where the question is typed: select lines with v or a
+// drag, or tag them one by one, then send. Monocle sends a
 // reference — the tour, the stop, the files and lines — to one configured
 // command, walkthrough_ask, which puts it in the agent's prompt and moves focus
 // there. Monocle knows nothing about the agent's window.
@@ -304,7 +304,7 @@ func (m appModel) handleAskDone(msg askDoneMsg) appModel {
 }
 
 // askLabel names what was sent the way the status bar has room for: the stop,
-// then up to three ranges by file name — "2.2 walletWithdrawals.ts:312-316".
+// then up to three ranges by file name — "2.2 orders.ts:120-124".
 func askLabel(p askPayload) string {
 	var parts []string
 	for i, r := range p.Refs {

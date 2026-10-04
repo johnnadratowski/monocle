@@ -123,8 +123,8 @@ func relatedEditorArgv(configured string, files []relatedFile, active int) []str
 
 // vimCommandLimit is how many +cmd, -c and -S arguments vim and nvim take
 // together; --cmd has a limit of its own of the same size. Measured on nvim
-// 0.12.4 and vim 9.2 (2026-10-04): an eleventh fails with `Too many
-// "+command", "-c command" or "--cmd command" arguments`.
+// 0.12.4 and vim 9.2: an eleventh fails with `Too many "+command", "-c
+// command" or "--cmd command" arguments`.
 const vimCommandLimit = 10
 
 // withEditorArgs appends related_editor_args to the related pane's editor
@@ -182,9 +182,9 @@ type relatedPanePlan struct {
 }
 
 // stageZoomedOption is the window option a setup that hides a window's splits
-// by zooming Monocle's pane (stage's "hide" key) sets while it is hidden. It
-// is cleared when Monocle unzooms, so that setup does not go on thinking the
-// window is hidden.
+// by zooming Monocle's pane (a "hide" key) sets while it is hidden. It is
+// cleared when Monocle unzooms, so that setup does not go on thinking the
+// window is hidden. The option's name is the contract with such a setup.
 const stageZoomedOption = "@stage_zoomed"
 
 // unzoomArgs are the tmux commands that unzoom the window holding Monocle's
