@@ -121,6 +121,50 @@ func relatedEditorArgv(configured string, files []relatedFile, active int) []str
 	return argv
 }
 
+// vimCommandLimit is how many +cmd, -c and -S arguments vim and nvim take
+// together; --cmd has a limit of its own of the same size. Measured on nvim
+// 0.12.4 and vim 9.2 (2026-10-04): an eleventh fails with `Too many
+// "+command", "-c command" or "--cmd command" arguments`.
+const vimCommandLimit = 10
+
+// withEditorArgs appends related_editor_args to the related pane's editor
+// argv. For vim and nvim it leaves them out, and says why, when they would
+// take the commands past vimCommandLimit: the editor would exit on the spot
+// and the pane would show nothing.
+func withEditorArgs(argv, extra []string) ([]string, error) {
+	if len(extra) == 0 || len(argv) == 0 {
+		return argv, nil
+	}
+	out := append(append([]string(nil), argv...), extra...)
+	if isVimLike(argv[0]) {
+		if cmds, pre := vimCommandCounts(out[1:]); cmds > vimCommandLimit || pre > vimCommandLimit {
+			return argv, fmt.Errorf("related_editor_args left out: with monocle's own they make %d +cmd/-c/-S and %d --cmd, and vim takes at most %d of each",
+				cmds, pre, vimCommandLimit)
+		}
+	}
+	return out, nil
+}
+
+// vimCommandCounts counts vim's command arguments in args: +cmd, -c and -S
+// together, and --cmd on its own.
+func vimCommandCounts(args []string) (cmds, pre int) {
+	for i := 0; i < len(args); i++ {
+		switch a := args[i]; {
+		case a == "--":
+			return cmds, pre
+		case a == "-c":
+			cmds++
+			i++
+		case a == "--cmd":
+			pre++
+			i++
+		case a == "-S", strings.HasPrefix(a, "+"):
+			cmds++
+		}
+	}
+	return cmds, pre
+}
+
 // relatedPanePlan is everything that decides the tmux command for showing
 // related files.
 type relatedPanePlan struct {
@@ -300,15 +344,32 @@ func (m appModel) showRelatedFiles(files []relatedFile, active int, reveal bool)
 	if !inTmux() {
 		return func() tea.Msg { return relatedPaneMsg{err: errRelatedNeedsTmux} }
 	}
+	argv, argsErr := withEditorArgs(relatedEditorArgv(m.editorCommand(), absRelated(m.repoRoot, files), active), m.relatedEditorArgs())
 	plan := relatedPanePlan{
 		owner:  os.Getenv("TMUX_PANE"),
 		dir:    m.repoRoot,
 		mode:   m.editorMode(),
 		focus:  m.relatedFocus(),
 		reveal: reveal,
-		argv:   relatedEditorArgv(m.editorCommand(), absRelated(m.repoRoot, files), active),
+		argv:   argv,
 	}
-	return showRelated(m.tour.pane, plan)
+	show := showRelated(m.tour.pane, plan)
+	if argsErr != nil {
+		// The files still open; the note says what was left out of the editor.
+		return tea.Batch(show, func() tea.Msg { return relatedPaneMsg{err: argsErr} })
+	}
+	return show
+}
+
+// relatedEditorArgs is the configured related_editor_args.
+func (m appModel) relatedEditorArgs() []string {
+	if m.engine == nil {
+		return nil
+	}
+	if cfg := m.engine.GetConfig(); cfg != nil {
+		return cfg.RelatedEditorArgs
+	}
+	return nil
 }
 
 // tourRelatedMsg asks to bring up one of the current stop's related files —

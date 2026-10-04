@@ -57,6 +57,12 @@ type Config struct {
 	// reference in the agent's prompt and moves focus there. Empty sends
 	// nothing (John 2026-10-04).
 	WalkthroughAsk string `json:"walkthrough_ask"`
+	// RelatedEditorArgs are extra arguments appended to the editor command of
+	// a tour stop's related-files pane — `["-S", "/path/stage.vim"]`, say — so
+	// whatever runs the tour can set the editor up. With vim and nvim they are
+	// left out, with a status-bar note, when they would take +cmd, -c and -S
+	// past vim's limit of ten (John 2026-10-04).
+	RelatedEditorArgs []string `json:"related_editor_args"`
 	// EditorMode controls how Ctrl+g / Ctrl+o open a file: "terminal" (take over
 	// Monocle's screen, the default), "tmux_vertical" (side-by-side split),
 	// "tmux_horizontal" (stacked split), or "tmux_window" (new tmux window/tab).

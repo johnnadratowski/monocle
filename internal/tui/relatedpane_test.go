@@ -248,3 +248,63 @@ func TestUnzoomArgs(t *testing.T) {
 		t.Errorf("no owner pane: got %q, want nothing", got)
 	}
 }
+
+// related_editor_args go on the end of the editor's argv, so whatever runs the
+// tour can set the editor up (John 2026-10-04: stage adds -S <script>).
+func TestRelatedEditorArgs(t *testing.T) {
+	files := []relatedFile{{path: "a.go", line: 4}}
+	base := relatedEditorArgv("nvim", files, 1) // one -c of monocle's own
+	repeat := func(n int, args ...string) []string {
+		var out []string
+		for i := 0; i < n; i++ {
+			out = append(out, args...)
+		}
+		return out
+	}
+
+	got, err := withEditorArgs(base, []string{"-S", "/x/stage.vim"})
+	if want := append(append([]string(nil), base...), "-S", "/x/stage.vim"); err != nil || !reflect.DeepEqual(got, want) {
+		t.Errorf("got %q %v, want %q", got, err, want)
+	}
+	if got, err := withEditorArgs([]string{"code", "a.go"}, []string{"--wait"}); err != nil || !reflect.DeepEqual(got, []string{"code", "a.go", "--wait"}) {
+		t.Errorf("another editor: got %q %v", got, err)
+	}
+
+	// +cmd, -c and -S share vim's ten (measured on nvim 0.12.4 and vim 9.2);
+	// --cmd has ten of its own. Past them the extras are left out, and said so.
+	for _, c := range []struct {
+		name  string
+		extra []string
+		ok    bool
+	}{
+		{"nine -S with monocle's -c", repeat(9, "-S", "s.vim"), true},
+		{"ten -S with monocle's -c", repeat(10, "-S", "s.vim"), false},
+		{"nine more -c", repeat(9, "-c", "echo"), true},
+		{"a +cmd on top of nine -c", append(repeat(9, "-c", "echo"), "+echo"), false},
+		{"ten --cmd count on their own", repeat(10, "--cmd", "echo"), true},
+		{"eleven --cmd", repeat(11, "--cmd", "echo"), false},
+	} {
+		got, err := withEditorArgs(base, c.extra)
+		if c.ok && (err != nil || len(got) != len(base)+len(c.extra)) {
+			t.Errorf("%s: refused (%v), want appended", c.name, err)
+		}
+		if !c.ok && (err == nil || !reflect.DeepEqual(got, base) || !strings.Contains(err.Error(), "related_editor_args")) {
+			t.Errorf("%s: got %q %v, want left out with a note", c.name, got, err)
+		}
+	}
+}
+
+// The pane's argv carries related_editor_args from the config.
+func TestRelatedPaneCarriesTheConfiguredArgs(t *testing.T) {
+	m := viewsAppIn(t, &types.Config{Editor: "nvim", RelatedEditorArgs: []string{"-S", "/x/stage.vim"}}, 140, false)
+	plans := captureRelated(t)
+	m = settle(t, m)
+	if len(*plans) != 1 {
+		t.Fatalf("%d plans", len(*plans))
+	}
+	argv := (*plans)[0].argv
+	if n := len(argv); n < 2 || argv[n-2] != "-S" || argv[n-1] != "/x/stage.vim" {
+		t.Errorf("argv %q does not end with the configured -S /x/stage.vim", argv)
+	}
+	_ = m
+}

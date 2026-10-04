@@ -44,6 +44,7 @@ Create either or both files — you only need to include the settings you want t
   "walkthrough_layout_reset": "",
   "walkthrough_navigate": "",
   "walkthrough_ask": "",
+  "related_editor_args": [],
   "ignore_patterns": [],
   "keybindings": {},
   "mouse": true,
@@ -84,6 +85,7 @@ Create either or both files — you only need to include the settings you want t
 | `walkthrough_layout_reset` | string | `""` | Shell command that puts the windows around a [tour](/guides/guided-tours#which-views-are-showing) back in their default layout. When `walkthrough_view_status` says `"layout": "saved"`, the tour note shows `layout saved · reset` flush right on the view's row; clicking `reset`, or typing `:layout reset`, runs it with `sh -c` in the repo root, with the same environment as the status command and a 10-second timeout, then asks the view status again. A failure shows in the status bar. Empty runs nothing. |
 | `walkthrough_navigate` | string | `""` | Shell command that takes over when `ctrl+h/j/k/l` reaches the edge of Monocle's panes, in place of `tmux select-pane`. Runs with `sh -c`, with `MONOCLE_NAV_DIR` (`left`, `down`, `up` or `right`) and `TMUX_PANE` set, and moves focus itself, e.g. to a tour's windows beside Monocle. If it fails, the key goes to tmux as before. Empty hands every edge to tmux. |
 | `walkthrough_ask` | string | `""` | Shell command that hands the agent the lines you send with `@`: the selection and the tagged lines, else the cursor's line. Runs with `sh -c` in the repo root and a 10-second timeout, with `MONOCLE_REPO_ROOT` and `MONOCLE_ASK_JSON` set — `{"tour": "…", "stop": "2.2", "repo": "/abs/repo", "refs": [{"path": "src/a.ts", "start": 312, "end": 316, "side": "new"}]}`. Adjacent lines of a file are merged into one range; `side` is `"old"` for removed lines, numbered in the old file; `tour` and `stop` are empty outside tour mode. It puts the reference in the agent's prompt and moves focus there. A failure shows in the status bar. Empty sends nothing. |
+| `related_editor_args` | string[] | `[]` | Extra arguments appended to the editor command of a [tour](/guides/guided-tours#related-files) stop's related-files pane, e.g. `["-S", "/path/setup.vim"]`. With vim and nvim, `+cmd`, `-c` and `-S` share a limit of ten (the pane uses one `-c` of its own) and `--cmd` has ten of its own; arguments that would go past either are left out, and the status bar says so. |
 | `ignore_patterns` | string array | `[]` | Glob patterns for files to exclude |
 | `min_diff_width` | integer | `80` | Minimum character width for the diff viewer in side-by-side layout |
 | `mouse` | `true`, `false` | `true` | Enable mouse interactions (click, scroll, drag), including clicking a tour stop's views |
