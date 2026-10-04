@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/josephschmitt/monocle/internal/types"
 )
 
@@ -131,5 +133,60 @@ func TestRelatedNAddsOneFile(t *testing.T) {
 	m = settle(t, m)
 	if len(*plans) != 1 {
 		t.Errorf("%d plans after arriving at 1.2 again, want the stop's respawn", len(*plans))
+	}
+}
+
+var (
+	openEditorKey         = tea.KeyPressMsg{Code: 'g', Mod: tea.ModCtrl}
+	openEditorTakeoverKey = tea.KeyPressMsg{Code: 'g', Mod: tea.ModCtrl | tea.ModShift}
+)
+
+// In a tour, ctrl+g opens the file in the related pane beside Monocle, at the
+// cursor's line, rather than in an editor of its own: the related pane is
+// where a tour's files are read.
+func TestOpenInEditorDuringATourUsesTheRelatedPane(t *testing.T) {
+	m, added, plans, _ := addApp(t, `[]`, true)
+	next, cmd := m.Update(openEditorKey) // on 1.2: b.go, line 30
+	m = driveWithin(t, next.(appModel), cmd, 0, 5*time.Second)
+
+	want := []string{filepath.Join(m.repoRoot, "b.go") + "|30|%99"}
+	if got := readLines(t, added); !reflect.DeepEqual(got, want) {
+		t.Errorf("related_editor_add ran for %q, want %q", got, want)
+	}
+	if len(*plans) != 0 {
+		t.Errorf("the pane was respawned with %+v", (*plans)[0].files)
+	}
+}
+
+// ctrl+shift+g still takes over the screen in a tour, and ctrl+g outside one
+// opens the editor as it always has.
+func TestOpenInEditorLeavesTheRelatedPaneAloneOtherwise(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		key  tea.KeyPressMsg
+		tour bool
+	}{
+		{"ctrl+shift+g in a tour", openEditorTakeoverKey, true},
+		{"ctrl+g with no tour", openEditorKey, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m, added, plans, _ := addApp(t, `[]`, true)
+			m.tour.on = tc.tour
+			_, cmd := m.Update(tc.key)
+			if cmd == nil {
+				t.Fatal("no command: the key opened nothing")
+			}
+			if msg := cmd(); msg != nil {
+				if _, ok := msg.(relatedPaneMsg); ok {
+					t.Errorf("went to the related pane: %+v", msg)
+				}
+			}
+			if got := readLines(t, added); len(got) != 0 {
+				t.Errorf("related_editor_add ran for %q", got)
+			}
+			if len(*plans) != 0 {
+				t.Errorf("the related pane was spawned with %+v", (*plans)[0].files)
+			}
+		})
 	}
 }

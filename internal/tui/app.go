@@ -2454,6 +2454,11 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			break
 		}
 		takeover := Matches(key, km.OpenInEditorTakeover)
+		// A tour reads its files in the related pane beside Monocle, so that is
+		// where ctrl+g opens one; ctrl+shift+g still takes over the screen.
+		if m.tour.on && !takeover && inTmux() {
+			return m.addResolved([]relatedFile{{path: filePath, line: line}})
+		}
 		return m, m.openFileCmd(filePath, line, takeover)
 
 	case Matches(key, km.OpenInMarkdownViewer):
