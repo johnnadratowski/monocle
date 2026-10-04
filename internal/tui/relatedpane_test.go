@@ -308,3 +308,19 @@ func TestRelatedPaneCarriesTheConfiguredArgs(t *testing.T) {
 	}
 	_ = m
 }
+
+// {owner} in related_editor_args is Monocle's own pane id, so each Monocle's
+// editor can listen on a socket of its own.
+func TestRelatedEditorArgsOwner(t *testing.T) {
+	m := viewsAppIn(t, &types.Config{Editor: "nvim", RelatedEditorArgs: []string{"--listen", "/tmp/nvim-{owner}.sock"}}, 140, false)
+	plans := captureRelated(t) // Monocle's pane is %99
+	m = settle(t, m)
+	if len(*plans) != 1 {
+		t.Fatalf("%d plans", len(*plans))
+	}
+	argv := (*plans)[0].argv
+	if n := len(argv); n < 2 || argv[n-2] != "--listen" || argv[n-1] != "/tmp/nvim-%99.sock" {
+		t.Errorf("argv %q does not end with --listen /tmp/nvim-%%99.sock", argv)
+	}
+	_ = m
+}

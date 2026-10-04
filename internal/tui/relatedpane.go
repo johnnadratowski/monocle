@@ -354,9 +354,10 @@ func (m appModel) showRelatedFiles(files []relatedFile, active int, reveal, take
 		return func() tea.Msg { return relatedPaneMsg{err: errRelatedNeedsTmux} }
 	}
 	files = absRelated(m.repoRoot, files)
-	argv, argsErr := withEditorArgs(relatedEditorArgv(m.editorCommand(), files, active), m.relatedEditorArgs())
+	owner := os.Getenv("TMUX_PANE")
+	argv, argsErr := withEditorArgs(relatedEditorArgv(m.editorCommand(), files, active), expandOwner(m.relatedEditorArgs(), owner))
 	plan := relatedPanePlan{
-		owner:      os.Getenv("TMUX_PANE"),
+		owner:      owner,
 		dir:        m.repoRoot,
 		mode:       m.editorMode(),
 		focus:      m.relatedFocus() || takeFocus,
@@ -371,6 +372,20 @@ func (m appModel) showRelatedFiles(files []relatedFile, active int, reveal, take
 		return tea.Batch(show, func() tea.Msg { return relatedPaneMsg{err: argsErr} })
 	}
 	return show
+}
+
+// expandOwner replaces {owner} in each of args with Monocle's own tmux pane
+// id, so the editor can be told something unique to this Monocle — a server
+// socket to listen on, say, that related_editor_add can then reach.
+func expandOwner(args []string, owner string) []string {
+	if len(args) == 0 {
+		return args
+	}
+	out := make([]string, len(args))
+	for i, a := range args {
+		out[i] = strings.ReplaceAll(a, "{owner}", owner)
+	}
+	return out
 }
 
 // relatedEditorArgs is the configured related_editor_args.

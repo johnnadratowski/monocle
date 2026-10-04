@@ -67,7 +67,8 @@ type Config struct {
 	WalkthroughResolve string `json:"walkthrough_resolve"`
 	// RelatedEditorArgs are extra arguments appended to the editor command of
 	// a tour stop's related-files pane — `["-S", "/path/setup.vim"]`, say — so
-	// whatever runs the tour can set the editor up. With vim and nvim they are
+	// whatever runs the tour can set the editor up. {owner} in them becomes
+	// Monocle's own tmux pane id. With vim and nvim they are
 	// left out, with a status-bar note, when they would take +cmd, -c and -S
 	// past vim's limit of ten.
 	RelatedEditorArgs []string `json:"related_editor_args"`
