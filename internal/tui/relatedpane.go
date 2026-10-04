@@ -46,6 +46,22 @@ func relatedFilesFor(stop types.WalkthroughStop) []relatedFile {
 	return out
 }
 
+// absRelated anchors relative paths to the review's checkout, so the editor
+// opens the review's files whatever directory its pane ends up in.
+func absRelated(root string, files []relatedFile) []relatedFile {
+	if root == "" {
+		return files
+	}
+	out := make([]relatedFile, len(files))
+	for i, f := range files {
+		if !filepath.IsAbs(f.path) {
+			f.path = filepath.Join(root, f.path)
+		}
+		out[i] = f
+	}
+	return out
+}
+
 // isVimLike reports whether an editor takes vim's -o (one window per file,
 // stacked) and -c (run a command) — which is what lets several files open at
 // once, each at its own line.
@@ -290,7 +306,7 @@ func (m appModel) showRelatedFiles(files []relatedFile, active int, reveal bool)
 		mode:   m.editorMode(),
 		focus:  m.relatedFocus(),
 		reveal: reveal,
-		argv:   relatedEditorArgv(m.editorCommand(), files, active),
+		argv:   relatedEditorArgv(m.editorCommand(), absRelated(m.repoRoot, files), active),
 	}
 	return showRelated(m.tour.pane, plan)
 }

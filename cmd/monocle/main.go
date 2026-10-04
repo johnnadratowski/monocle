@@ -1310,6 +1310,14 @@ func runTUI(socketOverride string, workdir string, additionalPaths []string, con
 	}
 	defer engine.Close()
 
+	// The engine's checkout is the review's, wherever this TUI was started: an
+	// explicit --socket can point it at a worktree's engine from the main clone.
+	if s := engine.GetSession(); s != nil && s.RepoRoot != "" && s.RepoRoot != repoRoot {
+		repoRoot = s.RepoRoot
+		_, statErr := os.Stat(filepath.Join(repoRoot, ".git"))
+		nonGitMode = statErr != nil
+	}
+
 	// Session selection. monocle serve defaults to "continue latest or
 	// start new", so the zero-flag case needs no client-side action.
 	switch {

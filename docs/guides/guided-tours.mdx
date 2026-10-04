@@ -46,6 +46,8 @@ A stop can name **related files** — typically where a change starts, when the 
 - **vim / nvim** open every file **read-only** as a horizontal split (`nvim -R -o a b`), each window at its line. Read-only because the pane usually sits in the worktree under review, where one stray keypress would edit the change.
 - Other editors open the first file, at its line.
 
+Paths are opened in the review's own checkout — the one the engine serves — even when monocle was started somewhere else and pointed at that engine with `--socket`, such as from the main clone against a worktree's engine.
+
 The next stop with related files **reuses** that pane (`tmux respawn-pane`) instead of splitting another; a stop without any leaves it as it is. `X` closes it. The pane is split beside monocle's own (stacked instead with `editor_mode: "tmux_horizontal"`), and it does not take focus unless you set `editor_focus: true` — the tour is driven from monocle, and a split that took the keyboard would swallow your next `.`. Related files need monocle to be running inside tmux.
 
 To get one back — after `X`, say, or to look at the second file — click its label or type `:related N`. That brings the pane up with **all** of the stop's related files, as arriving does, with file N's window the active one (vim/nvim end on `Nwincmd w`; other editors open file N): it respawns the pane when it is open and splits it when it is not. If monocle's tmux window is zoomed — a "hide everything" key that zooms monocle's pane, say — it is unzoomed so the pane can be seen, and the `@stage_zoomed` window option such a key sets is cleared. Keyboard focus follows the same rule as on arriving.

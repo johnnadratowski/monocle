@@ -588,6 +588,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.setSummaryItems(session.SummaryItems)
 			m.summaryOverview = session.SummaryOverview
 			m.agentLabel = session.AgentLabel
+			m.adoptSessionRoot(session)
 			m.syncTour(session)
 		}
 		m.statusBar.fileCount = len(msg.files)
@@ -737,6 +738,7 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.setSummaryItems(session.SummaryItems)
 			m.summaryOverview = session.SummaryOverview
 			m.agentLabel = session.AgentLabel
+			m.adoptSessionRoot(session)
 			m.syncTour(session)
 		}
 		// A new review's first refresh: go back to the top. This runs ahead of
@@ -5067,6 +5069,21 @@ func (m appModel) currentJumpPos() jumpPos {
 		line:     m.diffView.lineNumAt(m.diffView.cursor),
 		fullFile: m.diffView.fullFile,
 	}
+}
+
+// adoptSessionRoot makes the checkout the engine serves the TUI's own repo
+// root. The TUI can be started anywhere and pointed at an engine with
+// --socket, and every path it opens, runs or hands on — the related-files
+// pane, ctrl+g, a terminal, the tour commands — belongs to the review's
+// checkout, not to where the TUI was started. Started from the main clone
+// against a worktree's engine, the related pane opened the main clone's files,
+// where the PR's new files do not exist (John 2026-10-04).
+func (m *appModel) adoptSessionRoot(session *types.ReviewSession) {
+	if session == nil || session.RepoRoot == "" {
+		return
+	}
+	m.repoRoot = session.RepoRoot
+	m.diffView.repoRoot = session.RepoRoot
 }
 
 // recordJump remembers the position being left, so ctrl+o can return to it.

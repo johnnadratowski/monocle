@@ -2,6 +2,7 @@ package adapters
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -111,5 +112,33 @@ func TestDefaultSocketPath_Format(t *testing.T) {
 	// /tmp/monocle- (13) + 12 hex chars + .sock (5) = 30
 	if len(p) != 30 {
 		t.Fatalf("expected length 30, got %d (%s)", len(p), p)
+	}
+}
+
+// A linked worktree's .git is a file naming the main repo's git dir; its root
+// is the worktree, not the main checkout it was made from.
+func TestFindRepoRoot_LinkedWorktree(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	base, _ := filepath.EvalSymlinks(t.TempDir())
+	main, wt := filepath.Join(base, "main"), filepath.Join(base, "main", ".claude", "worktrees", "feature")
+	run := func(dir string, args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t", "GIT_CONFIG_GLOBAL=/dev/null")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	os.MkdirAll(main, 0o755)
+	run(main, "init", "-q")
+	run(main, "commit", "-q", "--allow-empty", "-m", "a")
+	run(main, "worktree", "add", "-q", "-b", "feature", wt)
+	sub := filepath.Join(wt, "server", "sql")
+	os.MkdirAll(sub, 0o755)
+	if got := FindRepoRoot(sub); got != wt {
+		t.Errorf("FindRepoRoot(%s) = %s, want the worktree %s", sub, got, wt)
 	}
 }
