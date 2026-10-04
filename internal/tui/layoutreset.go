@@ -58,22 +58,42 @@ func (m appModel) handleLayout(msg tourLayoutMsg) (appModel, tea.Cmd) {
 	}
 }
 
-// resetLayout runs the layout-reset command in the background, with the same
-// environment as the view-status command: the on-stop command's.
+// resetLayout puts the tour's windows back as a stop starts them. First the
+// related-files pane is respawned with the stop's own related files, fresh —
+// the way to get back files closed in its editor — then the layout-reset
+// command runs in the background, with the same environment as the
+// view-status command: the on-stop command's.
 func (m appModel) resetLayout() (appModel, tea.Cmd) {
+	stop, onStop := m.currentStop()
+	var respawn tea.Cmd
+	// Outside tmux there is no pane to respawn, and arriving at the stop has
+	// already said so.
+	if onStop && m.tour.on && inTmux() {
+		if files := relatedFilesFor(stop); len(files) > 0 {
+			respawn = m.showRelatedFiles(files, 1, false, false)
+		}
+	}
 	command := m.layoutResetCommand()
 	if command == "" {
 		m.statusBar.searchInfo = "no walkthrough_layout_reset command configured"
-		return m, nil
+		return m, respawn
 	}
-	stop, _ := m.currentStop()
 	engine, root := m.engine, m.repoRoot
 	return m, func() tea.Msg {
-		env, err := onStopEnv(stop, root, artifactFile(engine))
-		if err != nil {
-			return layoutResetDoneMsg{err: err}
+		var pane tea.Msg
+		if respawn != nil {
+			pane = respawn()
 		}
-		return layoutResetDoneMsg{err: execHook(command, root, env, layoutResetTimeout, io.Discard)}
+		done := layoutResetDoneMsg{}
+		if env, err := onStopEnv(stop, root, artifactFile(engine)); err != nil {
+			done.err = err
+		} else {
+			done.err = execHook(command, root, env, layoutResetTimeout, io.Discard)
+		}
+		if pane == nil {
+			return done
+		}
+		return tea.BatchMsg{func() tea.Msg { return pane }, func() tea.Msg { return done }}
 	}
 }
 

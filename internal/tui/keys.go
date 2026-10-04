@@ -73,6 +73,7 @@ type KeyMap struct {
 	TourForward  []string
 	ToggleTour   []string
 	CloseRelated []string // close the tmux pane holding a stop's related files
+	LayoutReset  []string // :layout reset: the stop's related files back, then walkthrough_layout_reset
 
 	// Code-structure navigation in the diff (vim %, [{ and [[)
 	BlockMatch []string // block start <-> end
@@ -195,6 +196,9 @@ func DefaultKeyMap() KeyMap {
 		TourForward:  []string{"f19"},
 		ToggleTour:   []string{"W"}, // "walkthrough"
 		CloseRelated: []string{"X"},
+		// A key a terminal tells apart from all others, for a key remapper
+		// to send from a "reset" key of its own.
+		LayoutReset: []string{"f17"},
 
 		BlockMatch: []string{"%"},
 		BlockUp:    []string{"("},
@@ -301,6 +305,7 @@ var keyActions = map[string]func(*KeyMap) *[]string{
 	"tour_forward":            func(km *KeyMap) *[]string { return &km.TourForward },
 	"toggle_tour":             func(km *KeyMap) *[]string { return &km.ToggleTour },
 	"close_related":           func(km *KeyMap) *[]string { return &km.CloseRelated },
+	"layout_reset":            func(km *KeyMap) *[]string { return &km.LayoutReset },
 	"block_match":             func(km *KeyMap) *[]string { return &km.BlockMatch },
 	"block_up":                func(km *KeyMap) *[]string { return &km.BlockUp },
 	"block_top":               func(km *KeyMap) *[]string { return &km.BlockTop },

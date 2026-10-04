@@ -2070,7 +2070,7 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			Matches(key, km.TourNext), Matches(key, km.TourPrev), Matches(key, km.ToggleTour),
 			Matches(key, km.CloseRelated), Matches(key, km.PaneSize),
 			Matches(key, km.PaneLeft), Matches(key, km.PaneDown), Matches(key, km.PaneUp), Matches(key, km.PaneRight),
-			Matches(key, km.ToggleSidebar), Matches(key, km.Help), Matches(key, km.CommandMode), Matches(key, km.SendLines), Matches(key, km.OpenRefs),
+			Matches(key, km.ToggleSidebar), Matches(key, km.Help), Matches(key, km.CommandMode), Matches(key, km.SendLines), Matches(key, km.OpenRefs), Matches(key, km.LayoutReset),
 			m.tour.on && (Matches(key, km.TourBack) || Matches(key, km.TourForward)):
 			// fall through to the shared cases — the tour keys included, since
 			// the doc pane is where the tour's note is being read. ctrl+h/j/k/l
@@ -2194,6 +2194,9 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	case Matches(key, km.ToggleTour):
 		return m.toggleTour()
+
+	case Matches(key, km.LayoutReset):
+		return m.handleLayout(tourLayoutMsg{arg: "reset"})
 
 	case Matches(key, km.CloseRelated):
 		if !inTmux() {
