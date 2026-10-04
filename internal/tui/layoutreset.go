@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
 
@@ -58,43 +59,57 @@ func (m appModel) handleLayout(msg tourLayoutMsg) (appModel, tea.Cmd) {
 	}
 }
 
-// resetLayout puts the tour's windows back as a stop starts them. First the
-// related-files pane is respawned with the stop's own related files, fresh —
-// the way to get back files closed in its editor — then the layout-reset
-// command runs in the background, with the same environment as the
-// view-status command: the on-stop command's.
+// resetLayout puts the tour back as the stop starts it. Monocle returns to
+// the stop's file at its first line, the keyboard in the diff and in Monocle's
+// own tmux pane, wherever the reviewer had wandered. The related-files pane is
+// respawned with the stop's own related files, fresh — the way to get back
+// files closed in its editor — and then the layout-reset command runs in the
+// background, with the same environment as the view-status command: the
+// on-stop command's.
 func (m appModel) resetLayout() (appModel, tea.Cmd) {
 	stop, onStop := m.currentStop()
-	var respawn tea.Cmd
-	// Outside tmux there is no pane to respawn, and arriving at the stop has
-	// already said so.
-	if onStop && m.tour.on && inTmux() {
-		if files := relatedFilesFor(stop); len(files) > 0 {
-			respawn = m.showRelatedFiles(files, 1, false, false)
+	var jump, respawn tea.Cmd
+	owner := ""
+	if onStop && m.tour.on {
+		jump = m.jumpToStop(stop)
+		// Outside tmux there is no pane to respawn or select, and arriving at
+		// the stop has already said so.
+		if inTmux() {
+			owner = os.Getenv("TMUX_PANE")
+			if files := relatedFilesFor(stop); len(files) > 0 {
+				respawn = m.showRelatedFiles(files, 1, false, false)
+			}
 		}
 	}
 	command := m.layoutResetCommand()
 	if command == "" {
 		m.statusBar.searchInfo = "no walkthrough_layout_reset command configured"
-		return m, respawn
 	}
 	engine, root := m.engine, m.repoRoot
-	return m, func() tea.Msg {
-		var pane tea.Msg
+	return m, tea.Batch(jump, func() tea.Msg {
+		var msgs tea.BatchMsg
 		if respawn != nil {
-			pane = respawn()
+			if pane := respawn(); pane != nil {
+				msgs = append(msgs, func() tea.Msg { return pane })
+			}
 		}
-		done := layoutResetDoneMsg{}
-		if env, err := onStopEnv(stop, root, artifactFile(engine)); err != nil {
-			done.err = err
-		} else {
-			done.err = execHook(command, root, env, layoutResetTimeout, io.Discard)
+		if owner != "" {
+			_, _ = tmux("select-pane", "-t", owner)
 		}
-		if pane == nil {
-			return done
+		if command != "" {
+			done := layoutResetDoneMsg{}
+			if env, err := onStopEnv(stop, root, artifactFile(engine)); err != nil {
+				done.err = err
+			} else {
+				done.err = execHook(command, root, env, layoutResetTimeout, io.Discard)
+			}
+			msgs = append(msgs, func() tea.Msg { return done })
 		}
-		return tea.BatchMsg{func() tea.Msg { return pane }, func() tea.Msg { return done }}
-	}
+		if len(msgs) == 0 {
+			return nil
+		}
+		return msgs
+	})
 }
 
 // handleLayoutResetDone says how the reset went and asks the view status again,

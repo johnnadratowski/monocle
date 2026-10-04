@@ -244,7 +244,7 @@ Bindings are grouped by the task they serve, and within a group ordered by key: 
 | `.` | Next stop of the agent's tour (resumes it when off) |
 | `backspace` / `f18` | Back to the stop you came from, as a browser goes back — through every stop entered, however you got there. Tour mode only |
 | `f19` | Forward again, until you enter another stop |
-| `f17` | Reset the layout, as `:layout reset` does: the stop's related files come back, fresh, then `walkthrough_layout_reset` runs. For a key remapper to send |
+| `f17` | Reset the layout, as `:layout reset` does: monocle goes back to the stop's first line, the stop's related files come back, fresh, then `walkthrough_layout_reset` runs. For a key remapper to send |
 | `:back` / `:forward` | The same as `backspace` / `f19` |
 | `:stop <id>` | Jump to a stop by id, e.g. `:stop 1.2` (no id lists them) |
 | `:view [n]` | Open the stop's nth view (default the first): through `walkthrough_on_stop` when set, else in the media / markdown viewer. Clicking a view's label under the note does the same |

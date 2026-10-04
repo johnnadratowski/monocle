@@ -309,7 +309,7 @@ func (m helpModel) buildContent() string {
 			{Label(km.TourForward), "Forward again (also :forward)"},
 			{Label(km.ToggleTour), "Tour mode on/off (hides the note and marks, keeps your stop)"},
 			{Label(km.CloseRelated), "Close the pane holding a stop's related files"},
-			{Label(km.LayoutReset), "Reset the layout: the stop's related files come back, then walkthrough_layout_reset runs (:layout reset)"},
+			{Label(km.LayoutReset), "Reset the layout: back to the stop's first line, its related files come back, then walkthrough_layout_reset runs (:layout reset)"},
 			{":stop <id>", "Jump to a stop by id, e.g. :stop 1.2 (no id lists them)"},
 			{":view [n]", "Open the stop's nth view (default 1) via walkthrough_on_stop, else the media/markdown viewer"},
 			{":related [n]", "Bring up the related-files pane with file n (default 1) active in it"},

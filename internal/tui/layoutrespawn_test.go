@@ -123,3 +123,35 @@ func TestF17BytesAreTheLayoutResetKey(t *testing.T) {
 		t.Errorf("ESC[31~ arrived as %q, want the layout-reset key", rec.keys)
 	}
 }
+
+// A layout reset also puts the reviewer back where the stop starts: its file,
+// the cursor on its first line, the keyboard in Monocle's diff and in
+// Monocle's own tmux pane — wherever they had wandered.
+func TestLayoutResetReturnsToTheStopsFirstLine(t *testing.T) {
+	m, dir := layoutApp(t, "")
+	orderRelated(t, filepath.Join(dir, "order"))
+	log := fakeTmux(t)
+	next, cmd := m.Update(sidebarSelectMsg{path: "a.go"})
+	m = driveWithin(t, next.(appModel), cmd, 0, 5*time.Second)
+	m.diffView.GoToLine(20)
+	m.setFocus(focusSidebar)
+	if m.diffView.path != "a.go" || m.diffView.EditorTargetLine() != 20 {
+		t.Fatalf("set-up: on %s:%d, want a.go:20", m.diffView.path, m.diffView.EditorTargetLine())
+	}
+
+	next, cmd = m.Update(f17Key)
+	m = driveWithin(t, next.(appModel), cmd, 0, 5*time.Second)
+	if got := [3]any{m.diffView.path, m.diffView.EditorTargetLine(), m.focus}; got != [3]any{"b.go", 30, focusMain} {
+		t.Errorf("after the reset: %v, want b.go, line 30, the diff focused", got)
+	}
+	if data, _ := os.ReadFile(log); !strings.Contains(string(data), "select-pane -t %99") {
+		t.Errorf("Monocle's pane was not selected:\n%s", data)
+	}
+
+	// ctrl+o goes back to where the reviewer was.
+	next, cmd = m.Update(tea.KeyPressMsg{Code: 'o', Mod: tea.ModCtrl})
+	m = driveWithin(t, next.(appModel), cmd, 0, 5*time.Second)
+	if m.diffView.path != "a.go" || m.diffView.EditorTargetLine() != 20 {
+		t.Errorf("ctrl+o after the reset: %s:%d, want a.go:20", m.diffView.path, m.diffView.EditorTargetLine())
+	}
+}
