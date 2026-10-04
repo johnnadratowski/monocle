@@ -363,6 +363,7 @@ func (m *appModel) leaveTour() {
 	m.tour.loading = ""
 	m.statusBar.tourLabel = ""
 	m.diffView.stopPath, m.diffView.stopStart, m.diffView.stopEnd = "", 0, 0
+	m.diffView.nearStops = nil
 	if m.docPane.active && strings.HasPrefix(m.docPane.annotationID, tourNoteKeyPrefix) {
 		m.closeDocPane()
 	}
@@ -495,6 +496,7 @@ func (m appModel) followStopCall(arg string) (appModel, tea.Cmd) {
 // once it has loaded. A stop with no file leaves the diff where it is.
 func (m *appModel) jumpToStop(stop types.WalkthroughStop) tea.Cmd {
 	m.diffView.stopPath, m.diffView.stopStart, m.diffView.stopEnd = "", 0, 0
+	m.diffView.nearStops = m.nearStopMarks()
 	if stop.File == "" {
 		return nil
 	}
@@ -536,6 +538,38 @@ func (m *appModel) jumpToStop(stop types.WalkthroughStop) tea.Cmd {
 
 	m.statusBar.searchInfo = fmt.Sprintf("%s: %s is not in the review", stop.ID, stop.File)
 	return nil
+}
+
+// nearStopMarks are the gutter marks for the stops around the current one: the
+// next, the one after it and the previous, in that order, so the nearer stop
+// ahead wins where they overlap. A stop with no lines, or in a file the review
+// does not hold, has none.
+func (m appModel) nearStopMarks() []nearStop {
+	if !m.hasTour() {
+		return nil
+	}
+	stops := m.tour.tour.Stops
+	var marks []nearStop
+	for _, near := range []struct {
+		offset int
+		color  string
+	}{{1, nextStopGutterColor}, {2, laterStopGutterColor}, {-1, prevStopGutterColor}} {
+		i := m.tour.index + near.offset
+		if i < 0 || i >= len(stops) || stops[i].File == "" || stops[i].LineStart <= 0 {
+			continue
+		}
+		s := stops[i]
+		path := s.File
+		if !m.reviewHasFile(s.File) {
+			af, ok := m.additionalFileFor(s.File)
+			if !ok {
+				continue
+			}
+			path = af.Path
+		}
+		marks = append(marks, nearStop{path: path, start: s.LineStart, end: max(s.LineEnd, s.LineStart), color: near.color})
+	}
+	return marks
 }
 
 // reviewHasFile reports whether a repo-relative path is one of the changed files.

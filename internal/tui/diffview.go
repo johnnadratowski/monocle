@@ -204,11 +204,42 @@ type diffViewModel struct {
 	// repo-relative path, or an added file's absolute one); "" is no stop.
 	stopPath           string
 	stopStart, stopEnd int
+	// nearStops are the stops around the current one, marked in colours of
+	// their own so the reviewer can see where the tour goes from here.
+	nearStops []nearStop
+}
+
+// nearStop is one of the stops around the current one: its range in the file
+// m.path names, and its gutter colour.
+type nearStop struct {
+	path       string
+	start, end int
+	color      string
 }
 
 // tourGutterColor marks a tour stop's lines. Magenta, because cyan is the
 // annotation rail and the summary palette owns the last gutter column.
 const tourGutterColor = "5"
+
+// The stops around the current one: the previous in blue, the next in green,
+// the one after it in bright green.
+const (
+	prevStopGutterColor  = "4"
+	nextStopGutterColor  = "2"
+	laterStopGutterColor = "10"
+)
+
+// stopLineNum is the new-file line a row shows, or 0: a stop's range is in
+// new-file lines, and a removed line, a hunk header or a comment has none.
+func stopLineNum(line diffViewLine) int {
+	if line.isHunk || line.isComment || line.isAnnotation || line.verbatim {
+		return 0
+	}
+	if line.rightLineNum != 0 {
+		return line.rightLineNum
+	}
+	return line.newLineNum
+}
 
 // inStopRange reports whether a row shows a line the current tour stop is
 // about. Only rows with a new-file number qualify: the stop's range is in
@@ -217,14 +248,23 @@ func (m diffViewModel) inStopRange(line diffViewLine) bool {
 	if m.stopPath == "" || m.stopStart <= 0 || m.path != m.stopPath || m.contentID != "" {
 		return false
 	}
-	if line.isHunk || line.isComment || line.isAnnotation || line.verbatim {
-		return false
-	}
-	n := line.rightLineNum
-	if n == 0 {
-		n = line.newLineNum
-	}
+	n := stopLineNum(line)
 	return n > 0 && n >= m.stopStart && n <= m.stopEnd
+}
+
+// nearStopColor is the colour of the stop around the current one that a row
+// shows a line of, or "" for none. The first in nearStops wins an overlap.
+func (m diffViewModel) nearStopColor(line diffViewLine) string {
+	if m.contentID != "" {
+		return ""
+	}
+	n := stopLineNum(line)
+	for _, s := range m.nearStops {
+		if n > 0 && s.path == m.path && n >= s.start && n <= s.end {
+			return s.color
+		}
+	}
+	return ""
 }
 
 // tagGutterColor marks a line tagged to send to the agent: yellow, apart from
@@ -234,12 +274,16 @@ const tagGutterColor = "3"
 // markGutter restyles a gutter for a row the reviewer tagged, or one inside the
 // stop's range: a solid block of the tag or tour colour, so either reads at a
 // glance down the side of the diff. A tag wins: it is the reviewer's own mark.
+// The stops around the current one come last, in their own colours.
 func (m diffViewModel) markGutter(line diffViewLine, base lipgloss.Style) lipgloss.Style {
 	switch {
 	case m.isTagged(line):
 		return base.Foreground(lipgloss.Color("0")).Background(lipgloss.Color(tagGutterColor)).Bold(true)
 	case m.inStopRange(line):
 		return base.Foreground(lipgloss.Color("0")).Background(lipgloss.Color(tourGutterColor)).Bold(true)
+	}
+	if c := m.nearStopColor(line); c != "" {
+		return base.Foreground(lipgloss.Color("0")).Background(lipgloss.Color(c)).Bold(true)
 	}
 	return base
 }
