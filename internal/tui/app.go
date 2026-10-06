@@ -2187,7 +2187,16 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.sendLines()
 
 	case Matches(key, km.OpenRefs) && (m.focus == focusMain || m.focus == focusDoc):
-		return m.openReferences(false)
+		return m.openAtCursor()
+	case (Matches(key, km.NextSymbol) || Matches(key, km.PrevSymbol)) && m.tour.on && m.focus == focusMain:
+		dir := 1
+		if Matches(key, km.PrevSymbol) {
+			dir = -1
+		}
+		if !m.diffView.jumpMark(dir) {
+			m.statusBar.searchInfo = "no more underlined symbols in this stop"
+		}
+		return m, nil
 	case Matches(key, km.OpenRefsPreview) && (m.focus == focusMain || m.focus == focusDoc):
 		return m.openReferences(true)
 

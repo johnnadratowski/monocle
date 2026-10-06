@@ -109,6 +109,10 @@ type KeyMap struct {
 	// OpenRefsPreview previews the first of them in the related pane's editor
 	// (related_editor_preview). f16 is for a key remapper.
 	OpenRefsPreview []string
+	// NextSymbol / PrevSymbol move the cursor between the symbols a tour
+	// stop's related files and calls are about (underlined in its lines).
+	NextSymbol []string
+	PrevSymbol []string
 
 	// General
 	OpenInEditor         []string
@@ -230,6 +234,8 @@ func DefaultKeyMap() KeyMap {
 		// vim's jump to definition.
 		OpenRefs:        []string{"o", "ctrl+]"},
 		OpenRefsPreview: []string{"p", "f16"},
+		NextSymbol:      []string{"u"},
+		PrevSymbol:      []string{"U"},
 
 		OpenInEditor:         []string{"ctrl+g"},
 		OpenInEditorTakeover: []string{"ctrl+shift+g"},
@@ -335,6 +341,8 @@ var keyActions = map[string]func(*KeyMap) *[]string{
 	"send_lines":              func(km *KeyMap) *[]string { return &km.SendLines },
 	"open_refs":               func(km *KeyMap) *[]string { return &km.OpenRefs },
 	"open_refs_preview":       func(km *KeyMap) *[]string { return &km.OpenRefsPreview },
+	"next_symbol":             func(km *KeyMap) *[]string { return &km.NextSymbol },
+	"prev_symbol":             func(km *KeyMap) *[]string { return &km.PrevSymbol },
 	"open_in_editor":          func(km *KeyMap) *[]string { return &km.OpenInEditor },
 	"open_in_editor_takeover": func(km *KeyMap) *[]string { return &km.OpenInEditorTakeover },
 	"jump_back":               func(km *KeyMap) *[]string { return &km.JumpBack },

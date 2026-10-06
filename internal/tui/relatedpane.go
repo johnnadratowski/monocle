@@ -434,7 +434,9 @@ func (m appModel) openStopRelated(arg string) (appModel, tea.Cmd) {
 		m.statusBar.searchInfo = fmt.Sprintf("%s has related files 1-%d", stop.ID, len(files))
 		return m, nil
 	}
-	return m, m.addOrShowRelated(files[n-1:n], files, n, true, false)
+	// The keyboard goes with it (John 2026-10-06): otherwise nothing shows
+	// which split the file landed in.
+	return m, m.addOrShowRelated(files[n-1:n], files, n, true, true)
 }
 
 // A file the reviewer closed in the related pane's editor should stay closed

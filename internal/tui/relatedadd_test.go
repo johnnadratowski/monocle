@@ -114,7 +114,7 @@ func TestRelatedNAddsOneFile(t *testing.T) {
 	m.engine.GetConfig().RelatedEditorAdd = `printf '%s|%s\n' {file} {line} >> ` + added
 	m = pressKey(t, m, ".")
 	plans := captureRelated(t)
-	fakeTmux(t)
+	log := fakeTmux(t)
 	orig := findPane
 	findPane = func(string, string) string { return "%7" }
 	t.Cleanup(func() { findPane = orig })
@@ -123,6 +123,10 @@ func TestRelatedNAddsOneFile(t *testing.T) {
 	m = driveWithin(t, next.(appModel), cmd, 0, 5*time.Second)
 	if got := readLines(t, added); !reflect.DeepEqual(got, []string{"internal/deep/path/b.go|30"}) {
 		t.Errorf("related_editor_add ran for %q, want only file 2", got)
+	}
+	// The keyboard goes with it, so the reviewer sees which split it landed in.
+	if data, _ := os.ReadFile(log); !strings.Contains(string(data), "select-pane -t %7") {
+		t.Errorf(":related 2 left the keyboard in Monocle:\n%s", data)
 	}
 	if len(*plans) != 0 {
 		t.Error(":related 2 respawned the pane")

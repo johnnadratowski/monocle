@@ -5,6 +5,7 @@ import (
 	"image/color"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -207,6 +208,97 @@ type diffViewModel struct {
 	// nearStops are the stops around the current one, marked in colours of
 	// their own so the reviewer can see where the tour goes from here.
 	nearStops []nearStop
+	// stopMarks are the symbols in the current stop's lines that its related
+	// files and calls are about, underlined so the reviewer can see which code
+	// each one explains (u / U move between them, o opens one).
+	stopMarks []stopMark
+}
+
+// stopMark is one symbol a stop's related file or call is about.
+type stopMark struct {
+	symbol string
+	call   bool // a call to another stop; else a related file
+	n      int  // 1-based: the related file's or the call's number
+	line   int  // a call's site; 0: anywhere in the stop's lines
+}
+
+// The underline colours: a call green, as the next stop's gutter (it leads on
+// through the tour); a related file cyan.
+const (
+	callMarkColor    = "2"
+	relatedMarkColor = "6"
+)
+
+// isIdentByte reports whether b can be part of an identifier, so a symbol is
+// marked only where it stands whole: readBalance, not readBalanceLive.
+func isIdentByte(b byte) bool {
+	return b == '_' || b == '$' || b >= '0' && b <= '9' || b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z'
+}
+
+// symbolRanges are the stop's marks on a row: each symbol where it stands
+// whole, in column order. Only rows the current stop is about have any.
+func (m diffViewModel) symbolRanges(line diffViewLine, content string) []markRange {
+	if len(m.stopMarks) == 0 || !m.inStopRange(line) {
+		return nil
+	}
+	n := stopLineNum(line)
+	var out []markRange
+	for _, mk := range m.stopMarks {
+		if mk.symbol == "" || (mk.line > 0 && mk.line != n) {
+			continue
+		}
+		col := lipgloss.Color(relatedMarkColor)
+		if mk.call {
+			col = lipgloss.Color(callMarkColor)
+		}
+		for from := 0; from < len(content); {
+			i := strings.Index(content[from:], mk.symbol)
+			if i < 0 {
+				break
+			}
+			s, e := from+i, from+i+len(mk.symbol)
+			if (s == 0 || !isIdentByte(content[s-1])) && (e == len(content) || !isIdentByte(content[e])) {
+				out = append(out, markRange{start: s, end: e, color: col, mark: mk})
+			}
+			from = e
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].start < out[j].start })
+	kept := out[:0]
+	for _, r := range out {
+		if len(kept) > 0 && r.start < kept[len(kept)-1].end {
+			continue // one mark per span: the first wins
+		}
+		kept = append(kept, r)
+	}
+	return kept
+}
+
+// cursorMark is the first mark on the cursor's row, if it has one.
+func (m diffViewModel) cursorMark() (stopMark, bool) {
+	if m.cursor < 0 || m.cursor >= len(m.lines) {
+		return stopMark{}, false
+	}
+	row := m.lines[m.cursor]
+	if r := m.symbolRanges(row, row.content); len(r) > 0 {
+		return r[0].mark, true
+	}
+	return stopMark{}, false
+}
+
+// jumpMark moves the cursor to the next (dir +1) or previous (-1) row of the
+// stop with a mark on it, and reports whether there was one.
+func (m *diffViewModel) jumpMark(dir int) bool {
+	for i := m.cursor + dir; i >= 0 && i < len(m.lines); i += dir {
+		row := m.lines[i]
+		if row.isComment || row.isAnnotation {
+			continue
+		}
+		if len(m.symbolRanges(row, row.content)) > 0 {
+			return m.GoToLine(stopLineNum(row))
+		}
+	}
+	return false
 }
 
 // nearStop is one of the stops around the current one: its range in the file
@@ -1776,7 +1868,7 @@ func (m diffViewModel) renderContentLine(line diffViewLine, _, contentWidth int,
 		renderedContent = padToWidth(renderedContent, contentWidth)
 	} else {
 		sc, sbg := m.applySearchHighlight(content, nil, nil)
-		renderedContent = m.hl.highlightLine(m.path, content, nil, sbg, sc, contentWidth)
+		renderedContent = m.hl.highlightLineMarked(m.path, content, nil, sbg, sc, m.symbolRanges(line, content), contentWidth)
 	}
 
 	return renderedGutter + renderedContent
@@ -1874,7 +1966,7 @@ func (m diffViewModel) renderDiffLine(line diffViewLine, _, contentWidth int, se
 			changes = clipChangeRanges(changes, contentWidth)
 		}
 		sc, sbg := m.applySearchHighlight(content, changes, changeBg)
-		renderedContent = m.hl.highlightLine(m.path, content, lineBg, sbg, sc, contentWidth)
+		renderedContent = m.hl.highlightLineMarked(m.path, content, lineBg, sbg, sc, m.symbolRanges(line, content), contentWidth)
 	}
 
 	return renderedGutter + renderedContent
@@ -2197,7 +2289,7 @@ func (m diffViewModel) styleSplitContent(content string, kind types.DiffLineKind
 		return applyBgAndPad(m.mdStyler.StyleLine(content), lineBg, contentW)
 	default:
 		sc, sbg := m.applySearchHighlight(content, changes, changeBg)
-		return m.hl.highlightLine(m.path, content, lineBg, sbg, sc, contentW)
+		return m.hl.highlightLineMarked(m.path, content, lineBg, sbg, sc, m.symbolRanges(line, content), contentW)
 	}
 }
 
@@ -2277,7 +2369,7 @@ func (m diffViewModel) renderWrappedLine(gutter, content string, gutterWidth, co
 		// The offsets index the unwrapped line, which is exactly what is being
 		// styled here — so intra-line change highlighting survives the wrap.
 		sc, sbg := m.applySearchHighlight(content, lineChangeRanges(mdLineOrZero(mdLine)), changeBg)
-		styled = m.hl.highlightLine(m.path, content, lineBg, sbg, sc, 0)
+		styled = m.hl.highlightLineMarked(m.path, content, lineBg, sbg, sc, m.symbolRanges(mdLineOrZero(mdLine), content), 0)
 	}
 
 	gutterStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))

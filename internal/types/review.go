@@ -240,6 +240,11 @@ type DocRef struct {
 	StartCol  int        `json:"start_col"`
 	EndLine   int        `json:"end_line"`
 	EndCol    int        `json:"end_col"`
+	// Symbol, on a tour stop's related file, is the identifier in the stop's
+	// own lines that the file explains — the function it defines, say. The
+	// TUI underlines it there, so the reviewer sees which code each related
+	// file is about. Empty marks nothing.
+	Symbol string `json:"symbol,omitempty"`
 }
 
 type ReviewSubmission struct {

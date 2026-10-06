@@ -730,15 +730,17 @@ func TestRelatedNBringsUpEveryFileWithNActive(t *testing.T) {
 	for i, want := range []struct {
 		last   string
 		reveal bool
-	}{{"1wincmd w", false}, {"2wincmd w", true}} {
+		focus  bool
+	}{{"1wincmd w", false, false}, {"2wincmd w", true, true}} {
 		p := (*plans)[i]
 		c := p.argv[len(p.argv)-1]
 		if !reflect.DeepEqual(p.argv[3:5], files) || !strings.HasSuffix(c, "|"+want.last) || p.reveal != want.reveal {
 			t.Errorf("plan %d: argv %q reveal %v; want both files, ending %q, reveal %v", i, p.argv, p.reveal, want.last, want.reveal)
 		}
-		// Keyboard focus stays with Monocle unless editor_focus says otherwise.
-		if p.owner != "%99" || p.focus {
-			t.Errorf("plan %d: owner %q focus %v, want beside %%99 without taking focus", i, p.owner, p.focus)
+		// Arriving leaves the keyboard with Monocle; asking for a file moves it
+		// there, so the reviewer sees which split it landed in.
+		if p.owner != "%99" || p.focus != want.focus {
+			t.Errorf("plan %d: owner %q focus %v, want beside %%99, focus %v", i, p.owner, p.focus, want.focus)
 		}
 	}
 	_ = m

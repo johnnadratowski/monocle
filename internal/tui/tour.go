@@ -363,7 +363,7 @@ func (m *appModel) leaveTour() {
 	m.tour.loading = ""
 	m.statusBar.tourLabel = ""
 	m.diffView.stopPath, m.diffView.stopStart, m.diffView.stopEnd = "", 0, 0
-	m.diffView.nearStops = nil
+	m.diffView.nearStops, m.diffView.stopMarks = nil, nil
 	if m.docPane.active && strings.HasPrefix(m.docPane.annotationID, tourNoteKeyPrefix) {
 		m.closeDocPane()
 	}
@@ -497,6 +497,7 @@ func (m appModel) followStopCall(arg string) (appModel, tea.Cmd) {
 func (m *appModel) jumpToStop(stop types.WalkthroughStop) tea.Cmd {
 	m.diffView.stopPath, m.diffView.stopStart, m.diffView.stopEnd = "", 0, 0
 	m.diffView.nearStops = m.nearStopMarks()
+	m.diffView.stopMarks = stopMarksFor(stop)
 	if stop.File == "" {
 		return nil
 	}
@@ -568,6 +569,23 @@ func (m appModel) nearStopMarks() []nearStop {
 			path = af.Path
 		}
 		marks = append(marks, nearStop{path: path, start: s.LineStart, end: max(s.LineEnd, s.LineStart), color: near.color})
+	}
+	return marks
+}
+
+// stopMarksFor lists the symbols a stop's related files and calls are about,
+// numbered as :related N and :call N number them.
+func stopMarksFor(stop types.WalkthroughStop) []stopMark {
+	var marks []stopMark
+	for i, r := range stop.Related {
+		if r.Symbol != "" {
+			marks = append(marks, stopMark{symbol: r.Symbol, n: i + 1})
+		}
+	}
+	for i, c := range stop.Calls {
+		if c.Symbol != "" {
+			marks = append(marks, stopMark{symbol: c.Symbol, call: true, n: i + 1, line: c.Line})
+		}
 	}
 	return marks
 }

@@ -119,7 +119,21 @@ func (h *highlighter) commentOnlyLines(path, content string) map[int]bool {
 // changeBg is the background for changed characters (nil if no intra-line changes).
 // changes specifies byte ranges within content that are changed.
 // width is the visual width to pad to.
+// markRange underlines a span of a line in a colour of its own: a symbol a
+// tour stop's related file or call is about. The text keeps its syntax colour.
+type markRange struct {
+	start, end int
+	color      color.Color
+	mark       stopMark
+}
+
 func (h *highlighter) highlightLine(path, content string, bg, changeBg color.Color, changes []changeRange, width int) string {
+	return h.highlightLineMarked(path, content, bg, changeBg, changes, nil, width)
+}
+
+// highlightLineMarked is highlightLine with marks: spans underlined in their
+// own colour, over whatever change or search styling they sit in.
+func (h *highlighter) highlightLineMarked(path, content string, bg, changeBg color.Color, changes []changeRange, marks []markRange, width int) string {
 	lexer := h.getLexer(path)
 	iter, err := lexer.Tokenise(nil, content)
 	if err != nil {
@@ -158,6 +172,21 @@ func (h *highlighter) highlightLine(path, content string, bg, changeBg color.Col
 				}
 			}
 
+			var inMark *markRange
+			for i := range marks {
+				mk := &marks[i]
+				if segStart >= mk.start && segStart < mk.end {
+					inMark = mk
+					if mk.end < segEnd {
+						segEnd = mk.end
+					}
+					break
+				}
+				if mk.start > segStart && mk.start < segEnd {
+					segEnd = mk.start
+				}
+			}
+
 			// Strip newlines from the rendered text. Each diff line is a single
 			// visual row, but some chroma lexers (e.g. TypeScript) include a
 			// trailing newline in the final token via EnsureNL, which would make
@@ -182,6 +211,9 @@ func (h *highlighter) highlightLine(path, content string, bg, changeBg color.Col
 				style = style.Background(changeBg)
 			} else if bg != nil {
 				style = style.Background(bg)
+			}
+			if inMark != nil {
+				style = style.Underline(true).UnderlineColor(inMark.color)
 			}
 
 			b.WriteString(style.Render(segText))

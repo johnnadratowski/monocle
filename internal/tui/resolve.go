@@ -257,3 +257,19 @@ func (m appModel) handleRelatedPreview(msg relatedPreviewMsg) (appModel, tea.Cmd
 	}
 	return m, nil
 }
+
+// openAtCursor is o: on a symbol the stop's related file or call is about
+// (underlined), it opens that — the file in the related pane, with the
+// keyboard, or the stop the call leads to. Anywhere else, or with lines picked
+// (v, +), it opens what the lines reference, as ctrl+] does.
+func (m appModel) openAtCursor() (appModel, tea.Cmd) {
+	if m.tour.on && !m.diffView.visualMode && len(m.diffView.tags) == 0 {
+		if mk, ok := m.diffView.cursorMark(); ok {
+			if mk.call {
+				return m.followStopCall(fmt.Sprint(mk.n))
+			}
+			return m.openStopRelated(fmt.Sprint(mk.n))
+		}
+	}
+	return m.openReferences(false)
+}
