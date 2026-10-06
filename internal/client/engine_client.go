@@ -492,6 +492,10 @@ func (c *EngineClient) invokeCallbacks(notif *protocol.EventNotification) {
 	if v, ok := notif.Payload["line"].(float64); ok {
 		payload.Line = int(v)
 	}
+	if v, ok := notif.Payload["top"].(float64); ok {
+		top := int(v)
+		payload.Top = &top
+	}
 
 	c.subsMu.Lock()
 	callbacks := make([]core.EventCallback, 0, len(c.subscribers[kind]))

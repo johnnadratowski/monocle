@@ -77,6 +77,24 @@ func TestGotoLine(t *testing.T) {
 		}
 	})
 
+	// The row to place the line at travels with it; omitted, it stays nil.
+	t.Run("a top offset travels with the event", func(t *testing.T) {
+		e, log := setup(t)
+		three := 3
+		if r := e.handleGotoLine(&protocol.GotoLineMsg{Type: protocol.TypeGotoLine, Path: "world.go", Line: 3, Top: &three}); !r.Success {
+			t.Fatalf("response = %+v", r)
+		}
+		gotoLine(e, "world.go", 3)
+		got := log.all()
+		if len(got) != 2 || got[0].Top == nil || *got[0].Top != 3 || got[1].Top != nil {
+			t.Errorf("events = %+v, want top 3, then none", got)
+		}
+		minus := -1
+		if r := e.handleGotoLine(&protocol.GotoLineMsg{Type: protocol.TypeGotoLine, Path: "world.go", Line: 3, Top: &minus}); r.Success || !strings.Contains(r.Message, "top") {
+			t.Errorf("a negative top gave %+v, want a refusal", r)
+		}
+	})
+
 	t.Run("pointing at a line is not a handover", func(t *testing.T) {
 		if isReviewSend(&protocol.GotoLineMsg{}) {
 			t.Error("goto_line counted as handing work to the reviewer")

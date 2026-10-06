@@ -271,6 +271,9 @@ type appModel struct {
 	newReviewPending bool
 	// pendingJumpLine is the line to land on once an async file load finishes.
 	pendingJumpLine int
+	// pendingJumpTop, when set, is the row from the top of the diff that line
+	// lands on (goto_line's top); nil centres it as any jump does.
+	pendingJumpTop *int
 
 	pendingDismissAdditionalFilePath string // set while the remove-added-file confirm modal is open
 
@@ -1100,10 +1103,7 @@ func (m appModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// A ctrl+o / ctrl+i landing: the file has finished loading, so the
 		// recorded line can finally be resolved against the new line list.
-		if m.pendingJumpLine != 0 {
-			m.diffView.GoToLine(m.pendingJumpLine)
-			m.pendingJumpLine = 0
-		}
+		m.landPendingJump()
 		// A new file needs its own source for the comment filter; the cached one
 		// belongs to the file just left.
 		if m.diffView.needsCommentSource() || m.diffView.needsBaseCommentSource() {
@@ -1252,10 +1252,7 @@ func (m appModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// A ctrl+o / ctrl+i landing: the file has finished loading, so the
 		// recorded line can finally be resolved against the new line list.
-		if m.pendingJumpLine != 0 {
-			m.diffView.GoToLine(m.pendingJumpLine)
-			m.pendingJumpLine = 0
-		}
+		m.landPendingJump()
 		return m, cmd
 
 	// Additional file loaded
@@ -1266,10 +1263,7 @@ func (m appModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.diffView, cmd = m.diffView.Update(msg)
 		// A tour stop in an added file lands on its line the same way.
-		if m.pendingJumpLine != 0 {
-			m.diffView.GoToLine(m.pendingJumpLine)
-			m.pendingJumpLine = 0
-		}
+		m.landPendingJump()
 		return m, cmd
 
 	case tourEventMsg:
@@ -5104,7 +5098,7 @@ func BridgeEngineEvents(engine core.EngineAPI, p *tea.Program) {
 		p.Send(tourEventMsg{status: e.Status, id: e.ItemID})
 	})
 	engine.On(core.EventGotoLine, func(e core.EventPayload) {
-		p.Send(gotoLineMsg{path: e.Path, line: e.Line})
+		p.Send(gotoLineMsg{path: e.Path, line: e.Line, top: e.Top})
 	})
 }
 
@@ -5121,6 +5115,21 @@ func (m appModel) currentJumpPos() jumpPos {
 		line:     m.diffView.lineNumAt(m.diffView.cursor),
 		fullFile: m.diffView.fullFile,
 	}
+}
+
+// landPendingJump lands the cursor on the line a jump was waiting for the file
+// to load to show — placed pendingJumpTop rows from the top when that is set,
+// centred otherwise.
+func (m *appModel) landPendingJump() {
+	if m.pendingJumpLine == 0 {
+		return
+	}
+	if m.pendingJumpTop != nil {
+		m.diffView.GoToLineAt(m.pendingJumpLine, *m.pendingJumpTop)
+	} else {
+		m.diffView.GoToLine(m.pendingJumpLine)
+	}
+	m.pendingJumpLine, m.pendingJumpTop = 0, nil
 }
 
 // adoptSessionRoot makes the checkout the engine serves the TUI's own repo
@@ -5173,7 +5182,7 @@ func (m appModel) goToJump(pos jumpPos) (appModel, tea.Cmd) {
 	if pos.fullFile != m.diffView.fullFile || pos.path != m.diffView.path {
 		m.diffView.fullFile = pos.fullFile
 		path, full, line := pos.path, pos.fullFile, pos.line
-		m.pendingJumpLine = line
+		m.pendingJumpLine, m.pendingJumpTop = line, nil
 		return m, func() tea.Msg {
 			return requestFileDiffMsg{path: path, full: full, anchorLine: line}
 		}

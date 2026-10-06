@@ -339,14 +339,15 @@ func TestEngineClient_GotoLineEvent(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer c.Close()
-	resp, err := c.Request(&protocol.GotoLineMsg{Type: protocol.TypeGotoLine, Path: "a.go", Line: 7}, time.Second)
+	top := 3
+	resp, err := c.Request(&protocol.GotoLineMsg{Type: protocol.TypeGotoLine, Path: "a.go", Line: 7, Top: &top}, time.Second)
 	if r, ok := resp.(*protocol.GotoLineResponse); err != nil || !ok || !r.Success {
 		t.Fatalf("goto_line: %+v %v", resp, err)
 	}
 	select {
 	case p := <-events:
-		if p.Path != "a.go" || p.Line != 7 {
-			t.Errorf("event %+v, want a.go:7", p)
+		if p.Path != "a.go" || p.Line != 7 || p.Top == nil || *p.Top != 3 {
+			t.Errorf("event %+v, want a.go:7 placed 3 rows from the top", p)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("the goto_line event never reached the client")

@@ -518,7 +518,7 @@ func (m *appModel) jumpToStop(stop types.WalkthroughStop) tea.Cmd {
 		return nil
 	}
 	m.diffView.stopPath = shown
-	return m.openFileAt(stop.File, stop.LineStart)
+	return m.openFileAt(stop.File, stop.LineStart, nil)
 }
 
 // reviewPathOf is the path the diff view shows a file of the review under —
@@ -536,21 +536,25 @@ func (m appModel) reviewPathOf(file string) (string, bool) {
 
 // openFileAt shows a file of the review with the diff cursor on its new-file
 // line (line <= 0: its first change), loading it first when another is on
-// screen. It returns the command that finishes the load. The caller has
-// checked the review holds the file (reviewPathOf).
-func (m *appModel) openFileAt(file string, line int) tea.Cmd {
+// screen; top, when set, places the line that many rows from the top of the
+// diff rather than centring it. It returns the command that finishes the
+// load. The caller has checked the review holds the file (reviewPathOf).
+func (m *appModel) openFileAt(file string, line int, top *int) tea.Cmd {
 	if m.reviewHasFile(file) {
 		m.sidebar.selectPath(file)
 		if m.diffView.path == file && !m.diffView.isViewingContentItem() && m.diffView.additionalFilePath == "" {
-			if line > 0 {
+			switch {
+			case line > 0 && top != nil:
+				m.diffView.GoToLineAt(line, *top)
+			case line > 0:
 				m.diffView.GoToLine(line)
-			} else {
+			default:
 				m.diffView.LandOnChunkEdge(+1)
 			}
 			return nil
 		}
 		m.tour.loading = file
-		m.pendingJumpLine = line
+		m.pendingJumpLine, m.pendingJumpTop = line, top
 		if line <= 0 {
 			m.pendingChunkLanding = +1
 		}
@@ -560,16 +564,18 @@ func (m *appModel) openFileAt(file string, line int) tea.Cmd {
 	if af, ok := m.additionalFileFor(file); ok {
 		m.sidebar.selectAdditionalByPath(af.Path)
 		m.tour.loading = af.Path
-		m.pendingJumpLine = line
+		m.pendingJumpLine, m.pendingJumpTop = line, top
 		return m.handleSidebarSelect(sidebarSelectMsg{path: af.Path, isAdditionalFile: true})
 	}
 	return nil
 }
 
-// gotoLineMsg asks to show a file at a new-file line — the agent's goto_line.
+// gotoLineMsg asks to show a file at a new-file line — the agent's goto_line —
+// placed top rows from the top of the diff when top is set.
 type gotoLineMsg struct {
 	path string
 	line int
+	top  *int
 }
 
 // gotoLine shows a file of the review at a line, as a jump (ctrl+o returns),
@@ -582,7 +588,7 @@ func (m appModel) gotoLine(msg gotoLineMsg) (appModel, tea.Cmd) {
 	m.recordJump()
 	m.setFocus(focusMain)
 	m.statusBar.searchInfo = fmt.Sprintf("showing %s:%d", msg.path, msg.line)
-	return m, m.openFileAt(msg.path, msg.line)
+	return m, m.openFileAt(msg.path, msg.line, msg.top)
 }
 
 // nearStopMarks are the gutter marks for the stops around the current one: the

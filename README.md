@@ -199,7 +199,7 @@ Monocle exposes review operations via **MCP tools** (default for Claude Code, an
 | Point at a repo/worktree | `set_repo` | `-C`/`--workdir` flag | Bind to the engine for a specific repo — call once after entering a git worktree so review tools target it, not the launch directory |
 | Guided tour | `set_walkthrough` | `monocle review set-walkthrough` | Walk the reviewer through the change as ordered stops (file + lines, a note, related files, views) they step through with `.` / `,` |
 | Show a tour stop | `goto_stop` | `monocle review goto-stop` | Move the reviewer to a stop by its id — answer "1.2 — why?" by showing 1.2 |
-| Show a file at a line | `goto_line` | `monocle review goto-line` | Open a file of the review (changed or added) with the diff cursor on a new-file line; ctrl+o returns, and the tour's stop does not change |
+| Show a file at a line | `goto_line` | `monocle review goto-line` | Open a file of the review (changed or added) with the diff cursor on a new-file line — `top` places it that many rows below the top of the diff, for as much as possible of what follows; ctrl+o returns, and the tour's stop does not change |
 | Show a before/after comparison | `send_diff` | — | Render an agent-supplied contrast (pseudocode before/after, competing design options) as a side-by-side diff — reads no files and runs no git |
 
 ## Keybindings
@@ -428,7 +428,7 @@ monocle review set-label [label] [--json]                Name this Monocle in th
 monocle review set-base-ref <ref> [--reset] [--json]     Review already-committed work (diff against <ref>)
 monocle review set-walkthrough [--file F] [--clear] [--json]  Send a guided tour of the review (stops stepped with . and ,)
 monocle review goto-stop <id> [--json]                   Move the reviewer to a tour stop
-monocle review goto-line <path> <line> [--json]          Show the reviewer a file of the review at a line
+monocle review goto-line <path> <line> [--top N] [--json]  Show the reviewer a file of the review at a line
 ```
 
 - `--wait` blocks until the reviewer responds (used by `/review-plan-wait`)

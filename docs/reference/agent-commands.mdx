@@ -611,17 +611,18 @@ Show the reviewer a file of the review at a line: the diff opens the file and pu
 monocle review goto-line src/orders.ts 120
 ```
 
-The path is a changed file or one added with `add-files` — repo-relative, an added file's name, or absolute. The move is a jump, so the reviewer returns with `ctrl+o`. It does not change the guided tour's stop. A path the review does not hold, or a line below 1, is an error that says so; the response says where the reviewer was taken.
+The path is a changed file or one added with `add-files` — repo-relative, an added file's name, or absolute. With `--top N` the line lands `N` rows below the first visible row of the diff, so as much as possible of what follows it is in view — closer to the top only when the file starts sooner, and with the whole file shown when it fits in the pane. Without it the line is centred, as any jump is. The move is a jump, so the reviewer returns with `ctrl+o`. It does not change the guided tour's stop. A path the review does not hold, or a line below 1, is an error that says so; the response says where the reviewer was taken.
 
 ### Flags
 
 | Flag | Description |
 |------|-------------|
+| `--top N` | Place the line `N` rows below the top of the diff pane (`0` is the top row). |
 | `--json` | Output as JSON. |
 
 ### MCP tool equivalent
 
-In MCP tools mode, call the `goto_line` tool with `path` and `line`.
+In MCP tools mode, call the `goto_line` tool with `path`, `line` and, optionally, `top`.
 
 ---
 

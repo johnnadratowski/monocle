@@ -74,3 +74,49 @@ func (e *tourEngine) GetAdditionalFileContent(path string) (string, error) {
 	data, err := os.ReadFile(path)
 	return string(data), err
 }
+
+// rowsAbove is how many screen rows the diff shows above the cursor's row.
+func rowsAbove(dv diffViewModel) int {
+	rows := 0
+	for i := dv.offset; i < dv.cursor; i++ {
+		rows += dv.screenLinesFor(i)
+	}
+	return rows
+}
+
+// With a top offset the line lands that many rows below the first visible
+// row — in a file loaded for it, and in the one on screen — so as much as
+// possible of what follows it is in view.
+func TestGotoLineTopPlacesTheRow(t *testing.T) {
+	three := 3
+	m, _ := tourApp(t) // a.go on screen; b.go has 60 lines
+	m = updateApp(t, m, gotoLineMsg{path: "b.go", line: 40, top: &three})
+	if m.diffView.path != "b.go" || cursorLine(m) != 40 || rowsAbove(m.diffView) != 3 {
+		t.Fatalf("at %s:%d with %d rows above, want b.go:40 three rows from the top", m.diffView.path, cursorLine(m), rowsAbove(m.diffView))
+	}
+	m = updateApp(t, m, gotoLineMsg{path: "b.go", line: 25, top: &three})
+	if cursorLine(m) != 25 || rowsAbove(m.diffView) != 3 {
+		t.Errorf("in the file on screen: line %d with %d rows above, want 25 three rows down", cursorLine(m), rowsAbove(m.diffView))
+	}
+	// Near the top of the file there are not three rows to show above it.
+	m = updateApp(t, m, gotoLineMsg{path: "b.go", line: 2, top: &three})
+	if cursorLine(m) != 2 || m.diffView.offset != 0 {
+		t.Errorf("line 2 left offset %d, want the top of the file", m.diffView.offset)
+	}
+}
+
+// A file shorter than the pane is shown whole, the line wherever it falls.
+func TestGotoLineTopWithAFileThatFits(t *testing.T) {
+	th, km := DefaultTheme(), DefaultKeyMap()
+	dv := newDiffViewModel(&th, &km)
+	dv.width, dv.height = 80, 30
+	dv, _ = dv.Update(loadDiffMsg{path: "c.go", result: fileDiff("c.go", 10)})
+	if !dv.GoToLineAt(8, 3) || dv.lineNumAt(dv.cursor) != 8 || dv.offset != 0 {
+		t.Errorf("line %d at offset %d, want line 8 with the whole file in view", dv.lineNumAt(dv.cursor), dv.offset)
+	}
+	// In a file longer than the pane the row is placed.
+	dv, _ = dv.Update(loadDiffMsg{path: "d.go", result: fileDiff("d.go", 100)})
+	if !dv.GoToLineAt(60, 3) || rowsAbove(dv) != 3 {
+		t.Errorf("line %d with %d rows above, want 60 three rows down", dv.lineNumAt(dv.cursor), rowsAbove(dv))
+	}
+}

@@ -4359,6 +4359,33 @@ func formatExpandedComment(c *types.ReviewComment, width int, originalCode strin
 	return strings.Join(lines, "\n")
 }
 
+// GoToLineAt moves the cursor to new-file line n as GoToLine does, then
+// scrolls so its row sits top rows below the first visible one, so as much as
+// possible of what follows it is in view. The top of the file clamps it, and a
+// file that fits in the pane is shown whole.
+func (m *diffViewModel) GoToLineAt(n, top int) bool {
+	if !m.GoToLine(n) {
+		return false
+	}
+	offset, rows := m.cursor, 0
+	for offset > 0 && rows+m.screenLinesFor(offset-1) <= top {
+		offset--
+		rows += m.screenLinesFor(offset)
+	}
+	total := 0
+	for i := range m.lines {
+		if total += m.screenLinesFor(i); total > m.height {
+			break
+		}
+	}
+	if total <= m.height {
+		offset = 0
+	}
+	m.offset = offset
+	m.ensureVisible()
+	return true
+}
+
 // GoToLine moves the cursor to the model line showing new-file line n and
 // centres it. Returns false when that line isn't in the current view — a
 // compact diff may not include it, or the file may have changed since the

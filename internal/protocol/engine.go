@@ -723,6 +723,9 @@ type GotoLineMsg struct {
 	Type string `json:"type"`
 	Path string `json:"path"`
 	Line int    `json:"line"`
+	// Top, when set, places the line that many rows below the first visible
+	// row of the diff, so as much as possible of what follows it is in view.
+	Top *int `json:"top,omitempty"`
 }
 
 type GotoLineResponse struct {

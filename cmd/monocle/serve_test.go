@@ -63,3 +63,31 @@ func TestWriteReadPIDFile(t *testing.T) {
 		t.Errorf("pid file still exists after remove: %v", err)
 	}
 }
+
+// goto-line's --top is optional: absent is nil, so "line at the top row"
+// (--top 0) and "no placement" stay apart.
+func TestGotoLineTopFlag(t *testing.T) {
+	for _, c := range []struct {
+		args []string
+		want *int
+	}{
+		{[]string{"review", "goto-line", "a.go", "12"}, nil},
+		{[]string{"review", "goto-line", "a.go", "12", "--top", "3"}, intPtr(3)},
+		{[]string{"review", "goto-line", "a.go", "12", "--top", "0"}, intPtr(0)},
+	} {
+		var cli CLI
+		parser, err := kong.New(&cli)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := parser.Parse(c.args); err != nil {
+			t.Fatalf("parse %v: %v", c.args, err)
+		}
+		got := cli.Review.GotoLine.Top
+		if (got == nil) != (c.want == nil) || (got != nil && *got != *c.want) {
+			t.Errorf("%v: top %v, want %v", c.args, got, c.want)
+		}
+	}
+}
+
+func intPtr(n int) *int { return &n }

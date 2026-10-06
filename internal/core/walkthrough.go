@@ -125,6 +125,9 @@ func (e *Engine) handleGotoLine(msg *protocol.GotoLineMsg) *protocol.GotoLineRes
 	if msg.Line < 1 {
 		return fail(fmt.Sprintf("line must be >= 1 (got %d)", msg.Line))
 	}
+	if msg.Top != nil && *msg.Top < 0 {
+		return fail(fmt.Sprintf("top must be >= 0 (got %d)", *msg.Top))
+	}
 	e.mu.RLock()
 	session := e.current
 	if session == nil {
@@ -146,7 +149,7 @@ func (e *Engine) handleGotoLine(msg *protocol.GotoLineMsg) *protocol.GotoLineRes
 	if !inReview[path] {
 		return fail(fmt.Sprintf("%s is not in the review: it must be a changed file or an added one (add it with add_files)", path))
 	}
-	e.emit(EventGotoLine, EventPayload{Kind: EventGotoLine, Path: path, Line: msg.Line})
+	e.emit(EventGotoLine, EventPayload{Kind: EventGotoLine, Path: path, Line: msg.Line, Top: msg.Top})
 	return &protocol.GotoLineResponse{
 		Type: protocol.TypeGotoLineResponse, Success: true,
 		Message: fmt.Sprintf("Showing the reviewer %s:%d.", path, msg.Line),

@@ -99,6 +99,7 @@ type ReviewGotoLineCmd struct {
 	Socket string `help:"Override socket path" env:"MONOCLE_SOCKET" default:""`
 	Path   string `arg:"" help:"A changed file or an added one: repo-relative, an added file's name, or absolute"`
 	Line   int    `arg:"" help:"The new-file line, from 1"`
+	Top    *int   `help:"Put the line this many rows below the top of the diff pane (default: centred)"`
 	JSON   bool   `help:"Output as JSON" default:"false"`
 }
 
@@ -109,7 +110,7 @@ func (cmd *ReviewGotoLineCmd) Run() error {
 	}
 	defer c.Close()
 
-	resp, err := c.Request(&protocol.GotoLineMsg{Type: protocol.TypeGotoLine, Path: cmd.Path, Line: cmd.Line}, client.DefaultTimeout)
+	resp, err := c.Request(&protocol.GotoLineMsg{Type: protocol.TypeGotoLine, Path: cmd.Path, Line: cmd.Line, Top: cmd.Top}, client.DefaultTimeout)
 	if err != nil {
 		return fmt.Errorf("goto-line: %w", err)
 	}

@@ -527,6 +527,9 @@ func eventPayloadMap(payload EventPayload) map[string]any {
 	if payload.Line != 0 {
 		m["line"] = payload.Line
 	}
+	if payload.Top != nil {
+		m["top"] = *payload.Top
+	}
 	return m
 }
 

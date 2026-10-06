@@ -237,8 +237,9 @@ func handleGotoStop(ctx context.Context, req *sdkmcp.CallToolRequest, params got
 }
 
 type gotoLineParams struct {
-	Path string `json:"path"` // a changed file or an added one: repo-relative, an added file's name, or absolute
-	Line int    `json:"line"` // a new-file line, from 1
+	Path string `json:"path"`          // a changed file or an added one: repo-relative, an added file's name, or absolute
+	Line int    `json:"line"`          // a new-file line, from 1
+	Top  *int   `json:"top,omitempty"` // put the line this many rows below the top of the diff pane
 }
 
 func handleGotoLine(ctx context.Context, req *sdkmcp.CallToolRequest, params gotoLineParams) (*sdkmcp.CallToolResult, any, error) {
@@ -248,7 +249,7 @@ func handleGotoLine(ctx context.Context, req *sdkmcp.CallToolRequest, params got
 	}
 	defer c.Close()
 
-	resp, err := c.Request(&protocol.GotoLineMsg{Type: protocol.TypeGotoLine, Path: params.Path, Line: params.Line}, client.DefaultTimeout)
+	resp, err := c.Request(&protocol.GotoLineMsg{Type: protocol.TypeGotoLine, Path: params.Path, Line: params.Line, Top: params.Top}, client.DefaultTimeout)
 	if err != nil {
 		return errResult("request: %v", err), nil, nil
 	}

@@ -35,6 +35,7 @@ type EventPayload struct {
 	Status  string // for status events
 	Message string // optional context
 	Line    int    // a new-file line, for EventGotoLine
+	Top     *int   // rows from the top of the diff to place Line at, for EventGotoLine; nil leaves it
 }
 
 // EventCallback is the signature for event subscribers.

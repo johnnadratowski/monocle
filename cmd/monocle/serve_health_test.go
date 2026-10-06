@@ -128,3 +128,35 @@ func TestServeRunsBuild(t *testing.T) {
 		}
 	})
 }
+
+// goto-line sends its path, line and top as the request.
+func TestGotoLineCmdSendsTheRequest(t *testing.T) {
+	sock := shortSock(t)
+	got := make(chan *protocol.GotoLineMsg, 1)
+	startMockServe(t, sock, func(conn net.Conn) {
+		defer conn.Close()
+		line, err := bufio.NewReader(conn).ReadBytes('\n')
+		if err != nil {
+			return
+		}
+		if msg, err := protocol.Decode(line); err == nil {
+			if m, ok := msg.(*protocol.GotoLineMsg); ok {
+				got <- m
+			}
+		}
+		data, _ := protocol.Encode(&protocol.GotoLineResponse{Type: protocol.TypeGotoLineResponse, Success: true, Message: "ok"})
+		_, _ = conn.Write(data)
+	})
+	cmd := ReviewGotoLineCmd{Socket: sock, Path: "a.go", Line: 12, Top: intPtr(3)}
+	if err := cmd.Run(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case m := <-got:
+		if m.Path != "a.go" || m.Line != 12 || m.Top == nil || *m.Top != 3 {
+			t.Errorf("sent %+v, want a.go:12 with top 3", m)
+		}
+	default:
+		t.Fatal("no goto_line request reached the engine")
+	}
+}
