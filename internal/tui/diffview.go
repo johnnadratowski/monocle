@@ -222,10 +222,10 @@ type stopMark struct {
 	line   int  // a call's site; 0: anywhere in the stop's lines
 }
 
-// The underline colours: a call green, as the next stop's gutter (it leads on
-// through the tour); a related file cyan.
+// The underline colours: a call yellow, as the doc pane's call label; a
+// related file cyan.
 const (
-	callMarkColor    = "2"
+	callMarkColor    = nextCallColor
 	relatedMarkColor = "6"
 )
 
