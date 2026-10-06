@@ -22,7 +22,7 @@ When the agent sends a tour, monocle enters **tour mode** on its first stop and 
 | `W` | Tour mode on/off. Off hides the note, the marks and the status; your stop is kept, and `.`/`,` or `W` resume there. |
 | `X` | Close the related-files pane. |
 | `d` | Hide the stop's note, and show it again. With the cursor on an annotation, `d` opens the annotation's doc links instead, as outside a tour. |
-| `:stop <id>` | Jump to a stop by id, e.g. `:stop 1.2`. With no id it lists the stops. |
+| `:stop <id>` | Jump to a stop by id, e.g. `:stop 1.2`. A chapter's number, `:stop 5`, goes to its first stop (an exact id wins); `:stop` alone goes to the tour's first stop. |
 | `:view [n]` | Open the stop's nth view (default the first): through your on-stop command when you have one (see [below](#screenshots-recordings-and-layouts)), else in your [`media_viewer`](/configuration/config-file) — or `markdown_viewer` for a markdown view. |
 | `:related [n]` | Bring up the stop's related files with the nth (default the first) active — see [Related files](#related-files). |
 | `:call [n]` | Go to the stop the stop's nth call (default the first) leads to — see [Calls](#calls). |

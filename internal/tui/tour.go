@@ -283,15 +283,20 @@ func (m appModel) gotoStop(id string, how stopEntry) (appModel, tea.Cmd) {
 		return m, nil
 	}
 	id = strings.TrimSpace(id)
-	if id == "" {
-		ids := make([]string, len(m.tour.tour.Stops))
-		for i, s := range m.tour.tour.Stops {
-			ids[i] = s.ID
+	// No id is the tour's first stop; a chapter's number, its first stop (`:stop 5` is 5.1): an
+	// exact id still wins, and a chapter ends at its dot, so 1 is never 10.1.
+	i := 0
+	if id != "" {
+		i = m.tour.tour.StopIndex(id)
+		for j, s := range m.tour.tour.Stops {
+			if i >= 0 {
+				break
+			}
+			if strings.HasPrefix(s.ID, id+".") {
+				i = j
+			}
 		}
-		m.statusBar.searchInfo = "stops: " + strings.Join(ids, " ")
-		return m, nil
 	}
-	i := m.tour.tour.StopIndex(id)
 	if i < 0 {
 		m.statusBar.searchInfo = fmt.Sprintf("no stop %q", id)
 		return m, nil

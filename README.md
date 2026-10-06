@@ -246,7 +246,7 @@ Bindings are grouped by the task they serve, and within a group ordered by key: 
 | `f19` | Forward again, until you enter another stop |
 | `f17` | Reset the layout, as `:layout reset` does: monocle goes back to the stop's first line, the stop's related files come back, fresh, then `walkthrough_layout_reset` runs. For a key remapper to send |
 | `:back` / `:forward` | The same as `backspace` / `f19` |
-| `:stop <id>` | Jump to a stop by id, e.g. `:stop 1.2` (no id lists them) |
+| `:stop <id>` | Jump to a stop by id, e.g. `:stop 1.2`; `:stop 5` goes to chapter 5's first stop, `:stop` alone to the tour's first |
 | `:view [n]` | Open the stop's nth view (default the first): through `walkthrough_on_stop` when set, else in the media / markdown viewer. Clicking a view's label under the note does the same |
 | `:related [n]` | Bring up the related-files pane — every related file of the stop, as on arriving — with file n (default the first) the active window, unzooming monocle's tmux window if it is zoomed. Clicking a related file's label does the same |
 | `:call [n]` | Go to the stop the stop's nth call (default the first) leads to. Clicking a call's label under the note does the same |

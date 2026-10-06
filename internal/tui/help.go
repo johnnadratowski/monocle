@@ -311,7 +311,7 @@ func (m helpModel) buildContent() string {
 			{Label(km.CloseRelated), "Close the pane holding a stop's related files"},
 			{Label(km.LayoutReset), "Reset the layout: back to the stop's first line, its related files come back, then walkthrough_layout_reset runs (:layout reset)"},
 			{Label(km.NextSymbol) + "/" + Label(km.PrevSymbol), "Next/previous underlined symbol in the stop: what a related file or a call is about"},
-			{":stop <id>", "Jump to a stop by id, e.g. :stop 1.2 (no id lists them)"},
+			{":stop <id>", "Jump to a stop by id, e.g. :stop 1.2; :stop 5 is chapter 5's first stop, :stop alone the tour's first"},
 			{":view [n]", "Open the stop's nth view (default 1) via walkthrough_on_stop, else the media/markdown viewer"},
 			{":related [n]", "Bring up the related-files pane with file n (default 1) active in it"},
 			{":call [n]", "Go to the stop that the stop's nth call (default 1) leads to"},

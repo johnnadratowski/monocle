@@ -268,9 +268,32 @@ func TestStopCommand(t *testing.T) {
 	if m.tour.index != 1 || !strings.Contains(m.statusBar.searchInfo, `no stop "9"`) {
 		t.Errorf(":stop 9 gave index %d %q, want no move and a notice", m.tour.index, m.statusBar.searchInfo)
 	}
+	// A chapter's number goes to its first stop; an exact id still wins (2 is a stop of its own).
+	m = typeCommand(t, m, "stop 1")
+	if m.tour.index != 0 {
+		t.Errorf(":stop 1 gave index %d, want 1.1, the chapter's first stop", m.tour.index)
+	}
+	m = typeCommand(t, m, "stop 2")
+	if m.tour.index != 2 {
+		t.Errorf(":stop 2 gave index %d, want the stop 2 itself", m.tour.index)
+	}
+	// No id goes to the tour's first stop.
 	m = typeCommand(t, m, "stop")
-	if m.statusBar.searchInfo != "stops: 1.1 1.2 2" {
-		t.Errorf(":stop with no id said %q, want the list of stops", m.statusBar.searchInfo)
+	if m.tour.index != 0 {
+		t.Errorf(":stop with no id gave index %d, want the first stop", m.tour.index)
+	}
+}
+
+// A chapter prefix stops at a dot: :stop 1 is never 10.1.
+func TestStopChapterNeedsTheDot(t *testing.T) {
+	tour := &types.Walkthrough{Title: "Tour", Stops: []types.WalkthroughStop{
+		{ID: "10.1", Title: "Ten", File: "a.go", LineStart: 5},
+		{ID: "1.4", Title: "One four", File: "b.go", LineStart: 30},
+	}}
+	m, _ := tourAppWith(t, tour, &types.Config{})
+	m = typeCommand(t, m, "stop 1")
+	if m.tour.index != 1 {
+		t.Errorf(":stop 1 gave index %d, want 1.4, not 10.1", m.tour.index)
 	}
 }
 
