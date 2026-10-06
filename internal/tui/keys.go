@@ -174,7 +174,7 @@ func DefaultKeyMap() KeyMap {
 		// not be rebound. E pairs with e/z in the sidebar tree: expand everything.
 		ExpandComment:     []string{"space"},
 		ExpandAllComments: []string{"E"},
-		OpenDocRef:        []string{"o"},
+		OpenDocRef:        []string{"d"},
 		YankLine:          []string{"y"},
 
 		TreeMode:       []string{"f"},
@@ -228,7 +228,7 @@ func DefaultKeyMap() KeyMap {
 		TagLines:  []string{"+"},
 		SendLines: []string{"@"},
 		// vim's jump to definition.
-		OpenRefs:        []string{"ctrl+]"},
+		OpenRefs:        []string{"o", "ctrl+]"},
 		OpenRefsPreview: []string{"p", "f16"},
 
 		OpenInEditor:         []string{"ctrl+g"},

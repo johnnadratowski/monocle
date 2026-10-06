@@ -281,7 +281,7 @@ When the agent sends a tour (`set_walkthrough`), monocle enters tour mode on its
 | Key | Action |
 |-----|--------|
 | `c` | Add a comment at the cursor |
-| `d` | Delete a comment (on a comment) |
+| `ctrl+x` | Delete a comment (on a comment) |
 | `s` | Suggest an edit at the cursor |
 | `v` | Visual select mode (multi-line comments) |
 | `x` | Toggle a comment resolved (on a comment) |
@@ -291,7 +291,7 @@ When the agent sends a tour (`set_walkthrough`), monocle enters tour mode on its
 | `Q` | Ask a question at the cursor (a comment that wants an answer) |
 | `+` | Tag the line, or every line of the selection, to send to the agent; on lines all tagged, untag them. Tagged lines are marked yellow in the gutter and stay tagged across files and stops until sent |
 | `@` | Send the selection and the tagged lines — else the tags, else the cursor's line — to the agent through `walkthrough_ask`, then clear them |
-| `ctrl+]` | Open what the lines `@` would send reference — the SQL file a query loads, the file a function lives in — in the related-files pane, through `walkthrough_resolve`, beside what it already holds (at most 8 files), and move focus there |
+| `o` / `ctrl+]` | Open what the lines `@` would send reference — the SQL file a query loads, the file a function lives in — in the related-files pane, through `walkthrough_resolve`, beside what it already holds (at most 8 files), and move focus there |
 | `p` / `f16` | Preview the first of them instead, in a passing preview in the related-files pane's editor (`related_editor_preview`), which takes the keyboard; nothing is added to the pane |
 | `space` | Expand/collapse a comment under the cursor |
 | `E` | Expand/collapse **all** comments in the open file (any view) |
@@ -315,7 +315,7 @@ When the agent sends a tour (`set_walkthrough`), monocle enters tour mode on its
 
 | Key | Action |
 |-----|--------|
-| `o` | Open/cycle an annotation's doc links in the doc pane. In tour mode, off an annotation, it shows and hides the stop's note |
+| `d` | Open/cycle an annotation's doc links in the doc pane. In tour mode, off an annotation, it shows and hides the stop's note |
 | `!` | Run a shell command on the current file |
 | `ctrl+g` | Open in your editor — the path on this line, else the file under review; in a tour, in the related-files pane |
 | `ctrl+shift+g` | Same, always taking over the screen |

@@ -250,3 +250,45 @@ func TestPreviewReferencesFallsBackToOpening(t *testing.T) {
 		t.Errorf("with no pane alive ran %q and made %d plans, want the pane spawned", got, len(*plans))
 	}
 }
+
+// o opens what the lines reference and p previews the first, as ctrl+] and its
+// preview do — with the tour off too: a reference is worth following in any
+// review.
+func TestReferenceKeysWorkWithTheTourOff(t *testing.T) {
+	m, added, _, _ := addApp(t, `[{"path": "q.sql", "line": 12}]`, true)
+	m = pressKey(t, m, "W") // the tour off
+	m = pressRefs(t, m, tea.KeyPressMsg{Code: 'o', Text: "o"})
+	if got := readLines(t, added); !reflect.DeepEqual(got, []string{filepath.Join(m.repoRoot, "q.sql") + "|12|%99"}) {
+		t.Errorf("o with the tour off ran %q, want the file added", got)
+	}
+
+	m, added, _, _ = previewApp(t, `[{"path": "q.sql", "line": 12}]`, true)
+	m = pressKey(t, m, "W")
+	m = pressRefs(t, m, previewRefsKey)
+	if got := readLines(t, added); !reflect.DeepEqual(got, []string{"preview|" + filepath.Join(m.repoRoot, "q.sql") + "|12|%99"}) {
+		t.Errorf("p with the tour off ran %q, want the preview", got)
+	}
+}
+
+// d is the doc pane's now, everywhere: on a comment it no longer deletes it;
+// ctrl+x does.
+func TestCtrlXDeletesACommentAndDDoesNot(t *testing.T) {
+	comment := &types.ReviewComment{ID: "c1", Body: "fix this"}
+	keyOn := func(key tea.KeyPressMsg) tea.Msg {
+		m, _ := tourApp(t)
+		m = pressKey(t, m, "W")
+		m.diffView.lines = append(m.diffView.lines, diffViewLine{isComment: true, comment: comment})
+		m.diffView.cursor = len(m.diffView.lines) - 1
+		_, cmd := m.Update(key)
+		if cmd == nil {
+			return nil
+		}
+		return cmd()
+	}
+	if msg, ok := keyOn(tea.KeyPressMsg{Code: 'x', Mod: tea.ModCtrl}).(deleteCommentMsg); !ok || msg.commentID != "c1" {
+		t.Errorf("ctrl+x on a comment did not delete it")
+	}
+	if _, ok := keyOn(tea.KeyPressMsg{Code: 'd', Text: "d"}).(deleteCommentMsg); ok {
+		t.Errorf("d on a comment deleted it")
+	}
+}

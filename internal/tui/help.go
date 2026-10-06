@@ -349,7 +349,7 @@ func (m helpModel) buildContent() string {
 			{Label(km.OpenRefs), "Open what those lines reference in the related pane, via walkthrough_resolve"},
 			{Label(km.OpenRefsPreview), "Preview the first of them in the related pane's editor (related_editor_preview)"},
 			{"x", "Toggle a comment resolved (on a comment)"},
-			{"d", "Delete a comment (on a comment)"},
+			{"ctrl+x", "Delete a comment (on a comment)"},
 			{Label(km.ExpandComment), "Expand/collapse a comment under the cursor"},
 			{Label(km.ExpandAllComments), "Expand/collapse all comments in the file (any view)"},
 		},

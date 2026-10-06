@@ -157,7 +157,7 @@ func TestHelpSectionsAreOrderedAndComplete(t *testing.T) {
 			}
 		}
 		if !found {
-			t.Errorf("%q missing from %q; sections were %v", "o", secOpen, sections[secOpen])
+			t.Errorf("%q missing from %q; sections were %v", PrimaryLabel(DefaultKeyMap().OpenDocRef), secOpen, sections[secOpen])
 		}
 	})
 }

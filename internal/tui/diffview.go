@@ -841,8 +841,8 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 				}
 				return m, nil
 			}
-		case key == "d":
-			// Delete comment under cursor
+		case key == "ctrl+x":
+			// Delete comment under cursor. Not d: d is the doc pane's, everywhere.
 			if c := m.CursorComment(); c != nil {
 				commentID := c.ID
 				return m, func() tea.Msg { return deleteCommentMsg{commentID: commentID} }

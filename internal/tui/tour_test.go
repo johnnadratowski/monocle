@@ -786,11 +786,11 @@ func TestOTogglesTheStopsNote(t *testing.T) {
 			m = pressKey(t, m, ".") // 1.2
 			reports, settle := len(e.reports()), m.tour.settle
 			m.setFocus(from.focus)
-			if m = pressKey(t, m, "o"); m.docPane.active {
-				t.Fatal("o did not close the stop's note")
+			if m = pressKey(t, m, "d"); m.docPane.active {
+				t.Fatal("d did not close the stop's note")
 			}
-			if m = pressKey(t, m, "o"); !noteOpen(m, "1.2") {
-				t.Fatalf("o did not bring back 1.2's note: active=%v note=%v id=%q", m.docPane.active, m.docPane.note, m.docPane.annotationID)
+			if m = pressKey(t, m, "d"); !noteOpen(m, "1.2") {
+				t.Fatalf("d did not bring back 1.2's note: active=%v note=%v id=%q", m.docPane.active, m.docPane.note, m.docPane.annotationID)
 			}
 			if !strings.Contains(stripANSISeq(m.docPane.View()), "The write.") || m.tour.index != 1 {
 				t.Errorf("the note brought back is not 1.2's, or the stop moved (index %d)", m.tour.index)
@@ -801,37 +801,37 @@ func TestOTogglesTheStopsNote(t *testing.T) {
 		})
 	}
 
-	t.Run("outside tour mode o is unchanged", func(t *testing.T) {
+	t.Run("outside tour mode d is unchanged", func(t *testing.T) {
 		m, _ := tourApp(t)
 		m = pressKey(t, m, "W")
-		if m = pressKey(t, m, "o"); m.docPane.active {
-			t.Error("o opened a note with the tour off")
+		if m = pressKey(t, m, "d"); m.docPane.active {
+			t.Error("d opened a note with the tour off")
 		}
 	})
 
-	// The cursor on an annotation is the narrower ask, so o opens its doc
-	// links there, tour or not; off it, o is the note's toggle again.
+	// The cursor on an annotation is the narrower ask, so d opens its doc
+	// links there, tour or not; off it, d is the note's toggle again.
 	t.Run("an annotation under the cursor wins", func(t *testing.T) {
 		m, _ := tourApp(t) // 1.1, cursor on a.go:5
 		m.diffView.annotations = []types.Annotation{{ID: "x1", TargetRef: "a.go", LineStart: 5, LineEnd: 5, Summary: "why",
 			Refs: []types.DocRef{{Kind: types.DocRefFile, Doc: "NOTES.md"}}}}
 		m.diffView.buildLines()
 		m.diffView.GoToLine(5)
-		if m = pressKey(t, m, "o"); m.docPane.annotationID != "x1" {
-			t.Fatalf("o on an annotation showed %q, want its doc links", m.docPane.annotationID)
+		if m = pressKey(t, m, "d"); m.docPane.annotationID != "x1" {
+			t.Fatalf("d on an annotation showed %q, want its doc links", m.docPane.annotationID)
 		}
 		m.diffView.GoToLine(20)
-		if m = pressKey(t, m, "o"); m.docPane.active {
-			t.Fatal("o off the annotation did not close its doc pane")
+		if m = pressKey(t, m, "d"); m.docPane.active {
+			t.Fatal("d off the annotation did not close its doc pane")
 		}
-		// With the pane closed, on the annotation, o still means its links.
+		// With the pane closed, on the annotation, d still means its links.
 		m.diffView.GoToLine(5)
-		if m = pressKey(t, m, "o"); m.docPane.annotationID != "x1" {
-			t.Fatalf("o on an annotation with the pane closed showed %q, want its doc links", m.docPane.annotationID)
+		if m = pressKey(t, m, "d"); m.docPane.annotationID != "x1" {
+			t.Fatalf("d on an annotation with the pane closed showed %q, want its doc links", m.docPane.annotationID)
 		}
 		m.diffView.GoToLine(20)
-		m = pressKey(t, m, "o")
-		if m = pressKey(t, m, "o"); !noteOpen(m, "1.1") {
+		m = pressKey(t, m, "d")
+		if m = pressKey(t, m, "d"); !noteOpen(m, "1.1") {
 			t.Errorf("o with the pane closed did not bring back 1.1's note: id=%q", m.docPane.annotationID)
 		}
 	})
