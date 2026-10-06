@@ -353,3 +353,32 @@ func TestEngineClient_GotoLineEvent(t *testing.T) {
 		t.Fatal("the goto_line event never reached the client")
 	}
 }
+
+// highlight_range's event reaches a client with its path and both ends.
+func TestEngineClient_HighlightRangeEvent(t *testing.T) {
+	_, socketPath := setupEngine(t)
+	ec, err := NewEngineClient(socketPath)
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+	defer ec.Close()
+	events := make(chan core.EventPayload, 1)
+	ec.On(core.EventHighlightRange, func(p core.EventPayload) { events <- p })
+	c, err := Connect(socketPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	resp, err := c.Request(&protocol.HighlightRangeMsg{Type: protocol.TypeHighlightRange, Path: "a.go", Start: 1, End: 1}, time.Second)
+	if r, ok := resp.(*protocol.HighlightRangeResponse); err != nil || !ok || !r.Success {
+		t.Fatalf("highlight_range: %+v %v", resp, err)
+	}
+	select {
+	case p := <-events:
+		if p.Path != "a.go" || p.Line != 1 || p.LineEnd != 1 {
+			t.Errorf("event %+v, want a.go 1-1", p)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the highlight_range event never reached the client")
+	}
+}

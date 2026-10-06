@@ -73,6 +73,10 @@ type Config struct {
 	// (the new-file line, 0 when the row has none) and MONOCLE_REPO_ROOT,
 	// fire-and-forget, 2 s timeout, output discarded. Empty runs nothing.
 	CursorCommand string `json:"cursor_command"`
+	// HighlightColor is the background of the range an agent highlights
+	// (highlight_range), as a colour lipgloss understands ("#2d3b6b", "4").
+	// Empty uses the theme's.
+	HighlightColor string `json:"highlight_color"`
 	// RelatedEditorArgs are extra arguments appended to the editor command of
 	// a tour stop's related-files pane — `["-S", "/path/setup.vim"]`, say — so
 	// whatever runs the tour can set the editor up. {owner} in them becomes

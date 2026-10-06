@@ -530,6 +530,9 @@ func eventPayloadMap(payload EventPayload) map[string]any {
 	if payload.Top != nil {
 		m["top"] = *payload.Top
 	}
+	if payload.LineEnd != 0 {
+		m["line_end"] = payload.LineEnd
+	}
 	return m
 }
 
@@ -764,6 +767,8 @@ func (s *SocketServer) routeMessage(msg any) any {
 		return s.engine.handleGotoStop(m)
 	case *protocol.GotoLineMsg:
 		return s.engine.handleGotoLine(m)
+	case *protocol.HighlightRangeMsg:
+		return s.engine.handleHighlightRange(m)
 	case *protocol.SetWalkthroughStopMsg:
 		return s.engine.handleSetWalkthroughStop(m)
 	case *protocol.GetSnapshotsMsg:

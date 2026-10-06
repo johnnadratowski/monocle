@@ -25,6 +25,10 @@ const (
 	// EventGotoLine fires when the agent asks to show a file at a line
 	// (goto_line). Path and Line say where.
 	EventGotoLine EventKind = "goto_line"
+	// EventHighlightRange fires when the agent sets or clears the review's
+	// highlighted range (highlight_range): Path, Line and LineEnd say which
+	// lines; an empty Path clears it.
+	EventHighlightRange EventKind = "highlight_range"
 )
 
 // EventPayload carries data for an engine event.
@@ -34,7 +38,8 @@ type EventPayload struct {
 	ItemID  string // for content item events
 	Status  string // for status events
 	Message string // optional context
-	Line    int    // a new-file line, for EventGotoLine
+	Line    int    // a new-file line, for EventGotoLine; the first of a range, for EventHighlightRange
+	LineEnd int    // the last new-file line of a range, for EventHighlightRange
 	Top     *int   // rows from the top of the diff to place Line at, for EventGotoLine; nil leaves it
 }
 

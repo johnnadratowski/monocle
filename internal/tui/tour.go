@@ -570,6 +570,37 @@ func (m *appModel) openFileAt(file string, line int, top *int) tea.Cmd {
 	return nil
 }
 
+// highlightRangeMsg sets the highlighted range — new-file lines start to end
+// of a file of the review — or, with no path, clears it (highlight_range).
+type highlightRangeMsg struct {
+	path       string
+	start, end int
+}
+
+// highlightRange marks a range of lines in a file of the review, replacing any
+// earlier one, or clears it. It moves nothing: goto_line does the moving. The
+// range shows in its file only, and stays through file switches until it is
+// replaced or cleared.
+func (m appModel) highlightRange(msg highlightRangeMsg) appModel {
+	if msg.path == "" {
+		m.diffView.hlPath = ""
+		return m
+	}
+	shown, ok := m.reviewPathOf(msg.path)
+	if !ok {
+		m.statusBar.searchInfo = msg.path + " is not in the review"
+		return m
+	}
+	m.diffView.hlPath, m.diffView.hlStart, m.diffView.hlEnd = shown, msg.start, msg.end
+	m.diffView.hlColor = ""
+	if m.engine != nil {
+		if cfg := m.engine.GetConfig(); cfg != nil {
+			m.diffView.hlColor = strings.TrimSpace(cfg.HighlightColor)
+		}
+	}
+	return m
+}
+
 // gotoLineMsg asks to show a file at a new-file line — the agent's goto_line —
 // placed top rows from the top of the diff when top is set.
 type gotoLineMsg struct {

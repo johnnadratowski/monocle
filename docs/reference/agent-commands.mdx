@@ -626,6 +626,30 @@ In MCP tools mode, call the `goto_line` tool with `path`, `line` and, optionally
 
 ---
 
+## `monocle review highlight`
+
+Highlight one range of lines in a file of the review, so the reviewer sees at a glance where it starts and ends.
+
+```bash
+monocle review highlight src/orders.ts 120 164
+monocle review highlight --clear
+```
+
+`<start>` and `<end>` are **new-file** lines (`start >= 1`, `end >= start`); the path resolves as `goto-line`'s does. A highlight replaces any earlier one, and `--clear` removes it. It only marks the lines — the range's rows are tinted with `highlight_color` — and moves neither the cursor nor the scroll: call `goto-line` to take the reviewer there. It shows in its file only and lasts through file switches until it is replaced or cleared; monocle forgets it on restart.
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--clear` | Remove the highlighted range. |
+| `--json` | Output as JSON. |
+
+### MCP tool equivalent
+
+In MCP tools mode, call the `highlight_range` tool with `path`, `start` and `end`, or with `clear: true`.
+
+---
+
 ## `send_diff` (MCP tool)
 
 Show the reviewer a before/after comparison whose contents you supply directly — for *illustrating* a change rather than reviewing one. Typical uses: pseudocode before/after, two competing design options side by side, or any contrast that is not the state of the repository.

@@ -1278,6 +1278,9 @@ func (m appModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case gotoLineMsg:
 		return m.gotoLine(msg)
 
+	case highlightRangeMsg:
+		return m.highlightRange(msg), nil
+
 	case tourSettledMsg:
 		return m.settleOnStop(msg)
 
@@ -5099,6 +5102,9 @@ func BridgeEngineEvents(engine core.EngineAPI, p *tea.Program) {
 	})
 	engine.On(core.EventGotoLine, func(e core.EventPayload) {
 		p.Send(gotoLineMsg{path: e.Path, line: e.Line, top: e.Top})
+	})
+	engine.On(core.EventHighlightRange, func(e core.EventPayload) {
+		p.Send(highlightRangeMsg{path: e.Path, start: e.Line, end: e.LineEnd})
 	})
 }
 

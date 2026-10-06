@@ -128,11 +128,26 @@ func (e *Engine) handleGotoLine(msg *protocol.GotoLineMsg) *protocol.GotoLineRes
 	if msg.Top != nil && *msg.Top < 0 {
 		return fail(fmt.Sprintf("top must be >= 0 (got %d)", *msg.Top))
 	}
+	path, err := e.reviewPath(path)
+	if err != nil {
+		return fail(err.Error())
+	}
+	e.emit(EventGotoLine, EventPayload{Kind: EventGotoLine, Path: path, Line: msg.Line, Top: msg.Top})
+	return &protocol.GotoLineResponse{
+		Type: protocol.TypeGotoLineResponse, Success: true,
+		Message: fmt.Sprintf("Showing the reviewer %s:%d.", path, msg.Line),
+	}
+}
+
+// reviewPath resolves a path the agent gave to a file of the review — a changed
+// file or an added one, by its repo-relative path, an added file's name, or an
+// absolute path, made repo-relative when it lies in the repo.
+func (e *Engine) reviewPath(path string) (string, error) {
 	e.mu.RLock()
 	session := e.current
 	if session == nil {
 		e.mu.RUnlock()
-		return fail("no active session")
+		return "", fmt.Errorf("no active session")
 	}
 	inReview := reviewPathSet(session)
 	for _, af := range session.AdditionalFiles {
@@ -147,12 +162,40 @@ func (e *Engine) handleGotoLine(msg *protocol.GotoLineMsg) *protocol.GotoLineRes
 		}
 	}
 	if !inReview[path] {
-		return fail(fmt.Sprintf("%s is not in the review: it must be a changed file or an added one (add it with add_files)", path))
+		return "", fmt.Errorf("%s is not in the review: it must be a changed file or an added one (add it with add_files)", path)
 	}
-	e.emit(EventGotoLine, EventPayload{Kind: EventGotoLine, Path: path, Line: msg.Line, Top: msg.Top})
-	return &protocol.GotoLineResponse{
-		Type: protocol.TypeGotoLineResponse, Success: true,
-		Message: fmt.Sprintf("Showing the reviewer %s:%d.", path, msg.Line),
+	return path, nil
+}
+
+// handleHighlightRange sets the review's one highlighted range of lines, at the
+// agent's request, replacing any earlier one — or clears it. The range only
+// marks lines; moving to them is goto_line's. It lives in the TUI, so the
+// engine checks what it can and announces it.
+func (e *Engine) handleHighlightRange(msg *protocol.HighlightRangeMsg) *protocol.HighlightRangeResponse {
+	fail := func(message string) *protocol.HighlightRangeResponse {
+		return &protocol.HighlightRangeResponse{Type: protocol.TypeHighlightRangeResponse, Message: message}
+	}
+	if msg.Clear {
+		e.emit(EventHighlightRange, EventPayload{Kind: EventHighlightRange})
+		return &protocol.HighlightRangeResponse{Type: protocol.TypeHighlightRangeResponse, Success: true, Message: "Highlight cleared."}
+	}
+	path := strings.TrimSpace(msg.Path)
+	switch {
+	case path == "":
+		return fail("a path is required (or clear)")
+	case msg.Start < 1:
+		return fail(fmt.Sprintf("start must be >= 1 (got %d)", msg.Start))
+	case msg.End < msg.Start:
+		return fail(fmt.Sprintf("end (%d) must be >= start (%d)", msg.End, msg.Start))
+	}
+	path, err := e.reviewPath(path)
+	if err != nil {
+		return fail(err.Error())
+	}
+	e.emit(EventHighlightRange, EventPayload{Kind: EventHighlightRange, Path: path, Line: msg.Start, LineEnd: msg.End})
+	return &protocol.HighlightRangeResponse{
+		Type: protocol.TypeHighlightRangeResponse, Success: true,
+		Message: fmt.Sprintf("Highlighting %s:%d-%d.", path, msg.Start, msg.End),
 	}
 }
 

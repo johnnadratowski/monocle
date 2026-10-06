@@ -199,6 +199,7 @@ Monocle exposes review operations via **MCP tools** (default for Claude Code, an
 | Point at a repo/worktree | `set_repo` | `-C`/`--workdir` flag | Bind to the engine for a specific repo — call once after entering a git worktree so review tools target it, not the launch directory |
 | Guided tour | `set_walkthrough` | `monocle review set-walkthrough` | Walk the reviewer through the change as ordered stops (file + lines, a note, related files, views) they step through with `.` / `,` |
 | Show a tour stop | `goto_stop` | `monocle review goto-stop` | Move the reviewer to a stop by its id — answer "1.2 — why?" by showing 1.2 |
+| Highlight a range | `highlight_range` | `monocle review highlight` | Tint one range of lines in a file of the review so its start and end read at a glance; replaces any earlier one, `clear` removes it. Moves nothing — pair it with `goto_line` |
 | Show a file at a line | `goto_line` | `monocle review goto-line` | Open a file of the review (changed or added) with the diff cursor on a new-file line — `top` places it that many rows below the top of the diff, for as much as possible of what follows; ctrl+o returns, and the tour's stop does not change |
 | Show a before/after comparison | `send_diff` | — | Render an agent-supplied contrast (pseudocode before/after, competing design options) as a side-by-side diff — reads no files and runs no git |
 
@@ -429,6 +430,8 @@ monocle review set-base-ref <ref> [--reset] [--json]     Review already-committe
 monocle review set-walkthrough [--file F] [--clear] [--json]  Send a guided tour of the review (stops stepped with . and ,)
 monocle review goto-stop <id> [--json]                   Move the reviewer to a tour stop
 monocle review goto-line <path> <line> [--top N] [--json]  Show the reviewer a file of the review at a line
+monocle review highlight <path> <start> <end> [--json]   Highlight a range of lines (replaces any earlier one)
+monocle review highlight --clear [--json]                Remove the highlighted range
 ```
 
 - `--wait` blocks until the reviewer responds (used by `/review-plan-wait`)
@@ -475,6 +478,7 @@ Monocle loads settings from JSON config files:
   "walkthrough_ask": "",
   "walkthrough_resolve": "",
   "cursor_command": "",
+  "highlight_color": "",
   "related_editor_args": [],
   "related_editor_add": "",
   "related_editor_preview": "",
@@ -517,6 +521,7 @@ Monocle loads settings from JSON config files:
 | `walkthrough_ask`                    | string                                     | `""`         | Shell command that hands the agent the lines you send with `@`: the selection and the tagged lines, else the cursor's line. Runs `sh -c` in the repo root, 10s timeout, with `MONOCLE_REPO_ROOT` and `MONOCLE_ASK_JSON` — `{"tour", "stop", "repo", "refs": [{"path", "start", "end", "side"}]}`, `side` `"old"` for removed lines in old-file numbers, `tour`/`stop` empty outside tour mode — in its environment. It puts the reference in the agent's prompt and moves focus there. Empty sends nothing |
 | `walkthrough_resolve`                | string                                     | `""`         | Shell command that says what the lines you point at with `ctrl+]` reference (the SQL file a query loads, the file a function lives in). Runs `sh -c` in the repo root, 10s timeout, with `MONOCLE_REPO_ROOT` and `MONOCLE_RESOLVE_JSON` (the shape of `MONOCLE_ASK_JSON`), and prints a JSON array `[{"path": "db/queries/x.sql", "line": 12}]`, paths repo-relative or absolute. monocle opens them in the related-files pane beside what it holds, at most 8 files, and moves focus there. Empty opens nothing |
 | `cursor_command`                     | string                                     | `""`         | Shell command run when the diff cursor rests on a new file:line (about 200 ms after the last move, never twice in a row for the same place, never while a modal is open), with `MONOCLE_FILE` (repo-relative), `MONOCLE_LINE` (new-file line, `0` when the row has none) and `MONOCLE_REPO_ROOT`. `sh -c` in the repo root, fire-and-forget, 2s timeout, output discarded. Empty runs nothing |
+| `highlight_color`                    | string                                     | `""`         | Background of the range an agent highlights (`highlight_range`), as a colour such as `"#2d3b6b"` or an ANSI number. Empty uses the theme's: `#2d3b6b` on the dark themes, `#cdd8ff` on `light` |
 | `related_editor_args`                | string[]                                   | `[]`         | Extra arguments appended to the editor command of a tour stop's related-files pane, e.g. `["-S", "/path/setup.vim"]`; `{owner}` in them becomes monocle's tmux pane id (e.g. `--listen /tmp/nvim-{owner}.sock`). With vim/nvim, `+cmd`, `-c` and `-S` share a limit of ten (the pane uses one `-c`) and `--cmd` has its own ten; arguments past either are left out, with a status-bar note |
 | `related_editor_add`                 | string                                     | `""`         | Shell command that adds one file to the editor already in the related-files pane, so files you closed there stay closed. With it set and the pane alive, `ctrl+]`, `ctrl+g` in a tour, `:related N` and a click on a related file run it once per file instead of respawning the pane. `{file}` (absolute path), `{line}` (`0` for none) and `{owner}` (monocle's tmux pane) are substituted shell-quoted. It should bring an open file forward rather than open it twice. Empty respawns |
 | `related_editor_preview`             | string                                     | `""`         | Shell command that shows one file in a passing preview in the editor already in the related-files pane (a popup the editor closes once you move on) instead of adding it. `p` / `f16` runs it for the first file `walkthrough_resolve` finds and moves focus there. Placeholders as `related_editor_add`'s. Empty, or no live pane: the key opens the files as `ctrl+]` does |

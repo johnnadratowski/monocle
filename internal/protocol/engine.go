@@ -71,6 +71,7 @@ const (
 	TypeGotoStop           = "goto_stop"
 	TypeSetWalkthroughStop = "set_walkthrough_stop"
 	TypeGotoLine           = "goto_line"
+	TypeHighlightRange     = "highlight_range"
 
 	// Snapshots
 	TypeGetSnapshots      = "get_snapshots"
@@ -163,6 +164,7 @@ const (
 	TypeGotoStopResponse           = "goto_stop_response"
 	TypeSetWalkthroughStopResponse = "set_walkthrough_stop_response"
 	TypeGotoLineResponse           = "goto_line_response"
+	TypeHighlightRangeResponse     = "highlight_range_response"
 
 	// Snapshots
 	TypeGetSnapshotsResponse      = "get_snapshots_response"
@@ -729,6 +731,23 @@ type GotoLineMsg struct {
 }
 
 type GotoLineResponse struct {
+	Type    string `json:"type"`
+	Success bool   `json:"success"`
+	Message string `json:"message,omitempty"`
+}
+
+// HighlightRangeMsg sets the review's one highlighted range of lines — new-file
+// lines Start to End of a file of the review — replacing any earlier one, or
+// with Clear removes it. It only marks the lines; it moves nothing.
+type HighlightRangeMsg struct {
+	Type  string `json:"type"`
+	Path  string `json:"path,omitempty"`
+	Start int    `json:"start,omitempty"`
+	End   int    `json:"end,omitempty"`
+	Clear bool   `json:"clear,omitempty"`
+}
+
+type HighlightRangeResponse struct {
 	Type    string `json:"type"`
 	Success bool   `json:"success"`
 	Message string `json:"message,omitempty"`

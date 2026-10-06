@@ -22,8 +22,11 @@ type Theme struct {
 	LineNumber lipgloss.Style
 
 	// Diff backgrounds (true color for syntax highlighting overlay)
-	AddedBg         color.Color
-	RemovedBg       color.Color
+	AddedBg   color.Color
+	RemovedBg color.Color
+	// HighlightBg tints the rows of a range an agent highlights: apart from
+	// the added and removed backgrounds, the gutter marks and the cursor.
+	HighlightBg     color.Color
 	AddedChangeBg   color.Color
 	RemovedChangeBg color.Color
 
@@ -96,6 +99,7 @@ func DefaultTheme() Theme {
 
 		AddedBg:         lipgloss.Color("#132a13"),
 		RemovedBg:       lipgloss.Color("#2a1313"),
+		HighlightBg:     lipgloss.Color("#2d3b6b"),
 		AddedChangeBg:   lipgloss.Color("#1f4a1f"),
 		RemovedChangeBg: lipgloss.Color("#4a1f1f"),
 
@@ -141,6 +145,7 @@ func LightTheme() Theme {
 
 		AddedBg:         lipgloss.Color("#d4f4d4"),
 		RemovedBg:       lipgloss.Color("#f4d4d4"),
+		HighlightBg:     lipgloss.Color("#cdd8ff"),
 		AddedChangeBg:   lipgloss.Color("#a8e6a8"),
 		RemovedChangeBg: lipgloss.Color("#e6a8a8"),
 
@@ -201,6 +206,7 @@ func MolokaiTheme() Theme {
 
 		AddedBg:         lipgloss.Color("#2B3D2B"),
 		RemovedBg:       lipgloss.Color("#3C1F26"),
+		HighlightBg:     lipgloss.Color("#2d3b6b"),
 		AddedChangeBg:   lipgloss.Color("#3F5F2F"),
 		RemovedChangeBg: lipgloss.Color("#5C2733"),
 
@@ -259,6 +265,7 @@ func DraculaTheme() Theme {
 
 		AddedBg:         lipgloss.Color("#1E3A2A"),
 		RemovedBg:       lipgloss.Color("#3A1E22"),
+		HighlightBg:     lipgloss.Color("#2d3b6b"),
 		AddedChangeBg:   lipgloss.Color("#2E5740"),
 		RemovedChangeBg: lipgloss.Color("#572E33"),
 
@@ -317,6 +324,7 @@ func NordTheme() Theme {
 
 		AddedBg:         lipgloss.Color("#3B4A3B"),
 		RemovedBg:       lipgloss.Color("#4A3536"),
+		HighlightBg:     lipgloss.Color("#2d3b6b"),
 		AddedChangeBg:   lipgloss.Color("#4E6A4E"),
 		RemovedChangeBg: lipgloss.Color("#6A4B4D"),
 

@@ -173,6 +173,7 @@ func (c *EngineClient) dialAndSubscribe() error {
 			string(core.EventActivityChanged),
 			string(core.EventWalkthroughChanged),
 			string(core.EventGotoLine),
+			string(core.EventHighlightRange),
 		},
 		Passive: true,
 	}
@@ -491,6 +492,9 @@ func (c *EngineClient) invokeCallbacks(notif *protocol.EventNotification) {
 	}
 	if v, ok := notif.Payload["line"].(float64); ok {
 		payload.Line = int(v)
+	}
+	if v, ok := notif.Payload["line_end"].(float64); ok {
+		payload.LineEnd = int(v)
 	}
 	if v, ok := notif.Payload["top"].(float64); ok {
 		top := int(v)

@@ -128,6 +128,44 @@ func (cmd *ReviewGotoLineCmd) Run() error {
 	return nil
 }
 
+// ReviewHighlightCmd sets the review's one highlighted range of lines, or
+// clears it.
+type ReviewHighlightCmd struct {
+	WorkDirFlag
+	Socket string `help:"Override socket path" env:"MONOCLE_SOCKET" default:""`
+	Path   string `arg:"" optional:"" help:"A changed file or an added one: repo-relative, an added file's name, or absolute"`
+	Start  int    `arg:"" optional:"" help:"The range's first new-file line, from 1"`
+	End    int    `arg:"" optional:"" help:"The range's last new-file line"`
+	Clear  bool   `help:"Remove the highlighted range" default:"false"`
+	JSON   bool   `help:"Output as JSON" default:"false"`
+}
+
+func (cmd *ReviewHighlightCmd) Run() error {
+	c, err := connectReview(cmd.Socket, cmd.WorkDir)
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+
+	msg := &protocol.HighlightRangeMsg{Type: protocol.TypeHighlightRange, Path: cmd.Path, Start: cmd.Start, End: cmd.End, Clear: cmd.Clear}
+	resp, err := c.Request(msg, client.DefaultTimeout)
+	if err != nil {
+		return fmt.Errorf("highlight: %w", err)
+	}
+	r, ok := resp.(*protocol.HighlightRangeResponse)
+	if !ok {
+		return fmt.Errorf("highlight: unexpected response %T", resp)
+	}
+	if cmd.JSON {
+		return printJSON(r)
+	}
+	if !r.Success {
+		return fmt.Errorf("%s", r.Message)
+	}
+	fmt.Println(r.Message)
+	return nil
+}
+
 // connectReview dials the engine for a repo, exiting with the client's own
 // message when none is running — the same contract as every review command.
 func connectReview(socket, workdir string) (*client.Client, error) {

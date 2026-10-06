@@ -160,3 +160,35 @@ func TestGotoLineCmdSendsTheRequest(t *testing.T) {
 		t.Fatal("no goto_line request reached the engine")
 	}
 }
+
+// highlight sends the range, or the clear, as the request.
+func TestHighlightCmdSendsTheRequest(t *testing.T) {
+	sock := shortSock(t)
+	got := make(chan *protocol.HighlightRangeMsg, 2)
+	startMockServe(t, sock, func(conn net.Conn) {
+		defer conn.Close()
+		line, err := bufio.NewReader(conn).ReadBytes('\n')
+		if err != nil {
+			return
+		}
+		if msg, err := protocol.Decode(line); err == nil {
+			if m, ok := msg.(*protocol.HighlightRangeMsg); ok {
+				got <- m
+			}
+		}
+		data, _ := protocol.Encode(&protocol.HighlightRangeResponse{Type: protocol.TypeHighlightRangeResponse, Success: true, Message: "ok"})
+		_, _ = conn.Write(data)
+	})
+	if err := (&ReviewHighlightCmd{Socket: sock, Path: "a.go", Start: 3, End: 9}).Run(); err != nil {
+		t.Fatal(err)
+	}
+	if err := (&ReviewHighlightCmd{Socket: sock, Clear: true}).Run(); err != nil {
+		t.Fatal(err)
+	}
+	if m := <-got; m.Path != "a.go" || m.Start != 3 || m.End != 9 || m.Clear {
+		t.Errorf("sent %+v, want a.go 3-9", m)
+	}
+	if m := <-got; !m.Clear {
+		t.Errorf("sent %+v, want a clear", m)
+	}
+}

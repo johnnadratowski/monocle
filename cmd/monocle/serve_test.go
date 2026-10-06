@@ -91,3 +91,26 @@ func TestGotoLineTopFlag(t *testing.T) {
 }
 
 func intPtr(n int) *int { return &n }
+
+// highlight takes a path and both ends, or --clear alone.
+func TestHighlightArgs(t *testing.T) {
+	var cli CLI
+	parser, err := kong.New(&cli)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := parser.Parse([]string{"review", "highlight", "a.go", "3", "9"}); err != nil {
+		t.Fatal(err)
+	}
+	if h := cli.Review.Highlight; h.Path != "a.go" || h.Start != 3 || h.End != 9 || h.Clear {
+		t.Errorf("parsed %+v", h)
+	}
+	cli = CLI{}
+	parser, _ = kong.New(&cli)
+	if _, err := parser.Parse([]string{"review", "highlight", "--clear"}); err != nil {
+		t.Fatal(err)
+	}
+	if !cli.Review.Highlight.Clear {
+		t.Error("--clear did not parse")
+	}
+}

@@ -122,6 +122,11 @@ func registerTools(s *sdkmcp.Server) {
 		Name:        "goto_line",
 		Description: desc["goto_line"],
 	}, handleGotoLine)
+
+	sdkmcp.AddTool(s, &sdkmcp.Tool{
+		Name:        "highlight_range",
+		Description: desc["highlight_range"],
+	}, handleHighlightRange)
 }
 
 // relatedParam is a repo file to open beside a tour stop, at a line.
@@ -259,6 +264,36 @@ func handleGotoLine(ctx context.Context, req *sdkmcp.CallToolRequest, params got
 	}
 	if !r.Success {
 		return errResult("goto_line: %s", r.Message), nil, nil
+	}
+	return textResult(r.Message), nil, nil
+}
+
+type highlightRangeParams struct {
+	Path  string `json:"path,omitempty"`  // a changed file or an added one: repo-relative, an added file's name, or absolute
+	Start int    `json:"start,omitempty"` // the range's first new-file line, from 1
+	End   int    `json:"end,omitempty"`   // the range's last new-file line
+	Clear bool   `json:"clear,omitempty"` // remove the highlighted range instead
+}
+
+func handleHighlightRange(ctx context.Context, req *sdkmcp.CallToolRequest, params highlightRangeParams) (*sdkmcp.CallToolResult, any, error) {
+	c, guard := boundClient()
+	if guard != nil {
+		return guard, nil, nil
+	}
+	defer c.Close()
+
+	resp, err := c.Request(&protocol.HighlightRangeMsg{
+		Type: protocol.TypeHighlightRange, Path: params.Path, Start: params.Start, End: params.End, Clear: params.Clear,
+	}, client.DefaultTimeout)
+	if err != nil {
+		return errResult("request: %v", err), nil, nil
+	}
+	r, ok := resp.(*protocol.HighlightRangeResponse)
+	if !ok {
+		return errResult("unexpected response %T", resp), nil, nil
+	}
+	if !r.Success {
+		return errResult("highlight_range: %s", r.Message), nil, nil
 	}
 	return textResult(r.Message), nil, nil
 }

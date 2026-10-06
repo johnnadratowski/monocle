@@ -212,6 +212,13 @@ type diffViewModel struct {
 	// files and calls are about, underlined so the reviewer can see which code
 	// each one explains (u / U move between them, o opens one).
 	stopMarks []stopMark
+
+	// The range an agent highlighted (highlight_range): new-file lines
+	// hlStart to hlEnd of the file shown under hlPath, "" for none. hlColor is
+	// highlight_color, "" for the theme's.
+	hlPath         string
+	hlStart, hlEnd int
+	hlColor        string
 }
 
 // stopMark is one symbol a stop's related file or call is about.
@@ -357,6 +364,42 @@ func (m diffViewModel) nearStopColor(line diffViewLine) string {
 		}
 	}
 	return ""
+}
+
+// inHighlight reports whether a row shows a line of the highlighted range. As
+// with a stop's range, only rows with a new-file number qualify.
+func (m diffViewModel) inHighlight(line diffViewLine) bool {
+	if m.hlPath == "" || m.path != m.hlPath || m.contentID != "" {
+		return false
+	}
+	if line.isHunk || line.isComment || line.isAnnotation || line.verbatim {
+		return false
+	}
+	n := line.rightLineNum
+	if n == 0 {
+		n = line.newLineNum
+	}
+	return n > 0 && n >= m.hlStart && n <= m.hlEnd
+}
+
+// rowBg is the background a row of the given kind is drawn on, and the one its
+// intra-line changes are: the added or removed tint — or, across a highlighted
+// range, the highlight's, so the range reads at a glance. Changes keep their
+// own colour, so an edit inside the range still shows.
+func (m diffViewModel) rowBg(line diffViewLine, kind types.DiffLineKind) (lineBg, changeBg color.Color) {
+	switch kind {
+	case types.DiffLineAdded:
+		lineBg, changeBg = m.theme.AddedBg, m.theme.AddedChangeBg
+	case types.DiffLineRemoved:
+		lineBg, changeBg = m.theme.RemovedBg, m.theme.RemovedChangeBg
+	}
+	if m.inHighlight(line) {
+		lineBg = m.theme.HighlightBg
+		if m.hlColor != "" {
+			lineBg = lipgloss.Color(m.hlColor)
+		}
+	}
+	return lineBg, changeBg
 }
 
 // tagGutterColor marks a line tagged to send to the agent: yellow, apart from
@@ -1816,11 +1859,12 @@ func (m diffViewModel) renderContentLine(line diffViewLine, _, contentWidth int,
 	gutterWidth := 4
 	gutter := fmt.Sprintf("%-3d ", line.newLineNum)
 	isMd := (m.contentMode || m.style == diffStyleFile) && isMarkdownContent(m.path)
+	lineBg, _ := m.rowBg(line, types.DiffLineContext) // the highlight's tint, or none
 
 	// Wrap mode, or the cursor's own line running off the side.
 	if m.wrap || (selected && m.autoWrapsCursorLine(line, contentWidth)) {
 		return m.renderWrappedLine(gutter, line.content, gutterWidth, contentWidth,
-			nil, nil, selected || inVisual, &line)
+			lineBg, nil, selected || inVisual, &line)
 	}
 
 	// Scroll mode: apply horizontal offset, then clip
@@ -1837,15 +1881,18 @@ func (m diffViewModel) renderContentLine(line diffViewLine, _, contentWidth int,
 
 	// Render gutter
 	gutterStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	if lineBg != nil {
+		gutterStyle = gutterStyle.Background(lineBg)
+	}
 	if len(gutter) < gutterWidth {
 		gutter = fmt.Sprintf("%-*s", gutterWidth, gutter)
 	}
-	renderedGutter := gutterWithRangeBar(gutter, m.markGutter(line, gutterStyle), line.annotated, m.summaryBarFor(line), nil)
+	renderedGutter := gutterWithRangeBar(gutter, m.markGutter(line, gutterStyle), line.annotated, m.summaryBarFor(line), lineBg)
 
 	// Faded: a source comment under the filter, or a hunk outside the selected
 	// summary item.
 	if m.faded(line) {
-		return renderedGutter + renderDimmedComment(content, nil, contentWidth)
+		return renderedGutter + renderDimmedComment(content, lineBg, contentWidth)
 	}
 
 	// Render content: markdown styling or syntax highlighting
@@ -1853,22 +1900,22 @@ func (m diffViewModel) renderContentLine(line diffViewLine, _, contentWidth int,
 	if isMd && line.mdIsFence {
 		// Code fence markers → render as horizontal rule
 		renderedContent = m.mdStyler.theme.MarkdownRule.Render(strings.Repeat("─", min(40, contentWidth)))
-		renderedContent = padToWidth(renderedContent, contentWidth)
+		renderedContent = applyBgAndPad(renderedContent, lineBg, contentWidth)
 	} else if isMd && line.mdInCodeBlock && line.mdCodeLang != "" {
 		// Code block with language → use Chroma syntax highlighting
 		fakePath := "code." + line.mdCodeLang
-		renderedContent = m.hl.highlightLine(fakePath, content, nil, nil, nil, contentWidth)
+		renderedContent = m.hl.highlightLine(fakePath, content, lineBg, nil, nil, contentWidth)
 	} else if isMd && line.mdInCodeBlock {
 		// Code block without language → code block style
 		renderedContent = m.mdStyler.theme.MarkdownCodeBlock.Render(content)
-		renderedContent = padToWidth(renderedContent, contentWidth)
+		renderedContent = applyBgAndPad(renderedContent, lineBg, contentWidth)
 	} else if isMd {
 		// Regular markdown line
 		renderedContent = m.mdStyler.StyleLine(content)
-		renderedContent = padToWidth(renderedContent, contentWidth)
+		renderedContent = applyBgAndPad(renderedContent, lineBg, contentWidth)
 	} else {
 		sc, sbg := m.applySearchHighlight(content, nil, nil)
-		renderedContent = m.hl.highlightLineMarked(m.path, content, nil, sbg, sc, m.symbolRanges(line, content), contentWidth)
+		renderedContent = m.hl.highlightLineMarked(m.path, content, lineBg, sbg, sc, m.symbolRanges(line, content), contentWidth)
 	}
 
 	return renderedGutter + renderedContent
@@ -1889,15 +1936,7 @@ func (m diffViewModel) renderDiffLine(line diffViewLine, _, contentWidth int, se
 	}
 
 	// Determine backgrounds
-	var lineBg, changeBg color.Color
-	switch line.kind {
-	case types.DiffLineAdded:
-		lineBg = m.theme.AddedBg
-		changeBg = m.theme.AddedChangeBg
-	case types.DiffLineRemoved:
-		lineBg = m.theme.RemovedBg
-		changeBg = m.theme.RemovedChangeBg
-	}
+	lineBg, changeBg := m.rowBg(line, line.kind)
 
 	// Wrap mode, or the cursor's own line running off the side.
 	if m.wrap || (selected && m.autoWrapsCursorLine(line, contentWidth)) {
@@ -2202,13 +2241,7 @@ func (m diffViewModel) splitRow(gutter, styled string, kind types.DiffLineKind, 
 	if empty {
 		return lipgloss.NewStyle().Faint(true).Render(strings.Repeat(" ", gutterW+contentW))
 	}
-	var lineBg color.Color
-	switch kind {
-	case types.DiffLineAdded:
-		lineBg = m.theme.AddedBg
-	case types.DiffLineRemoved:
-		lineBg = m.theme.RemovedBg
-	}
+	lineBg, _ := m.rowBg(line, kind)
 	gutterStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 	if lineBg != nil {
 		gutterStyle = gutterStyle.Background(lineBg)
@@ -2231,13 +2264,7 @@ func (m diffViewModel) renderSplitSide(gutter, content string, kind types.DiffLi
 
 	// The gutter carries the line's background; styleSplitContent derives the
 	// same backgrounds for the text itself.
-	var lineBg color.Color
-	switch kind {
-	case types.DiffLineAdded:
-		lineBg = m.theme.AddedBg
-	case types.DiffLineRemoved:
-		lineBg = m.theme.RemovedBg
-	}
+	lineBg, _ := m.rowBg(line, kind)
 
 	// Render gutter
 	gutterStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
@@ -2266,15 +2293,7 @@ func (m diffViewModel) renderSplitSide(gutter, content string, kind types.DiffLi
 // Pass contentW = 0 to skip the padding, which is what the wrapped path wants:
 // it pads each row itself, after the split.
 func (m diffViewModel) styleSplitContent(content string, kind types.DiffLineKind, changes []changeRange, contentW int, line diffViewLine) string {
-	var lineBg, changeBg color.Color
-	switch kind {
-	case types.DiffLineAdded:
-		lineBg = m.theme.AddedBg
-		changeBg = m.theme.AddedChangeBg
-	case types.DiffLineRemoved:
-		lineBg = m.theme.RemovedBg
-		changeBg = m.theme.RemovedChangeBg
-	}
+	lineBg, changeBg := m.rowBg(line, kind)
 
 	isMd := isMarkdownFile(m.path)
 	switch {
