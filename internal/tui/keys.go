@@ -107,8 +107,7 @@ type KeyMap struct {
 	SendLines []string
 	OpenRefs  []string // open what those lines reference in the related pane, via walkthrough_resolve
 	// OpenRefsPreview previews the first of them in the related pane's editor
-	// (related_editor_preview). f16 is for a terminal, or a tmux, that sends
-	// ctrl+shift+] as plain ctrl+]: a key remapper can send f16 instead.
+	// (related_editor_preview). f16 is for a key remapper.
 	OpenRefsPreview []string
 
 	// General
@@ -230,7 +229,7 @@ func DefaultKeyMap() KeyMap {
 		SendLines: []string{"@"},
 		// vim's jump to definition.
 		OpenRefs:        []string{"ctrl+]"},
-		OpenRefsPreview: []string{"ctrl+shift+]", "f16"},
+		OpenRefsPreview: []string{"p", "f16"},
 
 		OpenInEditor:         []string{"ctrl+g"},
 		OpenInEditorTakeover: []string{"ctrl+shift+g"},

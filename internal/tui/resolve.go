@@ -34,7 +34,7 @@ const resolveMaxOutput = 64 << 10
 type resolveDoneMsg struct {
 	files   []relatedFile
 	err     error
-	preview bool // ctrl+shift+]: preview the first, rather than open them all
+	preview bool // p: preview the first, rather than open them all
 }
 
 // resolveCommand is the configured walkthrough_resolve command, or "".

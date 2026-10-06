@@ -83,7 +83,7 @@ type Config struct {
 	// RelatedEditorPreview is a shell command that shows one file in a passing
 	// preview in the editor already running in the related-files pane — a
 	// popup it closes itself once the reviewer moves on — rather than adding
-	// it. ctrl+shift+] (or f16) runs it for the first file walkthrough_resolve
+	// it. p (or f16) runs it for the first file walkthrough_resolve
 	// finds. Placeholders as related_editor_add's. Empty, or no live pane:
 	// the key opens the files as ctrl+] does.
 	RelatedEditorPreview string `json:"related_editor_preview"`

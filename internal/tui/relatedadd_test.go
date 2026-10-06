@@ -192,7 +192,7 @@ func TestOpenInEditorLeavesTheRelatedPaneAloneOtherwise(t *testing.T) {
 }
 
 var (
-	previewRefsKey    = tea.KeyPressMsg{Code: ']', Mod: tea.ModCtrl | tea.ModShift}
+	previewRefsKey    = tea.KeyPressMsg{Code: 'p', Text: "p"}
 	previewRefsF16Key = tea.KeyPressMsg{Code: tea.KeyF16}
 )
 
@@ -211,10 +211,10 @@ func pressRefs(t *testing.T, m appModel, key tea.KeyPressMsg) appModel {
 	return driveWithin(t, next.(appModel), cmd, 0, 5*time.Second)
 }
 
-// ctrl+shift+] previews what the lines reference: the first file found, through
+// p previews what the lines reference: the first file found, through
 // related_editor_preview, in the live editor beside Monocle — which takes the
-// keyboard — and nothing is added to the pane. f16 is the same key, for a
-// terminal that cannot send ctrl+shift+].
+// keyboard — and nothing is added to the pane. f16 is the same key, for a key
+// remapper.
 func TestPreviewReferencesShowsTheFirstInThePreviewCommand(t *testing.T) {
 	for _, key := range []tea.KeyPressMsg{previewRefsKey, previewRefsF16Key} {
 		m, added, plans, log := previewApp(t, `[{"path": "q.sql", "line": 12}, {"path": "a.go", "line": 5}]`, true)
