@@ -603,6 +603,28 @@ In MCP tools mode, call the `goto_stop` tool with `id`.
 
 ---
 
+## `monocle review goto-line`
+
+Show the reviewer a file of the review at a line: the diff opens the file and puts the cursor on that **new-file** line, with the diff focused.
+
+```bash
+monocle review goto-line src/orders.ts 120
+```
+
+The path is a changed file or one added with `add-files` — repo-relative, an added file's name, or absolute. The move is a jump, so the reviewer returns with `ctrl+o`. It does not change the guided tour's stop. A path the review does not hold, or a line below 1, is an error that says so; the response says where the reviewer was taken.
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--json` | Output as JSON. |
+
+### MCP tool equivalent
+
+In MCP tools mode, call the `goto_line` tool with `path` and `line`.
+
+---
+
 ## `send_diff` (MCP tool)
 
 Show the reviewer a before/after comparison whose contents you supply directly — for *illustrating* a change rather than reviewing one. Typical uses: pseudocode before/after, two competing design options side by side, or any contrast that is not the state of the repository.

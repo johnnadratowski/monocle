@@ -70,6 +70,7 @@ const (
 	TypeSetWalkthrough     = "set_walkthrough"
 	TypeGotoStop           = "goto_stop"
 	TypeSetWalkthroughStop = "set_walkthrough_stop"
+	TypeGotoLine           = "goto_line"
 
 	// Snapshots
 	TypeGetSnapshots      = "get_snapshots"
@@ -161,6 +162,7 @@ const (
 	TypeSetWalkthroughResponse     = "set_walkthrough_response"
 	TypeGotoStopResponse           = "goto_stop_response"
 	TypeSetWalkthroughStopResponse = "set_walkthrough_stop_response"
+	TypeGotoLineResponse           = "goto_line_response"
 
 	// Snapshots
 	TypeGetSnapshotsResponse      = "get_snapshots_response"
@@ -710,6 +712,20 @@ type GotoStopMsg struct {
 }
 
 type GotoStopResponse struct {
+	Type    string `json:"type"`
+	Success bool   `json:"success"`
+	Message string `json:"message,omitempty"`
+}
+
+// GotoLineMsg shows the reviewer a file of the review at a new-file line —
+// a changed file or an added one — without moving the tour.
+type GotoLineMsg struct {
+	Type string `json:"type"`
+	Path string `json:"path"`
+	Line int    `json:"line"`
+}
+
+type GotoLineResponse struct {
 	Type    string `json:"type"`
 	Success bool   `json:"success"`
 	Message string `json:"message,omitempty"`

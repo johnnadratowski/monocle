@@ -12,6 +12,7 @@ import (
 
 	"github.com/josephschmitt/monocle/internal/core"
 	"github.com/josephschmitt/monocle/internal/db"
+	"github.com/josephschmitt/monocle/internal/protocol"
 	"github.com/josephschmitt/monocle/internal/types"
 )
 
@@ -318,5 +319,36 @@ func TestEngineClient_BackgroundFetchKeepsEdits(t *testing.T) {
 	ec.refreshConfig(gen) // began before that save
 	if got := ec.GetConfig(); got != cfg {
 		t.Error("a fetch begun before a save was handed out after it")
+	}
+}
+
+// goto_line's event reaches a client with its path and line.
+func TestEngineClient_GotoLineEvent(t *testing.T) {
+	engine, socketPath := setupEngine(t)
+	ec, err := NewEngineClient(socketPath)
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+	defer ec.Close()
+	events := make(chan core.EventPayload, 1)
+	ec.On(core.EventGotoLine, func(p core.EventPayload) { events <- p })
+	_ = engine
+	// The agent's side: a plain request, as the CLI and the MCP tool send it.
+	c, err := Connect(socketPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	resp, err := c.Request(&protocol.GotoLineMsg{Type: protocol.TypeGotoLine, Path: "a.go", Line: 7}, time.Second)
+	if r, ok := resp.(*protocol.GotoLineResponse); err != nil || !ok || !r.Success {
+		t.Fatalf("goto_line: %+v %v", resp, err)
+	}
+	select {
+	case p := <-events:
+		if p.Path != "a.go" || p.Line != 7 {
+			t.Errorf("event %+v, want a.go:7", p)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the goto_line event never reached the client")
 	}
 }

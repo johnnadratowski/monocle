@@ -109,6 +109,50 @@ func (e *Engine) handleGotoStop(msg *protocol.GotoStopMsg) *protocol.GotoStopRes
 	return &protocol.GotoStopResponse{Type: protocol.TypeGotoStopResponse, Success: true, Message: message}
 }
 
+// handleGotoLine shows the reviewer a file of the review at a new-file line,
+// at the agent's request: a changed file or an added one, by its repo-relative
+// path, an added file's name, or an absolute path. It does not move the tour.
+// The TUI does the showing, so the engine checks what it can — the file is in
+// the review, the line is a line — and announces where.
+func (e *Engine) handleGotoLine(msg *protocol.GotoLineMsg) *protocol.GotoLineResponse {
+	fail := func(message string) *protocol.GotoLineResponse {
+		return &protocol.GotoLineResponse{Type: protocol.TypeGotoLineResponse, Message: message}
+	}
+	path := strings.TrimSpace(msg.Path)
+	if path == "" {
+		return fail("a path is required")
+	}
+	if msg.Line < 1 {
+		return fail(fmt.Sprintf("line must be >= 1 (got %d)", msg.Line))
+	}
+	e.mu.RLock()
+	session := e.current
+	if session == nil {
+		e.mu.RUnlock()
+		return fail("no active session")
+	}
+	inReview := reviewPathSet(session)
+	for _, af := range session.AdditionalFiles {
+		inReview[af.Path] = true
+	}
+	repoRoot := session.RepoRoot
+	e.mu.RUnlock()
+
+	if filepath.IsAbs(path) {
+		if rel, err := filepath.Rel(repoRoot, path); err == nil && inReview[rel] {
+			path = rel
+		}
+	}
+	if !inReview[path] {
+		return fail(fmt.Sprintf("%s is not in the review: it must be a changed file or an added one (add it with add_files)", path))
+	}
+	e.emit(EventGotoLine, EventPayload{Kind: EventGotoLine, Path: path, Line: msg.Line})
+	return &protocol.GotoLineResponse{
+		Type: protocol.TypeGotoLineResponse, Success: true,
+		Message: fmt.Sprintf("Showing the reviewer %s:%d.", path, msg.Line),
+	}
+}
+
 // handleSetWalkthroughStop records a move the TUI already made.
 func (e *Engine) handleSetWalkthroughStop(msg *protocol.SetWalkthroughStopMsg) *protocol.SetWalkthroughStopResponse {
 	resp := &protocol.SetWalkthroughStopResponse{Type: protocol.TypeSetWalkthroughStopResponse}

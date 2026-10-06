@@ -458,14 +458,9 @@ func (s *SocketServer) handleSubscription(conn net.Conn, scanner *bufio.Scanner,
 			// the outbound queue was full. The engine emit() loop must
 			// remain non-blocking regardless of consumer health.
 			_ = sc.send(&protocol.EventNotification{
-				Type:  protocol.TypeEventNotification,
-				Event: string(payload.Kind),
-				Payload: map[string]any{
-					"message": payload.Message,
-					"status":  payload.Status,
-					"path":    payload.Path,
-					"item_id": payload.ItemID,
-				},
+				Type:    protocol.TypeEventNotification,
+				Event:   string(payload.Kind),
+				Payload: eventPayloadMap(payload),
 			})
 		})
 		unsubs = append(unsubs, unsub)
@@ -521,6 +516,20 @@ func (s *SocketServer) handleSubscription(conn net.Conn, scanner *bufio.Scanner,
 	}
 }
 
+// eventPayloadMap is an engine event as a subscriber receives it.
+func eventPayloadMap(payload EventPayload) map[string]any {
+	m := map[string]any{
+		"message": payload.Message,
+		"status":  payload.Status,
+		"path":    payload.Path,
+		"item_id": payload.ItemID,
+	}
+	if payload.Line != 0 {
+		m["line"] = payload.Line
+	}
+	return m
+}
+
 // handleQueuedConnection manages a persistent connection that receives event
 // notifications but does NOT increment subscriberCount. This means Submit()
 // always queues feedback for pull delivery via get_feedback, while the client
@@ -548,14 +557,9 @@ func (s *SocketServer) handleQueuedConnection(conn net.Conn, scanner *bufio.Scan
 		kind := EventKind(eventName)
 		unsub := s.engine.On(kind, func(payload EventPayload) {
 			_ = sc.send(&protocol.EventNotification{
-				Type:  protocol.TypeEventNotification,
-				Event: string(payload.Kind),
-				Payload: map[string]any{
-					"message": payload.Message,
-					"status":  payload.Status,
-					"path":    payload.Path,
-					"item_id": payload.ItemID,
-				},
+				Type:    protocol.TypeEventNotification,
+				Event:   string(payload.Kind),
+				Payload: eventPayloadMap(payload),
 			})
 		})
 		unsubs = append(unsubs, unsub)
@@ -755,6 +759,8 @@ func (s *SocketServer) routeMessage(msg any) any {
 		return s.engine.handleSetWalkthrough(m)
 	case *protocol.GotoStopMsg:
 		return s.engine.handleGotoStop(m)
+	case *protocol.GotoLineMsg:
+		return s.engine.handleGotoLine(m)
 	case *protocol.SetWalkthroughStopMsg:
 		return s.engine.handleSetWalkthroughStop(m)
 	case *protocol.GetSnapshotsMsg:

@@ -54,5 +54,9 @@
   {
     "name": "goto_stop",
     "description": "Move the reviewer's Monocle to a stop of the guided tour (see set_walkthrough), by its id \u2014 e.g. when they ask about \"1.2\", show them 1.2 while you answer. The diff jumps to the stop, its note opens, and its related files and views open as they do when the reviewer steps there. Errors name the valid ids when the id is unknown."
+  },
+  {
+    "name": "goto_line",
+    "description": "Show the reviewer a file of the review at a line: the diff opens the file \u2014 a changed file, or one added with add_files; repo-relative path, an added file's name, or an absolute path \u2014 and puts the cursor on that NEW-file line, focused. The reviewer can return with ctrl+o. It does not move the guided tour's stop. A path the review does not hold is an error that says so."
   }
 ]

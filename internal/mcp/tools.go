@@ -117,6 +117,11 @@ func registerTools(s *sdkmcp.Server) {
 		Name:        "goto_stop",
 		Description: desc["goto_stop"],
 	}, handleGotoStop)
+
+	sdkmcp.AddTool(s, &sdkmcp.Tool{
+		Name:        "goto_line",
+		Description: desc["goto_line"],
+	}, handleGotoLine)
 }
 
 // relatedParam is a repo file to open beside a tour stop, at a line.
@@ -227,6 +232,32 @@ func handleGotoStop(ctx context.Context, req *sdkmcp.CallToolRequest, params got
 	}
 	if !r.Success {
 		return errResult("goto_stop: %s", r.Message), nil, nil
+	}
+	return textResult(r.Message), nil, nil
+}
+
+type gotoLineParams struct {
+	Path string `json:"path"` // a changed file or an added one: repo-relative, an added file's name, or absolute
+	Line int    `json:"line"` // a new-file line, from 1
+}
+
+func handleGotoLine(ctx context.Context, req *sdkmcp.CallToolRequest, params gotoLineParams) (*sdkmcp.CallToolResult, any, error) {
+	c, guard := boundClient()
+	if guard != nil {
+		return guard, nil, nil
+	}
+	defer c.Close()
+
+	resp, err := c.Request(&protocol.GotoLineMsg{Type: protocol.TypeGotoLine, Path: params.Path, Line: params.Line}, client.DefaultTimeout)
+	if err != nil {
+		return errResult("request: %v", err), nil, nil
+	}
+	r, ok := resp.(*protocol.GotoLineResponse)
+	if !ok {
+		return errResult("unexpected response %T", resp), nil, nil
+	}
+	if !r.Success {
+		return errResult("goto_line: %s", r.Message), nil, nil
 	}
 	return textResult(r.Message), nil, nil
 }

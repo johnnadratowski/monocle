@@ -175,6 +175,8 @@ func Decode(data []byte) (any, error) {
 		msg = &SetWalkthroughMsg{}
 	case TypeGotoStop:
 		msg = &GotoStopMsg{}
+	case TypeGotoLine:
+		msg = &GotoLineMsg{}
 	case TypeSetWalkthroughStop:
 		msg = &SetWalkthroughStopMsg{}
 	case TypeGetSnapshots:
@@ -295,6 +297,8 @@ func Decode(data []byte) (any, error) {
 		msg = &SetWalkthroughResponse{}
 	case TypeGotoStopResponse:
 		msg = &GotoStopResponse{}
+	case TypeGotoLineResponse:
+		msg = &GotoLineResponse{}
 	case TypeSetWalkthroughStopResponse:
 		msg = &SetWalkthroughStopResponse{}
 	case TypeGetSnapshotsResponse:

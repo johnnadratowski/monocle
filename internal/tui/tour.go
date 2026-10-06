@@ -510,14 +510,38 @@ func (m *appModel) jumpToStop(stop types.WalkthroughStop) tea.Cmd {
 	if m.diffView.stopEnd < m.diffView.stopStart {
 		m.diffView.stopEnd = m.diffView.stopStart
 	}
-	line := stop.LineStart
 	m.recordJump()
 	m.setFocus(focusMain)
+	shown, ok := m.reviewPathOf(stop.File)
+	if !ok {
+		m.statusBar.searchInfo = fmt.Sprintf("%s: %s is not in the review", stop.ID, stop.File)
+		return nil
+	}
+	m.diffView.stopPath = shown
+	return m.openFileAt(stop.File, stop.LineStart)
+}
 
-	if m.reviewHasFile(stop.File) {
-		m.diffView.stopPath = stop.File
-		m.sidebar.selectPath(stop.File)
-		if m.diffView.path == stop.File && !m.diffView.isViewingContentItem() && m.diffView.additionalFilePath == "" {
+// reviewPathOf is the path the diff view shows a file of the review under —
+// a changed file's repo path, an added file's absolute one — or false when
+// the review has no such file.
+func (m appModel) reviewPathOf(file string) (string, bool) {
+	if m.reviewHasFile(file) {
+		return file, true
+	}
+	if af, ok := m.additionalFileFor(file); ok {
+		return af.Path, true
+	}
+	return "", false
+}
+
+// openFileAt shows a file of the review with the diff cursor on its new-file
+// line (line <= 0: its first change), loading it first when another is on
+// screen. It returns the command that finishes the load. The caller has
+// checked the review holds the file (reviewPathOf).
+func (m *appModel) openFileAt(file string, line int) tea.Cmd {
+	if m.reviewHasFile(file) {
+		m.sidebar.selectPath(file)
+		if m.diffView.path == file && !m.diffView.isViewingContentItem() && m.diffView.additionalFilePath == "" {
 			if line > 0 {
 				m.diffView.GoToLine(line)
 			} else {
@@ -525,25 +549,40 @@ func (m *appModel) jumpToStop(stop types.WalkthroughStop) tea.Cmd {
 			}
 			return nil
 		}
-		m.tour.loading = stop.File
+		m.tour.loading = file
 		m.pendingJumpLine = line
 		if line <= 0 {
 			m.pendingChunkLanding = +1
 		}
-		path, full := stop.File, m.diffView.fullFile
+		path, full := file, m.diffView.fullFile
 		return func() tea.Msg { return requestFileDiffMsg{path: path, full: full, anchorLine: line} }
 	}
-
-	if af, ok := m.additionalFileFor(stop.File); ok {
-		m.diffView.stopPath = af.Path
+	if af, ok := m.additionalFileFor(file); ok {
 		m.sidebar.selectAdditionalByPath(af.Path)
 		m.tour.loading = af.Path
 		m.pendingJumpLine = line
 		return m.handleSidebarSelect(sidebarSelectMsg{path: af.Path, isAdditionalFile: true})
 	}
-
-	m.statusBar.searchInfo = fmt.Sprintf("%s: %s is not in the review", stop.ID, stop.File)
 	return nil
+}
+
+// gotoLineMsg asks to show a file at a new-file line — the agent's goto_line.
+type gotoLineMsg struct {
+	path string
+	line int
+}
+
+// gotoLine shows a file of the review at a line, as a jump (ctrl+o returns),
+// with the diff focused. The tour stays on its stop.
+func (m appModel) gotoLine(msg gotoLineMsg) (appModel, tea.Cmd) {
+	if _, ok := m.reviewPathOf(msg.path); !ok {
+		m.statusBar.searchInfo = msg.path + " is not in the review"
+		return m, nil
+	}
+	m.recordJump()
+	m.setFocus(focusMain)
+	m.statusBar.searchInfo = fmt.Sprintf("showing %s:%d", msg.path, msg.line)
+	return m, m.openFileAt(msg.path, msg.line)
 }
 
 // nearStopMarks are the gutter marks for the stops around the current one: the

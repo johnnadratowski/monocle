@@ -172,6 +172,7 @@ func (c *EngineClient) dialAndSubscribe() error {
 			string(core.EventWaitStatusChanged),
 			string(core.EventActivityChanged),
 			string(core.EventWalkthroughChanged),
+			string(core.EventGotoLine),
 		},
 		Passive: true,
 	}
@@ -487,6 +488,9 @@ func (c *EngineClient) invokeCallbacks(notif *protocol.EventNotification) {
 	}
 	if v, ok := notif.Payload["item_id"].(string); ok {
 		payload.ItemID = v
+	}
+	if v, ok := notif.Payload["line"].(float64); ok {
+		payload.Line = int(v)
 	}
 
 	c.subsMu.Lock()

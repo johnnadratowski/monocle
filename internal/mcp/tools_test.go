@@ -171,7 +171,7 @@ func TestWalkthroughFromParams(t *testing.T) {
 // Both tour tools must be described: an empty description is an MCP tool an
 // agent has no reason to call.
 func TestTourToolsAreDescribed(t *testing.T) {
-	for _, name := range []string{"set_walkthrough", "goto_stop"} {
+	for _, name := range []string{"set_walkthrough", "goto_stop", "goto_line"} {
 		if toolDescriptions()[name] == "" {
 			t.Errorf("tools.json has no description for %s", name)
 		}

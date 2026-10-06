@@ -55,6 +55,7 @@ type ReviewCmd struct {
 	SetBaseRef     ReviewSetBaseRefCmd     `cmd:"set-base-ref" help:"Diff against a commit so already-committed work is reviewed"`
 	SetWalkthrough ReviewSetWalkthroughCmd `cmd:"set-walkthrough" help:"Give the reviewer a guided tour of the review: ordered stops stepped through with . and ,"`
 	GotoStop       ReviewGotoStopCmd       `cmd:"goto-stop" help:"Move the reviewer's Monocle to a stop of the guided tour"`
+	GotoLine       ReviewGotoLineCmd       `cmd:"goto-line" help:"Show the reviewer a file of the review at a line"`
 }
 
 // WorkDirFlag is embedded by commands that support --workdir.

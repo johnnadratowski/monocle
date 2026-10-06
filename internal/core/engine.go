@@ -22,6 +22,9 @@ const (
 	// the review's guided tour, or asks for a stop. Status is one of the
 	// WalkthroughEvent* values; ItemID is the stop to show.
 	EventWalkthroughChanged EventKind = "walkthrough_changed"
+	// EventGotoLine fires when the agent asks to show a file at a line
+	// (goto_line). Path and Line say where.
+	EventGotoLine EventKind = "goto_line"
 )
 
 // EventPayload carries data for an engine event.
@@ -31,6 +34,7 @@ type EventPayload struct {
 	ItemID  string // for content item events
 	Status  string // for status events
 	Message string // optional context
+	Line    int    // a new-file line, for EventGotoLine
 }
 
 // EventCallback is the signature for event subscribers.

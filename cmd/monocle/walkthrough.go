@@ -93,6 +93,40 @@ func (cmd *ReviewGotoStopCmd) Run() error {
 	return nil
 }
 
+// ReviewGotoLineCmd shows the reviewer a file of the review at a line.
+type ReviewGotoLineCmd struct {
+	WorkDirFlag
+	Socket string `help:"Override socket path" env:"MONOCLE_SOCKET" default:""`
+	Path   string `arg:"" help:"A changed file or an added one: repo-relative, an added file's name, or absolute"`
+	Line   int    `arg:"" help:"The new-file line, from 1"`
+	JSON   bool   `help:"Output as JSON" default:"false"`
+}
+
+func (cmd *ReviewGotoLineCmd) Run() error {
+	c, err := connectReview(cmd.Socket, cmd.WorkDir)
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+
+	resp, err := c.Request(&protocol.GotoLineMsg{Type: protocol.TypeGotoLine, Path: cmd.Path, Line: cmd.Line}, client.DefaultTimeout)
+	if err != nil {
+		return fmt.Errorf("goto-line: %w", err)
+	}
+	r, ok := resp.(*protocol.GotoLineResponse)
+	if !ok {
+		return fmt.Errorf("goto-line: unexpected response %T", resp)
+	}
+	if cmd.JSON {
+		return printJSON(r)
+	}
+	if !r.Success {
+		return fmt.Errorf("%s", r.Message)
+	}
+	fmt.Println(r.Message)
+	return nil
+}
+
 // connectReview dials the engine for a repo, exiting with the client's own
 // message when none is running — the same contract as every review command.
 func connectReview(socket, workdir string) (*client.Client, error) {

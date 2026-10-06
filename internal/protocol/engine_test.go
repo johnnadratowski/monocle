@@ -113,6 +113,8 @@ func TestEngineMessagesRoundTrip(t *testing.T) {
 		{"SetWalkthroughResponse", &SetWalkthroughResponse{Type: TypeSetWalkthroughResponse, Success: true, Count: 1, Current: "1.1"}},
 		{"GotoStop", &GotoStopMsg{Type: TypeGotoStop, ID: "1.2"}},
 		{"GotoStopResponse", &GotoStopResponse{Type: TypeGotoStopResponse, Success: true}},
+		{"GotoLine", &GotoLineMsg{Type: TypeGotoLine, Path: "a.go", Line: 12}},
+		{"GotoLineResponse", &GotoLineResponse{Type: TypeGotoLineResponse, Success: true, Message: "m"}},
 		{"SetWalkthroughStop", &SetWalkthroughStopMsg{Type: TypeSetWalkthroughStop, ID: "1.2"}},
 		{"SetWalkthroughStopResponse", &SetWalkthroughStopResponse{Type: TypeSetWalkthroughStopResponse}},
 		{"SetBaseRef", &SetBaseRefMsg{Type: TypeSetBaseRef, Ref: "main"}},

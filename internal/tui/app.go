@@ -1263,6 +1263,9 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tourWalkMsg:
 		return m.walkStops(msg.dir)
 
+	case gotoLineMsg:
+		return m.gotoLine(msg)
+
 	case tourSettledMsg:
 		return m.settleOnStop(msg)
 
@@ -5081,6 +5084,9 @@ func BridgeEngineEvents(engine core.EngineAPI, p *tea.Program) {
 	})
 	engine.On(core.EventWalkthroughChanged, func(e core.EventPayload) {
 		p.Send(tourEventMsg{status: e.Status, id: e.ItemID})
+	})
+	engine.On(core.EventGotoLine, func(e core.EventPayload) {
+		p.Send(gotoLineMsg{path: e.Path, line: e.Line})
 	})
 }
 
