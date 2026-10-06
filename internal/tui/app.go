@@ -322,6 +322,9 @@ type appModel struct {
 	// tour is the agent's guided tour and where the reviewer is in it.
 	tour tourState
 
+	// cursor tracks where the diff cursor rests, for cursor_command.
+	cursor cursorWatch
+
 	// reviewSentAt is when the agent handed the current round over, rendered as a
 	// live age beside the title. Zero means nothing has been sent since the agent
 	// last collected feedback, and the age is omitted rather than frozen.
@@ -539,8 +542,23 @@ type initialLoadMsg struct {
 	additionalFiles []types.AdditionalFile
 }
 
-// Update handles all incoming messages and routes them appropriately.
+// Update handles all incoming messages and routes them appropriately, then
+// notes where the diff cursor ended up, for cursor_command.
 func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if s, ok := msg.(cursorSettledMsg); ok {
+		return m.settleCursor(s)
+	}
+	next, cmd := m.update(msg)
+	app, ok := next.(appModel)
+	if !ok {
+		return next, cmd
+	}
+	app, watch := app.watchCursor()
+	return app, tea.Batch(cmd, watch)
+}
+
+// update handles all incoming messages and routes them appropriately.
+func (m appModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case tea.WindowSizeMsg:

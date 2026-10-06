@@ -65,6 +65,14 @@ type Config struct {
 	// JSON array of {"path", "line"}, which Monocle opens in the related-files
 	// pane. Empty opens nothing.
 	WalkthroughResolve string `json:"walkthrough_resolve"`
+	// CursorCommand is a shell command run when the diff cursor comes to rest
+	// on a new file:line — about 200 ms after the last move, never twice in a
+	// row for the same place, never while a modal is open — so something
+	// outside Monocle can follow what the reviewer is looking at. It runs via
+	// sh -c in the repo root with MONOCLE_FILE (repo-relative), MONOCLE_LINE
+	// (the new-file line, 0 when the row has none) and MONOCLE_REPO_ROOT,
+	// fire-and-forget, 2 s timeout, output discarded. Empty runs nothing.
+	CursorCommand string `json:"cursor_command"`
 	// RelatedEditorArgs are extra arguments appended to the editor command of
 	// a tour stop's related-files pane — `["-S", "/path/setup.vim"]`, say — so
 	// whatever runs the tour can set the editor up. {owner} in them becomes
