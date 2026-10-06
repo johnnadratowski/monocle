@@ -958,8 +958,47 @@ func (d *DB) SetWalkthroughStop(sessionID, stopID string) error {
 }
 
 // DeleteWalkthrough removes a session's tour, used when the review is cleared or
-// approved: a tour explains one review, and the next one needs its own.
+// approved: a tour explains one review, and the next one needs its own. The
+// stops visited go with it.
 func (d *DB) DeleteWalkthrough(sessionID string) error {
+	if _, err := d.Exec(`DELETE FROM walkthrough_visits WHERE session_id = ?`, sessionID); err != nil {
+		return fmt.Errorf("delete walkthrough visits: %w", err)
+	}
 	_, err := d.Exec(`DELETE FROM walkthroughs WHERE session_id = ?`, sessionID)
 	return err
+}
+
+// AddWalkthroughVisit records that the reviewer has been on a stop of a tour.
+// A stop already recorded stays as it is.
+func (d *DB) AddWalkthroughVisit(sessionID, tourTitle, stopID string) error {
+	_, err := d.Exec(
+		`INSERT OR IGNORE INTO walkthrough_visits (session_id, tour_title, stop_id) VALUES (?, ?, ?)`,
+		sessionID, tourTitle, stopID,
+	)
+	if err != nil {
+		return fmt.Errorf("add walkthrough visit: %w", err)
+	}
+	return nil
+}
+
+// GetWalkthroughVisits returns the stops of a tour the reviewer has been on, in
+// the order first visited.
+func (d *DB) GetWalkthroughVisits(sessionID, tourTitle string) ([]string, error) {
+	rows, err := d.Query(
+		`SELECT stop_id FROM walkthrough_visits WHERE session_id = ? AND tour_title = ? ORDER BY rowid`,
+		sessionID, tourTitle,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("get walkthrough visits: %w", err)
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan walkthrough visit: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }

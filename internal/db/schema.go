@@ -17,6 +17,7 @@ DROP TABLE IF EXISTS content_items;
 DROP TABLE IF EXISTS additional_files;
 DROP TABLE IF EXISTS file_metadata;
 DROP TABLE IF EXISTS annotations;
+DROP TABLE IF EXISTS walkthrough_visits;
 DROP TABLE IF EXISTS walkthroughs;
 DROP TABLE IF EXISTS changed_files;
 DROP TABLE IF EXISTS sessions;
@@ -94,6 +95,17 @@ CREATE TABLE IF NOT EXISTS walkthroughs (
 	stops TEXT NOT NULL DEFAULT '[]',
 	current_stop TEXT NOT NULL DEFAULT '',
 	updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- The tour stops the reviewer has been on, by tour title and stop id, so a stop
+-- read before is known as such across restarts. Added without a version bump:
+-- replaying this schema creates it in an intact database, and a binary from
+-- before it still opens the database.
+CREATE TABLE IF NOT EXISTS walkthrough_visits (
+	session_id TEXT NOT NULL REFERENCES sessions(id),
+	tour_title TEXT NOT NULL DEFAULT '',
+	stop_id TEXT NOT NULL,
+	PRIMARY KEY (session_id, tour_title, stop_id)
 );
 
 -- Agent-supplied per-file grouping metadata. Kept in a separate table so it

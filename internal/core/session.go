@@ -104,6 +104,10 @@ func (sm *SessionManager) ResumeSession(sessionID string) (*types.ReviewSession,
 	if tour, stop, err := sm.db.GetWalkthrough(session.ID); err == nil && tour != nil {
 		session.Walkthrough = tour
 		session.WalkthroughStop = stop
+		// The stop the reviewer is on has been the current stop, so it counts,
+		// recorded or not.
+		visits, _ := sm.db.GetWalkthroughVisits(session.ID, tour.Title)
+		session.WalkthroughVisited = visitedStops(tour, append(visits, stop))
 	}
 
 	// Build file statuses map

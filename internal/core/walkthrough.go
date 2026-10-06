@@ -48,6 +48,7 @@ func (e *Engine) handleSetWalkthrough(msg *protocol.SetWalkthroughMsg) *protocol
 		if err == nil {
 			session.Walkthrough = nil
 			session.WalkthroughStop = ""
+			session.WalkthroughVisited = nil
 		}
 		e.mu.Unlock()
 		if err != nil {
@@ -69,6 +70,11 @@ func (e *Engine) handleSetWalkthrough(msg *protocol.SetWalkthroughMsg) *protocol
 	}
 	session.Walkthrough = &w
 	session.WalkthroughStop = current
+	// A re-sent tour keeps the stops visited that it still has; another tour,
+	// by its title, starts afresh. Arriving does not count the first stop: the
+	// TUI reports it once the reviewer is shown it.
+	visits, _ := e.database.GetWalkthroughVisits(session.ID, w.Title)
+	session.WalkthroughVisited = visitedStops(&w, visits)
 	inReview := reviewPathSet(session)
 	repoRoot := session.RepoRoot
 	e.mu.Unlock()
@@ -238,6 +244,10 @@ func (e *Engine) moveToStop(id string) (string, string, string, error) {
 		return "", "", "", fmt.Errorf("record stop: %w", err)
 	}
 	session.WalkthroughStop = stop.ID
+	// Best effort: losing a visit only costs the stop reading as new again.
+	if err := e.database.AddWalkthroughVisit(session.ID, session.Walkthrough.Title, stop.ID); err == nil {
+		session.WalkthroughVisited = visitedStops(session.Walkthrough, append(session.WalkthroughVisited, stop.ID))
+	}
 	return stop.ID, prev, stop.Heading(), nil
 }
 
@@ -250,8 +260,24 @@ func (e *Engine) dropWalkthroughLocked(sessionID string) error {
 	if e.current != nil && e.current.ID == sessionID {
 		e.current.Walkthrough = nil
 		e.current.WalkthroughStop = ""
+		e.current.WalkthroughVisited = nil
 	}
 	return nil
+}
+
+// visitedStops is ids as the stops of tour visited: each once, in order, and
+// only those the tour still has.
+func visitedStops(tour *types.Walkthrough, ids []string) []string {
+	var out []string
+	seen := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		if id == "" || seen[id] || tour.StopIndex(id) < 0 {
+			continue
+		}
+		seen[id] = true
+		out = append(out, id)
+	}
+	return out
 }
 
 // stopIDList renders a tour's ids for an error message that has to tell the

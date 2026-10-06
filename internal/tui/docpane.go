@@ -22,6 +22,7 @@ type docPaneModel struct {
 
 	annotationID string // which annotation's refs are showing (for cycling)
 	title        string
+	titleMark    string // styled, after a note's title: whether its stop is new or visited
 	lines        []string
 	offset       int
 
@@ -228,7 +229,7 @@ func (m docPaneModel) currentRef() (types.DocRef, bool) {
 // setContent loads a document's text and the highlight range from the active
 // ref, scrolling so the range is visible. content is the full document text.
 func (m *docPaneModel) setContent(title, content string, ref types.DocRef) {
-	m.title = title
+	m.title, m.titleMark = title, ""
 	m.lines = strings.Split(content, "\n")
 	m.hlStartLine, m.hlStartCol = ref.StartLine, ref.StartCol
 	m.hlEndLine, m.hlEndCol = ref.EndLine, ref.EndCol
@@ -271,6 +272,7 @@ func (m *docPaneModel) scrollUp()   { m.offset--; m.clamp() }
 
 func (m *docPaneModel) close() {
 	m.active = false
+	m.titleMark = ""
 	m.focused = false
 	m.refs = nil
 	m.lines = nil
@@ -329,9 +331,26 @@ func (m docPaneModel) View() string {
 	}
 
 	var b strings.Builder
-	if hint == "" {
+	switch {
+	case m.note && m.titleMark != "":
+		// The mark keeps its own colour, so it is drawn outside the title's style.
+		mark := " " + m.titleMark
+		plain := lipgloss.NewStyle().Foreground(accent).Bold(true)
+		markW, hintW := lipgloss.Width(mark), lipgloss.Width(hint)
+		reserve := markW + 1
+		if hint != "" {
+			reserve += hintW + 3
+		}
+		left := plain.Render(" " + truncateToWidth(title, max(m.width-reserve, 1)))
+		gap := max(m.width-lipgloss.Width(left)-markW-hintW-1, 1)
+		tail := strings.Repeat(" ", gap)
+		if hint != "" {
+			tail += hint + " "
+		}
+		b.WriteString(left + mark + plain.Render(tail))
+	case hint == "":
 		b.WriteString(titleStyle.Render(" " + truncateToWidth(title, m.width-1)))
-	} else {
+	default:
 		left := " " + truncateToWidth(title, max(m.width-lipgloss.Width(hint)-4, 1))
 		gap := max(m.width-lipgloss.Width(left)-lipgloss.Width(hint)-1, 1)
 		b.WriteString(titleStyle.Render(left + strings.Repeat(" ", gap) + hint + " "))

@@ -104,11 +104,15 @@ type ReviewSession struct {
 	// can ask where the reviewer is.
 	Walkthrough     *Walkthrough
 	WalkthroughStop string
-	FileStatuses    map[string]bool // path -> reviewed
-	IgnorePatterns  []string
-	ReviewRound     int
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	// WalkthroughVisited are the ids of the tour's stops the reviewer has been
+	// on, in the order first visited, so a stop read before is known as such
+	// across restarts.
+	WalkthroughVisited []string
+	FileStatuses       map[string]bool // path -> reviewed
+	IgnorePatterns     []string
+	ReviewRound        int
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
 }
 
 type ChangedFile struct {

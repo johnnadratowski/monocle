@@ -165,3 +165,59 @@ func TestMigrateAddsCommentStopID(t *testing.T) {
 		t.Errorf("stop id did not round-trip: %+v", got)
 	}
 }
+
+// The stops the reviewer has been on are kept per session and tour, each once,
+// in the order first visited, and go when the tour does.
+func TestWalkthroughVisits(t *testing.T) {
+	d := walkthroughDB(t)
+	_ = d.CreateSession(&types.ReviewSession{ID: "s2", Agent: "claude", RepoRoot: "/r", BaseRef: "main"})
+	_ = d.SaveWalkthrough("s1", sampleTour(), "1.1")
+	for _, id := range []string{"1.2", "1.1", "1.2"} {
+		if err := d.AddWalkthroughVisit("s1", "Tour", id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_ = d.AddWalkthroughVisit("s1", "Another tour", "9")
+	_ = d.AddWalkthroughVisit("s2", "Tour", "1.1")
+	if got, err := d.GetWalkthroughVisits("s1", "Tour"); err != nil || !reflect.DeepEqual(got, []string{"1.2", "1.1"}) {
+		t.Errorf("visits %v %v, want 1.2 then 1.1, each once, this tour only", got, err)
+	}
+	if err := d.DeleteWalkthrough("s1"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := d.GetWalkthroughVisits("s1", "Tour"); len(got) != 0 {
+		t.Errorf("visits %v outlived the tour", got)
+	}
+	if got, _ := d.GetWalkthroughVisits("s2", "Tour"); !reflect.DeepEqual(got, []string{"1.1"}) {
+		t.Errorf("another session's visits %v, want them untouched", got)
+	}
+}
+
+// The visits table arrives without a version bump: an intact database gains it
+// in place, and a binary from before it can still open the database.
+func TestMigrateAddsWalkthroughVisitsInPlace(t *testing.T) {
+	d, err := Open(":memory:")
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer d.Close()
+	if err := d.CreateSession(&types.ReviewSession{ID: "keep", Agent: "claude", RepoRoot: "/r", BaseRef: "main", ReviewName: "Staged"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Exec("DROP TABLE walkthrough_visits"); err != nil {
+		t.Fatal(err)
+	}
+	if err := Migrate(d.DB); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if got, err := d.GetSession("keep"); err != nil || got.ReviewName != "Staged" {
+		t.Fatalf("staged review lost: %+v %v", got, err)
+	}
+	if err := d.AddWalkthroughVisit("keep", "Tour", "1.1"); err != nil {
+		t.Errorf("visits table missing after migration: %v", err)
+	}
+	var v int
+	if err := d.QueryRow("SELECT version FROM schema_version LIMIT 1").Scan(&v); err != nil || v != 18 {
+		t.Errorf("schema version %d (%v), want it left at 18", v, err)
+	}
+}

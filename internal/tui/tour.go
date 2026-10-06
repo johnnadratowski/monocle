@@ -7,6 +7,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/josephschmitt/monocle/internal/core"
 	"github.com/josephschmitt/monocle/internal/types"
@@ -46,6 +47,15 @@ type tourState struct {
 	statusSeq int
 	// history is the stops entered, for back and forward (stopHistory).
 	history stopHistory
+	// seen are the stops the reviewer has been on, seeded from the review
+	// when the tour loads (seenTitle: the tour it was seeded for) and kept
+	// here after: the engine records a visit as the stop is entered, so its
+	// list already holds the stop being arrived at. fresh says whether the
+	// current stop was new on arrival, worked out once per stay (freshFor).
+	seen      map[string]bool
+	seenTitle string
+	fresh     bool
+	freshFor  string
 }
 
 // A tour is read in order, but following a call to the stop about the function
@@ -160,6 +170,13 @@ func (m *appModel) syncTour(session *types.ReviewSession) {
 	}
 	prev, _ := m.currentStop()
 	m.tour.tour = session.Walkthrough
+	if m.tour.seen == nil || m.tour.seenTitle != session.Walkthrough.Title {
+		m.tour.seen = make(map[string]bool, len(session.WalkthroughVisited))
+		for _, id := range session.WalkthroughVisited {
+			m.tour.seen[id] = true
+		}
+		m.tour.seenTitle, m.tour.freshFor = session.Walkthrough.Title, ""
+	}
 	m.tour.index = -1
 	for _, id := range []string{prev.ID, session.WalkthroughStop} {
 		if i := session.Walkthrough.StopIndex(id); id != "" && i >= 0 {
@@ -198,6 +215,15 @@ func (m appModel) enterStop(i int, how stopEntry) (appModel, tea.Cmd) {
 	// A walk back or forward has already moved the history to this stop, so
 	// for it this records nothing, as re-entering a stop does not.
 	m.tour.history.visit(stop.ID)
+	// New or visited is decided on arrival and held for the stay, so the
+	// title does not turn to visited while the reviewer reads.
+	if stop.ID != m.tour.freshFor {
+		m.tour.fresh, m.tour.freshFor = !m.tour.seen[stop.ID], stop.ID
+	}
+	if m.tour.seen == nil {
+		m.tour.seen = map[string]bool{}
+	}
+	m.tour.seen[stop.ID] = true
 	m.statusBar.tourLabel = m.tourLabel()
 	// A notice left from the last key ("end of tour") belongs to the stop being
 	// left. A keypress clears it anyway; a move the agent made would not.
@@ -380,8 +406,24 @@ func (m *appModel) leaveTour() {
 func (m *appModel) openStopNote(stop types.WalkthroughStop) {
 	m.docPane.theme = &m.theme
 	m.docPane.openNote(tourNoteKeyPrefix+stop.ID, stop.Heading(), stopNoteBody(stop), stopLinkGroups(stop, m.tour.tour, m.stopStatus(stop)), m.diffView.mdStyler)
+	m.docPane.titleMark = stopVisitMark(m.tour.fresh && m.tour.freshFor == stop.ID)
 	recalcPaneDimensions(m)
 	m.diffView.ensureVisible()
+}
+
+// The marks after a stop's title: a bright "new" on a stop the reviewer has not
+// been on before, a dim check on one they have.
+const (
+	stopNewMark     = "new"
+	stopVisitedMark = "✓"
+)
+
+// stopVisitMark is the styled mark for a stop new on arrival, or visited.
+func stopVisitMark(fresh bool) string {
+	if fresh {
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Bold(true).Render(stopNewMark)
+	}
+	return lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(stopVisitedMark)
 }
 
 // stopNoteBody is the doc pane's text for a stop: the note. What else the stop
@@ -728,7 +770,9 @@ func (m appModel) handleTourEvent(msg tourEventMsg) (appModel, tea.Cmd) {
 			i = m.tour.index
 		}
 		// The engine already knows where the reviewer is: it put them there.
-		return m.enterStop(i, stopEntry{effects: true})
+		// A tour arriving is still reported, so the first stop the reviewer is
+		// shown is recorded as visited; the agent's goto recorded its own.
+		return m.enterStop(i, stopEntry{report: msg.status == core.WalkthroughEventSet, effects: true})
 	}
 	return m, nil
 }
