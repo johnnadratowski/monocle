@@ -80,6 +80,13 @@ type Config struct {
 	// file's absolute path, {line} its line (0 for none), {owner} Monocle's
 	// tmux pane id; each is substituted shell-quoted. Empty respawns.
 	RelatedEditorAdd string `json:"related_editor_add"`
+	// RelatedEditorPreview is a shell command that shows one file in a passing
+	// preview in the editor already running in the related-files pane — a
+	// popup it closes itself once the reviewer moves on — rather than adding
+	// it. ctrl+shift+] (or f16) runs it for the first file walkthrough_resolve
+	// finds. Placeholders as related_editor_add's. Empty, or no live pane:
+	// the key opens the files as ctrl+] does.
+	RelatedEditorPreview string `json:"related_editor_preview"`
 	// EditorMode controls how Ctrl+g / Ctrl+o open a file: "terminal" (take over
 	// Monocle's screen, the default), "tmux_vertical" (side-by-side split),
 	// "tmux_horizontal" (stacked split), or "tmux_window" (new tmux window/tab).

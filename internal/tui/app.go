@@ -1290,6 +1290,9 @@ func (m appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case resolveDoneMsg:
 		return m.handleResolveDone(msg)
 
+	case relatedPreviewMsg:
+		return m.handleRelatedPreview(msg)
+
 	case tourLayoutMsg:
 		return m.handleLayout(msg)
 
@@ -2070,7 +2073,7 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			Matches(key, km.TourNext), Matches(key, km.TourPrev), Matches(key, km.ToggleTour),
 			Matches(key, km.CloseRelated), Matches(key, km.PaneSize),
 			Matches(key, km.PaneLeft), Matches(key, km.PaneDown), Matches(key, km.PaneUp), Matches(key, km.PaneRight),
-			Matches(key, km.ToggleSidebar), Matches(key, km.Help), Matches(key, km.CommandMode), Matches(key, km.SendLines), Matches(key, km.OpenRefs), Matches(key, km.LayoutReset),
+			Matches(key, km.ToggleSidebar), Matches(key, km.Help), Matches(key, km.CommandMode), Matches(key, km.SendLines), Matches(key, km.OpenRefs), Matches(key, km.OpenRefsPreview), Matches(key, km.LayoutReset),
 			m.tour.on && (Matches(key, km.TourBack) || Matches(key, km.TourForward)):
 			// fall through to the shared cases — the tour keys included, since
 			// the doc pane is where the tour's note is being read. ctrl+h/j/k/l
@@ -2184,7 +2187,9 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.sendLines()
 
 	case Matches(key, km.OpenRefs) && (m.focus == focusMain || m.focus == focusDoc):
-		return m.openReferences()
+		return m.openReferences(false)
+	case Matches(key, km.OpenRefsPreview) && (m.focus == focusMain || m.focus == focusDoc):
+		return m.openReferences(true)
 
 	case Matches(key, km.TourNext):
 		return m.stepTour(+1)

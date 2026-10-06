@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -30,8 +32,9 @@ const resolveMaxOutput = 64 << 10
 
 // resolveDoneMsg carries what walkthrough_resolve said to open.
 type resolveDoneMsg struct {
-	files []relatedFile
-	err   error
+	files   []relatedFile
+	err     error
+	preview bool // ctrl+shift+]: preview the first, rather than open them all
 }
 
 // resolveCommand is the configured walkthrough_resolve command, or "".
@@ -49,7 +52,7 @@ func (m appModel) resolveCommand() string {
 // at — the same lines @ would send — reference, and opens the answer beside
 // what the related pane already holds. Like @ it leaves visual mode and clears
 // the tags.
-func (m appModel) openReferences() (appModel, tea.Cmd) {
+func (m appModel) openReferences(preview bool) (appModel, tea.Cmd) {
 	command := m.resolveCommand()
 	if command == "" {
 		m.statusBar.searchInfo = "set walkthrough_resolve to open what these lines reference"
@@ -64,10 +67,10 @@ func (m appModel) openReferences() (appModel, tea.Cmd) {
 	return m, func() tea.Msg {
 		var out bytes.Buffer
 		if err := execHook(command, root, env, resolveTimeout, &limitedWriter{w: &out, left: resolveMaxOutput}); err != nil {
-			return resolveDoneMsg{err: err}
+			return resolveDoneMsg{err: err, preview: preview}
 		}
 		files, err := parseResolved(out.Bytes(), root)
-		return resolveDoneMsg{files: files, err: err}
+		return resolveDoneMsg{files: files, err: err, preview: preview}
 	}
 }
 
@@ -132,6 +135,9 @@ func (m appModel) handleResolveDone(msg resolveDoneMsg) (appModel, tea.Cmd) {
 		m.statusBar.searchInfo = "nothing to open on these lines"
 		return m, nil
 	}
+	if msg.preview && m.relatedPreviewCommand() != "" && inTmux() {
+		return m, m.previewResolved(msg.files)
+	}
 	if m.relatedAddCommand() != "" {
 		return m.addResolved(msg.files)
 	}
@@ -189,4 +195,65 @@ func (m appModel) addResolved(found []relatedFile) (appModel, tea.Cmd) {
 	}
 	m.statusBar.searchInfo = fmt.Sprintf("opened %d: %s", len(found), strings.Join(names, ", "))
 	return m, m.addOrShowRelated(found, spawn, active, true, true)
+}
+
+// relatedPreviewCommand is the configured related_editor_preview, or "".
+func (m appModel) relatedPreviewCommand() string {
+	if m.engine == nil {
+		return ""
+	}
+	if cfg := m.engine.GetConfig(); cfg != nil {
+		return strings.TrimSpace(cfg.RelatedEditorPreview)
+	}
+	return ""
+}
+
+// relatedPreviewMsg reports a preview: the file shown and how many were left
+// out, or, with fallback, that there was no live editor to preview in.
+type relatedPreviewMsg struct {
+	shown    relatedFile
+	more     int
+	fallback []relatedFile
+	err      error
+}
+
+// previewResolved shows the first file found in a passing preview in the
+// editor beside Monocle (related_editor_preview), and gives that editor the
+// keyboard, so the preview can be read and scrolled; the editor closes it once
+// the reviewer moves on. Nothing is added to the pane. With no live pane there
+// is no editor to preview in, and the files open as ctrl+] opens them.
+func (m appModel) previewResolved(found []relatedFile) tea.Cmd {
+	template := m.relatedPreviewCommand()
+	owner, tracked, root := os.Getenv("TMUX_PANE"), m.tour.pane, m.repoRoot
+	return func() tea.Msg {
+		relatedPaneMu.Lock()
+		defer relatedPaneMu.Unlock()
+		pane := findPane(tracked, owner)
+		if pane == "" {
+			return relatedPreviewMsg{fallback: found}
+		}
+		revealOwner(owner)
+		if err := execHook(expandAddCommand(template, found[0], owner), root, nil, relatedAddTimeout, io.Discard); err != nil {
+			return relatedPreviewMsg{err: fmt.Errorf("related_editor_preview: %w", err)}
+		}
+		_, _ = tmux("select-pane", "-t", pane)
+		return relatedPreviewMsg{shown: found[0], more: len(found) - 1}
+	}
+}
+
+// handleRelatedPreview says what the preview showed, or opens the files when
+// there was nothing to preview in.
+func (m appModel) handleRelatedPreview(msg relatedPreviewMsg) (appModel, tea.Cmd) {
+	switch {
+	case msg.err != nil:
+		m.statusBar.searchInfo = "related files: " + msg.err.Error()
+		return m, nil
+	case msg.fallback != nil:
+		return m.addResolved(msg.fallback)
+	}
+	m.statusBar.searchInfo = "preview: " + filepath.Base(msg.shown.path)
+	if msg.more > 0 {
+		m.statusBar.searchInfo += fmt.Sprintf(" · %d more, ctrl+] opens them all", msg.more)
+	}
+	return m, nil
 }

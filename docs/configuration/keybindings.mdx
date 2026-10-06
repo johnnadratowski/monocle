@@ -92,6 +92,7 @@ Each key in the object is an action name; the value is the key string to bind. O
 | `tag_lines` | `+` | Tag the current line (or every line of the visual selection) to send to the agent; untags lines already all tagged |
 | `send_lines` | `@` | Send the visual selection and tagged lines (else the tags, else the current line) to the agent through `walkthrough_ask` |
 | `open_refs` | `ctrl+]` | Open what the lines `send_lines` would send reference in the related-files pane, through `walkthrough_resolve`, and move focus there |
+| `open_refs_preview` | `ctrl+shift+]`, `f16` | Preview the first of them in the related-files pane's editor, through `related_editor_preview` |
 | `reviewed` | `r` | Toggle file reviewed |
 | `submit` | `S` | Submit review |
 | `pause` | `P` | Pause the agent |

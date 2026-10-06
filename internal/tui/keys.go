@@ -106,6 +106,10 @@ type KeyMap struct {
 	TagLines  []string
 	SendLines []string
 	OpenRefs  []string // open what those lines reference in the related pane, via walkthrough_resolve
+	// OpenRefsPreview previews the first of them in the related pane's editor
+	// (related_editor_preview). f16 is for a terminal, or a tmux, that sends
+	// ctrl+shift+] as plain ctrl+]: a key remapper can send f16 instead.
+	OpenRefsPreview []string
 
 	// General
 	OpenInEditor         []string
@@ -225,7 +229,8 @@ func DefaultKeyMap() KeyMap {
 		TagLines:  []string{"+"},
 		SendLines: []string{"@"},
 		// vim's jump to definition.
-		OpenRefs: []string{"ctrl+]"},
+		OpenRefs:        []string{"ctrl+]"},
+		OpenRefsPreview: []string{"ctrl+shift+]", "f16"},
 
 		OpenInEditor:         []string{"ctrl+g"},
 		OpenInEditorTakeover: []string{"ctrl+shift+g"},
@@ -330,6 +335,7 @@ var keyActions = map[string]func(*KeyMap) *[]string{
 	"tag_lines":               func(km *KeyMap) *[]string { return &km.TagLines },
 	"send_lines":              func(km *KeyMap) *[]string { return &km.SendLines },
 	"open_refs":               func(km *KeyMap) *[]string { return &km.OpenRefs },
+	"open_refs_preview":       func(km *KeyMap) *[]string { return &km.OpenRefsPreview },
 	"open_in_editor":          func(km *KeyMap) *[]string { return &km.OpenInEditor },
 	"open_in_editor_takeover": func(km *KeyMap) *[]string { return &km.OpenInEditorTakeover },
 	"jump_back":               func(km *KeyMap) *[]string { return &km.JumpBack },

@@ -190,3 +190,63 @@ func TestOpenInEditorLeavesTheRelatedPaneAloneOtherwise(t *testing.T) {
 		})
 	}
 }
+
+var (
+	previewRefsKey    = tea.KeyPressMsg{Code: ']', Mod: tea.ModCtrl | tea.ModShift}
+	previewRefsF16Key = tea.KeyPressMsg{Code: tea.KeyF16}
+)
+
+// previewApp is addApp with related_editor_preview recording, beside the add
+// command, each file it is run for.
+func previewApp(t *testing.T, answer string, alive bool) (appModel, string, *[]relatedPanePlan, string) {
+	t.Helper()
+	m, added, plans, log := addApp(t, answer, alive)
+	m.engine.GetConfig().RelatedEditorPreview = `printf 'preview|%s|%s|%s\n' {file} {line} {owner} >> ` + added
+	return m, added, plans, log
+}
+
+func pressRefs(t *testing.T, m appModel, key tea.KeyPressMsg) appModel {
+	t.Helper()
+	next, cmd := m.Update(key)
+	return driveWithin(t, next.(appModel), cmd, 0, 5*time.Second)
+}
+
+// ctrl+shift+] previews what the lines reference: the first file found, through
+// related_editor_preview, in the live editor beside Monocle — which takes the
+// keyboard — and nothing is added to the pane. f16 is the same key, for a
+// terminal that cannot send ctrl+shift+].
+func TestPreviewReferencesShowsTheFirstInThePreviewCommand(t *testing.T) {
+	for _, key := range []tea.KeyPressMsg{previewRefsKey, previewRefsF16Key} {
+		m, added, plans, log := previewApp(t, `[{"path": "q.sql", "line": 12}, {"path": "a.go", "line": 5}]`, true)
+		m = pressRefs(t, m, key)
+		want := []string{"preview|" + filepath.Join(m.repoRoot, "q.sql") + "|12|%99"}
+		if got := readLines(t, added); !reflect.DeepEqual(got, want) {
+			t.Errorf("%s: ran %q, want only the preview of the first file %q", key, got, want)
+		}
+		if len(*plans) != 0 {
+			t.Errorf("%s: the pane was respawned", key)
+		}
+		if data, _ := os.ReadFile(log); !strings.Contains(string(data), "select-pane -t %7") {
+			t.Errorf("%s: the editor did not get the keyboard:\n%s", key, data)
+		}
+		if want := "preview: q.sql · 1 more, ctrl+] opens them all"; m.statusBar.searchInfo != want {
+			t.Errorf("%s: status %q, want %q", key, m.statusBar.searchInfo, want)
+		}
+	}
+}
+
+// With no preview command, or no live pane to preview in, the key opens the
+// references as ctrl+] does.
+func TestPreviewReferencesFallsBackToOpening(t *testing.T) {
+	m, added, _, _ := addApp(t, `[{"path": "q.sql", "line": 12}]`, true) // no related_editor_preview
+	m = pressRefs(t, m, previewRefsKey)
+	if got := readLines(t, added); !reflect.DeepEqual(got, []string{filepath.Join(m.repoRoot, "q.sql") + "|12|%99"}) {
+		t.Errorf("with no preview command ran %q, want the add command", got)
+	}
+
+	m, added, plans, _ := previewApp(t, `[{"path": "q.sql", "line": 12}]`, false)
+	m = pressRefs(t, m, previewRefsKey)
+	if got := readLines(t, added); len(got) != 0 || len(*plans) != 1 {
+		t.Errorf("with no pane alive ran %q and made %d plans, want the pane spawned", got, len(*plans))
+	}
+}
