@@ -3602,8 +3602,10 @@ func recalcPaneDimensions(m *appModel) {
 // pane when it's open. It shrinks the diff's real height (so its scroll math
 // matches what's rendered) and records the doc pane's inner height. The sidebar
 // keeps its full height — the doc pane sits under the diff only, not the sidebar.
-// noteMaxPercent caps a tour note's pane, as a share of Monocle's height.
-const noteMaxPercent = 40
+// noteMaxPercent caps a tour note's pane, as a share of Monocle's height. Two
+// thirds, so a note's end (a second reviewer's line, say) is not cut off and
+// missed; the PaneSize key shrinks it at once.
+const noteMaxPercent = 66
 
 // docSize is the doc pane's size against the diff, cycled by the PaneSize key:
 // the focused pane biggest first, then smallest, then back to the usual split.
@@ -3632,11 +3634,10 @@ func reserveDocPane(m *appModel) {
 	// half the screen away from the code it is about is the wrong trade.
 	m.docPane.width = m.diffView.width
 	if m.docPane.note {
-		// A tour note gets at most noteMaxPercent of the window, box included;
-		// a longer one scrolls inside it, under its pinned labels.
-		if capInner := m.height*noteMaxPercent/100 - borderH; capInner < docInner {
-			docInner = capInner
-		}
+		// A tour note gets up to noteMaxPercent of the window, box included —
+		// more than the usual half — and a longer one scrolls inside it, under
+		// its pinned labels.
+		docInner = m.height*noteMaxPercent/100 - borderH
 		if want := m.docPane.noteHeight(m.diffView.width); want < docInner {
 			docInner = want
 		}

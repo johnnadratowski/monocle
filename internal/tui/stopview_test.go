@@ -929,14 +929,14 @@ func rowWith(screen, text string) string {
 	return ""
 }
 
-// A long note's pane stops at 40% of the window, box included; a short one
+// A long note's pane stops at 66% of the window, box included; a short one
 // stays the size of its note.
-func TestTheNotePaneIsCappedAtFortyPercent(t *testing.T) {
+func TestTheNotePaneIsCappedAtTwoThirds(t *testing.T) {
 	for _, height := range []int{30, 44, 60} {
 		m := longNoteApp(t)
 		m = updateApp(t, m, tea.WindowSizeMsg{Width: 140, Height: height})
-		if outer := m.docPane.height + 2; outer > height*40/100 || outer < height*40/100-1 {
-			t.Errorf("height %d: the long note's pane is %d rows, want 40%% (%d)", height, outer, height*40/100)
+		if outer := m.docPane.height + 2; outer > height*66/100 || outer < height*66/100-1 {
+			t.Errorf("height %d: the long note's pane is %d rows, want 66%% (%d)", height, outer, height*66/100)
 		}
 	}
 	m := viewsAppIn(t, &types.Config{}, 140, false) // "The write.": a short note
