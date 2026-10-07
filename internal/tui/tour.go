@@ -407,8 +407,26 @@ func (m *appModel) openStopNote(stop types.WalkthroughStop) {
 	m.docPane.theme = &m.theme
 	m.docPane.openNote(tourNoteKeyPrefix+stop.ID, stop.Heading(), stopNoteBody(stop), stopLinkGroups(stop, m.tour.tour, m.stopStatus(stop)), m.diffView.mdStyler)
 	m.docPane.titleMark = stopVisitMark(m.tour.fresh && m.tour.freshFor == stop.ID)
+	m.docPane.titleLoc = stopLocation(stop, m.repoRoot)
 	recalcPaneDimensions(m)
 	m.diffView.ensureVisible()
+}
+
+// stopLocation is where a stop is, as its note's header shows it: its file as
+// the review names it, repo-relative, and its lines — none for a stop with no
+// file.
+func stopLocation(stop types.WalkthroughStop, root string) noteLocation {
+	if stop.File == "" {
+		return noteLocation{}
+	}
+	loc := noteLocation{path: repoRelative(root, stop.File)}
+	switch {
+	case stop.LineStart > 0 && stop.LineEnd > stop.LineStart:
+		loc.lines = fmt.Sprintf("%d–%d", stop.LineStart, stop.LineEnd)
+	case stop.LineStart > 0:
+		loc.lines = fmt.Sprint(stop.LineStart)
+	}
+	return loc
 }
 
 // The marks after a stop's title: a bright "new" on a stop the reviewer has not

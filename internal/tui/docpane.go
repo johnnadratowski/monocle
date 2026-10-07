@@ -22,7 +22,8 @@ type docPaneModel struct {
 
 	annotationID string // which annotation's refs are showing (for cycling)
 	title        string
-	titleMark    string // styled, after a note's title: whether its stop is new or visited
+	titleMark    string       // styled, after a note's title: whether its stop is new or visited
+	titleLoc     noteLocation // after the mark, dim: where a note's stop is
 	lines        []string
 	offset       int
 
@@ -229,7 +230,7 @@ func (m docPaneModel) currentRef() (types.DocRef, bool) {
 // setContent loads a document's text and the highlight range from the active
 // ref, scrolling so the range is visible. content is the full document text.
 func (m *docPaneModel) setContent(title, content string, ref types.DocRef) {
-	m.title, m.titleMark = title, ""
+	m.title, m.titleMark, m.titleLoc = title, "", noteLocation{}
 	m.lines = strings.Split(content, "\n")
 	m.hlStartLine, m.hlStartCol = ref.StartLine, ref.StartCol
 	m.hlEndLine, m.hlEndCol = ref.EndLine, ref.EndCol
@@ -273,6 +274,7 @@ func (m *docPaneModel) scrollUp()   { m.offset--; m.clamp() }
 func (m *docPaneModel) close() {
 	m.active = false
 	m.titleMark = ""
+	m.titleLoc = noteLocation{}
 	m.focused = false
 	m.refs = nil
 	m.lines = nil
@@ -332,22 +334,39 @@ func (m docPaneModel) View() string {
 
 	var b strings.Builder
 	switch {
-	case m.note && m.titleMark != "":
-		// The mark keeps its own colour, so it is drawn outside the title's style.
-		mark := " " + m.titleMark
+	case m.note && (m.titleMark != "" || m.titleLoc.path != ""):
+		// The mark keeps its own colour, and the stop's location is dim, so both
+		// are drawn outside the title's style. The title is kept whole while the
+		// location can shorten instead.
+		mark := ""
+		if m.titleMark != "" {
+			mark = " " + m.titleMark
+		}
 		plain := lipgloss.NewStyle().Foreground(accent).Bold(true)
 		markW, hintW := lipgloss.Width(mark), lipgloss.Width(hint)
 		reserve := markW + 1
 		if hint != "" {
 			reserve += hintW + 3
 		}
-		left := plain.Render(" " + truncateToWidth(title, max(m.width-reserve, 1)))
-		gap := max(m.width-lipgloss.Width(left)-markW-hintW-1, 1)
-		tail := strings.Repeat(" ", gap)
-		if hint != "" {
-			tail += hint + " "
+		room := max(m.width-reserve, 1)
+		const sep = "  "
+		loc := m.titleLoc.shorten(room - lipgloss.Width(title) - len(sep))
+		if loc == "" {
+			shortest := m.titleLoc.shortest()
+			if keep := room - len(sep) - lipgloss.Width(shortest); shortest != "" && keep >= min(lipgloss.Width(title), minNoteTitle) {
+				title, loc = truncateToWidth(title, keep), shortest
+			}
 		}
-		b.WriteString(left + mark + plain.Render(tail))
+		left := plain.Render(" "+truncateToWidth(title, room)) + mark
+		if loc != "" {
+			left += sep + lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(loc)
+		}
+		right := ""
+		if hint != "" {
+			right = hint + " "
+		}
+		gap := max(m.width-lipgloss.Width(left)-lipgloss.Width(right), 1)
+		b.WriteString(left + plain.Render(strings.Repeat(" ", gap)+right))
 	case hint == "":
 		b.WriteString(titleStyle.Render(" " + truncateToWidth(title, m.width-1)))
 	default:
@@ -452,3 +471,50 @@ func truncateToWidth(s string, w int) string {
 	}
 	return lipgloss.NewStyle().MaxWidth(w).Render(s)
 }
+
+// noteLocation is where a note's stop is: its file, as the review names it,
+// and its lines ("528–548", "528", or none).
+type noteLocation struct{ path, lines string }
+
+// shorten is the location in at most w columns: whole, or with directories
+// dropped from the left, one at a time, behind an ellipsis. The file name and
+// the lines are what identify it, so it is never shortened past them; "" when
+// even they do not fit.
+func (l noteLocation) shorten(w int) string {
+	for _, form := range l.forms() {
+		if lipgloss.Width(form) <= w {
+			return form
+		}
+	}
+	return ""
+}
+
+// shortest is the location shortened as far as shorten goes, or "" for none.
+func (l noteLocation) shortest() string {
+	forms := l.forms()
+	if len(forms) == 0 {
+		return ""
+	}
+	return forms[len(forms)-1]
+}
+
+// forms are the ways shorten can write the location, longest first.
+func (l noteLocation) forms() []string {
+	if l.path == "" {
+		return nil
+	}
+	suffix := ""
+	if l.lines != "" {
+		suffix = ":" + l.lines
+	}
+	parts := strings.Split(l.path, "/")
+	forms := []string{l.path + suffix}
+	for drop := 1; drop < len(parts); drop++ {
+		forms = append(forms, "…/"+strings.Join(parts[drop:], "/")+suffix)
+	}
+	return forms
+}
+
+// minNoteTitle is the fewest columns of a stop's title the location may leave
+// it: below that the location gives way, since the title is what the bar is for.
+const minNoteTitle = 16

@@ -255,7 +255,7 @@ Bindings are grouped by the task they serve, and within a group ordered by key: 
 | `:call [n]` | Go to the stop the stop's nth call (default the first) leads to. Clicking a call's label under the note does the same |
 | `:layout [reset]` | Say whether the tour's windows are in a saved layout; `reset` respawns the related-files pane with the stop's own related files, then runs `walkthrough_layout_reset` to put back the default. Clicking `reset` in the note's `Layout: saved · reset` does the same |
 
-When the agent sends a tour (`set_walkthrough`), monocle enters tour mode on its first stop: the diff cursor lands on the stop's lines, which stay marked in the gutter (magenta; the previous stop blue, the next green, the one after bright green), the doc pane shows `1.2 · Title` (marked `new` on a stop you have not been on before, `✓` on one you have, kept across restarts) and the agent's note, and the status bar shows `tour 1.2 · 3 of 7` (the stop id, then its position in the tour). Ask the agent about a stop by its id. The ends of the tour clamp rather than wrap.
+When the agent sends a tour (`set_walkthrough`), monocle enters tour mode on its first stop: the diff cursor lands on the stop's lines, which stay marked in the gutter (magenta; the previous stop blue, the next green, the one after bright green), the doc pane shows `1.2 · Title` (marked `new` on a stop you have not been on before, `✓` on one you have, kept across restarts), then where the stop is, dim — `src/auth/login.ts:40–52` — and the agent's note, and the status bar shows `tour 1.2 · 3 of 7` (the stop id, then its position in the tour). Ask the agent about a stop by its id. The ends of the tour clamp rather than wrap.
 
 #### View & panes
 

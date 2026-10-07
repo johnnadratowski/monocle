@@ -21,7 +21,7 @@ func noteTitle(m appModel) string {
 func TestTheStopTitleSaysWhetherItIsNew(t *testing.T) {
 	m, _ := tourApp(t) // restored on 1.1, which nothing records as visited
 	m = pressKey(t, m, ".")
-	if !m.tour.fresh || !strings.HasSuffix(strings.TrimSpace(noteTitle(m)), stopNewMark) {
+	if !m.tour.fresh || !strings.Contains(noteTitle(m), "Where it lands "+stopNewMark+" ") {
 		t.Fatalf("first arrival at 1.2: title %q, want it marked new", noteTitle(m))
 	}
 	// Staying — the tour switched off and on — keeps it new.
@@ -30,7 +30,7 @@ func TestTheStopTitleSaysWhetherItIsNew(t *testing.T) {
 		t.Error("1.2 turned visited during the stay")
 	}
 	m = pressKey(t, pressKey(t, m, ","), ".")
-	if m.tour.fresh || !strings.HasSuffix(strings.TrimSpace(noteTitle(m)), stopVisitedMark) {
+	if m.tour.fresh || !strings.Contains(noteTitle(m), "Where it lands "+stopVisitedMark+" ") {
 		t.Errorf("back at 1.2: title %q, want it marked visited", noteTitle(m))
 	}
 	// Back/forward, a call or :stop count the same.
