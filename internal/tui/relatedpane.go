@@ -513,6 +513,51 @@ func (m appModel) addOrShowRelated(add, spawn []relatedFile, active int, reveal,
 	}
 }
 
+// openEditorMsg asks to open a file of the repo at a line in the editor
+// beside Monocle (open_editor), zooming its pane when full is set.
+type openEditorMsg struct {
+	path string
+	line int
+	full bool
+}
+
+// openEditorAt opens a file in the related-files pane as ctrl+g does in a
+// tour — added to the editor already there, or a pane started with it — and
+// gives that pane the keyboard; with full it zooms the pane to fill the window.
+// The diff stays where it is.
+func (m appModel) openEditorAt(msg openEditorMsg) (appModel, tea.Cmd) {
+	m, cmd := m.addResolved([]relatedFile{{path: msg.path, line: msg.line}})
+	if msg.full && cmd != nil && inTmux() {
+		cmd = zoomRelatedAfter(cmd, m.tour.pane, os.Getenv("TMUX_PANE"))
+	}
+	return m, cmd
+}
+
+// zoomRelatedAfter runs open, then zooms the related-files pane it opened —
+// the pane open reports, or the one tagged as Monocle's — unless its window is
+// zoomed already: resize-pane -Z toggles.
+func zoomRelatedAfter(open tea.Cmd, tracked, owner string) tea.Cmd {
+	return func() tea.Msg {
+		msg := open()
+		pane := ""
+		if pm, ok := msg.(relatedPaneMsg); ok {
+			if pm.err != nil {
+				return msg
+			}
+			pane = pm.pane
+		}
+		if pane == "" {
+			pane = findPane(tracked, owner)
+		}
+		if pane != "" {
+			if flag, err := tmux("display-message", "-p", "-t", pane, "#{window_zoomed_flag}"); err == nil && strings.TrimSpace(flag) != "1" {
+				_, _ = tmux("resize-pane", "-Z", "-t", pane)
+			}
+		}
+		return msg
+	}
+}
+
 // relatedFocus is whether a new related-files split takes focus. It follows
 // editor_focus when that is set, but defaults to keeping focus on Monocle,
 // unlike ctrl+g: the tour is driven from Monocle, and a split that took the

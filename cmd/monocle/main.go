@@ -57,6 +57,7 @@ type ReviewCmd struct {
 	GotoStop       ReviewGotoStopCmd       `cmd:"goto-stop" help:"Move the reviewer's Monocle to a stop of the guided tour"`
 	GotoLine       ReviewGotoLineCmd       `cmd:"goto-line" help:"Show the reviewer a file of the review at a line"`
 	Highlight      ReviewHighlightCmd      `cmd:"highlight" help:"Highlight a range of lines in a file of the review (--clear removes it)"`
+	OpenEditor     ReviewOpenEditorCmd     `cmd:"open-editor" help:"Open any file of the repo at a line in the editor beside Monocle (--full zooms it)"`
 }
 
 // WorkDirFlag is embedded by commands that support --workdir.

@@ -119,6 +119,8 @@ func TestEngineMessagesRoundTrip(t *testing.T) {
 		{"HighlightRange", &HighlightRangeMsg{Type: TypeHighlightRange, Path: "a.go", Start: 3, End: 9}},
 		{"HighlightRangeClear", &HighlightRangeMsg{Type: TypeHighlightRange, Clear: true}},
 		{"HighlightRangeResponse", &HighlightRangeResponse{Type: TypeHighlightRangeResponse, Success: true, Message: "m"}},
+		{"OpenEditor", &OpenEditorMsg{Type: TypeOpenEditor, Path: "lib/util.go", Line: 12, Full: true}},
+		{"OpenEditorResponse", &OpenEditorResponse{Type: TypeOpenEditorResponse, Success: true, Message: "m"}},
 		{"SetWalkthroughStop", &SetWalkthroughStopMsg{Type: TypeSetWalkthroughStop, ID: "1.2"}},
 		{"SetWalkthroughStopResponse", &SetWalkthroughStopResponse{Type: TypeSetWalkthroughStopResponse}},
 		{"SetBaseRef", &SetBaseRefMsg{Type: TypeSetBaseRef, Ref: "main"}},

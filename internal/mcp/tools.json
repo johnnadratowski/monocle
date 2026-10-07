@@ -62,5 +62,9 @@
   {
     "name": "highlight_range",
     "description": "Highlight one range of lines in a file of the review, so the reviewer sees where it starts and ends: pass path (a changed file or one added with add_files; repo-relative, an added file's name, or absolute), start and end (NEW-file lines, start >= 1, end >= start). It replaces any earlier highlight; pass clear: true to remove it. It only marks the lines \u2014 it does not move the cursor or scroll; use goto_line to move there. The highlight shows in that file only and lasts until replaced or cleared."
+  },
+  {
+    "name": "open_editor",
+    "description": "Open any file of the repo at a line in the editor beside the reviewer's Monocle \u2014 not only the review's files, e.g. the definition of a function the code calls. Pass path (repo-relative or absolute, inside the repo), line (from 1) and optionally full. Monocle does what its own ctrl+g does: the file is added to the editor already in the related-files pane, or a pane is started with it, and that pane gets the keyboard; with full: true the pane is zoomed to fill the window. The diff stays where it is. A path outside the repo, a missing file or a line below 1 is an error that says so."
   }
 ]

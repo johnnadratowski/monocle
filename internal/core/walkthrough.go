@@ -173,6 +173,65 @@ func (e *Engine) reviewPath(path string) (string, error) {
 	return path, nil
 }
 
+// repoFile resolves a path the agent gave to a file of the repo — any file,
+// in the review or not — repo-relative or absolute, returning it
+// repo-relative. A path outside the repo, a missing file and a directory are
+// refused.
+func (e *Engine) repoFile(path string) (string, error) {
+	e.mu.RLock()
+	session := e.current
+	if session == nil {
+		e.mu.RUnlock()
+		return "", fmt.Errorf("no active session")
+	}
+	repoRoot := session.RepoRoot
+	e.mu.RUnlock()
+
+	abs := path
+	if !filepath.IsAbs(abs) {
+		abs = filepath.Join(repoRoot, abs)
+	}
+	abs = filepath.Clean(abs)
+	rel, err := filepath.Rel(repoRoot, abs)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("%s is outside the repo (%s)", path, repoRoot)
+	}
+	info, err := os.Stat(abs)
+	switch {
+	case err != nil:
+		return "", fmt.Errorf("no such file: %s", path)
+	case info.IsDir():
+		return "", fmt.Errorf("%s is not a file", path)
+	}
+	return rel, nil
+}
+
+// handleOpenEditor opens any file of the repo at a line in the editor beside
+// the reviewer's TUI, at the agent's request — the TUI does it as its own
+// ctrl+g does, giving that editor the keyboard, and with Full zooms it. The
+// diff stays where it is.
+func (e *Engine) handleOpenEditor(msg *protocol.OpenEditorMsg) *protocol.OpenEditorResponse {
+	fail := func(message string) *protocol.OpenEditorResponse {
+		return &protocol.OpenEditorResponse{Type: protocol.TypeOpenEditorResponse, Message: message}
+	}
+	path := strings.TrimSpace(msg.Path)
+	if path == "" {
+		return fail("a path is required")
+	}
+	if msg.Line < 1 {
+		return fail(fmt.Sprintf("line must be >= 1 (got %d)", msg.Line))
+	}
+	path, err := e.repoFile(path)
+	if err != nil {
+		return fail(err.Error())
+	}
+	e.emit(EventOpenEditor, EventPayload{Kind: EventOpenEditor, Path: path, Line: msg.Line, Full: msg.Full})
+	return &protocol.OpenEditorResponse{
+		Type: protocol.TypeOpenEditorResponse, Success: true,
+		Message: fmt.Sprintf("Opening %s:%d in the editor beside the reviewer.", path, msg.Line),
+	}
+}
+
 // handleHighlightRange sets the review's one highlighted range of lines, at the
 // agent's request, replacing any earlier one — or clears it. The range only
 // marks lines; moving to them is goto_line's. It lives in the TUI, so the

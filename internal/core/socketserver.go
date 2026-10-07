@@ -533,6 +533,9 @@ func eventPayloadMap(payload EventPayload) map[string]any {
 	if payload.LineEnd != 0 {
 		m["line_end"] = payload.LineEnd
 	}
+	if payload.Full {
+		m["full"] = true
+	}
 	return m
 }
 
@@ -769,6 +772,8 @@ func (s *SocketServer) routeMessage(msg any) any {
 		return s.engine.handleGotoLine(m)
 	case *protocol.HighlightRangeMsg:
 		return s.engine.handleHighlightRange(m)
+	case *protocol.OpenEditorMsg:
+		return s.engine.handleOpenEditor(m)
 	case *protocol.SetWalkthroughStopMsg:
 		return s.engine.handleSetWalkthroughStop(m)
 	case *protocol.GetSnapshotsMsg:

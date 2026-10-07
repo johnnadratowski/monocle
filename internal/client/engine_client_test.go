@@ -382,3 +382,32 @@ func TestEngineClient_HighlightRangeEvent(t *testing.T) {
 		t.Fatal("the highlight_range event never reached the client")
 	}
 }
+
+// open_editor's event reaches a client with its path, line and full.
+func TestEngineClient_OpenEditorEvent(t *testing.T) {
+	_, socketPath := setupEngine(t)
+	ec, err := NewEngineClient(socketPath)
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+	defer ec.Close()
+	events := make(chan core.EventPayload, 1)
+	ec.On(core.EventOpenEditor, func(p core.EventPayload) { events <- p })
+	c, err := Connect(socketPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	resp, err := c.Request(&protocol.OpenEditorMsg{Type: protocol.TypeOpenEditor, Path: "a.go", Line: 1, Full: true}, time.Second)
+	if r, ok := resp.(*protocol.OpenEditorResponse); err != nil || !ok || !r.Success {
+		t.Fatalf("open_editor: %+v %v", resp, err)
+	}
+	select {
+	case p := <-events:
+		if p.Path != "a.go" || p.Line != 1 || !p.Full {
+			t.Errorf("event %+v, want a.go:1 full", p)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the open_editor event never reached the client")
+	}
+}

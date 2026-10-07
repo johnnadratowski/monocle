@@ -166,6 +166,42 @@ func (cmd *ReviewHighlightCmd) Run() error {
 	return nil
 }
 
+// ReviewOpenEditorCmd opens any file of the repo at a line in the editor beside
+// the reviewer's Monocle.
+type ReviewOpenEditorCmd struct {
+	WorkDirFlag
+	Socket string `help:"Override socket path" env:"MONOCLE_SOCKET" default:""`
+	Path   string `arg:"" help:"Any file of the repo: repo-relative or absolute"`
+	Line   int    `arg:"" help:"The line, from 1"`
+	Full   bool   `help:"Fill the window with the editor (zoom its pane)" default:"false"`
+	JSON   bool   `help:"Output as JSON" default:"false"`
+}
+
+func (cmd *ReviewOpenEditorCmd) Run() error {
+	c, err := connectReview(cmd.Socket, cmd.WorkDir)
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+
+	resp, err := c.Request(&protocol.OpenEditorMsg{Type: protocol.TypeOpenEditor, Path: cmd.Path, Line: cmd.Line, Full: cmd.Full}, client.DefaultTimeout)
+	if err != nil {
+		return fmt.Errorf("open-editor: %w", err)
+	}
+	r, ok := resp.(*protocol.OpenEditorResponse)
+	if !ok {
+		return fmt.Errorf("open-editor: unexpected response %T", resp)
+	}
+	if cmd.JSON {
+		return printJSON(r)
+	}
+	if !r.Success {
+		return fmt.Errorf("%s", r.Message)
+	}
+	fmt.Println(r.Message)
+	return nil
+}
+
 // connectReview dials the engine for a repo, exiting with the client's own
 // message when none is running — the same contract as every review command.
 func connectReview(socket, workdir string) (*client.Client, error) {

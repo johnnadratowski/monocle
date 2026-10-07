@@ -29,6 +29,10 @@ const (
 	// highlighted range (highlight_range): Path, Line and LineEnd say which
 	// lines; an empty Path clears it.
 	EventHighlightRange EventKind = "highlight_range"
+	// EventOpenEditor fires when the agent asks to open a file of the repo in
+	// the editor beside the TUI (open_editor): Path, Line, and Full to fill the
+	// window with it.
+	EventOpenEditor EventKind = "open_editor"
 )
 
 // EventPayload carries data for an engine event.
@@ -40,6 +44,7 @@ type EventPayload struct {
 	Message string // optional context
 	Line    int    // a new-file line, for EventGotoLine; the first of a range, for EventHighlightRange
 	LineEnd int    // the last new-file line of a range, for EventHighlightRange
+	Full    bool   // fill the window with the editor, for EventOpenEditor
 	Top     *int   // rows from the top of the diff to place Line at, for EventGotoLine; nil leaves it
 }
 

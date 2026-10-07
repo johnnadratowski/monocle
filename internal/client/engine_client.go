@@ -174,6 +174,7 @@ func (c *EngineClient) dialAndSubscribe() error {
 			string(core.EventWalkthroughChanged),
 			string(core.EventGotoLine),
 			string(core.EventHighlightRange),
+			string(core.EventOpenEditor),
 		},
 		Passive: true,
 	}
@@ -492,6 +493,9 @@ func (c *EngineClient) invokeCallbacks(notif *protocol.EventNotification) {
 	}
 	if v, ok := notif.Payload["line"].(float64); ok {
 		payload.Line = int(v)
+	}
+	if v, ok := notif.Payload["full"].(bool); ok {
+		payload.Full = v
 	}
 	if v, ok := notif.Payload["line_end"].(float64); ok {
 		payload.LineEnd = int(v)

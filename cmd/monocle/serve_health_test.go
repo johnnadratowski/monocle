@@ -192,3 +192,29 @@ func TestHighlightCmdSendsTheRequest(t *testing.T) {
 		t.Errorf("sent %+v, want a clear", m)
 	}
 }
+
+// open-editor sends its path, line and full as the request.
+func TestOpenEditorCmdSendsTheRequest(t *testing.T) {
+	sock := shortSock(t)
+	got := make(chan *protocol.OpenEditorMsg, 1)
+	startMockServe(t, sock, func(conn net.Conn) {
+		defer conn.Close()
+		line, err := bufio.NewReader(conn).ReadBytes('\n')
+		if err != nil {
+			return
+		}
+		if msg, err := protocol.Decode(line); err == nil {
+			if m, ok := msg.(*protocol.OpenEditorMsg); ok {
+				got <- m
+			}
+		}
+		data, _ := protocol.Encode(&protocol.OpenEditorResponse{Type: protocol.TypeOpenEditorResponse, Success: true, Message: "ok"})
+		_, _ = conn.Write(data)
+	})
+	if err := (&ReviewOpenEditorCmd{Socket: sock, Path: "lib/util.go", Line: 12, Full: true}).Run(); err != nil {
+		t.Fatal(err)
+	}
+	if m := <-got; m.Path != "lib/util.go" || m.Line != 12 || !m.Full {
+		t.Errorf("sent %+v, want lib/util.go:12 full", m)
+	}
+}

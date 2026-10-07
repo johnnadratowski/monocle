@@ -127,6 +127,11 @@ func registerTools(s *sdkmcp.Server) {
 		Name:        "highlight_range",
 		Description: desc["highlight_range"],
 	}, handleHighlightRange)
+
+	sdkmcp.AddTool(s, &sdkmcp.Tool{
+		Name:        "open_editor",
+		Description: desc["open_editor"],
+	}, handleOpenEditor)
 }
 
 // relatedParam is a repo file to open beside a tour stop, at a line.
@@ -294,6 +299,33 @@ func handleHighlightRange(ctx context.Context, req *sdkmcp.CallToolRequest, para
 	}
 	if !r.Success {
 		return errResult("highlight_range: %s", r.Message), nil, nil
+	}
+	return textResult(r.Message), nil, nil
+}
+
+type openEditorParams struct {
+	Path string `json:"path"`           // any file of the repo: repo-relative or absolute
+	Line int    `json:"line"`           // from 1
+	Full bool   `json:"full,omitempty"` // fill the window with the editor
+}
+
+func handleOpenEditor(ctx context.Context, req *sdkmcp.CallToolRequest, params openEditorParams) (*sdkmcp.CallToolResult, any, error) {
+	c, guard := boundClient()
+	if guard != nil {
+		return guard, nil, nil
+	}
+	defer c.Close()
+
+	resp, err := c.Request(&protocol.OpenEditorMsg{Type: protocol.TypeOpenEditor, Path: params.Path, Line: params.Line, Full: params.Full}, client.DefaultTimeout)
+	if err != nil {
+		return errResult("request: %v", err), nil, nil
+	}
+	r, ok := resp.(*protocol.OpenEditorResponse)
+	if !ok {
+		return errResult("unexpected response %T", resp), nil, nil
+	}
+	if !r.Success {
+		return errResult("open_editor: %s", r.Message), nil, nil
 	}
 	return textResult(r.Message), nil, nil
 }

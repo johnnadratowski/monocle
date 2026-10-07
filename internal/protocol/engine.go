@@ -72,6 +72,7 @@ const (
 	TypeSetWalkthroughStop = "set_walkthrough_stop"
 	TypeGotoLine           = "goto_line"
 	TypeHighlightRange     = "highlight_range"
+	TypeOpenEditor         = "open_editor"
 
 	// Snapshots
 	TypeGetSnapshots      = "get_snapshots"
@@ -165,6 +166,7 @@ const (
 	TypeSetWalkthroughStopResponse = "set_walkthrough_stop_response"
 	TypeGotoLineResponse           = "goto_line_response"
 	TypeHighlightRangeResponse     = "highlight_range_response"
+	TypeOpenEditorResponse         = "open_editor_response"
 
 	// Snapshots
 	TypeGetSnapshotsResponse      = "get_snapshots_response"
@@ -748,6 +750,22 @@ type HighlightRangeMsg struct {
 }
 
 type HighlightRangeResponse struct {
+	Type    string `json:"type"`
+	Success bool   `json:"success"`
+	Message string `json:"message,omitempty"`
+}
+
+// OpenEditorMsg opens any file of the repo at a line in the editor beside the
+// reviewer's TUI — not only the review's files — giving that editor the
+// keyboard, and with Full filling the window with it.
+type OpenEditorMsg struct {
+	Type string `json:"type"`
+	Path string `json:"path"`
+	Line int    `json:"line"`
+	Full bool   `json:"full,omitempty"`
+}
+
+type OpenEditorResponse struct {
 	Type    string `json:"type"`
 	Success bool   `json:"success"`
 	Message string `json:"message,omitempty"`

@@ -114,3 +114,18 @@ func TestHighlightArgs(t *testing.T) {
 		t.Error("--clear did not parse")
 	}
 }
+
+// open-editor takes a path and a line, and --full.
+func TestOpenEditorArgs(t *testing.T) {
+	var cli CLI
+	parser, err := kong.New(&cli)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := parser.Parse([]string{"review", "open-editor", "lib/util.go", "12", "--full"}); err != nil {
+		t.Fatal(err)
+	}
+	if o := cli.Review.OpenEditor; o.Path != "lib/util.go" || o.Line != 12 || !o.Full {
+		t.Errorf("parsed %+v", o)
+	}
+}

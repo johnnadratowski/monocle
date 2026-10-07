@@ -650,6 +650,30 @@ In MCP tools mode, call the `highlight_range` tool with `path`, `start` and `end
 
 ---
 
+## `monocle review open-editor`
+
+Open any file of the repo at a line in the editor beside the reviewer's monocle — not only the review's files: the definition of a function the code calls, say.
+
+```bash
+monocle review open-editor src/lib/money.ts 42
+monocle review open-editor src/lib/money.ts 42 --full
+```
+
+The path is repo-relative or absolute, inside the repo; the line counts from 1. monocle does what its own `ctrl+g` does in a tour: it adds the file to the editor already in the related-files pane (through `related_editor_add`), or starts the pane with it, and gives that pane the keyboard. With `--full` the pane is also zoomed to fill the tmux window. The diff's cursor and scroll stay where they are. A path outside the repo, a missing file, a directory or a line below 1 is an error that says so. The related-files pane needs monocle to be running inside tmux.
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--full` | Zoom the editor's pane to fill the window. |
+| `--json` | Output as JSON. |
+
+### MCP tool equivalent
+
+In MCP tools mode, call the `open_editor` tool with `path`, `line` and, optionally, `full`.
+
+---
+
 ## `send_diff` (MCP tool)
 
 Show the reviewer a before/after comparison whose contents you supply directly — for *illustrating* a change rather than reviewing one. Typical uses: pseudocode before/after, two competing design options side by side, or any contrast that is not the state of the repository.

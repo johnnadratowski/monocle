@@ -1281,6 +1281,9 @@ func (m appModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case highlightRangeMsg:
 		return m.highlightRange(msg), nil
 
+	case openEditorMsg:
+		return m.openEditorAt(msg)
+
 	case tourSettledMsg:
 		return m.settleOnStop(msg)
 
@@ -5105,6 +5108,9 @@ func BridgeEngineEvents(engine core.EngineAPI, p *tea.Program) {
 	})
 	engine.On(core.EventHighlightRange, func(e core.EventPayload) {
 		p.Send(highlightRangeMsg{path: e.Path, start: e.Line, end: e.LineEnd})
+	})
+	engine.On(core.EventOpenEditor, func(e core.EventPayload) {
+		p.Send(openEditorMsg{path: e.Path, line: e.Line, full: e.Full})
 	})
 }
 
