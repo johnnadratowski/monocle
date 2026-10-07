@@ -57,11 +57,11 @@
   },
   {
     "name": "goto_line",
-    "description": "Show the reviewer a file of the review at a line: the diff opens the file \u2014 a changed file, or one added with add_files; repo-relative path, an added file's name, or an absolute path \u2014 and puts the cursor on that NEW-file line, focused. With top, the line lands that many rows below the first visible row (0 is the top row), so as much as possible of what follows it is in view; without it the line is centred. The reviewer can return with ctrl+o. It does not move the guided tour's stop. A path the review does not hold is an error that says so."
+    "description": "Show the reviewer a file of the review at a line: the diff opens the file \u2014 a changed file, or one added with add_files; repo-relative path, an added file's name, or an absolute path \u2014 and puts the cursor on that NEW-file line, focused. With top, the line lands that many rows below the first visible row (0 is the top row), so as much as possible of what follows it is in view; without it the line is centred. A line the compact diff hides between hunks is revealed, with a few lines around it. The reviewer can return with ctrl+o. It does not move the guided tour's stop. A path the review does not hold is an error that says so."
   },
   {
     "name": "highlight_range",
-    "description": "Highlight one range of lines in a file of the review, so the reviewer sees where it starts and ends: pass path (a changed file or one added with add_files; repo-relative, an added file's name, or absolute), start and end (NEW-file lines, start >= 1, end >= start). It replaces any earlier highlight; pass clear: true to remove it. It only marks the lines \u2014 it does not move the cursor or scroll; use goto_line to move there. The highlight shows in that file only and lasts until replaced or cleared."
+    "description": "Highlight one range of lines in a file of the review, so the reviewer sees where it starts and ends: pass path (a changed file or one added with add_files; repo-relative, an added file's name, or absolute), start and end (NEW-file lines, start >= 1, end >= start). It replaces any earlier highlight; pass clear: true to remove it. It only marks the lines \u2014 it does not move the cursor or scroll; use goto_line to move there. Lines the compact diff hides are revealed. The highlight shows in that file only and lasts until replaced or cleared."
   },
   {
     "name": "open_editor",

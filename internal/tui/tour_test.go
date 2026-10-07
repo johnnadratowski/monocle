@@ -20,6 +20,9 @@ import (
 type tourEngine struct {
 	stubEngine
 	diffs map[string]*types.DiffResult
+	// fullDiffs, when set for a path, are its whole-file diffs; otherwise the
+	// whole-file diff is the same as the compact one.
+	fullDiffs map[string]*types.DiffResult
 
 	mu       sync.Mutex
 	reported []string
@@ -32,7 +35,13 @@ func (e *tourEngine) GetFileDiff(path string) (*types.DiffResult, error) {
 	return nil, fmt.Errorf("no diff for %s", path)
 }
 func (e *tourEngine) GetFileDiffFull(path string) (*types.DiffResult, error) {
+	if d, ok := e.fullDiffs[path]; ok {
+		return d, nil
+	}
 	return e.GetFileDiff(path)
+}
+func (e *tourEngine) RefreshChangedFiles() ([]types.ChangedFile, error) {
+	return e.changedFiles, nil
 }
 func (e *tourEngine) GetFileContent(path string) (string, error) {
 	return "the contents of " + path, nil
@@ -459,6 +468,8 @@ func (e *commentEngine) AddComment(target core.CommentTarget, ct types.CommentTy
 	e.targets = append(e.targets, target)
 	return &types.ReviewComment{ID: "c", StopID: target.StopID}, nil
 }
+func (e *commentEngine) ResolveComment(string) error { return nil }
+func (e *commentEngine) DeleteComment(string) error  { return nil }
 
 func TestCommentsAreTaggedWithTheStop(t *testing.T) {
 	m, e := tourApp(t)

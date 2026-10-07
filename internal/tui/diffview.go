@@ -468,6 +468,9 @@ type loadDiffMsg struct {
 	annotations     []types.Annotation
 	selectCommentID string // if set, auto-select and expand this comment after loading
 	anchorLine      int    // if set, re-anchor cursor to this new-file line after loading
+	// seq numbers the requestFileDiffMsg this load answers, 0 for any other
+	// load: an answer to a request a newer one has replaced is dropped.
+	seq int
 }
 
 // requestFileDiffMsg asks the app to re-fetch a file diff honoring the full-file

@@ -560,7 +560,7 @@ func (m *appModel) jumpToStop(stop types.WalkthroughStop) tea.Cmd {
 		return nil
 	}
 	m.diffView.stopPath = shown
-	return m.openFileAt(stop.File, stop.LineStart, nil)
+	return m.openFileAt(stop.File, stop.LineStart, stop.LineEnd, nil)
 }
 
 // reviewPathOf is the path the diff view shows a file of the review under —
@@ -579,12 +579,16 @@ func (m appModel) reviewPathOf(file string) (string, bool) {
 // openFileAt shows a file of the review with the diff cursor on its new-file
 // line (line <= 0: its first change), loading it first when another is on
 // screen; top, when set, places the line that many rows from the top of the
-// diff rather than centring it. It returns the command that finishes the
-// load. The caller has checked the review holds the file (reviewPathOf).
-func (m *appModel) openFileAt(file string, line int, top *int) tea.Cmd {
+// diff rather than centring it. Lines line to end are revealed (reveal.go),
+// and the file reloaded when a compact diff on screen hides them, or when a
+// load of it is already on its way and would land elsewhere. It returns the
+// command that finishes the load. The caller has checked the review holds
+// the file (reviewPathOf).
+func (m *appModel) openFileAt(file string, line, end int, top *int) tea.Cmd {
 	if m.reviewHasFile(file) {
 		m.sidebar.selectPath(file)
-		if m.diffView.path == file && !m.diffView.isViewingContentItem() && m.diffView.additionalFilePath == "" {
+		reload := m.reveal(file, line, end) || m.tour.loading == file
+		if !reload && m.diffView.path == file && !m.diffView.isViewingContentItem() && m.diffView.additionalFilePath == "" {
 			switch {
 			case line > 0 && top != nil:
 				m.diffView.GoToLineAt(line, *top)
@@ -622,16 +626,18 @@ type highlightRangeMsg struct {
 // highlightRange marks a range of lines in a file of the review, replacing any
 // earlier one, or clears it. It moves nothing: goto_line does the moving. The
 // range shows in its file only, and stays through file switches until it is
-// replaced or cleared.
-func (m appModel) highlightRange(msg highlightRangeMsg) appModel {
+// replaced or cleared. Its lines are revealed (reveal.go); when the compact
+// diff on screen hides them it reloads, the cursor's line kept where it is on
+// screen, unless a jump to another file is on its way.
+func (m appModel) highlightRange(msg highlightRangeMsg) (appModel, tea.Cmd) {
 	if msg.path == "" {
 		m.diffView.hlPath = ""
-		return m
+		return m, nil
 	}
 	shown, ok := m.reviewPathOf(msg.path)
 	if !ok {
 		m.statusBar.searchInfo = msg.path + " is not in the review"
-		return m
+		return m, nil
 	}
 	m.diffView.hlPath, m.diffView.hlStart, m.diffView.hlEnd = shown, msg.start, msg.end
 	m.diffView.hlColor = ""
@@ -640,7 +646,24 @@ func (m appModel) highlightRange(msg highlightRangeMsg) appModel {
 			m.diffView.hlColor = strings.TrimSpace(cfg.HighlightColor)
 		}
 	}
-	return m
+	if !m.reviewHasFile(msg.path) || !m.reveal(msg.path, msg.start, msg.end) {
+		return m, nil
+	}
+	if m.tour.loading != "" && m.tour.loading != msg.path {
+		return m, nil // the file shows them when the reviewer comes back to it
+	}
+	if m.pendingJumpLine == 0 {
+		if line := m.diffView.anchorLineForCursor(); line > 0 {
+			rows := 0
+			for i := m.diffView.offset; i < m.diffView.cursor; i++ {
+				rows += m.diffView.screenLinesFor(i)
+			}
+			m.pendingJumpLine, m.pendingJumpTop = line, &rows
+		}
+	}
+	m.tour.loading = msg.path
+	path, full, anchor := msg.path, m.diffView.fullFile, m.pendingJumpLine
+	return m, func() tea.Msg { return requestFileDiffMsg{path: path, full: full, anchorLine: anchor} }
 }
 
 // gotoLineMsg asks to show a file at a new-file line — the agent's goto_line —
@@ -661,7 +684,7 @@ func (m appModel) gotoLine(msg gotoLineMsg) (appModel, tea.Cmd) {
 	m.recordJump()
 	m.setFocus(focusMain)
 	m.statusBar.searchInfo = fmt.Sprintf("showing %s:%d", msg.path, msg.line)
-	return m, m.openFileAt(msg.path, msg.line, msg.top)
+	return m, m.openFileAt(msg.path, msg.line, msg.line, msg.top)
 }
 
 // nearStopMarks are the gutter marks for the stops around the current one: the

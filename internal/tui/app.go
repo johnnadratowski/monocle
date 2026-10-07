@@ -274,6 +274,11 @@ type appModel struct {
 	// pendingJumpTop, when set, is the row from the top of the diff that line
 	// lands on (goto_line's top); nil centres it as any jump does.
 	pendingJumpTop *int
+	// revealed are the stretches of each file shown even where a compact diff
+	// would hide them (reveal.go); diffReq numbers requestFileDiffMsg loads,
+	// so only the latest one lands.
+	revealed map[string][]lineRange
+	diffReq  int
 
 	pendingDismissAdditionalFilePath string // set while the remove-added-file confirm modal is open
 
@@ -1093,6 +1098,9 @@ func (m appModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Diff loading
 	case loadDiffMsg:
+		if msg.seq != 0 && msg.seq != m.diffReq {
+			return m, nil // a newer request for a diff is on its way
+		}
 		if m.staleForTour(msg.path) {
 			return m, nil
 		}
@@ -1220,10 +1228,13 @@ func (m appModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		path := msg.path
 		full := msg.full
 		anchorLine := msg.anchorLine
+		revealed := m.revealedFor(path)
+		m.diffReq++
+		seq := m.diffReq
 		return m, func() tea.Msg {
-			result, err := fetchDiff(engine, path, full)
+			result, err := fetchDiff(engine, path, full, revealed)
 			if err != nil {
-				return loadDiffMsg{path: path}
+				return loadDiffMsg{path: path, seq: seq}
 			}
 			session := engine.GetSession()
 			var comments []types.ReviewComment
@@ -1240,6 +1251,7 @@ func (m appModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				comments:    comments,
 				annotations: annotationsForFile(session, path),
 				anchorLine:  anchorLine,
+				seq:         seq,
 			}
 		}
 
@@ -1279,7 +1291,7 @@ func (m appModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.gotoLine(msg)
 
 	case highlightRangeMsg:
-		return m.highlightRange(msg), nil
+		return m.highlightRange(msg)
 
 	case openEditorMsg:
 		return m.openEditorAt(msg)
@@ -1344,6 +1356,7 @@ func (m appModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		id := msg.commentID
 		currentPath := m.diffView.path
 		full := m.diffView.fullFile
+		revealed := m.revealedFor(currentPath)
 		contentID := m.diffView.contentID
 		isContent := m.diffView.isViewingContentItem()
 		additionalPath := m.diffView.additionalFilePath
@@ -1393,7 +1406,7 @@ func (m appModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return loadAdditionalFileMsg{path: additionalPath, content: content, comments: comments}
 			}
-			result, _ := fetchDiff(engine, currentPath, full)
+			result, _ := fetchDiff(engine, currentPath, full, revealed)
 			session := engine.GetSession()
 			var comments []types.ReviewComment
 			if session != nil {
@@ -1479,6 +1492,7 @@ func (m appModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		id := msg.commentID
 		currentPath := m.diffView.path
 		full := m.diffView.fullFile
+		revealed := m.revealedFor(currentPath)
 		contentID := m.diffView.contentID
 		isContent := m.diffView.isViewingContentItem()
 		additionalPath := m.diffView.additionalFilePath
@@ -1529,7 +1543,7 @@ func (m appModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return loadAdditionalFileMsg{path: additionalPath, content: content, comments: comments}
 			}
 			// Reload diff to update comment display
-			result, _ := fetchDiff(engine, currentPath, full)
+			result, _ := fetchDiff(engine, currentPath, full, revealed)
 			session := engine.GetSession()
 			var comments []types.ReviewComment
 			if session != nil {
@@ -4178,13 +4192,25 @@ func annotationsForFile(session *types.ReviewSession, path string) []types.Annot
 	return out
 }
 
-// fetchDiff fetches a file diff honoring the full-file display modifier so the
-// preference persists as the reviewer switches files and reloads comments.
-func fetchDiff(engine core.EngineAPI, path string, full bool) (*types.DiffResult, error) {
+// fetchDiff loads a file's diff honoring the full-file display modifier, so
+// the preference persists as the reviewer switches files and reloads comments:
+// the whole file, or the compact diff with any stretches revealed in it
+// (reveal.go) shown as context too.
+func fetchDiff(engine core.EngineAPI, path string, full bool, revealed []lineRange) (*types.DiffResult, error) {
 	if full {
 		return engine.GetFileDiffFull(path)
 	}
-	return engine.GetFileDiff(path)
+	result, err := engine.GetFileDiff(path)
+	if err != nil || result == nil || len(revealed) == 0 {
+		return result, err
+	}
+	whole, err := engine.GetFileDiffFull(path)
+	if err != nil || whole == nil {
+		return result, nil // the compact diff is still worth showing
+	}
+	withReveals := *result
+	withReveals.Hunks = revealHunks(result.Hunks, whole.Hunks, revealed)
+	return &withReveals, nil
 }
 
 func (m appModel) handleSidebarSelect(msg sidebarSelectMsg) tea.Cmd {
@@ -4241,8 +4267,9 @@ func (m appModel) handleSidebarSelect(msg sidebarSelectMsg) tea.Cmd {
 		}
 	}
 	full := m.diffView.fullFile
+	revealed := m.revealedFor(msg.path)
 	return func() tea.Msg {
-		result, err := fetchDiff(m.engine, msg.path, full)
+		result, err := fetchDiff(m.engine, msg.path, full, revealed)
 		if err != nil {
 			return loadDiffMsg{path: msg.path}
 		}
@@ -4267,6 +4294,7 @@ func (m appModel) handleSidebarSelect(msg sidebarSelectMsg) tea.Cmd {
 // handleSaveComment persists a new or edited comment then reloads the diff.
 func (m appModel) handleSaveComment(msg saveCommentMsg) tea.Cmd {
 	full := m.diffView.fullFile
+	revealed := m.revealedFor(msg.path)
 	// A comment written during a tour is tagged with the stop it was written at.
 	stopID := ""
 	if stop, ok := m.currentStop(); ok && m.tour.on {
@@ -4345,7 +4373,7 @@ func (m appModel) handleSaveComment(msg saveCommentMsg) tea.Cmd {
 		}
 
 		// Reload diff for the file
-		result, err := fetchDiff(m.engine, msg.path, full)
+		result, err := fetchDiff(m.engine, msg.path, full, revealed)
 		if err != nil {
 			return loadDiffMsg{path: msg.path}
 		}
@@ -4464,6 +4492,7 @@ func (m appModel) refreshFiles() tea.Cmd {
 	engine := m.engine
 	currentPath := m.diffView.path
 	full := m.diffView.fullFile
+	revealed := m.revealedFor(currentPath)
 	isContentItem := m.diffView.isViewingContentItem()
 	contentID := m.diffView.contentID
 	inAdditionalFileMode := m.diffView.additionalFilePath != ""
@@ -4507,7 +4536,7 @@ func (m appModel) refreshFiles() tea.Cmd {
 		var result *types.DiffResult
 		var comments []types.ReviewComment
 		if currentPath != "" && !inAdditionalFileMode {
-			result, _ = fetchDiff(engine, currentPath, full)
+			result, _ = fetchDiff(engine, currentPath, full, revealed)
 			if session != nil {
 				for _, c := range session.Comments {
 					if c.TargetRef == currentPath {

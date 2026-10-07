@@ -200,8 +200,8 @@ Monocle exposes review operations via **MCP tools** (default for Claude Code, an
 | Guided tour | `set_walkthrough` | `monocle review set-walkthrough` | Walk the reviewer through the change as ordered stops (file + lines, a note, related files, views) they step through with `.` / `,` |
 | Show a tour stop | `goto_stop` | `monocle review goto-stop` | Move the reviewer to a stop by its id — answer "1.2 — why?" by showing 1.2 |
 | Open a file in the editor | `open_editor` | `monocle review open-editor` | Open any file of the repo at a line in the editor beside Monocle (the related-files pane), giving it the keyboard; `full` zooms it to fill the window. The diff stays where it is |
-| Highlight a range | `highlight_range` | `monocle review highlight` | Tint one range of lines in a file of the review so its start and end read at a glance; replaces any earlier one, `clear` removes it. Moves nothing — pair it with `goto_line` |
-| Show a file at a line | `goto_line` | `monocle review goto-line` | Open a file of the review (changed or added) with the diff cursor on a new-file line — `top` places it that many rows below the top of the diff, for as much as possible of what follows; ctrl+o returns, and the tour's stop does not change |
+| Highlight a range | `highlight_range` | `monocle review highlight` | Tint one range of lines in a file of the review so its start and end read at a glance; replaces any earlier one, `clear` removes it. Moves nothing — pair it with `goto_line`. Lines a compact diff hides are revealed |
+| Show a file at a line | `goto_line` | `monocle review goto-line` | Open a file of the review (changed or added) with the diff cursor on a new-file line — `top` places it that many rows below the top of the diff, for as much as possible of what follows; ctrl+o returns, and the tour's stop does not change. A line a compact diff hides between hunks is revealed, with a margin, the rest staying compact |
 | Show a before/after comparison | `send_diff` | — | Render an agent-supplied contrast (pseudocode before/after, competing design options) as a side-by-side diff — reads no files and runs no git |
 
 ## Keybindings

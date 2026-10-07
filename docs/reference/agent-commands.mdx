@@ -611,7 +611,7 @@ Show the reviewer a file of the review at a line: the diff opens the file and pu
 monocle review goto-line src/orders.ts 120
 ```
 
-The path is a changed file or one added with `add-files` — repo-relative, an added file's name, or absolute. With `--top N` the line lands `N` rows below the first visible row of the diff, so as much as possible of what follows it is in view — closer to the top only when the file starts sooner, and with the whole file shown when it fits in the pane. Without it the line is centred, as any jump is. The move is a jump, so the reviewer returns with `ctrl+o`. It does not change the guided tour's stop. A path the review does not hold, or a line below 1, is an error that says so; the response says where the reviewer was taken.
+The path is a changed file or one added with `add-files` — repo-relative, an added file's name, or absolute. With `--top N` the line lands `N` rows below the first visible row of the diff, so as much as possible of what follows it is in view — closer to the top only when the file starts sooner, and with the whole file shown when it fits in the pane. Without it the line is centred, as any jump is. A line the compact diff hides between its hunks is revealed: that stretch of unchanged lines joins the diff, with three lines either side, the way expanding between hunks works on a code host, and the rest of the file stays compact. Revealed lines stay revealed for the session — through `a` and back, refreshes, and leaving the file. The move is a jump, so the reviewer returns with `ctrl+o`. It does not change the guided tour's stop. A path the review does not hold, or a line below 1, is an error that says so; the response says where the reviewer was taken.
 
 ### Flags
 
@@ -635,7 +635,7 @@ monocle review highlight src/orders.ts 120 164
 monocle review highlight --clear
 ```
 
-`<start>` and `<end>` are **new-file** lines (`start >= 1`, `end >= start`); the path resolves as `goto-line`'s does. A highlight replaces any earlier one, and `--clear` removes it. It only marks the lines — the range's rows are tinted with `highlight_color` — and moves neither the cursor nor the scroll: call `goto-line` to take the reviewer there. It shows in its file only and lasts through file switches until it is replaced or cleared; monocle forgets it on restart.
+`<start>` and `<end>` are **new-file** lines (`start >= 1`, `end >= start`); the path resolves as `goto-line`'s does. A highlight replaces any earlier one, and `--clear` removes it. It only marks the lines — the range's rows are tinted with `highlight_color` — and moves neither the cursor nor the scroll: call `goto-line` to take the reviewer there. Lines of the range the compact diff hides are revealed as `goto-line` reveals them, the cursor kept where it is on screen. It shows in its file only and lasts through file switches until it is replaced or cleared; monocle forgets it on restart.
 
 ### Flags
 
