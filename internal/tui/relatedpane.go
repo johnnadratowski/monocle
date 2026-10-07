@@ -434,8 +434,8 @@ func (m appModel) openStopRelated(arg string) (appModel, tea.Cmd) {
 		m.statusBar.searchInfo = fmt.Sprintf("%s has related files 1-%d", stop.ID, len(files))
 		return m, nil
 	}
-	// The keyboard goes with it (John 2026-10-06): otherwise nothing shows
-	// which split the file landed in.
+	// The keyboard goes with it. Opening a file is a request to look at it, and
+	// with focus left behind nothing shows which split the file landed in.
 	return m, m.addOrShowRelated(files[n-1:n], files, n, true, true)
 }
 
