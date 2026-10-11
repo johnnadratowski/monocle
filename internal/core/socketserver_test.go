@@ -432,3 +432,107 @@ func TestSocketServer_SubmitEmitsFeedbackEvent(t *testing.T) {
 		t.Error("did not receive feedback_submitted event notification")
 	}
 }
+
+// The review events as a client outside this module sees them: plain NDJSON
+// on the socket, a passive subscriber making its own requests on the same
+// connection. Each change answers its request and announces itself, so any
+// other client showing the review can show it at once. Written against the
+// wire's own strings, so renaming a constant cannot pass it silently.
+func TestSocketServer_ReviewEventsContract(t *testing.T) {
+	_, socketPath := setupTestEngine(t)
+	conn, err := net.Dial("unix", socketPath)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close()
+	reviewEventsContract(t, conn, "test.go")
+}
+
+// The same contract over an in-memory connection, for where no socket can be
+// bound.
+func TestReviewEventsContractOverAPipe(t *testing.T) {
+	e := eventsEngine(t)
+	conn, served := net.Pipe()
+	defer conn.Close()
+	go e.server.handleConnection(served)
+	reviewEventsContract(t, conn, "a.go")
+}
+
+func reviewEventsContract(t *testing.T, conn net.Conn, file string) {
+	t.Helper()
+	scanner := bufio.NewScanner(conn)
+	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
+	send := func(line string) {
+		t.Helper()
+		if _, err := conn.Write([]byte(line + "\n")); err != nil {
+			t.Fatalf("write %s: %v", line, err)
+		}
+	}
+	next := func() map[string]any {
+		t.Helper()
+		conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+		if !scanner.Scan() {
+			t.Fatalf("connection ended: %v", scanner.Err())
+		}
+		var m map[string]any
+		if err := json.Unmarshal(scanner.Bytes(), &m); err != nil {
+			t.Fatalf("decode %s: %v", scanner.Bytes(), err)
+		}
+		return m
+	}
+	// exchange sends a request and returns its answer and the event it fired,
+	// in whichever order they arrive.
+	exchange := func(req, respType, event string) (resp, payload map[string]any) {
+		t.Helper()
+		send(req)
+		for resp == nil || payload == nil {
+			m := next()
+			switch {
+			case m["type"] == respType:
+				resp = m
+			case m["type"] == "event_notification" && m["event"] == event:
+				payload, _ = m["payload"].(map[string]any)
+			default:
+				t.Fatalf("after %s: unexpected %v", req, m)
+			}
+		}
+		if e, _ := resp["error"].(string); e != "" {
+			t.Fatalf("%s: %s", req, e)
+		}
+		return resp, payload
+	}
+	want := func(what string, payload map[string]any, fields map[string]any) {
+		t.Helper()
+		for k, v := range fields {
+			if payload[k] != v {
+				t.Errorf("%s: payload[%q] = %v, want %v (payload %v)", what, k, payload[k], v, payload)
+			}
+		}
+	}
+
+	send(`{"type":"subscribe","events":["comment_added","comment_edited","comment_deleted","comment_resolved","reviewed_changed"],"passive":true}`)
+	if ack := next(); ack["type"] != "subscribe_response" || ack["success"] != true || ack["protocol_version"] != float64(1) {
+		t.Fatalf("ack = %v, want success on protocol 1", ack)
+	}
+
+	resp, ev := exchange(`{"type":"add_comment","target_type":"file","target_ref":"`+file+`","line_start":3,"line_end":4,"comment_type":"question","body":"why?","stop_id":"s1"}`,
+		"add_comment_response", "comment_added")
+	comment, _ := resp["comment"].(map[string]any)
+	id, _ := comment["ID"].(string) // ReviewComment carries no json tags
+	if id == "" {
+		t.Fatalf("add_comment_response = %v, want a comment with an id", resp)
+	}
+	want("comment_added", ev, map[string]any{"item_id": id, "path": file, "line": float64(3), "line_end": float64(4)})
+
+	_, ev = exchange(`{"type":"edit_comment","comment_id":"`+id+`","comment_type":"issue","body":"why skip it?"}`, "edit_comment_response", "comment_edited")
+	want("comment_edited", ev, map[string]any{"item_id": id, "path": file})
+	_, ev = exchange(`{"type":"resolve_comment","comment_id":"`+id+`"}`, "resolve_comment_response", "comment_resolved")
+	want("comment_resolved", ev, map[string]any{"item_id": id, "status": "resolved"})
+	_, ev = exchange(`{"type":"delete_comment","comment_id":"`+id+`"}`, "delete_comment_response", "comment_deleted")
+	want("comment_deleted", ev, map[string]any{"item_id": id, "path": file})
+
+	_, ev = exchange(`{"type":"mark_reviewed","path":"`+file+`"}`, "mark_reviewed_response", "reviewed_changed")
+	want("mark_reviewed", ev, map[string]any{"path": file, "status": "on"})
+	_, ev = exchange(`{"type":"unmark_reviewed","path":"`+file+`"}`, "unmark_reviewed_response", "reviewed_changed")
+	want("unmark_reviewed", ev, map[string]any{"path": file, "status": "off"})
+}

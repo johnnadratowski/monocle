@@ -33,6 +33,22 @@ const (
 	// the editor beside the TUI (open_editor): Path, Line, and Full to fill the
 	// window with it.
 	EventOpenEditor EventKind = "open_editor"
+	// EventCommentAdded, EventCommentEdited, EventCommentDeleted and
+	// EventCommentResolved fire when a comment changes, whoever changed it, so
+	// every client showing the review can show it at once. ItemID is the
+	// comment; Path its target (a file path, or a content item's ID); Line and
+	// LineEnd its lines. Resolving toggles: Status is "resolved" or "open".
+	// Clearing every comment fires EventCommentDeleted with no ItemID.
+	EventCommentAdded    EventKind = "comment_added"
+	EventCommentEdited   EventKind = "comment_edited"
+	EventCommentDeleted  EventKind = "comment_deleted"
+	EventCommentResolved EventKind = "comment_resolved"
+	// EventReviewedChanged fires when a file or content item is marked
+	// reviewed or unmarked: Path is the file, or ItemID the content item;
+	// Status is "on" or "off". Neither set means everything was. A mark the
+	// engine drops by itself, because the file or item changed under it, is
+	// not announced here.
+	EventReviewedChanged EventKind = "reviewed_changed"
 )
 
 // EventPayload carries data for an engine event.

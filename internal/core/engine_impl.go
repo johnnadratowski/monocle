@@ -1250,10 +1250,12 @@ func (e *Engine) AddComment(target CommentTarget, commentType types.CommentType,
 	session.Comments = append(session.Comments, *comment)
 	e.mu.Unlock()
 
+	e.emit(EventCommentAdded, commentEvent(EventCommentAdded, comment))
 	return comment, nil
 }
 
-func (e *Engine) EditComment(commentID string, commentType types.CommentType, body string) (*types.ReviewComment, error) {
+func (e *Engine) EditComment(commentID string, commentType types.CommentType, body string) (edited *types.ReviewComment, err error) {
+	defer e.announce(&err, func() EventPayload { return commentEvent(EventCommentEdited, edited) })
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -1284,7 +1286,9 @@ func (e *Engine) EditComment(commentID string, commentType types.CommentType, bo
 	return &result, nil
 }
 
-func (e *Engine) DeleteComment(commentID string) error {
+func (e *Engine) DeleteComment(commentID string) (err error) {
+	gone := types.ReviewComment{ID: commentID}
+	defer e.announce(&err, func() EventPayload { return commentEvent(EventCommentDeleted, &gone) })
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -1300,6 +1304,8 @@ func (e *Engine) DeleteComment(commentID string) error {
 	for _, c := range e.current.Comments {
 		if c.ID != commentID {
 			comments = append(comments, c)
+		} else {
+			gone = c
 		}
 	}
 	e.current.Comments = comments
@@ -1307,7 +1313,16 @@ func (e *Engine) DeleteComment(commentID string) error {
 	return nil
 }
 
-func (e *Engine) ResolveComment(commentID string) error {
+func (e *Engine) ResolveComment(commentID string) (err error) {
+	var resolved types.ReviewComment
+	defer e.announce(&err, func() EventPayload {
+		p := commentEvent(EventCommentResolved, &resolved)
+		p.Status = "open"
+		if resolved.Resolved {
+			p.Status = "resolved"
+		}
+		return p
+	})
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -1333,10 +1348,12 @@ func (e *Engine) ResolveComment(commentID string) error {
 		return fmt.Errorf("resolve comment: %w", err)
 	}
 
+	resolved = *found
 	return nil
 }
 
-func (e *Engine) ClearComments() error {
+func (e *Engine) ClearComments() (err error) {
+	defer e.announce(&err, allCommentsDeleted)
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -1356,7 +1373,8 @@ func (e *Engine) ClearComments() error {
 // ClearReview resets the current review to a blank slate: clears all comments,
 // content items/plans, and reviewed states. Does not advance the round or
 // create a submission record.
-func (e *Engine) ClearReview() error {
+func (e *Engine) ClearReview() (err error) {
+	defer e.announce(&err, allCommentsDeleted, func() EventPayload { return reviewedEvent("", "", false) })
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.clearReviewLocked()
@@ -1462,10 +1480,11 @@ func (e *Engine) clearReviewContent(sessionID string) {
 
 // -- Review status --
 
-func (e *Engine) MarkReviewed(path string) error {
+func (e *Engine) MarkReviewed(path string) (err error) {
 	if !e.IsReviewTrackingEnabled() {
 		return nil
 	}
+	defer e.announce(&err, func() EventPayload { return reviewedEvent(path, "", true) })
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -1496,10 +1515,11 @@ func (e *Engine) MarkReviewed(path string) error {
 	return nil
 }
 
-func (e *Engine) UnmarkReviewed(path string) error {
+func (e *Engine) UnmarkReviewed(path string) (err error) {
 	if !e.IsReviewTrackingEnabled() {
 		return nil
 	}
+	defer e.announce(&err, func() EventPayload { return reviewedEvent(path, "", false) })
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -1574,10 +1594,11 @@ func (e *Engine) DismissArtifact(id string) error {
 	return nil
 }
 
-func (e *Engine) MarkContentReviewed(id string) error {
+func (e *Engine) MarkContentReviewed(id string) (err error) {
 	if !e.IsReviewTrackingEnabled() {
 		return nil
 	}
+	defer e.announce(&err, func() EventPayload { return reviewedEvent("", id, true) })
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -1599,10 +1620,11 @@ func (e *Engine) MarkContentReviewed(id string) error {
 	return nil
 }
 
-func (e *Engine) UnmarkContentReviewed(id string) error {
+func (e *Engine) UnmarkContentReviewed(id string) (err error) {
 	if !e.IsReviewTrackingEnabled() {
 		return nil
 	}
+	defer e.announce(&err, func() EventPayload { return reviewedEvent("", id, false) })
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -1624,10 +1646,11 @@ func (e *Engine) UnmarkContentReviewed(id string) error {
 	return nil
 }
 
-func (e *Engine) ResetAllReviewed() error {
+func (e *Engine) ResetAllReviewed() (err error) {
 	if !e.IsReviewTrackingEnabled() {
 		return nil
 	}
+	defer e.announce(&err, func() EventPayload { return reviewedEvent("", "", false) })
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -1655,10 +1678,11 @@ func (e *Engine) ResetAllReviewed() error {
 	return nil
 }
 
-func (e *Engine) MarkAllReviewed() error {
+func (e *Engine) MarkAllReviewed() (err error) {
 	if !e.IsReviewTrackingEnabled() {
 		return nil
 	}
+	defer e.announce(&err, func() EventPayload { return reviewedEvent("", "", true) })
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -2920,6 +2944,38 @@ func (e *Engine) emit(event EventKind, payload EventPayload) {
 	for _, cb := range subs {
 		cb(payload)
 	}
+}
+
+// announce emits the events the given funcs build, once the method that
+// deferred it returns without error. Defer it before taking e.mu: deferred
+// calls run last in, first out, so it runs after the unlock, as emit
+// requires, and the funcs can read what the method found under the lock.
+func (e *Engine) announce(err *error, events ...func() EventPayload) {
+	if *err != nil {
+		return
+	}
+	for _, event := range events {
+		p := event()
+		e.emit(p.Kind, p)
+	}
+}
+
+// commentEvent is a comment's event: which comment, and where it is.
+func commentEvent(kind EventKind, c *types.ReviewComment) EventPayload {
+	return EventPayload{Kind: kind, ItemID: c.ID, Path: c.TargetRef, Line: c.LineStart, LineEnd: c.LineEnd}
+}
+
+// allCommentsDeleted is the event for every comment going at once.
+func allCommentsDeleted() EventPayload { return EventPayload{Kind: EventCommentDeleted} }
+
+// reviewedEvent is a reviewed mark's event: a file's path or a content item's
+// ID, or neither for every one of them.
+func reviewedEvent(path, item string, on bool) EventPayload {
+	status := "off"
+	if on {
+		status = "on"
+	}
+	return EventPayload{Kind: EventReviewedChanged, Path: path, ItemID: item, Status: status}
 }
 
 // -- Lifecycle --
