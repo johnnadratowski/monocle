@@ -345,8 +345,8 @@ func closeRelatedCmd(tracked, owner string) tea.Cmd {
 // take away what the last one opened.
 func (m appModel) openRelated(stop types.WalkthroughStop) tea.Cmd {
 	files := relatedFilesFor(stop)
-	if len(files) == 0 {
-		return nil
+	if len(files) == 0 || m.relatedOpenCommand() != "" {
+		return nil // (with related_open, a stop's files are only its labels)
 	}
 	return m.showRelatedFiles(files, 1, false, false)
 }
@@ -433,6 +433,9 @@ func (m appModel) openStopRelated(arg string) (appModel, tea.Cmd) {
 	if !ok {
 		m.statusBar.searchInfo = fmt.Sprintf("%s has related files 1-%d", stop.ID, len(files))
 		return m, nil
+	}
+	if m.relatedOpenCommand() != "" {
+		return m.openElsewhere(files[n-1 : n])
 	}
 	// The keyboard goes with it. Opening a file is a request to look at it, and
 	// with focus left behind nothing shows which split the file landed in.
@@ -526,6 +529,9 @@ type openEditorMsg struct {
 // gives that pane the keyboard; with full it zooms the pane to fill the window.
 // The diff stays where it is.
 func (m appModel) openEditorAt(msg openEditorMsg) (appModel, tea.Cmd) {
+	if m.relatedOpenCommand() != "" {
+		return m.openElsewhere([]relatedFile{{path: msg.path, line: msg.line}})
+	}
 	m, cmd := m.addResolved([]relatedFile{{path: msg.path, line: msg.line}})
 	if msg.full && cmd != nil && inTmux() {
 		cmd = zoomRelatedAfter(cmd, m.tour.pane, os.Getenv("TMUX_PANE"))

@@ -135,6 +135,9 @@ func (m appModel) handleResolveDone(msg resolveDoneMsg) (appModel, tea.Cmd) {
 		m.statusBar.searchInfo = "nothing to open on these lines"
 		return m, nil
 	}
+	if m.relatedOpenCommand() != "" {
+		return m.openElsewhere(msg.files)
+	}
 	if msg.preview && m.relatedPreviewCommand() != "" && inTmux() {
 		return m, m.previewResolved(msg.files)
 	}
@@ -177,6 +180,9 @@ func (m appModel) handleResolveDone(msg resolveDoneMsg) (appModel, tea.Cmd) {
 // stop's related files and the files found — not with what it last held,
 // which the reviewer may have closed — at most maxRelatedFiles of them.
 func (m appModel) addResolved(found []relatedFile) (appModel, tea.Cmd) {
+	if m.relatedOpenCommand() != "" {
+		return m.openElsewhere(found)
+	}
 	var base []relatedFile
 	if stop, ok := m.currentStop(); ok && m.tour.on {
 		base = absRelated(m.repoRoot, relatedFilesFor(stop))

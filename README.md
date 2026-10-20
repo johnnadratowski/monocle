@@ -484,6 +484,7 @@ Monocle loads settings from JSON config files:
   "related_editor_args": [],
   "related_editor_add": "",
   "related_editor_preview": "",
+  "related_open": "",
   "ignore_patterns": [],
   "keybindings": {},
   "mouse": true,
@@ -527,6 +528,7 @@ Monocle loads settings from JSON config files:
 | `related_editor_args`                | string[]                                   | `[]`         | Extra arguments appended to the editor command of a tour stop's related-files pane, e.g. `["-S", "/path/setup.vim"]`; `{owner}` in them becomes monocle's tmux pane id (e.g. `--listen /tmp/nvim-{owner}.sock`). With vim/nvim, `+cmd`, `-c` and `-S` share a limit of ten (the pane uses one `-c`) and `--cmd` has its own ten; arguments past either are left out, with a status-bar note |
 | `related_editor_add`                 | string                                     | `""`         | Shell command that adds one file to the editor already in the related-files pane, so files you closed there stay closed. With it set and the pane alive, `ctrl+]`, `ctrl+g` in a tour, `:related N` and a click on a related file run it once per file instead of respawning the pane. `{file}` (absolute path), `{line}` (`0` for none) and `{owner}` (monocle's tmux pane) are substituted shell-quoted. It should bring an open file forward rather than open it twice. Empty respawns |
 | `related_editor_preview`             | string                                     | `""`         | Shell command that shows one file in a passing preview in the editor already in the related-files pane (a popup the editor closes once you move on) instead of adding it. `p` / `f16` runs it for the first file `walkthrough_resolve` finds and moves focus there. Placeholders as `related_editor_add`'s. Empty, or no live pane: the key opens the files as `ctrl+]` does |
+| `related_open`                       | string                                     | `""`         | Shell command that opens one related file somewhere other than the related-files pane (a popout window, say). With it set no pane is split beside Monocle: arriving at a stop opens nothing (its related files are the labels under the note), `:related N` or a click on a label runs it for that file, `ctrl+]` and `p` run it for the first file `walkthrough_resolve` finds, and `ctrl+g` in a tour and `open-editor` run it for theirs. Placeholders as `related_editor_add`'s. Empty keeps the related-files pane |
 | `ignore_patterns`                    | string array                               | `[]`         | Glob patterns for files to exclude                                       |
 | `min_diff_width`                     | integer                                    | `80`         | Minimum character width for the diff viewer in side-by-side layout       |
 | `mouse`                              | `true`, `false`                            | `true`       | Enable mouse interactions (click, scroll, drag), including clicking a tour stop's views                          |

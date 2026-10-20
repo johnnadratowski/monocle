@@ -1326,6 +1326,9 @@ func (m appModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case relatedPreviewMsg:
 		return m.handleRelatedPreview(msg)
 
+	case relatedOpenMsg:
+		return m.handleRelatedOpen(msg), nil
+
 	case tourLayoutMsg:
 		return m.handleLayout(msg)
 

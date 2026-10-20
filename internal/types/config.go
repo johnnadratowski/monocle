@@ -99,6 +99,15 @@ type Config struct {
 	// finds. Placeholders as related_editor_add's. Empty, or no live pane:
 	// the key opens the files as ctrl+] does.
 	RelatedEditorPreview string `json:"related_editor_preview"`
+	// RelatedOpen is a shell command that opens one related file somewhere
+	// other than the related-files pane — a popout window, say. With it set no
+	// pane is split beside Monocle: arriving at a stop opens nothing (its
+	// related files are the labels under the note), `:related N` or a click
+	// on a label runs it for that file, what walkthrough_resolve finds (ctrl+]
+	// and p) runs it for the first file found, and ctrl+g in a tour and
+	// open-editor run it for theirs. Placeholders as related_editor_add's.
+	// Empty keeps the related-files pane.
+	RelatedOpen string `json:"related_open"`
 	// EditorMode controls how Ctrl+g / Ctrl+o open a file: "terminal" (take over
 	// Monocle's screen, the default), "tmux_vertical" (side-by-side split),
 	// "tmux_horizontal" (stacked split), or "tmux_window" (new tmux window/tab).
