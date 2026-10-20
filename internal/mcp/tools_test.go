@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"encoding/json"
 	"reflect"
 	"strings"
 	"testing"
@@ -152,19 +153,30 @@ func TestEmptyFeedbackMessage(t *testing.T) {
 
 func TestWalkthroughFromParams(t *testing.T) {
 	got := walkthroughFromParams(setWalkthroughParams{Title: "T", Stops: []walkthroughStopParam{{
-		ID: "1.2", Title: "t", File: "a.go", LineStart: 3, LineEnd: 5, Note: "n", Layout: "review",
+		ID: "1.2", Title: "t", File: "a.go", LineStart: 3, LineEnd: 5, Note: "n", Layout: "review", Order: []string{"code", "view"},
 		Related: []relatedParam{{Doc: "b.go", StartLine: 7, Label: "caller"}},
 		Views:   []stopViewParam{{Kind: "video", Target: "d.webm", Label: "demo"}},
 		Calls:   []stopCallParam{{Stop: "2.2", Symbol: "createOrder", Line: 48}},
 	}}})
 	want := types.Walkthrough{Title: "T", Stops: []types.WalkthroughStop{{
-		ID: "1.2", Title: "t", File: "a.go", LineStart: 3, LineEnd: 5, Note: "n", Layout: "review",
+		ID: "1.2", Title: "t", File: "a.go", LineStart: 3, LineEnd: 5, Note: "n", Layout: "review", Order: []string{"code", "view"},
 		Related: []types.DocRef{{Kind: types.DocRefFile, Doc: "b.go", StartLine: 7, Label: "caller"}},
 		Views:   []types.StopView{{Kind: "video", Target: "d.webm", Label: "demo"}},
 		Calls:   []types.StopCall{{Stop: "2.2", Symbol: "createOrder", Line: 48}},
 	}}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got  %+v\nwant %+v", got, want)
+	}
+}
+
+// An agent's set_walkthrough arrives as JSON: a stop's "order" reaches the tour.
+func TestSetWalkthroughParamsReadAStopsOrder(t *testing.T) {
+	var p setWalkthroughParams
+	if err := json.Unmarshal([]byte(`{"stops":[{"id":"1","order":["view","doc","code","regions"]}]}`), &p); err != nil {
+		t.Fatal(err)
+	}
+	if got := walkthroughFromParams(p).Stops[0].Order; !reflect.DeepEqual(got, []string{"view", "doc", "code", "regions"}) {
+		t.Errorf("order %q", got)
 	}
 }
 

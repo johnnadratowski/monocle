@@ -40,6 +40,10 @@ type WalkthroughStop struct {
 	// Layout is an opaque scene name, passed through to the on-stop command.
 	// Monocle itself never interprets it.
 	Layout string `json:"layout,omitempty"`
+	// Order is the order the on-stop command shows the stop's windows in, as
+	// it names them (["view", "doc", "code", "regions"], say), passed through
+	// like Layout. Monocle itself never interprets it.
+	Order []string `json:"order,omitempty"`
 }
 
 // StopView is something to show alongside a stop that is not code: a
@@ -140,6 +144,13 @@ func NormalizeWalkthrough(w Walkthrough) (Walkthrough, error) {
 			s.LineEnd = s.LineStart
 		}
 		s.Layout = strings.TrimSpace(s.Layout)
+		var order []string
+		for _, o := range s.Order {
+			if o = strings.TrimSpace(o); o != "" {
+				order = append(order, o)
+			}
+		}
+		s.Order = order
 
 		related := make([]DocRef, 0, len(s.Related))
 		for _, r := range s.Related {

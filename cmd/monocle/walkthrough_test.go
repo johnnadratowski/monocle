@@ -1,6 +1,7 @@
 package main
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -29,12 +30,14 @@ func TestTourCommandsParseByTheirDocumentedNames(t *testing.T) {
 func TestParseWalkthroughJSON(t *testing.T) {
 	t.Run("a tour object", func(t *testing.T) {
 		got, err := parseWalkthroughJSON([]byte(`{"title":"T","stops":[{"id":"1.1","file":"a.go","line_start":4,
-			"related":[{"doc":"b.go","start_line":9}],"views":[{"kind":"video","target":"d.webm"}],"layout":"review"}]}`))
+			"related":[{"doc":"b.go","start_line":9}],"views":[{"kind":"video","target":"d.webm"}],"layout":"review",
+			"order":["view","doc","code","regions"]}]}`))
 		if err != nil {
 			t.Fatal(err)
 		}
 		s := got.Stops[0]
-		if got.Title != "T" || s.ID != "1.1" || s.LineStart != 4 || s.Related[0].StartLine != 9 || s.Views[0].Target != "d.webm" || s.Layout != "review" {
+		if got.Title != "T" || s.ID != "1.1" || s.LineStart != 4 || s.Related[0].StartLine != 9 || s.Views[0].Target != "d.webm" || s.Layout != "review" ||
+			!reflect.DeepEqual(s.Order, []string{"view", "doc", "code", "regions"}) {
 			t.Errorf("got %+v", got)
 		}
 	})

@@ -16,6 +16,7 @@ import (
 func TestOnStopEnv(t *testing.T) {
 	stop := types.WalkthroughStop{
 		ID: "1.2", Title: "Where it lands", File: "db/q.go", LineStart: 4, Layout: "review",
+		Order: []string{"view", "doc", "code", "regions"}, // stage's to read: carried through as it is
 		Views: []types.StopView{
 			{Kind: types.StopViewImage, Target: "shots/login.png", Label: "Login"},
 			{Kind: types.StopViewVideo, Target: "/abs/demo.webm"},

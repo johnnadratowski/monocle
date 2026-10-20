@@ -21,6 +21,20 @@ func TestNormalizeWalkthrough(t *testing.T) {
 		}
 	})
 
+	// The order is the on-stop command's (stage's rules engine reads it): Monocle
+	// keeps it as sent, only tidied, and never reads it itself.
+	t.Run("keeps a stop's order as sent, tidied", func(t *testing.T) {
+		got, err := NormalizeWalkthrough(Walkthrough{Stops: []WalkthroughStop{
+			{ID: "a", Order: []string{" view ", "", "doc", "code ", "regions"}}, {ID: "b"},
+		}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(got.Stops[0].Order, []string{"view", "doc", "code", "regions"}) || got.Stops[1].Order != nil {
+			t.Errorf("orders %q and %q, want the first tidied and none for the second", got.Stops[0].Order, got.Stops[1].Order)
+		}
+	})
+
 	t.Run("numbers a stop sent without an id by its position", func(t *testing.T) {
 		got, err := NormalizeWalkthrough(Walkthrough{Stops: []WalkthroughStop{{ID: "a"}, {Title: "no id"}}})
 		if err != nil {
@@ -134,13 +148,14 @@ func TestWalkthroughJSONRoundTrip(t *testing.T) {
 		Views:   []StopView{{Kind: StopViewVideo, Target: "demo.webm", Label: "Demo"}},
 		Calls:   []StopCall{{Stop: "2.2", Symbol: "createOrder", Line: 48}},
 		Layout:  "review",
+		Order:   []string{"view", "doc", "code", "regions"},
 	}}}
 	data, err := json.Marshal(in)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, key := range []string{`"id":"1.2"`, `"line_start":3`, `"line_end":9`, `"related":`, `"views":`, `"layout":"review"`, `"doc":"b.go"`,
-		`"calls":[{"stop":"2.2","symbol":"createOrder","line":48}]`} {
+		`"calls":[{"stop":"2.2","symbol":"createOrder","line":48}]`, `"order":["view","doc","code","regions"]`} {
 		if !strings.Contains(string(data), key) {
 			t.Errorf("encoded tour %s is missing %s", data, key)
 		}

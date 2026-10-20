@@ -166,6 +166,7 @@ type walkthroughStopParam struct {
 	Views     []stopViewParam `json:"views,omitempty"`
 	Calls     []stopCallParam `json:"calls,omitempty"`
 	Layout    string          `json:"layout,omitempty"`
+	Order     []string        `json:"order,omitempty"` // the on-stop command's window order; Monocle passes it through
 }
 
 type setWalkthroughParams struct {
@@ -179,7 +180,7 @@ func walkthroughFromParams(p setWalkthroughParams) types.Walkthrough {
 	for _, s := range p.Stops {
 		stop := types.WalkthroughStop{
 			ID: s.ID, Title: s.Title, File: s.File, LineStart: s.LineStart, LineEnd: s.LineEnd,
-			Note: s.Note, Layout: s.Layout,
+			Note: s.Note, Layout: s.Layout, Order: s.Order,
 		}
 		for _, r := range s.Related {
 			stop.Related = append(stop.Related, types.DocRef{
