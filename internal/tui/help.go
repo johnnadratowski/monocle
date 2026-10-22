@@ -316,6 +316,7 @@ func (m helpModel) buildContent() string {
 			{":related [n]", "Bring up the related-files pane with file n (default 1) active in it"},
 			{":call [n]", "Go to the stop that the stop's nth call (default 1) leads to"},
 			{":layout [reset]", "Say whether the tour's windows are in a saved layout; reset puts back the default"},
+			{":doc [on|off|toggle]", "Hide or show the doc pane (the stop's note); a new stop shows its note again"},
 			{"click a label", "Clicking a call's, related file's or view's label is :call N / :related N / :view N for it"},
 		},
 		secView: {
@@ -326,6 +327,7 @@ func (m helpModel) buildContent() string {
 			{Label(km.Select), "Focus the diff pane / toggle a directory open"},
 			{Label(km.ToggleSidebar), "Show/hide the sidebar"},
 			{Label(km.PaneSize), "Doc pane size: focused biggest, smallest, back"},
+			{Label(km.DocPane), "Hide/show the doc pane, the diff taking its rows (also :doc off|on|toggle)"},
 			{Label(km.CycleLayout), "Cycle layout (auto/side-by-side/stacked)"},
 			{Label(km.ToggleFocusMode), "Toggle focus mode (hide sidebar, wrap lines)"},
 			{Label(km.Wrap), "Toggle line wrapping (any pane)"},

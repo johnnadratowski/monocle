@@ -229,7 +229,13 @@ func (m appModel) enterStop(i int, how stopEntry) (appModel, tea.Cmd) {
 	// left. A keypress clears it anyway; a move the agent made would not.
 	m.statusBar.searchInfo = ""
 
+	// A new stop's note comes up shown; the same stop again (an agent's re-sent
+	// tour, :stop to where he is) keeps a note he or the driver hid hidden.
+	keepHidden := m.docHidden && m.docPane.annotationID == tourNoteKeyPrefix+stop.ID
 	m.openStopNote(stop)
+	if keepHidden {
+		m.setDocHidden(true)
+	}
 	var cmds []tea.Cmd
 	if cmd := m.jumpToStop(stop); cmd != nil {
 		cmds = append(cmds, cmd)
@@ -404,6 +410,7 @@ func (m *appModel) leaveTour() {
 // what else the stop carries — its related files and views, as labels a click
 // opens — so the reviewer can see there is more without having to know to look.
 func (m *appModel) openStopNote(stop types.WalkthroughStop) {
+	m.docHidden = false
 	m.docPane.theme = &m.theme
 	m.docPane.openNote(tourNoteKeyPrefix+stop.ID, stop.Heading(), stopNoteBody(stop), stopLinkGroups(stop, m.tour.tour, m.stopStatus(stop)), m.diffView.mdStyler)
 	m.docPane.titleMark = stopVisitMark(m.tour.fresh && m.tour.freshFor == stop.ID)

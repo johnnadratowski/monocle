@@ -78,7 +78,7 @@ func handOffToTmux(d paneDir) tea.Cmd {
 // when open — always sits below the diff.
 func (m appModel) paneNeighbour(d paneDir) (focusTarget, bool) {
 	sidebar := !m.sidebarHidden
-	doc := m.docPane.active
+	doc := m.docShown()
 	stacked := m.layout == layoutStacked
 
 	switch m.focus {

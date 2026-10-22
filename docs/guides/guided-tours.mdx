@@ -29,6 +29,7 @@ When the agent sends a tour, monocle enters **tour mode** on its first stop and 
 | `:call [n]` | Go to the stop the stop's nth call (default the first) leads to — see [Calls](#calls). |
 | `:back` / `:forward` | The same as `backspace` / `f19`. |
 | `:layout [reset]` | Say whether the tour's windows are in a saved layout; `reset` puts back the default — see [Which views are showing](#which-views-are-showing). |
+| `:doc on`, `:doc off`, `:doc toggle`, `:doc` | Hide or show the stop's note (`-` toggles), the diff taking its rows. A new stop's note comes up shown. |
 
 The ends clamp: `.` on the last stop tells you it is the end rather than wrapping to the first. A stop with no file — one that exists to show a recording, say — shows its note and leaves the diff where it is. `ctrl+o` returns to wherever a stop jumped you from.
 

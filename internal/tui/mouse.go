@@ -45,7 +45,7 @@ const (
 // overlays never did.)
 func computePaneLayout(m *appModel) paneLayout {
 	l := computeMainPanes(m)
-	if m.docPane.active {
+	if m.docShown() {
 		// The doc pane is its own box directly under the diff's, so its content
 		// starts past the diff's bottom border and its own top one.
 		l.doc = paneRegion{l.diff.x, l.diff.y + l.diff.h + borderH, l.diff.w, m.docPane.height}

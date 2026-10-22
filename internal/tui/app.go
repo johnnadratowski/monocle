@@ -203,6 +203,7 @@ type appModel struct {
 	diffView       diffViewModel
 	docPane        docPaneModel // annotation doc pane (bottom split, when open)
 	docSize        docSize      // the doc pane's size against the diff (the PaneSize key)
+	docHidden      bool         // the doc pane kept but out of sight, the diff given its room (:doc off, the DocPane key)
 	statusBar      statusBarModel
 	commentEditor  commentEditorModel
 	reviewSummary  reviewSummaryModel
@@ -1332,6 +1333,9 @@ func (m appModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tourLayoutMsg:
 		return m.handleLayout(msg)
 
+	case docPaneMsg:
+		return m.handleDocPane(msg.arg), nil
+
 	case layoutResetDoneMsg:
 		return m.handleLayoutResetDone(msg)
 
@@ -2096,7 +2100,7 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	// When the doc pane has focus, it captures scroll/close keys; Tab, shift+tab,
 	// and the open-ref key fall through to the shared handlers below.
-	if m.focus == focusDoc && m.docPane.active {
+	if m.focus == focusDoc && m.docShown() {
 		switch {
 		case key == "esc":
 			m.closeDocPane()
@@ -2109,7 +2113,7 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case Matches(key, km.FocusSwap), key == "shift+tab", Matches(key, km.OpenDocRef),
 			Matches(key, km.TourNext), Matches(key, km.TourPrev), Matches(key, km.ToggleTour),
-			Matches(key, km.CloseRelated), Matches(key, km.PaneSize),
+			Matches(key, km.CloseRelated), Matches(key, km.PaneSize), Matches(key, km.DocPane),
 			Matches(key, km.PaneLeft), Matches(key, km.PaneDown), Matches(key, km.PaneUp), Matches(key, km.PaneRight),
 			Matches(key, km.ToggleSidebar), Matches(key, km.Help), Matches(key, km.CommandMode), Matches(key, km.SendLines), Matches(key, km.OpenRefs), Matches(key, km.OpenRefsPreview), Matches(key, km.LayoutReset),
 			m.tour.on && (Matches(key, km.TourBack) || Matches(key, km.TourForward)):
@@ -2278,10 +2282,13 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m = m.cycleFocus(-1)
 		return m, nil
 
-	case Matches(key, km.PaneSize) && m.docPane.active:
+	case Matches(key, km.PaneSize) && m.docShown():
 		m.docSize = nextDocSize(m.docSize, m.focus == focusDoc)
 		recalcPaneDimensions(&m)
 		return m, nil
+
+	case Matches(key, km.DocPane):
+		return m.handleDocPane("toggle"), nil
 
 	case Matches(key, km.ToggleSidebar):
 		m.sidebarHidden = !m.sidebarHidden
@@ -2682,8 +2689,13 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 			// No annotation under the cursor: if the doc pane is open, o closes it
 			// so the same key dismisses the pane from anywhere in the diff.
+			// Hidden, o brings it back rather than closing what can't be seen.
 			if m.docPane.active {
-				m.closeDocPane()
+				if m.docHidden {
+					m.setDocHidden(false)
+				} else {
+					m.closeDocPane()
+				}
 				return m, nil
 			}
 			// In tour mode o toggles the stop's note: closed, it comes back,
@@ -3188,7 +3200,7 @@ var commandNames = []string{
 	"pause", "unpause", "history",
 	"mark-all-reviewed", "mark-all-unreviewed",
 	"base-artifact-version", "base-ref", "ref", "theme",
-	"relaunch", "stop", "view", "related", "call", "back", "forward", "layout",
+	"relaunch", "stop", "view", "related", "call", "back", "forward", "layout", "doc",
 }
 
 // matchingCommands returns the command names that start with prefix, in order.
@@ -3304,6 +3316,12 @@ func (m appModel) executeCommand(cmd string) tea.Cmd {
 			dir = +1
 		}
 		return func() tea.Msg { return tourWalkMsg{dir: dir} }
+	}
+	// `:doc off|on|toggle` — hide the doc pane so the diff gets its room, or
+	// bring it back. A walkthrough driver sends it as it sends `:stop`.
+	if trimmed == "doc" || strings.HasPrefix(trimmed, "doc ") {
+		arg := strings.TrimSpace(strings.TrimPrefix(trimmed, "doc"))
+		return func() tea.Msg { return docPaneMsg{arg: arg} }
 	}
 	// `:layout reset` — put the tour's windows back in their default layout.
 	if trimmed == "layout" || strings.HasPrefix(trimmed, "layout ") {
@@ -3671,8 +3689,55 @@ func nextDocSize(cur docSize, docFocused bool) docSize {
 	return [...]docSize{docSizeMin, docSizeDefault, docSizeMax}[cur]
 }
 
+// docShown is whether the doc pane is on screen: open, and not hidden.
+func (m appModel) docShown() bool { return m.docPane.active && !m.docHidden }
+
+// docPaneMsg is `:doc off|on|toggle` (no argument toggles).
+type docPaneMsg struct{ arg string }
+
+// handleDocPane hides or shows the doc pane. on and off are idempotent, so a
+// driver can send them without knowing the state. on with nothing open brings
+// back the tour stop's note, as o does.
+func (m appModel) handleDocPane(arg string) appModel {
+	on := !m.docShown()
+	switch arg {
+	case "", "toggle":
+	case "on":
+		on = true
+	case "off":
+		on = false
+	default:
+		m.statusBar.searchInfo = "usage: :doc [on|off|toggle]"
+		return m
+	}
+	switch {
+	case !on:
+		if m.docPane.active {
+			m.setDocHidden(true)
+		}
+	case m.docPane.active:
+		m.setDocHidden(false)
+	default:
+		if stop, ok := m.currentStop(); ok && m.tour.on {
+			m.openStopNote(stop)
+		}
+	}
+	return m
+}
+
+// setDocHidden hides or shows the open doc pane, its content kept. Hidden, the
+// diff takes the pane's rows and focus in it moves to the diff.
+func (m *appModel) setDocHidden(hidden bool) {
+	m.docHidden = hidden
+	if hidden && m.focus == focusDoc {
+		m.setFocus(focusMain)
+	}
+	recalcPaneDimensions(m)
+	m.diffView.ensureVisible()
+}
+
 func reserveDocPane(m *appModel) {
-	if !m.docPane.active {
+	if !m.docShown() {
 		return
 	}
 	const borderH = 2
@@ -4088,7 +4153,7 @@ func (m appModel) cycleFocus(dir int) appModel {
 		order = append(order, focusSidebar)
 	}
 	order = append(order, focusMain)
-	if m.docPane.active {
+	if m.docShown() {
 		order = append(order, focusDoc)
 	}
 	if len(order) < 2 {
@@ -4121,8 +4186,13 @@ func (m appModel) openOrCycleDocPane(a *types.Annotation) appModel {
 		return m
 	}
 	if m.docPane.active && m.docPane.annotationID == a.ID {
+		if m.docHidden {
+			m.setDocHidden(false) // what o asked for is on screen first, then cycled
+			return m
+		}
 		return m.cycleDocRefOrClose()
 	}
+	m.docHidden = false
 	m.docPane.annotationID = a.ID
 	m.docPane.openRefs(a.Refs)
 	ref := a.Refs[0]
@@ -4172,6 +4242,7 @@ func (m appModel) loadDocRef(ref types.DocRef) (title, content string) {
 // returns focus to the diff if the pane held it.
 func (m *appModel) closeDocPane() {
 	m.docPane.close()
+	m.docHidden = false
 	if m.focus == focusDoc {
 		m.focus = focusMain
 		m.diffView.focused = true
@@ -4884,7 +4955,7 @@ func (m appModel) View() tea.View {
 
 	if m.sidebarHidden {
 		mainView := diffBox(m.diffView.width+bw, m.diffView.height+bh)
-		if m.docPane.active {
+		if m.docShown() {
 			mainView = lipgloss.JoinVertical(lipgloss.Left, mainView, docPaneBox(m.diffView.width+bw))
 		}
 		body = mainView
@@ -4897,7 +4968,7 @@ func (m appModel) View() tea.View {
 		mainView := diffBox(m.diffView.width+bw, m.diffView.height+bh)
 
 		parts := []string{sidebarView, mainView}
-		if m.docPane.active {
+		if m.docShown() {
 			parts = append(parts, docPaneBox(m.diffView.width+bw))
 		}
 		body = lipgloss.JoinVertical(lipgloss.Left, parts...)
@@ -4919,7 +4990,7 @@ func (m appModel) View() tea.View {
 		mainView := diffBox(diffOuterW, m.diffView.height+bh)
 
 		// Doc pane stacks under the diff only; the sidebar stays full-height beside.
-		if m.docPane.active {
+		if m.docShown() {
 			mainView = lipgloss.JoinVertical(lipgloss.Left, mainView, docPaneBox(diffOuterW))
 		}
 
