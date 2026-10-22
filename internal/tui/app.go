@@ -1336,6 +1336,9 @@ func (m appModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case docPaneMsg:
 		return m.handleDocPane(msg.arg), nil
 
+	case linkMsg:
+		return m.handleLink(msg.arg), nil
+
 	case layoutResetDoneMsg:
 		return m.handleLayoutResetDone(msg)
 
@@ -2113,7 +2116,7 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case Matches(key, km.FocusSwap), key == "shift+tab", Matches(key, km.OpenDocRef),
 			Matches(key, km.TourNext), Matches(key, km.TourPrev), Matches(key, km.ToggleTour),
-			Matches(key, km.CloseRelated), Matches(key, km.PaneSize), Matches(key, km.DocPane),
+			Matches(key, km.CloseRelated), Matches(key, km.PaneSize), Matches(key, km.DocPane), Matches(key, km.OpenLink),
 			Matches(key, km.PaneLeft), Matches(key, km.PaneDown), Matches(key, km.PaneUp), Matches(key, km.PaneRight),
 			Matches(key, km.ToggleSidebar), Matches(key, km.Help), Matches(key, km.CommandMode), Matches(key, km.SendLines), Matches(key, km.OpenRefs), Matches(key, km.OpenRefsPreview), Matches(key, km.LayoutReset),
 			m.tour.on && (Matches(key, km.TourBack) || Matches(key, km.TourForward)):
@@ -2289,6 +2292,9 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	case Matches(key, km.DocPane):
 		return m.handleDocPane("toggle"), nil
+
+	case Matches(key, km.OpenLink) && m.docPane.active:
+		return m.handleLink(""), nil
 
 	case Matches(key, km.ToggleSidebar):
 		m.sidebarHidden = !m.sidebarHidden
@@ -3207,7 +3213,7 @@ var commandNames = []string{
 	"pause", "unpause", "history",
 	"mark-all-reviewed", "mark-all-unreviewed",
 	"base-artifact-version", "base-ref", "ref", "theme",
-	"relaunch", "stop", "view", "related", "call", "back", "forward", "layout", "doc",
+	"relaunch", "stop", "view", "related", "call", "back", "forward", "layout", "doc", "link",
 }
 
 // matchingCommands returns the command names that start with prefix, in order.
@@ -3329,6 +3335,11 @@ func (m appModel) executeCommand(cmd string) tea.Cmd {
 	if trimmed == "doc" || strings.HasPrefix(trimmed, "doc ") {
 		arg := strings.TrimSpace(strings.TrimPrefix(trimmed, "doc"))
 		return func() tea.Msg { return docPaneMsg{arg: arg} }
+	}
+	// `:link 2` — open the doc pane note's second link (http, https, stage://).
+	if trimmed == "link" || strings.HasPrefix(trimmed, "link ") {
+		arg := strings.TrimSpace(strings.TrimPrefix(trimmed, "link"))
+		return func() tea.Msg { return linkMsg{arg: arg} }
 	}
 	// `:layout reset` — put the tour's windows back in their default layout.
 	if trimmed == "layout" || strings.HasPrefix(trimmed, "layout ") {

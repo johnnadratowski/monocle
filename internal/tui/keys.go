@@ -29,6 +29,7 @@ type KeyMap struct {
 	ToggleSidebar []string
 	PaneSize      []string // cycle the doc pane against the diff: focused one biggest, smallest, equal
 	DocPane       []string // hide/show the doc pane, the diff taking its room (:doc off|on|toggle)
+	OpenLink      []string // open the doc pane note's first link (http, https, stage://); :link N for another
 
 	// Diff view
 	ScrollDown       []string
@@ -160,6 +161,7 @@ func DefaultKeyMap() KeyMap {
 		ToggleSidebar: []string{";"},
 		PaneSize:      []string{"="},
 		DocPane:       []string{"-"},
+		OpenLink:      []string{"V"},
 
 		ScrollDown:      []string{"J"},
 		ScrollUp:        []string{"K"},
@@ -290,6 +292,7 @@ var keyActions = map[string]func(*KeyMap) *[]string{
 	"toggle_sidebar":          func(km *KeyMap) *[]string { return &km.ToggleSidebar },
 	"pane_size":               func(km *KeyMap) *[]string { return &km.PaneSize },
 	"doc_pane":                func(km *KeyMap) *[]string { return &km.DocPane },
+	"open_link":               func(km *KeyMap) *[]string { return &km.OpenLink },
 	"scroll_down":             func(km *KeyMap) *[]string { return &km.ScrollDown },
 	"scroll_up":               func(km *KeyMap) *[]string { return &km.ScrollUp },
 	"scroll_left":             func(km *KeyMap) *[]string { return &km.ScrollLeft },

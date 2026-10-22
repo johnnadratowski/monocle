@@ -316,6 +316,7 @@ func (m helpModel) buildContent() string {
 			{":related [n]", "Bring up the related-files pane with file n (default 1) active in it"},
 			{":call [n]", "Go to the stop that the stop's nth call (default 1) leads to"},
 			{":layout [reset]", "Say whether the tour's windows are in a saved layout; reset puts back the default"},
+			{Label(km.OpenLink) + " · :link [n]", "Open the note's first link (or its nth): http, https and stage:// (a click on a link opens it too)"},
 			{":doc [on|off|toggle]", "Hide or show the doc pane (the stop's note); a new stop shows its note again"},
 			{"click a label", "Clicking a call's, related file's or view's label is :call N / :related N / :view N for it"},
 		},

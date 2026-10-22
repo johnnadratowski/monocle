@@ -83,6 +83,9 @@ func (ms *markdownStyler) StyleLine(line string) string {
 
 // styleInline applies bold, italic, and inline code styling within a line.
 func (ms *markdownStyler) styleInline(line string) string {
+	// Links first, outside code spans (links.go), then the rest
+	line = ms.styleLinks(line)
+
 	// Process inline code first (to prevent bold/italic from matching inside code)
 	line = inlineCodePattern.ReplaceAllStringFunc(line, func(match string) string {
 		m := inlineCodePattern.FindStringSubmatch(match)

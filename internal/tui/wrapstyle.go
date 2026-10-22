@@ -1,6 +1,10 @@
 package tui
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/charmbracelet/x/ansi"
+)
 
 // A wrapped row inherits nothing from the row above it: the terminal is handed
 // each row separately, so a colour opened on one row is simply not in effect on
@@ -22,10 +26,21 @@ func carryStyles(rows []string) []string {
 		return rows
 	}
 	out := make([]string, len(rows))
-	active := ""
+	active, link := "", ""
 	for i, row := range rows {
-		out[i] = active + row
-		active = activeAfter(active, row)
+		// A hyperlink open at a row's end is closed there and opened again on the next row (links.go), so a box's
+		// border and padding never join it.
+		reopen := ""
+		if link != "" {
+			reopen = ansi.SetHyperlink(link)
+		}
+		after := hyperlinkAfter(link, row)
+		closeLink := ""
+		if after != "" {
+			closeLink = ansi.ResetHyperlink()
+		}
+		out[i] = active + reopen + row + closeLink
+		active, link = activeAfter(active, row), after
 	}
 	return out
 }
