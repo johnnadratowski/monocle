@@ -26,6 +26,7 @@ import (
 // RPC must not permanently brick the client.
 type EngineClient struct {
 	socketPath string
+	frontend   *protocol.FrontendInfo // sent with every subscribe, when this client is a frontend's
 
 	// active is the currently-installed connection bundle (conn + scanner
 	// + per-conn closed channel + per-conn pending/readErr). It's a
@@ -110,8 +111,16 @@ func (cc *clientConn) close() {
 // and starts the demultiplexing read loop. The returned client satisfies
 // core.EngineAPI.
 func NewEngineClient(socketPath string) (*EngineClient, error) {
+	return NewFrontendClient(socketPath, nil)
+}
+
+// NewFrontendClient is NewEngineClient for a reviewer's frontend: info, when
+// given, goes with every subscribe (the first and each redial's), so the
+// engine can say which frontends are attached and what they understand.
+func NewFrontendClient(socketPath string, info *protocol.FrontendInfo) (*EngineClient, error) {
 	c := &EngineClient{
 		socketPath:     socketPath,
+		frontend:       info,
 		subscribers:    make(map[core.EventKind]map[int]core.EventCallback),
 		eventCh:        make(chan *protocol.EventNotification, 256),
 		quitCh:         make(chan struct{}),
@@ -154,30 +163,7 @@ func (c *EngineClient) dialAndSubscribe() error {
 	scanner := bufio.NewScanner(conn)
 	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
 
-	// Subscribe to every event kind so the client mirrors all engine events.
-	// Passive=true marks this as a viewer connection: the TUI is not an
-	// attached agent, so the engine must not flip into push-delivery mode
-	// just because the reviewer's UI is open.
-	sub := &protocol.SubscribeMsg{
-		Type: protocol.TypeSubscribe,
-		Events: []string{
-			string(core.EventFileChanged),
-			string(core.EventFeedbackStatusChanged),
-			string(core.EventContentItemAdded),
-			string(core.EventPauseChanged),
-			string(core.EventFeedbackSubmitted),
-			string(core.EventConnectionChanged),
-			string(core.EventAdditionalFileAdded),
-			string(core.EventFeedbackPickedUp),
-			string(core.EventWaitStatusChanged),
-			string(core.EventActivityChanged),
-			string(core.EventWalkthroughChanged),
-			string(core.EventGotoLine),
-			string(core.EventHighlightRange),
-			string(core.EventOpenEditor),
-		},
-		Passive: true,
-	}
+	sub := c.subscribeMsg()
 	data, err := protocol.Encode(sub)
 	if err != nil {
 		conn.Close()
@@ -248,6 +234,34 @@ func (c *EngineClient) dialAndSubscribe() error {
 
 	go c.readLoop(cc)
 	return nil
+}
+
+// subscribeMsg is the subscribe handshake: every event kind, so the client
+// mirrors all engine events, and Passive=true, as a viewer connection: the
+// TUI is not an attached agent, so the engine must not flip into
+// push-delivery mode just because the reviewer's UI is open.
+func (c *EngineClient) subscribeMsg() *protocol.SubscribeMsg {
+	return &protocol.SubscribeMsg{
+		Type: protocol.TypeSubscribe,
+		Events: []string{
+			string(core.EventFileChanged),
+			string(core.EventFeedbackStatusChanged),
+			string(core.EventContentItemAdded),
+			string(core.EventPauseChanged),
+			string(core.EventFeedbackSubmitted),
+			string(core.EventConnectionChanged),
+			string(core.EventAdditionalFileAdded),
+			string(core.EventFeedbackPickedUp),
+			string(core.EventWaitStatusChanged),
+			string(core.EventActivityChanged),
+			string(core.EventWalkthroughChanged),
+			string(core.EventGotoLine),
+			string(core.EventHighlightRange),
+			string(core.EventOpenEditor),
+		},
+		Passive:  true,
+		Frontend: c.frontend,
+	}
 }
 
 // ensureConn re-dials if the active connection has been torn down (timeout,

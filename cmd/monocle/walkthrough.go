@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/josephschmitt/monocle/internal/client"
 	"github.com/josephschmitt/monocle/internal/protocol"
+	"github.com/josephschmitt/monocle/internal/tui"
 	"github.com/josephschmitt/monocle/internal/types"
 )
 
@@ -259,4 +261,55 @@ func parseWalkthroughJSON(data []byte) (types.Walkthrough, error) {
 		return types.Walkthrough{}, errors.New(`tour has no stops (use --clear to withdraw a tour)`)
 	}
 	return tour, nil
+}
+
+// ReviewCapsCmd asks the engine which TUIs are attached and what each
+// understands. It answers for the running processes, not the binary on disk:
+// a tour started before an upgrade still runs the old TUI.
+type ReviewCapsCmd struct {
+	WorkDirFlag
+	Socket string `help:"Override socket path" env:"MONOCLE_SOCKET" default:""`
+	JSON   bool   `help:"Output as JSON" default:"false"`
+}
+
+func (cmd *ReviewCapsCmd) Run() error {
+	c, err := connectReview(cmd.Socket, cmd.WorkDir)
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+
+	// An engine older than get_frontends closes the connection unanswered:
+	// an error here, so a driver sends nothing.
+	resp, err := c.Request(&protocol.GetFrontendsMsg{Type: protocol.TypeGetFrontends}, client.DefaultTimeout)
+	if err != nil {
+		return fmt.Errorf("caps: %w", err)
+	}
+	r, ok := resp.(*protocol.GetFrontendsResponse)
+	if !ok {
+		return fmt.Errorf("caps: unexpected response %T", resp)
+	}
+	if cmd.JSON {
+		return printJSON(r)
+	}
+	fmt.Print(capsText(r))
+	return nil
+}
+
+// capsText is caps without --json: a line per TUI, then what all of them have.
+func capsText(r *protocol.GetFrontendsResponse) string {
+	if len(r.Frontends) == 0 {
+		return "no Monocle TUI attached\n"
+	}
+	var b strings.Builder
+	for _, f := range r.Frontends {
+		fmt.Fprintf(&b, "tui pid %d (%s): %s\n", f.Pid, f.Version, strings.Join(f.Features, " "))
+	}
+	fmt.Fprintf(&b, "all: %s\n", strings.Join(r.Features, " "))
+	return b.String()
+}
+
+// frontendInfo is how this process reports itself as a TUI to the engine.
+func frontendInfo() protocol.FrontendInfo {
+	return protocol.FrontendInfo{Pid: os.Getpid(), Version: version, Features: tui.Features}
 }

@@ -215,10 +215,23 @@ type SubmitContentResponse struct {
 // otherwise tells the UI "an agent is connected". The zero value (false)
 // preserves the existing push-subscriber semantics for backwards
 // compatibility with any agent that sends SubscribeMsg directly.
+//
+// Frontend is set by a reviewer's frontend (the TUI): what it is and what it
+// understands, so a driver can ask the running process (get_frontends) rather
+// than the binary on disk. An older engine ignores it; an older TUI sends none.
 type SubscribeMsg struct {
-	Type    string   `json:"type"`
-	Events  []string `json:"events"`
-	Passive bool     `json:"passive,omitempty"`
+	Type     string        `json:"type"`
+	Events   []string      `json:"events"`
+	Passive  bool          `json:"passive,omitempty"`
+	Frontend *FrontendInfo `json:"frontend,omitempty"`
+}
+
+// FrontendInfo is a frontend's account of itself. Features are the commands a
+// driver may type into it (its `:` commands, e.g. "doc" for `:doc on|off`).
+type FrontendInfo struct {
+	Pid      int      `json:"pid"`
+	Version  string   `json:"version,omitempty"`
+	Features []string `json:"features"`
 }
 
 // SubscribeResponse acknowledges a subscription request.

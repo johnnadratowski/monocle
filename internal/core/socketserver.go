@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"slices"
+	"sort"
 	"sync"
 	"time"
 
@@ -143,6 +145,9 @@ type SocketServer struct {
 	// has always had at least one active client since startup.
 	lastDisconnectAt time.Time
 	subscriberMu     sync.Mutex
+	// frontends are the attached frontends that reported themselves on
+	// subscribing (protocol.FrontendInfo), by connection; under subscriberMu.
+	frontends map[*subscriberConn]protocol.FrontendInfo
 
 	// totalActiveConns counts every live accepted connection regardless of
 	// type. It's the source of truth for idle detection, tracked at
@@ -464,6 +469,20 @@ func (s *SocketServer) handleSubscription(conn net.Conn, scanner *bufio.Scanner,
 			})
 		})
 		unsubs = append(unsubs, unsub)
+	}
+
+	if sub.Frontend != nil {
+		s.subscriberMu.Lock()
+		if s.frontends == nil {
+			s.frontends = map[*subscriberConn]protocol.FrontendInfo{}
+		}
+		s.frontends[sc] = *sub.Frontend
+		s.subscriberMu.Unlock()
+		defer func() {
+			s.subscriberMu.Lock()
+			delete(s.frontends, sc)
+			s.subscriberMu.Unlock()
+		}()
 	}
 
 	// Passive subscribers (e.g. the TUI) get events but don't count as
@@ -806,6 +825,8 @@ func (s *SocketServer) routeMessage(msg any) any {
 		return s.engine.handleGetSocketPath(m)
 	case *protocol.GetServerInfoMsg:
 		return s.engine.handleGetServerInfo(m)
+	case *protocol.GetFrontendsMsg:
+		return s.getFrontends()
 	case *protocol.SetPauseMsg:
 		return s.engine.handleSetPause(m)
 
@@ -832,4 +853,27 @@ func (s *SocketServer) handleIdentify(msg *protocol.IdentifyMsg) {
 		Status:  status,
 		Message: msg.Agent,
 	})
+}
+
+// getFrontends answers get_frontends: the frontends attached now, by pid, and
+// the features all of them have — what a driver may type into whichever one
+// it reaches. None attached is no features.
+func (s *SocketServer) getFrontends() *protocol.GetFrontendsResponse {
+	s.subscriberMu.Lock()
+	list := make([]protocol.FrontendInfo, 0, len(s.frontends))
+	for _, f := range s.frontends {
+		list = append(list, f)
+	}
+	s.subscriberMu.Unlock()
+	sort.Slice(list, func(i, j int) bool { return list[i].Pid < list[j].Pid })
+
+	common := []string{}
+	for i, f := range list {
+		if i == 0 {
+			common = append(common, f.Features...)
+			continue
+		}
+		common = slices.DeleteFunc(common, func(c string) bool { return !slices.Contains(f.Features, c) })
+	}
+	return &protocol.GetFrontendsResponse{Type: protocol.TypeGetFrontendsResponse, Frontends: list, Features: common}
 }

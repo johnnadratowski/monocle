@@ -94,6 +94,7 @@ const (
 	TypeGetSubscriberCount    = "get_subscriber_count"
 	TypeGetSocketPath         = "get_socket_path"
 	TypeGetServerInfo         = "get_server_info"
+	TypeGetFrontends          = "get_frontends"
 
 	// Pause flow
 	TypeSetPause = "set_pause"
@@ -188,6 +189,7 @@ const (
 	TypeGetSubscriberCountResponse    = "get_subscriber_count_response"
 	TypeGetSocketPathResponse         = "get_socket_path_response"
 	TypeGetServerInfoResponse         = "get_server_info_response"
+	TypeGetFrontendsResponse          = "get_frontends_response"
 
 	// Pause flow
 	TypeSetPauseResponse = "set_pause_response"
@@ -945,6 +947,21 @@ type GetServerInfoMsg struct {
 type GetServerInfoResponse struct {
 	Type    string `json:"type"`
 	Version string `json:"version,omitempty"`
+}
+
+// GetFrontendsMsg asks which reviewer frontends are attached now and what
+// each understands. An engine older than it closes the connection unanswered.
+type GetFrontendsMsg struct {
+	Type string `json:"type"`
+}
+
+// GetFrontendsResponse lists the attached frontends that reported themselves
+// (a TUI from before FrontendInfo reports nothing and is not listed), and
+// Features: those every listed one has, [] when none is attached.
+type GetFrontendsResponse struct {
+	Type      string         `json:"type"`
+	Frontends []FrontendInfo `json:"frontends"`
+	Features  []string       `json:"features"`
 }
 
 // --- Pause flow ---

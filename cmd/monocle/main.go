@@ -58,6 +58,7 @@ type ReviewCmd struct {
 	GotoLine       ReviewGotoLineCmd       `cmd:"goto-line" help:"Show the reviewer a file of the review at a line"`
 	Highlight      ReviewHighlightCmd      `cmd:"highlight" help:"Highlight a range of lines in a file of the review (--clear removes it)"`
 	OpenEditor     ReviewOpenEditorCmd     `cmd:"open-editor" help:"Open any file of the repo at a line in the editor beside Monocle (--full zooms it)"`
+	Caps           ReviewCapsCmd           `cmd:"caps" help:"What the running Monocle TUIs understand (their : commands a driver may send), from the TUIs themselves"`
 }
 
 // WorkDirFlag is embedded by commands that support --workdir.
@@ -1307,7 +1308,8 @@ func runTUI(socketOverride string, workdir string, additionalPaths []string, con
 		return fmt.Errorf("ensure serve: %w", err)
 	}
 
-	engine, err := client.NewEngineClient(socketPath)
+	info := frontendInfo()
+	engine, err := client.NewFrontendClient(socketPath, &info)
 	if err != nil {
 		return fmt.Errorf("connect engine: %w", err)
 	}

@@ -3194,6 +3194,13 @@ func (m appModel) persistSidebarStyle() {
 }
 
 // executeCommand runs a named command entered in command mode.
+// Features are the `:` commands a driver (a walkthrough's stage) may type into
+// this TUI, reported to the engine when it connects (get_frontends) so the
+// driver asks the running TUI rather than the binary on disk: a TUI from
+// before a command would take its keys as typing. Add a command here when a
+// driver is meant to send it.
+var Features = []string{"doc"}
+
 // commandNames is the canonical list of `:` commands, used for tab completion.
 var commandNames = []string{
 	"submit", "submit!", "discard", "clear", "cancel-feedback",

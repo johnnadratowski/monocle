@@ -675,6 +675,32 @@ In MCP tools mode, call the `open_editor` tool with `path`, `line` and, optional
 
 ---
 
+## `monocle review caps`
+
+Ask which monocle TUIs are attached to the review and what each understands, before typing a `:` command into one — for a tool that drives the TUI through tmux, as a walkthrough does with `:doc off`.
+
+```bash
+monocle review caps --json
+```
+
+```json
+{"type":"get_frontends_response","frontends":[{"pid":4242,"version":"v1.4.0","features":["doc"]}],"features":["doc"]}
+```
+
+The answer comes from the TUIs themselves, as each reported on connecting, not from the monocle binary on disk: a TUI started before an upgrade keeps running the old build. `features` lists what every attached TUI has; with none attached it is `[]`. A TUI from before `caps` reports nothing and is not listed. An engine from before `caps` closes the connection unanswered, so the command fails: treat that as no features.
+
+| Feature | Commands |
+|---------|----------|
+| `doc` | `:doc on`, `:doc off`, `:doc toggle` |
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--json` | Output as JSON. Without it, a line per TUI (`tui pid 4242 (v1.4.0): doc`) and then `all: doc`. |
+
+---
+
 ## `send_diff` (MCP tool)
 
 Show the reviewer a before/after comparison whose contents you supply directly — for *illustrating* a change rather than reviewing one. Typical uses: pseudocode before/after, two competing design options side by side, or any contrast that is not the state of the repository.
