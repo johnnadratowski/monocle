@@ -8,6 +8,7 @@ import (
 	"os"
 	"slices"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -827,6 +828,8 @@ func (s *SocketServer) routeMessage(msg any) any {
 		return s.engine.handleGetServerInfo(m)
 	case *protocol.GetFrontendsMsg:
 		return s.getFrontends()
+	case *protocol.DocPaneMsg:
+		return s.docPane(m)
 	case *protocol.SetPauseMsg:
 		return s.engine.handleSetPause(m)
 
@@ -876,4 +879,27 @@ func (s *SocketServer) getFrontends() *protocol.GetFrontendsResponse {
 		common = slices.DeleteFunc(common, func(c string) bool { return !slices.Contains(f.Features, c) })
 	}
 	return &protocol.GetFrontendsResponse{Type: protocol.TypeGetFrontendsResponse, Frontends: list, Features: common}
+}
+
+// docPane answers doc_pane: the TUIs hear it as an event and hide or show
+// their doc pane, as `:doc` does. Delivered counts the attached TUIs that
+// reported "doc"; an older one is not subscribed to the event at all.
+func (s *SocketServer) docPane(m *protocol.DocPaneMsg) *protocol.DocPaneResponse {
+	state := strings.TrimSpace(m.State)
+	if state != "on" && state != "off" && state != "toggle" {
+		return &protocol.DocPaneResponse{Type: protocol.TypeDocPaneResponse,
+			Message: fmt.Sprintf("state must be on, off or toggle, not %q", m.State)}
+	}
+	n := 0
+	for _, f := range s.getFrontends().Frontends {
+		if slices.Contains(f.Features, "doc") {
+			n++
+		}
+	}
+	s.engine.emit(EventDocPane, EventPayload{Kind: EventDocPane, Status: state})
+	message := fmt.Sprintf("Asked %d Monocle TUI(s) to turn the doc pane %s.", n, state)
+	if n == 0 {
+		message = "Sent, but no Monocle TUI that understands it is attached."
+	}
+	return &protocol.DocPaneResponse{Type: protocol.TypeDocPaneResponse, Success: true, Message: message, Delivered: n}
 }

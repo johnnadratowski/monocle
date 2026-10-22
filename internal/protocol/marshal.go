@@ -179,6 +179,8 @@ func Decode(data []byte) (any, error) {
 		msg = &GotoLineMsg{}
 	case TypeHighlightRange:
 		msg = &HighlightRangeMsg{}
+	case TypeDocPane:
+		msg = &DocPaneMsg{}
 	case TypeOpenEditor:
 		msg = &OpenEditorMsg{}
 	case TypeSetWalkthroughStop:
@@ -307,6 +309,8 @@ func Decode(data []byte) (any, error) {
 		msg = &GotoLineResponse{}
 	case TypeHighlightRangeResponse:
 		msg = &HighlightRangeResponse{}
+	case TypeDocPaneResponse:
+		msg = &DocPaneResponse{}
 	case TypeOpenEditorResponse:
 		msg = &OpenEditorResponse{}
 	case TypeSetWalkthroughStopResponse:

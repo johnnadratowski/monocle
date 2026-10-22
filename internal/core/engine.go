@@ -33,6 +33,10 @@ const (
 	// the editor beside the TUI (open_editor): Path, Line, and Full to fill the
 	// window with it.
 	EventOpenEditor EventKind = "open_editor"
+	// EventDocPane fires when a driver asks the TUI to hide or show its doc
+	// pane (doc_pane): Status is "on", "off" or "toggle", as the TUI's :doc
+	// takes them.
+	EventDocPane EventKind = "doc_pane"
 	// EventCommentAdded, EventCommentEdited, EventCommentDeleted and
 	// EventCommentResolved fire when a comment changes, whoever changed it, so
 	// every client showing the review can show it at once. ItemID is the

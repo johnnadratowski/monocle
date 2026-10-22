@@ -675,6 +675,32 @@ In MCP tools mode, call the `open_editor` tool with `path`, `line` and, optional
 
 ---
 
+## `monocle review doc`
+
+Hide or show the doc pane — the tour stop's note under the diff — in the reviewer's monocle, as its own `:doc` does: hidden, the diff takes the pane's rows.
+
+```bash
+monocle review doc off
+monocle review doc on
+monocle review doc toggle
+```
+
+It goes through the engine as an event, as `goto-stop` does, so nothing is typed into the TUI, and a TUI from before it never subscribed to the event and ignores it. `on` and `off` are idempotent, so a driver can send them without knowing the state. A note hidden stays hidden when the same stop is entered again (a re-sent tour, say); entering another stop shows its note.
+
+The answer says how many attached TUIs understand it (`delivered`, from what each reported, as [`caps`](#monocle-review-caps) shows); `0` means none will act. An engine from before it closes the connection unanswered, so the command fails.
+
+```json
+{"type":"doc_pane_response","success":true,"message":"Asked 1 Monocle TUI(s) to turn the doc pane off.","delivered":1}
+```
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--json` | Output as JSON. |
+
+---
+
 ## `monocle review caps`
 
 Ask which monocle TUIs are attached to the review and what each understands, before typing a `:` command into one — for a tool that drives the TUI through tmux, as a walkthrough does with `:doc off`.

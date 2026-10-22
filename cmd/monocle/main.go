@@ -58,6 +58,7 @@ type ReviewCmd struct {
 	GotoLine       ReviewGotoLineCmd       `cmd:"goto-line" help:"Show the reviewer a file of the review at a line"`
 	Highlight      ReviewHighlightCmd      `cmd:"highlight" help:"Highlight a range of lines in a file of the review (--clear removes it)"`
 	OpenEditor     ReviewOpenEditorCmd     `cmd:"open-editor" help:"Open any file of the repo at a line in the editor beside Monocle (--full zooms it)"`
+	Doc            ReviewDocCmd            `cmd:"doc" help:"Hide or show the doc pane (the stop's note) in the reviewer's TUI, as its :doc does"`
 	Caps           ReviewCapsCmd           `cmd:"caps" help:"What the running Monocle TUIs understand (their : commands a driver may send), from the TUIs themselves"`
 }
 

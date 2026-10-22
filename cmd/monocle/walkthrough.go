@@ -313,3 +313,37 @@ func capsText(r *protocol.GetFrontendsResponse) string {
 func frontendInfo() protocol.FrontendInfo {
 	return protocol.FrontendInfo{Pid: os.Getpid(), Version: version, Features: tui.Features}
 }
+
+// ReviewDocCmd hides or shows the doc pane in the reviewer's TUI, through the
+// engine: nothing is typed into the TUI, and one too old to know it ignores it.
+type ReviewDocCmd struct {
+	WorkDirFlag
+	Socket string `help:"Override socket path" env:"MONOCLE_SOCKET" default:""`
+	State  string `arg:"" enum:"on,off,toggle" help:"on, off or toggle"`
+	JSON   bool   `help:"Output as JSON" default:"false"`
+}
+
+func (cmd *ReviewDocCmd) Run() error {
+	c, err := connectReview(cmd.Socket, cmd.WorkDir)
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+
+	resp, err := c.Request(&protocol.DocPaneMsg{Type: protocol.TypeDocPane, State: cmd.State}, client.DefaultTimeout)
+	if err != nil {
+		return fmt.Errorf("doc: %w", err)
+	}
+	r, ok := resp.(*protocol.DocPaneResponse)
+	if !ok {
+		return fmt.Errorf("doc: unexpected response %T", resp)
+	}
+	if cmd.JSON {
+		return printJSON(r)
+	}
+	if !r.Success {
+		return fmt.Errorf("%s", r.Message)
+	}
+	fmt.Println(r.Message)
+	return nil
+}

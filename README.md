@@ -436,6 +436,7 @@ monocle review goto-line <path> <line> [--top N] [--json]  Show the reviewer a f
 monocle review highlight <path> <start> <end> [--json]   Highlight a range of lines (replaces any earlier one)
 monocle review highlight --clear [--json]                Remove the highlighted range
 monocle review open-editor <path> <line> [--full] [--json]  Open any repo file at a line in the editor beside Monocle
+monocle review doc <on|off|toggle> [--json]              Hide or show the doc pane in the reviewer's TUI (as its :doc)
 monocle review caps [--json]                             What the running TUIs understand (the : commands a driver may send)
 ```
 

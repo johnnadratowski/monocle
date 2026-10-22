@@ -72,6 +72,7 @@ const (
 	TypeSetWalkthroughStop = "set_walkthrough_stop"
 	TypeGotoLine           = "goto_line"
 	TypeHighlightRange     = "highlight_range"
+	TypeDocPane            = "doc_pane"
 	TypeOpenEditor         = "open_editor"
 
 	// Snapshots
@@ -167,6 +168,7 @@ const (
 	TypeSetWalkthroughStopResponse = "set_walkthrough_stop_response"
 	TypeGotoLineResponse           = "goto_line_response"
 	TypeHighlightRangeResponse     = "highlight_range_response"
+	TypeDocPaneResponse            = "doc_pane_response"
 	TypeOpenEditorResponse         = "open_editor_response"
 
 	// Snapshots
@@ -755,6 +757,24 @@ type HighlightRangeResponse struct {
 	Type    string `json:"type"`
 	Success bool   `json:"success"`
 	Message string `json:"message,omitempty"`
+}
+
+// DocPaneMsg asks the reviewer's TUI to hide or show its doc pane, as its
+// `:doc on|off|toggle` does — through the engine, so nothing is typed into
+// the TUI. State is "on", "off" or "toggle".
+type DocPaneMsg struct {
+	Type  string `json:"type"`
+	State string `json:"state"`
+}
+
+// DocPaneResponse says whether the ask went out, and Delivered how many
+// attached TUIs said they understand it (get_frontends' "doc"): one too old
+// to know it never subscribed to the event, and does nothing.
+type DocPaneResponse struct {
+	Type      string `json:"type"`
+	Success   bool   `json:"success"`
+	Message   string `json:"message,omitempty"`
+	Delivered int    `json:"delivered"`
 }
 
 // OpenEditorMsg opens any file of the repo at a line in the editor beside the

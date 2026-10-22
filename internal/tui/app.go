@@ -5222,7 +5222,14 @@ func BridgeEngineEvents(engine core.EngineAPI, p *tea.Program) {
 	engine.On(core.EventOpenEditor, func(e core.EventPayload) {
 		p.Send(openEditorMsg{path: e.Path, line: e.Line, full: e.Full})
 	})
+	engine.On(core.EventDocPane, func(e core.EventPayload) {
+		p.Send(docPaneEventMsg(e))
+	})
 }
+
+// docPaneEventMsg is the engine's doc_pane (`monocle review doc`) as the TUI's
+// own `:doc`, with the same on, off and toggle.
+func docPaneEventMsg(e core.EventPayload) tea.Msg { return docPaneMsg{arg: e.Status} }
 
 // currentJumpPos describes where the cursor is now, for the jump list.
 func (m appModel) currentJumpPos() jumpPos {
