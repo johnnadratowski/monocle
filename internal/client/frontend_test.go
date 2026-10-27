@@ -59,3 +59,10 @@ func TestEngineClient_DocPaneEvent(t *testing.T) {
 		t.Fatal("the doc_pane event never reached the client")
 	}
 }
+
+// The TUI's client subscribes to comments, so the walkthrough's push reaches it.
+func TestSubscribeIncludesComments(t *testing.T) {
+	if sub := (&EngineClient{}).subscribeMsg(); !slices.Contains(sub.Events, string(core.EventComments)) {
+		t.Errorf("subscribe events %v lack %s", sub.Events, core.EventComments)
+	}
+}

@@ -255,6 +255,7 @@ Bindings are grouped by the task they serve, and within a group ordered by key: 
 | `:call [n]` | Go to the stop the stop's nth call (default the first) leads to. Clicking a call's label under the note does the same |
 | `:layout [reset]` | Say whether the tour's windows are in a saved layout; `reset` respawns the related-files pane with the stop's own related files, then runs `walkthrough_layout_reset` to put back the default. Clicking `reset` in the note's `Layout: saved · reset` does the same |
 | `:doc on`, `:doc off`, `:doc toggle`, `:doc` | Hide or show the doc pane (the stop's note), the diff taking its rows; alone it toggles. `on` and `off` are idempotent, for a driver to send. A new stop's note comes up shown; the same stop again keeps it hidden |
+| `:comments on`, `:comments off`, `:comments toggle`, `:comments` | Show or hide source-code comment-only lines (a run of two or more becomes one "N comment lines hidden" row); alone it toggles. `on` and `off` are idempotent, for a walkthrough to send (`monocle review comments`); a dimmed view stays dimmed on `on`. The state holds across stops |
 | `:link`, `:link N` | Open the doc pane note's first (or Nth) link: http, https and `stage://` only; a link of any other scheme stays as written. The note shows its links underlined, as terminal hyperlinks |
 
 When the agent sends a tour (`set_walkthrough`), monocle enters tour mode on its first stop: the diff cursor lands on the stop's lines, which stay marked in the gutter (magenta; the previous stop blue, the next green, the one after bright green), the doc pane shows `1.2 · Title` (marked `new` on a stop you have not been on before, `✓` on one you have, kept across restarts), then where the stop is, dim — `src/auth/login.ts:40–52` — and the agent's note, and the status bar shows `tour 1.2 · 3 of 7` (the stop id, then its position in the tour). Ask the agent about a stop by its id. The ends of the tour clamp rather than wrap.
@@ -272,7 +273,7 @@ When the agent sends a tour (`set_walkthrough`), monocle enters tour mode on its
 | `O` | Hide/show inline comments + annotations |
 | `T` | Cycle layout (auto/side-by-side/stacked) |
 | `1` / `2` | Jump straight to a pane |
-| `m` | Cycle source-code comments: dim → hide → show |
+| `m` | Cycle source-code comments: dim → hide → show. In a walkthrough with `comments_command` set: show ↔ hide, shared with the windows beside Monocle (`M` still cycles, unshared) |
 | `M` | The same cycle in reverse |
 | `/` | Sidebar: cycle the reviewed filter |
 | `;` | Show/hide the sidebar |
@@ -439,6 +440,7 @@ monocle review highlight <path> <start> <end> [--json]   Highlight a range of li
 monocle review highlight --clear [--json]                Remove the highlighted range
 monocle review open-editor <path> <line> [--full] [--json]  Open any repo file at a line in the editor beside Monocle
 monocle review doc <on|off|toggle> [--json]              Hide or show the doc pane in the reviewer's TUI (as its :doc)
+monocle review comments <on|off|toggle> [--json]         Show or hide source-code comment lines in the reviewer's TUI (as its :comments)
 monocle review caps [--json]                             What the running TUIs understand (the : commands a driver may send)
 ```
 
@@ -486,6 +488,7 @@ Monocle loads settings from JSON config files:
   "walkthrough_ask": "",
   "walkthrough_resolve": "",
   "cursor_command": "",
+  "comments_command": "",
   "highlight_color": "",
   "related_editor_args": [],
   "related_editor_add": "",
@@ -530,6 +533,7 @@ Monocle loads settings from JSON config files:
 | `walkthrough_ask`                    | string                                     | `""`         | Shell command that hands the agent the lines you send with `@`: the selection and the tagged lines, else the cursor's line. Runs `sh -c` in the repo root, 10s timeout, with `MONOCLE_REPO_ROOT` and `MONOCLE_ASK_JSON` — `{"tour", "stop", "repo", "refs": [{"path", "start", "end", "side"}]}`, `side` `"old"` for removed lines in old-file numbers, `tour`/`stop` empty outside tour mode — in its environment. It puts the reference in the agent's prompt and moves focus there. Empty sends nothing |
 | `walkthrough_resolve`                | string                                     | `""`         | Shell command that says what the lines you point at with `ctrl+]` reference (the SQL file a query loads, the file a function lives in). Runs `sh -c` in the repo root, 10s timeout, with `MONOCLE_REPO_ROOT` and `MONOCLE_RESOLVE_JSON` (the shape of `MONOCLE_ASK_JSON`), and prints a JSON array `[{"path": "db/queries/x.sql", "line": 12}]`, paths repo-relative or absolute. monocle opens them in the related-files pane beside what it holds, at most 8 files, and moves focus there. Empty opens nothing |
 | `cursor_command`                     | string                                     | `""`         | Shell command run when the diff cursor rests on a new file:line (about 200 ms after the last move, never twice in a row for the same place, never while a modal is open), with `MONOCLE_FILE` (repo-relative), `MONOCLE_LINE` (new-file line, `0` when the row has none) and `MONOCLE_REPO_ROOT`. `sh -c` in the repo root, fire-and-forget, 2s timeout, output discarded. Empty runs nothing |
+| `comments_command`                   | string                                     | `""`         | Shell command run when you turn source-code comment lines on or off with `m`, so a walkthrough shares the state with the windows beside Monocle, with `MONOCLE_COMMENTS` (`on`: shown, `off`: hidden) and `MONOCLE_REPO_ROOT`. `sh -c` in the repo root, fire-and-forget, 2s timeout, output discarded; never for a state pushed in by `monocle review comments`. Set, `m` toggles show and hide; empty, `m` cycles dim, hide, show |
 | `highlight_color`                    | string                                     | `""`         | Background of the range an agent highlights (`highlight_range`), as a colour such as `"#2d3b6b"` or an ANSI number. Empty uses the theme's: `#2d3b6b` on the dark themes, `#cdd8ff` on `light` |
 | `related_editor_args`                | string[]                                   | `[]`         | Extra arguments appended to the editor command of a tour stop's related-files pane, e.g. `["-S", "/path/setup.vim"]`; `{owner}` in them becomes monocle's tmux pane id (e.g. `--listen /tmp/nvim-{owner}.sock`). With vim/nvim, `+cmd`, `-c` and `-S` share a limit of ten (the pane uses one `-c`) and `--cmd` has its own ten; arguments past either are left out, with a status-bar note |
 | `related_editor_add`                 | string                                     | `""`         | Shell command that adds one file to the editor already in the related-files pane, so files you closed there stay closed. With it set and the pane alive, `ctrl+]`, `ctrl+g` in a tour, `:related N` and a click on a related file run it once per file instead of respawning the pane. `{file}` (absolute path), `{line}` (`0` for none) and `{owner}` (monocle's tmux pane) are substituted shell-quoted. It should bring an open file forward rather than open it twice. Empty respawns |

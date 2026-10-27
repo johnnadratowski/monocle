@@ -259,6 +259,7 @@ func (c *EngineClient) subscribeMsg() *protocol.SubscribeMsg {
 			string(core.EventHighlightRange),
 			string(core.EventOpenEditor),
 			string(core.EventDocPane),
+			string(core.EventComments),
 		},
 		Passive:  true,
 		Frontend: c.frontend,

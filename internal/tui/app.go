@@ -1336,6 +1336,9 @@ func (m appModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case docPaneMsg:
 		return m.handleDocPane(msg.arg), nil
 
+	case commentsMsg:
+		return m.handleComments(msg.arg)
+
 	case linkMsg:
 		return m.handleLink(msg.arg), nil
 
@@ -2670,6 +2673,11 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.diffView.ToggleOverlays()
 		return m, nil
 
+	case Matches(key, km.HideComments) && m.commentsCommand() != "":
+		// In a walkthrough the comments key is the tour's: shown and hidden,
+		// shared with the windows beside Monocle through comments_command.
+		return m.toggleSharedComments()
+
 	case Matches(key, km.HideComments), Matches(key, km.HideCommentsBack):
 		if Matches(key, km.HideCommentsBack) {
 			m.diffView.CycleCommentFilterBack()
@@ -3205,7 +3213,7 @@ func (m appModel) persistSidebarStyle() {
 // driver asks the running TUI rather than the binary on disk: a TUI from
 // before a command would take its keys as typing. Add a command here when a
 // driver is meant to send it.
-var Features = []string{"doc"}
+var Features = []string{"doc", "comments"}
 
 // commandNames is the canonical list of `:` commands, used for tab completion.
 var commandNames = []string{
@@ -3213,7 +3221,7 @@ var commandNames = []string{
 	"pause", "unpause", "history",
 	"mark-all-reviewed", "mark-all-unreviewed",
 	"base-artifact-version", "base-ref", "ref", "theme",
-	"relaunch", "stop", "view", "related", "call", "back", "forward", "layout", "doc", "link",
+	"relaunch", "stop", "view", "related", "call", "back", "forward", "layout", "doc", "comments", "link",
 }
 
 // matchingCommands returns the command names that start with prefix, in order.
@@ -3335,6 +3343,13 @@ func (m appModel) executeCommand(cmd string) tea.Cmd {
 	if trimmed == "doc" || strings.HasPrefix(trimmed, "doc ") {
 		arg := strings.TrimSpace(strings.TrimPrefix(trimmed, "doc"))
 		return func() tea.Msg { return docPaneMsg{arg: arg} }
+	}
+	// `:comments on|off|toggle` — show or hide source-code comment lines. A
+	// walkthrough's stage sends it (as `monocle review comments`) to share the
+	// tour's comment state.
+	if trimmed == "comments" || strings.HasPrefix(trimmed, "comments ") {
+		arg := strings.TrimSpace(strings.TrimPrefix(trimmed, "comments"))
+		return func() tea.Msg { return commentsMsg{arg: arg} }
 	}
 	// `:link 2` — open the doc pane note's second link (http, https, stage://).
 	if trimmed == "link" || strings.HasPrefix(trimmed, "link ") {
@@ -5236,11 +5251,18 @@ func BridgeEngineEvents(engine core.EngineAPI, p *tea.Program) {
 	engine.On(core.EventDocPane, func(e core.EventPayload) {
 		p.Send(docPaneEventMsg(e))
 	})
+	engine.On(core.EventComments, func(e core.EventPayload) {
+		p.Send(commentsEventMsg(e))
+	})
 }
 
 // docPaneEventMsg is the engine's doc_pane (`monocle review doc`) as the TUI's
 // own `:doc`, with the same on, off and toggle.
 func docPaneEventMsg(e core.EventPayload) tea.Msg { return docPaneMsg{arg: e.Status} }
+
+// commentsEventMsg is the engine's comments (`monocle review comments`) as the
+// TUI's own `:comments`.
+func commentsEventMsg(e core.EventPayload) tea.Msg { return commentsMsg{arg: e.Status} }
 
 // currentJumpPos describes where the cursor is now, for the jump list.
 func (m appModel) currentJumpPos() jumpPos {

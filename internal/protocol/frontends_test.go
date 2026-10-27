@@ -55,3 +55,13 @@ func TestDocPaneRoundTrip(t *testing.T) {
 		t.Errorf("doc_pane_response after a round trip: %+v", out)
 	}
 }
+
+func TestCommentsRoundTrip(t *testing.T) {
+	if out, ok := roundTrip(t, &CommentsMsg{Type: TypeComments, State: "off"}).(*CommentsMsg); !ok || out.State != "off" {
+		t.Errorf("comments after a round trip: %+v", out)
+	}
+	in := &CommentsResponse{Type: TypeCommentsResponse, Success: true, Message: "m", Delivered: 1}
+	if out, ok := roundTrip(t, in).(*CommentsResponse); !ok || !reflect.DeepEqual(out, in) {
+		t.Errorf("comments_response after a round trip: %+v", out)
+	}
+}

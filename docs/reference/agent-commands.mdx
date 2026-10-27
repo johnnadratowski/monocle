@@ -701,6 +701,32 @@ The answer says how many attached TUIs understand it (`delivered`, from what eac
 
 ---
 
+## `monocle review comments`
+
+Show or hide source-code comment-only lines in the reviewer's monocle, as its own `:comments` does. A walkthrough sends it to share one comment state across Monocle and the windows beside it: the regions explorer's `m` turns it there, and Monocle follows.
+
+```bash
+monocle review comments off
+monocle review comments on
+monocle review comments toggle
+```
+
+Hidden, a run of two or more comment-only lines is one "N comment lines hidden" row, counting the lines the diff added and removed among them. A single one is only hidden, and every other line keeps its real line number. `on` and `off` are idempotent; `on` leaves a dimmed view dimmed (dimmed comments are shown). It goes through the engine as an event, as `doc` does, and a state pushed this way never runs the TUI's `comments_command`, so the two sides never echo. The state holds across stops.
+
+The answer says how many attached TUIs understand it (`delivered`); `0` means none will act.
+
+```json
+{"type":"comments_response","success":true,"message":"Asked 1 Monocle TUI(s) to turn comments off.","delivered":1}
+```
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--json` | Output as JSON. |
+
+---
+
 ## `monocle review caps`
 
 Ask which monocle TUIs are attached to the review and what each understands, before typing a `:` command into one — for a tool that drives the TUI through tmux, as a walkthrough does with `:doc off`.

@@ -830,6 +830,8 @@ func (s *SocketServer) routeMessage(msg any) any {
 		return s.getFrontends()
 	case *protocol.DocPaneMsg:
 		return s.docPane(m)
+	case *protocol.CommentsMsg:
+		return s.comments(m)
 	case *protocol.SetPauseMsg:
 		return s.engine.handleSetPause(m)
 
@@ -902,4 +904,27 @@ func (s *SocketServer) docPane(m *protocol.DocPaneMsg) *protocol.DocPaneResponse
 		message = "Sent, but no Monocle TUI that understands it is attached."
 	}
 	return &protocol.DocPaneResponse{Type: protocol.TypeDocPaneResponse, Success: true, Message: message, Delivered: n}
+}
+
+// comments answers comments: the TUIs hear it as an event and show or hide
+// source-code comment lines, as `:comments` does. Delivered counts the attached
+// TUIs that reported "comments".
+func (s *SocketServer) comments(m *protocol.CommentsMsg) *protocol.CommentsResponse {
+	state := strings.TrimSpace(m.State)
+	if state != "on" && state != "off" && state != "toggle" {
+		return &protocol.CommentsResponse{Type: protocol.TypeCommentsResponse,
+			Message: fmt.Sprintf("state must be on, off or toggle, not %q", m.State)}
+	}
+	n := 0
+	for _, f := range s.getFrontends().Frontends {
+		if slices.Contains(f.Features, "comments") {
+			n++
+		}
+	}
+	s.engine.emit(EventComments, EventPayload{Kind: EventComments, Status: state})
+	message := fmt.Sprintf("Asked %d Monocle TUI(s) to turn comments %s.", n, state)
+	if n == 0 {
+		message = "Sent, but no Monocle TUI that understands it is attached."
+	}
+	return &protocol.CommentsResponse{Type: protocol.TypeCommentsResponse, Success: true, Message: message, Delivered: n}
 }

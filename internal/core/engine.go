@@ -37,6 +37,10 @@ const (
 	// pane (doc_pane): Status is "on", "off" or "toggle", as the TUI's :doc
 	// takes them.
 	EventDocPane EventKind = "doc_pane"
+	// EventComments fires when a driver asks the TUI to show or hide source-code
+	// comment lines (comments): Status is "on" (shown), "off" (hidden) or
+	// "toggle", as the TUI's :comments takes them.
+	EventComments EventKind = "comments"
 	// EventCommentAdded, EventCommentEdited, EventCommentDeleted and
 	// EventCommentResolved fire when a comment changes, whoever changed it, so
 	// every client showing the review can show it at once. ItemID is the

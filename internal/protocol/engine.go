@@ -73,6 +73,7 @@ const (
 	TypeGotoLine           = "goto_line"
 	TypeHighlightRange     = "highlight_range"
 	TypeDocPane            = "doc_pane"
+	TypeComments           = "comments"
 	TypeOpenEditor         = "open_editor"
 
 	// Snapshots
@@ -169,6 +170,7 @@ const (
 	TypeGotoLineResponse           = "goto_line_response"
 	TypeHighlightRangeResponse     = "highlight_range_response"
 	TypeDocPaneResponse            = "doc_pane_response"
+	TypeCommentsResponse           = "comments_response"
 	TypeOpenEditorResponse         = "open_editor_response"
 
 	// Snapshots
@@ -771,6 +773,22 @@ type DocPaneMsg struct {
 // attached TUIs said they understand it (get_frontends' "doc"): one too old
 // to know it never subscribed to the event, and does nothing.
 type DocPaneResponse struct {
+	Type      string `json:"type"`
+	Success   bool   `json:"success"`
+	Message   string `json:"message,omitempty"`
+	Delivered int    `json:"delivered"`
+}
+
+// CommentsMsg asks the reviewer's TUI to show or hide source-code comment
+// lines, as its `:comments on|off|toggle` does: on shows them, off hides them.
+type CommentsMsg struct {
+	Type  string `json:"type"`
+	State string `json:"state"`
+}
+
+// CommentsResponse says whether the ask went out, and Delivered how many
+// attached TUIs said they understand it (get_frontends' "comments").
+type CommentsResponse struct {
 	Type      string `json:"type"`
 	Success   bool   `json:"success"`
 	Message   string `json:"message,omitempty"`

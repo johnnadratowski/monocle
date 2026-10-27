@@ -73,6 +73,16 @@ type Config struct {
 	// (the new-file line, 0 when the row has none) and MONOCLE_REPO_ROOT,
 	// fire-and-forget, 2 s timeout, output discarded. Empty runs nothing.
 	CursorCommand string `json:"cursor_command"`
+	// CommentsCommand is a shell command run when the reviewer turns source-code
+	// comment lines on or off with the comments key (m), so a walkthrough can
+	// share the state with the windows beside Monocle (John 2026-10-27: "a global
+	// thing in tour, where it hides for both and uses the same key from both
+	// windows"). It runs via sh -c in the repo root with MONOCLE_COMMENTS ("on":
+	// shown, "off": hidden) and MONOCLE_REPO_ROOT, fire-and-forget, 2 s timeout,
+	// output discarded; never for a state pushed in (`monocle review comments`).
+	// Set, m toggles shown and hidden (M still cycles shown, dimmed, hidden, and
+	// is not shared); empty, m cycles the three as before.
+	CommentsCommand string `json:"comments_command"`
 	// HighlightColor is the background of the range an agent highlights
 	// (highlight_range), as a colour lipgloss understands ("#2d3b6b", "4").
 	// Empty uses the theme's.

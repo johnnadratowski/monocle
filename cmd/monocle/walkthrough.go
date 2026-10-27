@@ -347,3 +347,38 @@ func (cmd *ReviewDocCmd) Run() error {
 	fmt.Println(r.Message)
 	return nil
 }
+
+// ReviewCommentsCmd shows or hides source-code comment lines in the reviewer's
+// TUI, through the engine, as its `:comments` does: a walkthrough's stage pushes
+// its tour-wide comment state with it when the regions explorer's key changes it.
+type ReviewCommentsCmd struct {
+	WorkDirFlag
+	Socket string `help:"Override socket path" env:"MONOCLE_SOCKET" default:""`
+	State  string `arg:"" enum:"on,off,toggle" help:"on (comments shown), off (hidden) or toggle"`
+	JSON   bool   `help:"Output as JSON" default:"false"`
+}
+
+func (cmd *ReviewCommentsCmd) Run() error {
+	c, err := connectReview(cmd.Socket, cmd.WorkDir)
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+
+	resp, err := c.Request(&protocol.CommentsMsg{Type: protocol.TypeComments, State: cmd.State}, client.DefaultTimeout)
+	if err != nil {
+		return fmt.Errorf("comments: %w", err)
+	}
+	r, ok := resp.(*protocol.CommentsResponse)
+	if !ok {
+		return fmt.Errorf("comments: unexpected response %T", resp)
+	}
+	if cmd.JSON {
+		return printJSON(r)
+	}
+	if !r.Success {
+		return fmt.Errorf("%s", r.Message)
+	}
+	fmt.Println(r.Message)
+	return nil
+}
