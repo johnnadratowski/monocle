@@ -1535,12 +1535,20 @@ func TestScrollExtent(t *testing.T) {
 
 	t.Run("filtered-out comment lines are not scrollable content", func(t *testing.T) {
 		// Lines 1 and 2 (above the viewport) are comment-only source lines and the
-		// filter is hiding them, so they occupy no rows and shouldn't be counted.
+		// filter is hiding them: together they are one marker row ("2 comment lines
+		// hidden"), so they count as one line, not two.
 		hidden := m
 		hidden.commentFilter = commentsHidden
 		hidden.commentLines = map[int]bool{1: true, 2: true}
-		if e := hidden.scrollExtent(); e.linesAbove != 8 {
-			t.Errorf("hidden comments should not count, lines above = %d, want 8", e.linesAbove)
+		if e := hidden.scrollExtent(); e.linesAbove != 9 {
+			t.Errorf("two hidden comment lines should count as their one marker row, lines above = %d, want 9", e.linesAbove)
+		}
+		// A single hidden comment line has no marker: it occupies no row at all.
+		single := m
+		single.commentFilter = commentsHidden
+		single.commentLines = map[int]bool{1: true}
+		if e := single.scrollExtent(); e.linesAbove != 9 {
+			t.Errorf("a single hidden comment line should not count, lines above = %d, want 9", e.linesAbove)
 		}
 	})
 }

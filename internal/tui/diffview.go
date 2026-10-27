@@ -1041,7 +1041,16 @@ func (m diffViewModel) View() string {
 	for i := m.offset; i < len(m.lines) && screenUsed < m.height; i++ {
 		line := m.lines[i]
 		// Rows removed from the view: comment-only lines under the filter, and
-		// hunks outside the selected summary item.
+		// hunks outside the selected summary item. A run of hidden comment lines
+		// leaves one marker row where it starts.
+		if run, ok := m.commentMarkerAt(i); ok {
+			if screenUsed > 0 {
+				b.WriteString("\n")
+			}
+			b.WriteString(ansi.Truncate(m.renderCommentMarker(run), m.width, ""))
+			screenUsed++
+			continue
+		}
 		if m.isHiddenComment(line) || m.isHiddenBySummary(line) {
 			continue
 		}
@@ -2824,7 +2833,10 @@ func (m diffViewModel) screenLinesFor(idx int) int {
 	}
 	line := m.lines[idx]
 	// Hidden rows occupy no screen rows, or the cursor and the viewport bottom
-	// drift apart from what is drawn.
+	// drift apart from what is drawn; a run of hidden comments, its marker's one.
+	if _, ok := m.commentMarkerAt(idx); ok {
+		return 1
+	}
 	if m.isHiddenComment(line) || m.isHiddenBySummary(line) {
 		return 0
 	}
@@ -3117,7 +3129,7 @@ func (m diffViewModel) scrollExtent() scrollExtent {
 			continue
 		}
 		// Rows that aren't drawn occupy no space, so they aren't scrollable content.
-		if m.isHiddenComment(m.lines[i]) || m.isHiddenBySummary(m.lines[i]) {
+		if _, marker := m.commentMarkerAt(i); !marker && (m.isHiddenComment(m.lines[i]) || m.isHiddenBySummary(m.lines[i])) {
 			continue
 		}
 		if i < m.offset {
@@ -3704,7 +3716,11 @@ func (m diffViewModel) displayLinesFor(idx int) int {
 		return 1
 	}
 	line := m.lines[idx]
-	// Hidden comment lines render nothing (filter in the hide state).
+	// Hidden comment lines render nothing (filter in the hide state), but the
+	// first of a run draws its marker.
+	if _, ok := m.commentMarkerAt(idx); ok {
+		return 1
+	}
 	if m.isHiddenComment(line) {
 		return 0
 	}
@@ -4107,6 +4123,74 @@ func (m diffViewModel) isDimmedComment(line diffViewLine) bool {
 // because the filter is in the hide state and the line is comment-only.
 func (m diffViewModel) isHiddenComment(line diffViewLine) bool {
 	return m.commentFilter == commentsHidden && m.commentLineNum(line) > 0
+}
+
+// commentMarkerMin is the shortest run of hidden comment lines drawn as a marker
+// row; a single line is only hidden. The regions explorer beside a walkthrough
+// collapses the same way, so the two windows read alike.
+const commentMarkerMin = 2
+
+// commentRun is a run of comment-only lines the hide state removes (John
+// 2026-10-27: "I also want to be able to hide comments … a global thing in
+// tour"): how many, and how many of them the diff added or removed, so a changed
+// comment never goes silently.
+type commentRun struct{ lines, added, removed int }
+
+// hiddenCommentRow is a row the comment filter removes and the summary filter
+// does not (a row outside the summary item has no marker).
+func (m diffViewModel) hiddenCommentRow(i int) bool {
+	return i >= 0 && i < len(m.lines) && m.isHiddenComment(m.lines[i]) && !m.isHiddenBySummary(m.lines[i])
+}
+
+// commentMarkerAt is the run of hidden comment lines that starts at row i, when
+// it is long enough to be drawn as one marker row in its place. The marker is
+// not a line of the file: the cursor never rests on it, and the rows around it
+// keep their own line numbers.
+func (m diffViewModel) commentMarkerAt(i int) (commentRun, bool) {
+	if !m.hiddenCommentRow(i) || m.hiddenCommentRow(i-1) {
+		return commentRun{}, false
+	}
+	var r commentRun
+	for j := i; m.hiddenCommentRow(j); j++ {
+		ln := m.lines[j]
+		r.lines++
+		if ln.kind == types.DiffLineAdded {
+			r.added++
+		}
+		if ln.kind == types.DiffLineRemoved && !ln.leftEmpty {
+			r.removed++
+		}
+		if ln.isSplit && ln.rightKind == types.DiffLineAdded && !ln.rightEmpty {
+			r.added++
+		}
+	}
+	return r, r.lines >= commentMarkerMin
+}
+
+// renderCommentMarker draws a run's marker: "⋯ N comment lines hidden", and
+// what the diff changed among them in its own colours.
+func (m diffViewModel) renderCommentMarker(r commentRun) string {
+	faint := lipgloss.NewStyle().Faint(true)
+	s := faint.Render(fmt.Sprintf("%*s⋯ %d comment lines hidden", m.markerIndent(), "", r.lines))
+	var changed []string
+	if r.added > 0 {
+		changed = append(changed, m.theme.Added.Render(fmt.Sprintf("+%d", r.added)))
+	}
+	if r.removed > 0 {
+		changed = append(changed, m.theme.Removed.Render(fmt.Sprintf("−%d", r.removed)))
+	}
+	if len(changed) > 0 {
+		s += faint.Render(" (") + strings.Join(changed, " ") + faint.Render(")")
+	}
+	return s
+}
+
+// markerIndent puts the marker where the code starts, past the line-number gutter.
+func (m diffViewModel) markerIndent() int {
+	if m.style == diffStyleFile || m.contentMode {
+		return 4
+	}
+	return 10
 }
 
 // CursorAnnotation returns the annotation under the cursor: the annotation whose
