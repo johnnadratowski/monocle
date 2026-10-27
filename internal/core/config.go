@@ -13,12 +13,25 @@ import (
 // It checks ~/.config/monocle/config.json first, then .monocle/config.json in cwd.
 func LoadConfig() (*types.Config, error) {
 	cfg := DefaultConfig()
-	for _, path := range configFiles() {
+	for i, path := range configFiles() {
 		if data, err := os.ReadFile(path); err == nil {
-			json.Unmarshal(data, cfg) //nolint:errcheck
+			applyConfigFile(cfg, data, i > 0) //nolint:errcheck
 		}
 	}
 	return cfg, nil
+}
+
+// applyConfigFile reads one config file over cfg. A project's file (the
+// repository's own .monocle/config.json, the repo under review) may not set
+// the shell commands only the global config sets: comments_command runs on a
+// key press, and a repository must not choose what that runs.
+func applyConfigFile(cfg *types.Config, data []byte, project bool) error {
+	keep := cfg.CommentsCommand
+	err := json.Unmarshal(data, cfg)
+	if project {
+		cfg.CommentsCommand = keep
+	}
+	return err
 }
 
 // configFiles are the files a config is read from, later ones overriding
@@ -32,12 +45,12 @@ func configFiles() []string {
 // caught half-written must not swap every setting back to its default.
 func readConfig() (*types.Config, error) {
 	cfg := DefaultConfig()
-	for _, path := range configFiles() {
+	for i, path := range configFiles() {
 		data, err := os.ReadFile(path)
 		if err != nil {
 			continue
 		}
-		if err := json.Unmarshal(data, cfg); err != nil {
+		if err := applyConfigFile(cfg, data, i > 0); err != nil {
 			return nil, fmt.Errorf("parse %s: %w", path, err)
 		}
 	}

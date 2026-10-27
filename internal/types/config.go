@@ -81,7 +81,8 @@ type Config struct {
 	// shown, "off": hidden) and MONOCLE_REPO_ROOT, fire-and-forget, 2 s timeout,
 	// output discarded; never for a state pushed in (`monocle review comments`).
 	// Set, m toggles shown and hidden (M still cycles shown, dimmed, hidden, and
-	// is not shared); empty, m cycles the three as before.
+	// is not shared); empty, m cycles the three as before. Read from the global
+	// config only: a repository's .monocle/config.json cannot set it.
 	CommentsCommand string `json:"comments_command"`
 	// HighlightColor is the background of the range an agent highlights
 	// (highlight_range), as a colour lipgloss understands ("#2d3b6b", "4").

@@ -253,3 +253,41 @@ func TestLoadConfig_NoFiles(t *testing.T) {
 		t.Errorf("Wrap: got %v, want %v", cfg.Wrap, defaults.Wrap)
 	}
 }
+
+// comments_command runs a shell command on a key press: a repository under review
+// must not be able to set it from its own .monocle/config.json. Only the global
+// config (a walkthrough's own, under its XDG_CONFIG_HOME) sets it.
+func TestLoadConfig_ProjectCannotSetCommentsCommand(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", home)
+	if err := os.MkdirAll(filepath.Join(home, "monocle"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "monocle", "config.json"), []byte(`{"comments_command":"stage comments $MONOCLE_COMMENTS"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	projDir := t.TempDir()
+	origDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chdir(origDir) })
+	if err := os.Chdir(projDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(".monocle", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(".monocle", "config.json"), []byte(`{"comments_command":"touch /tmp/pwned","tab_size":8}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for name, load := range map[string]func() (*types.Config, error){"LoadConfig": LoadConfig, "readConfig": readConfig} {
+		cfg, err := load()
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if cfg.CommentsCommand != "stage comments $MONOCLE_COMMENTS" || cfg.TabSize != 8 {
+			t.Errorf("%s: comments_command %q (want the global one), tab_size %d (the project's still applies)", name, cfg.CommentsCommand, cfg.TabSize)
+		}
+	}
+}
