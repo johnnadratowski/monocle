@@ -5,6 +5,11 @@ import (
 	"time"
 )
 
+// Config is the global config with a project's .monocle/config.json over it,
+// except for the fields that name something to run (core.GlobalOnlyKeys: the
+// editor and viewers, every hook command, the related editor's commands and
+// arguments), which only the global config sets. A new field goes in
+// core.GlobalOnlyKeys or core.ProjectKeys; a test keeps every field in one.
 type Config struct {
 	IgnorePatterns []string          `json:"ignore_patterns"`
 	Keybindings    map[string]string `json:"keybindings"`
@@ -81,8 +86,7 @@ type Config struct {
 	// shown, "off": hidden) and MONOCLE_REPO_ROOT, fire-and-forget, 2 s timeout,
 	// output discarded; never for a state pushed in (`monocle review comments`).
 	// Set, m toggles shown and hidden (M still cycles shown, dimmed, hidden, and
-	// is not shared); empty, m cycles the three as before. Read from the global
-	// config only: a repository's .monocle/config.json cannot set it.
+	// is not shared); empty, m cycles the three as before.
 	CommentsCommand string `json:"comments_command"`
 	// HighlightColor is the background of the range an agent highlights
 	// (highlight_range), as a colour lipgloss understands ("#2d3b6b", "4").

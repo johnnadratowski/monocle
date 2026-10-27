@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/josephschmitt/monocle/internal/types"
@@ -254,40 +256,123 @@ func TestLoadConfig_NoFiles(t *testing.T) {
 	}
 }
 
-// comments_command runs a shell command on a key press: a repository under review
-// must not be able to set it from its own .monocle/config.json. Only the global
-// config (a walkthrough's own, under its XDG_CONFIG_HOME) sets it.
-func TestLoadConfig_ProjectCannotSetCommentsCommand(t *testing.T) {
+// projectAndGlobal writes a global config and a project's .monocle/config.json
+// (the project's in a fresh working directory) and loads with each loader.
+func projectAndGlobal(t *testing.T, global, project string) map[string]*types.Config {
+	t.Helper()
 	home := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", home)
 	if err := os.MkdirAll(filepath.Join(home, "monocle"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(home, "monocle", "config.json"), []byte(`{"comments_command":"stage comments $MONOCLE_COMMENTS"}`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(home, "monocle", "config.json"), []byte(global), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	projDir := t.TempDir()
 	origDir, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { os.Chdir(origDir) })
-	if err := os.Chdir(projDir); err != nil {
+	if err := os.Chdir(t.TempDir()); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.MkdirAll(".monocle", 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(".monocle", "config.json"), []byte(`{"comments_command":"touch /tmp/pwned","tab_size":8}`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(".monocle", "config.json"), []byte(project), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	for name, load := range map[string]func() (*types.Config, error){"LoadConfig": LoadConfig, "readConfig": readConfig} {
+	out := map[string]*types.Config{}
+	for name, load := range map[string]func() (*types.Config, error){"LoadConfig": LoadConfig, "readConfig (the live re-read)": readConfig} {
 		cfg, err := load()
 		if err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
-		if cfg.CommentsCommand != "stage comments $MONOCLE_COMMENTS" || cfg.TabSize != 8 {
-			t.Errorf("%s: comments_command %q (want the global one), tab_size %d (the project's still applies)", name, cfg.CommentsCommand, cfg.TabSize)
+		out[name] = cfg
+	}
+	return out
+}
+
+// fieldByKey is the config's field with that key, as a value.
+func fieldByKey(t *testing.T, cfg *types.Config, key string) reflect.Value {
+	t.Helper()
+	v := reflect.ValueOf(cfg).Elem()
+	for i := 0; i < v.NumField(); i++ {
+		if ConfigKey(v.Type().Field(i)) == key {
+			return v.Field(i)
+		}
+	}
+	t.Fatalf("no config field %q", key)
+	return reflect.Value{}
+}
+
+// A repository under review must not choose what Monocle runs: its own
+// .monocle/config.json never sets an editor, a viewer, a hook command or an
+// editor's arguments, in the first load or the live re-read; the global config
+// (a walkthrough's own, under its XDG_CONFIG_HOME) still does. One case a field.
+func TestLoadConfig_ProjectCannotSetWhatRuns(t *testing.T) {
+	for _, key := range GlobalOnlyKeys {
+		t.Run(key, func(t *testing.T) {
+			val := func(who string) any {
+				if key == "related_editor_args" {
+					return []string{"-c", who}
+				}
+				return who + " command"
+			}
+			g, _ := json.Marshal(map[string]any{key: val("global")})
+			p, _ := json.Marshal(map[string]any{key: val("project"), "tab_size": 8})
+			for name, cfg := range projectAndGlobal(t, string(g), string(p)) {
+				got := fieldByKey(t, cfg, key).Interface()
+				if !reflect.DeepEqual(got, val("global")) {
+					t.Errorf("%s: %s = %v, want the global config's", name, key, got)
+				}
+				if cfg.TabSize != 8 {
+					t.Errorf("%s: the project's tab_size was dropped with it", name)
+				}
+			}
+		})
+	}
+}
+
+// With no global value, a project's is not taken either: the field stays empty.
+func TestLoadConfig_ProjectAloneSetsNothingThatRuns(t *testing.T) {
+	project := map[string]any{}
+	for _, key := range GlobalOnlyKeys {
+		if key == "related_editor_args" {
+			project[key] = []string{"-c", "evil"}
+		} else {
+			project[key] = "touch /tmp/pwned"
+		}
+	}
+	p, _ := json.Marshal(project)
+	def := DefaultConfig()
+	for name, cfg := range projectAndGlobal(t, "{}", string(p)) {
+		for _, key := range GlobalOnlyKeys {
+			if got, want := fieldByKey(t, cfg, key).Interface(), fieldByKey(t, def, key).Interface(); !reflect.DeepEqual(got, want) {
+				t.Errorf("%s: a project alone set %s to %v (default %v)", name, key, got, want)
+			}
+		}
+	}
+}
+
+// Every field of the config is placed on purpose: one that runs something is
+// global-only, the rest a project may set. A new field fails here until it is
+// put in one list or the other.
+func TestEveryConfigFieldIsGlobalOnlyOrAProjects(t *testing.T) {
+	typ := reflect.TypeOf(types.Config{})
+	seen := map[string]bool{}
+	for i := 0; i < typ.NumField(); i++ {
+		key := ConfigKey(typ.Field(i))
+		seen[key] = true
+		inG, inP := slices.Contains(GlobalOnlyKeys, key), slices.Contains(ProjectKeys, key)
+		if inG == inP {
+			t.Errorf("config field %s (%s): in GlobalOnlyKeys %v, in ProjectKeys %v; it must be in exactly one (does it run anything?)",
+				typ.Field(i).Name, key, inG, inP)
+		}
+	}
+	for _, k := range append(append([]string{}, GlobalOnlyKeys...), ProjectKeys...) {
+		if !seen[k] {
+			t.Errorf("%s is listed but no config field has that key", k)
 		}
 	}
 }

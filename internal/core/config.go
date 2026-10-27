@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+	"slices"
+	"strings"
 
 	"github.com/josephschmitt/monocle/internal/types"
 )
@@ -22,16 +25,74 @@ func LoadConfig() (*types.Config, error) {
 }
 
 // applyConfigFile reads one config file over cfg. A project's file (the
-// repository's own .monocle/config.json, the repo under review) may not set
-// the shell commands only the global config sets: comments_command runs on a
-// key press, and a repository must not choose what that runs.
+// repository's own .monocle/config.json: the repo under review, whoever wrote
+// it) sets the other settings only. Every field that names something to run
+// (GlobalOnlyKeys: an editor, a viewer, a hook command, an editor's arguments)
+// is the global config's alone, so a repository never chooses what Monocle runs.
 func applyConfigFile(cfg *types.Config, data []byte, project bool) error {
-	keep := cfg.CommentsCommand
-	err := json.Unmarshal(data, cfg)
-	if project {
-		cfg.CommentsCommand = keep
+	if !project {
+		return json.Unmarshal(data, cfg)
 	}
+	kept := keepGlobalOnly(cfg)
+	err := json.Unmarshal(data, cfg)
+	kept(cfg)
 	return err
+}
+
+// GlobalOnlyKeys are the config's keys that name something to run: a program
+// (editor, markdown_viewer, media_viewer), a shell command (the walkthrough_*
+// hooks, cursor_command, comments_command, related_editor_add and _preview,
+// related_open), or arguments handed to one (related_editor_args). Only the
+// global config sets them. ProjectKeys are the rest; a test holds every field
+// of types.Config to one list or the other, so a new one is placed on purpose.
+var GlobalOnlyKeys = []string{
+	"editor", "markdown_viewer", "media_viewer",
+	"walkthrough_on_stop", "walkthrough_view_status", "walkthrough_layout_reset",
+	"walkthrough_navigate", "walkthrough_ask", "walkthrough_resolve",
+	"cursor_command", "comments_command",
+	"related_editor_args", "related_editor_add", "related_editor_preview", "related_open",
+}
+
+// ProjectKeys are the settings a project's file may set: how the review looks
+// and behaves, nothing that runs.
+var ProjectKeys = []string{
+	"ignore_patterns", "keybindings", "diff_style", "sidebar_style", "theme", "layout", "wrap", "tab_size",
+	"context_lines", "full_file_diff", "highlight_color", "editor_mode", "editor_focus", "review_format",
+	"auto_focus_mode", "mouse", "min_diff_width", "comment_expand", "comment_expand_delay",
+	"mark_reviewed_on_submit", "review_tracking", "idle_timeout",
+}
+
+// ConfigKey is a field's key in the config file.
+func ConfigKey(f reflect.StructField) string {
+	k, _, _ := strings.Cut(f.Tag.Get("json"), ",")
+	return k
+}
+
+// keepGlobalOnly copies cfg's GlobalOnlyKeys fields (deeply: a slice is cloned,
+// as decoding into cfg may reuse its array) and returns what puts them back.
+func keepGlobalOnly(cfg *types.Config) func(*types.Config) {
+	v := reflect.ValueOf(cfg).Elem()
+	t := v.Type()
+	saved := map[int]reflect.Value{}
+	for i := 0; i < t.NumField(); i++ {
+		if !slices.Contains(GlobalOnlyKeys, ConfigKey(t.Field(i))) {
+			continue
+		}
+		f := v.Field(i)
+		c := reflect.New(f.Type()).Elem()
+		if f.Kind() == reflect.Slice && !f.IsNil() {
+			c.Set(reflect.AppendSlice(reflect.MakeSlice(f.Type(), 0, f.Len()), f))
+		} else {
+			c.Set(f)
+		}
+		saved[i] = c
+	}
+	return func(dst *types.Config) {
+		d := reflect.ValueOf(dst).Elem()
+		for i, c := range saved {
+			d.Field(i).Set(c)
+		}
+	}
 }
 
 // configFiles are the files a config is read from, later ones overriding
