@@ -231,7 +231,7 @@ Bindings are grouped by the task they serve, and within a group ordered by key: 
 | `(` | Out one level, to the enclosing block's opening line (vim [{) |
 | `)` | Out to the outermost enclosing block (vim 99[{) |
 | `/` / `?` | Search the diff forward/backward (diff focused) |
-| `<` / `>` | Previous/next comment or annotation |
+| `"` / `'` | Previous/next comment or annotation |
 | `[` / `]` | Previous/next diff chunk in the diff pane, else previous/next file |
 | `{` / `}` | Previous/next file (any pane) |
 | `ctrl+i` | Forward again (vim ctrl+i) |

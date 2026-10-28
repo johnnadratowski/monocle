@@ -175,7 +175,8 @@ func DefaultKeyMap() KeyMap {
 		ToggleFullDiff:  []string{"a"},
 		ToggleOverlays:  []string{"O"},
 		// m for "mute the comments" — a right-hand home-row key, and vim's own m
-		// (set mark) is not bound here; marks are walked with < and >.
+		// (set mark) is not bound here; marks are walked with ' and " (< and > are
+		// Stage's stop keys in a tour, John 2026-10-28).
 		HideComments:     []string{"m"},
 		HideCommentsBack: []string{"M"},
 		// space was already the single-comment toggle, but hardcoded, so it could
@@ -192,11 +193,11 @@ func DefaultKeyMap() KeyMap {
 		SearchNext:     []string{"n"},
 		SearchPrev:     []string{"N"},
 
-		PrevMark: []string{"<"},
-		NextMark: []string{">"},
+		PrevMark: []string{"\""},
+		NextMark: []string{"'"},
 
 		// . and , are free, sit together under the right hand, and read as
-		// forward/back the way > and < already do for marks.
+		// forward/back, beside Stage's < and > for whole stops.
 		TourNext: []string{"."},
 		TourPrev: []string{","},
 		// backspace is a browser's back. F18 and F19 are keys a terminal can
