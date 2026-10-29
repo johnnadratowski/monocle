@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -155,6 +156,28 @@ func (m appModel) tourLabel() string {
 		return ""
 	}
 	return fmt.Sprintf("tour %s · %d of %d", stop.ID, m.tour.index+1, len(m.tour.tour.Stops))
+}
+
+// prTourTitle is a tour title that starts with its PR's number, as an agent
+// titles a PR's tour: "PR #308 · CMP-8 Signup Fixes", "PR #12: Fix the retry".
+var prTourTitle = regexp.MustCompile(`(?i)^PR\s*#(\d+)(?:\s*[·:|—–-]\s*|\s+|$)(.*)$`)
+
+// tourBarTitle is what the top bar calls a tour while it is on: "Tour for PR
+// #308: CMP-8 Signup Fixes" for one titled "PR #308 · CMP-8 Signup Fixes" —
+// the PR said once, as what the tour is for, not as part of its name — and
+// "Tour: <title>" for any other.
+func tourBarTitle(title string) string {
+	title = strings.TrimSpace(title)
+	if g := prTourTitle.FindStringSubmatch(title); g != nil {
+		if name := strings.TrimSpace(g[2]); name != "" {
+			return fmt.Sprintf("Tour for PR #%s: %s", g[1], name)
+		}
+		return "Tour for PR #" + g[1]
+	}
+	if title == "" {
+		return "Tour"
+	}
+	return "Tour: " + title
 }
 
 // syncTour takes the tour the engine holds. It keeps the reviewer on the stop

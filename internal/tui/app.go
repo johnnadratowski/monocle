@@ -4829,9 +4829,15 @@ func (m appModel) renderTitleBar() string {
 // The age is what tells you, on walking back to the terminal, whether this is the
 // round you already read or a new one — so it is worth a slot in the bar, but not
 // at the cost of the name, hence the narrower fallback.
+//
+// While a tour is on, the tour takes the name's place: it is what the reviewer
+// is doing, and its title says which PR it is for (tourBarTitle).
 func (m appModel) reviewNameVariants() []string {
 	name := m.reviewName
 	sentAt := m.reviewSentAt
+	if m.hasTour() && m.tour.on {
+		name = tourBarTitle(m.tour.tour.Title)
+	}
 	if name == "" && len(m.sidebar.contentItems) > 0 {
 		latest := m.sidebar.contentItems[len(m.sidebar.contentItems)-1]
 		name = latest.Title
