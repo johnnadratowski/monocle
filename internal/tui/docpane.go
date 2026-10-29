@@ -116,8 +116,8 @@ func (m docPaneModel) noteScrollHint() string {
 // of them showing from offset: on the left how many are below ("↓ 12 more
 // lines", or "end of note" once there are none), on the right which are
 // showing ("lines 1–8 of 20"). The marker is where the reading stops, so it
-// is where a note cut short has to say so; the band's hint is easy to read
-// past as part of the title.
+// is where a note cut short has to say so; the title bar's hint is easy to
+// read past as part of the title.
 func noteMarkerText(total, rows, offset int) (left, right string) {
 	last := min(offset+rows, total)
 	if below := total - last; below > 0 {
@@ -252,11 +252,17 @@ func (m *docPaneModel) close() {
 	m.annotationID = ""
 }
 
-// headRows is the title bar: one row. (A tour note's is a solid band, which
-// keeps it apart from the text without a rule.)
-func (m docPaneModel) headRows() int { return 1 }
+// headRows is the title bar, plus, for a tour note, the rule under it, which
+// keeps the title apart from the text.
+func (m docPaneModel) headRows() int {
+	if m.note {
+		return 2
+	}
+	return 1
+}
 
-// viewportHeight is the number of doc lines that fit under the title bar.
+// viewportHeight is the number of doc lines that fit under the title bar (and a
+// note's rule).
 func (m docPaneModel) viewportHeight() int {
 	h := m.height - m.headRows()
 	if h < 1 {
@@ -273,13 +279,6 @@ func (m docPaneModel) View() string {
 	}
 	accent := lipgloss.Color(annotationColor)
 	titleStyle := lipgloss.NewStyle().Foreground(accent).Bold(true).Width(m.width)
-	// A tour note's title bar is a solid band of the accent, edge to edge,
-	// dark text on it: the stop's id and title stand out from the note and
-	// from the code under it.
-	band := lipgloss.NewStyle().Background(accent).Foreground(lipgloss.Color("0"))
-	if m.note {
-		titleStyle = band.Bold(true).Width(m.width)
-	}
 	// The width is only final at render time (the horizontal layout measures
 	// the rendered sidebar), so re-wrap a note here if it moved. m is a copy.
 	m.reflow()
@@ -302,15 +301,14 @@ func (m docPaneModel) View() string {
 	var b strings.Builder
 	switch {
 	case m.note && (m.titleMark != "" || m.titleLoc.path != ""):
-		// The mark is styled by its maker (stopVisitMark), and the stop's
-		// location is not bold, so both are drawn outside the title's style,
-		// on the band. The title is kept whole while the location can shorten
-		// instead.
+		// The mark keeps its own colour, and the stop's location is dim, so both
+		// are drawn outside the title's style. The title is kept whole while the
+		// location can shorten instead.
 		mark := ""
 		if m.titleMark != "" {
-			mark = band.Render(" ") + m.titleMark
+			mark = " " + m.titleMark
 		}
-		plain := band.Bold(true)
+		plain := lipgloss.NewStyle().Foreground(accent).Bold(true)
 		markW, hintW := lipgloss.Width(mark), lipgloss.Width(hint)
 		reserve := markW + 1
 		if hint != "" {
@@ -327,7 +325,7 @@ func (m docPaneModel) View() string {
 		}
 		left := plain.Render(" "+truncateToWidth(title, room)) + mark
 		if loc != "" {
-			left += band.Render(sep + loc)
+			left += sep + lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(loc)
 		}
 		right := ""
 		if hint != "" {
@@ -341,6 +339,10 @@ func (m docPaneModel) View() string {
 		left := " " + truncateToWidth(title, max(m.width-lipgloss.Width(hint)-4, 1))
 		gap := max(m.width-lipgloss.Width(left)-lipgloss.Width(hint)-1, 1)
 		b.WriteString(titleStyle.Render(left + strings.Repeat(" ", gap) + hint + " "))
+	}
+
+	if m.note {
+		b.WriteString("\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(strings.Repeat("─", max(m.width, 0))))
 	}
 
 	lineNumStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))

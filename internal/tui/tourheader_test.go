@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/josephschmitt/monocle/internal/types"
@@ -54,9 +55,11 @@ func bandCells(raw string) (cells, onAccent int) {
 	return cells, onAccent
 }
 
-// The note's header is a solid band of the tour's accent, edge to edge, with
-// the stop's id and title in it, and no rule under it.
-func TestTheNoteHeaderIsASolidAccentBand(t *testing.T) {
+// The note's header is the stop's id and title in the tour's accent, bold, on
+// no background, with its scroll hint at the right end, and a rule under it
+// (John, 2026-10-29, after a solid band: "Switch it back to the way we had it,
+// with the coloring and the horizontal bar beneath").
+func TestTheNoteHeaderIsAccentTextOverARule(t *testing.T) {
 	for _, fresh := range []bool{true, false} {
 		th := DefaultTheme()
 		d := docPaneModel{width: 80, height: 8, theme: &th}
@@ -64,22 +67,25 @@ func TestTheNoteHeaderIsASolidAccentBand(t *testing.T) {
 		d.titleMark = stopVisitMark(fresh)
 		d.titleLoc = noteLocation{path: "server/api/write.ts", lines: "5–9"}
 		rows := strings.Split(d.View(), "\n")
-		cells, onAccent := bandCells(rows[0])
-		if cells != 80 || onAccent != 80 {
-			t.Errorf("fresh %v: the header is %d cells, %d of them on the accent: want all 80 (%q)", fresh, cells, onAccent, rows[0])
+		if cells, onAccent := bandCells(rows[0]); cells != 80 || onAccent != 0 {
+			t.Errorf("fresh %v: the header is %d cells, %d of them on the accent: want 80, none (%q)", fresh, cells, onAccent, rows[0])
 		}
-		if head := ansi.Strip(rows[0]); !strings.HasPrefix(head, " 1.2 · Where it lands") {
-			t.Errorf("fresh %v: the header reads %q, want the stop's id and title first", fresh, head)
+		title := lipgloss.NewStyle().Foreground(lipgloss.Color(annotationColor)).Bold(true).Render(" 1.2 · Where it lands")
+		if !strings.HasPrefix(rows[0], title) {
+			t.Errorf("fresh %v: the header does not start with the title in bold accent: %q", fresh, rows[0])
 		}
-		if strings.Contains(ansi.Strip(rows[1]), "────") {
-			t.Errorf("fresh %v: a rule under the band: %q", fresh, ansi.Strip(rows[1]))
+		if head := ansi.Strip(rows[0]); !strings.HasSuffix(head, "more lines ") {
+			t.Errorf("fresh %v: the header %q does not end with its scroll hint", fresh, head)
+		}
+		if rule := ansi.Strip(rows[1]); rule != strings.Repeat("─", 80) {
+			t.Errorf("fresh %v: the row under the header is %q, want a rule across the pane", fresh, rule)
 		}
 	}
 }
 
 // A note longer than its pane says so where the reading ends: its last row is
 // a marker — how many lines are below, and which lines are showing of how
-// many — that reads "end of note" once scrolled to the end. The band says how
+// many — that reads "end of note" once scrolled to the end. The header says how
 // much is above and below. A note that fits has neither.
 func TestALongNoteSaysThereIsMore(t *testing.T) {
 	m := longNoteApp(t)
@@ -91,7 +97,7 @@ func TestALongNoteSaysThereIsMore(t *testing.T) {
 		t.Errorf("the note's last row is %q, want the more-lines marker", marker)
 	}
 	if band := rowWith(screen, "1.2 · Where it lands"); !strings.Contains(band, "more lines") {
-		t.Errorf("the band does not say there is more: %q", band)
+		t.Errorf("the header does not say there is more: %q", band)
 	}
 	nx, ny := onScreen(t, m, "Note line 2.")
 	for i := 0; i < 70; i++ {

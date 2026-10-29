@@ -56,8 +56,7 @@ func noteBar(t *testing.T, width int, loc noteLocation) (raw, row, hint string) 
 	return raw, stripANSISeq(raw), hint
 }
 
-// After a stop's title and its mark comes where the stop is, on the band but
-// not bold. A narrow pane shortens the location from the left before it cuts
+// After a stop's title and its mark comes, dim, where the stop is. A narrow pane shortens the location from the left before it cuts
 // the title, and the scroll hint keeps its place at the right end.
 func TestTheNoteHeaderSaysWhereTheStopIs(t *testing.T) {
 	loc := noteLocation{path: "server/api/v1/finalWrite.ts", lines: "528–548"}
@@ -86,9 +85,8 @@ func TestTheNoteHeaderSaysWhereTheStopIs(t *testing.T) {
 			}
 			continue
 		}
-		band := lipgloss.NewStyle().Background(lipgloss.Color(annotationColor)).Foreground(lipgloss.Color("0"))
-		if plain := band.Render("  " + c.locShown); !strings.Contains(raw, plain) {
-			t.Errorf("at %d columns the location %q is not drawn plain on the band: %q", c.width, c.locShown, raw)
+		if dim := lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(c.locShown); !strings.Contains(raw, dim) {
+			t.Errorf("at %d columns the location %q is not drawn dim: %q", c.width, c.locShown, raw)
 		}
 	}
 	// No location, no change: the title, its mark, the hint.
