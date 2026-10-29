@@ -303,22 +303,6 @@ func rowWith(screen, text string) string {
 	return ""
 }
 
-// A long note's pane stops at 66% of the window, box included; a short one
-// stays the size of its note.
-func TestTheNotePaneIsCappedAtTwoThirds(t *testing.T) {
-	for _, height := range []int{30, 44, 60} {
-		m := longNoteApp(t)
-		m = updateApp(t, m, tea.WindowSizeMsg{Width: 140, Height: height})
-		if outer := m.docPane.height + 2; outer > height*66/100 || outer < height*66/100-1 {
-			t.Errorf("height %d: the long note's pane is %d rows, want 66%% (%d)", height, outer, height*66/100)
-		}
-	}
-	m := viewsAppIn(t, &types.Config{}, 140, false) // "The write.": a short note
-	if want := m.docPane.noteHeight(m.docPane.width); m.docPane.height != want {
-		t.Errorf("a short note's pane is %d rows, want its own %d", m.docPane.height, want)
-	}
-}
-
 // TestNoteThumb pins the notes pane's scrollbar: none when the note fits; a thumb
 // sized by the share in view; at the top, the middle and the very bottom as the
 // note scrolls.

@@ -75,10 +75,11 @@ func handOffToTmux(d paneDir) tea.Cmd {
 // paneNeighbour returns the pane lying in the given direction, and whether one
 // exists. It answers for the CURRENT geometry: the sidebar sits left of the
 // diff in the horizontal layout and above it when stacked, and the doc pane —
-// when open — always sits below the diff.
+// when open — sits above the diff for a tour note and below it otherwise.
 func (m appModel) paneNeighbour(d paneDir) (focusTarget, bool) {
 	sidebar := !m.sidebarHidden
 	doc := m.docShown()
+	above := m.docAbove() // a tour note sits above the diff, an annotation's doc under it
 	stacked := m.layout == layoutStacked
 
 	switch m.focus {
@@ -86,6 +87,9 @@ func (m appModel) paneNeighbour(d paneDir) (focusTarget, bool) {
 		// The sidebar is the outermost pane in its axis, so only the direction
 		// pointing at the diff leads anywhere.
 		if stacked && d == paneDown {
+			if above {
+				return focusDoc, true
+			}
 			return focusMain, true
 		}
 		if !stacked && d == paneRight {
@@ -99,18 +103,24 @@ func (m appModel) paneNeighbour(d paneDir) (focusTarget, bool) {
 				return focusSidebar, true
 			}
 		case paneUp:
+			if above {
+				return focusDoc, true
+			}
 			if sidebar && stacked {
 				return focusSidebar, true
 			}
 		case paneDown:
-			if doc {
+			if doc && !above {
 				return focusDoc, true
 			}
 		}
 
 	case focusDoc:
-		if d == paneUp {
+		switch {
+		case above && d == paneDown, !above && d == paneUp:
 			return focusMain, true
+		case above && d == paneUp && sidebar && stacked:
+			return focusSidebar, true
 		}
 		// The doc pane spans the diff column, so leaving it sideways means the
 		// sidebar in the horizontal layout.

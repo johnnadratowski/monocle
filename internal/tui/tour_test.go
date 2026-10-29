@@ -442,7 +442,7 @@ func TestStopNoteBody(t *testing.T) {
 	}
 }
 
-func TestNotePaneWrapsAndSizesToItsNote(t *testing.T) {
+func TestNotePaneWraps(t *testing.T) {
 	th := DefaultTheme()
 	d := docPaneModel{width: 24, height: 10, theme: &th}
 	d.openNote("tour:1", "1 · T", "one two three four five six seven eight nine ten", nil)
@@ -454,9 +454,6 @@ func TestNotePaneWrapsAndSizesToItsNote(t *testing.T) {
 		if w := len([]rune(l)); w > 24 {
 			t.Errorf("row %q is %d wide in a 24-column pane", l, w)
 		}
-	}
-	if got := d.noteHeight(24); got != len(d.lines)+2 {
-		t.Errorf("noteHeight = %d, want its rows plus the title and its rule", got)
 	}
 	d.close()
 	if d.note || d.active {

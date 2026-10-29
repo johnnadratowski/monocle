@@ -57,7 +57,7 @@ var GlobalOnlyKeys = []string{
 // and behaves, nothing that runs.
 var ProjectKeys = []string{
 	"ignore_patterns", "keybindings", "diff_style", "sidebar_style", "theme", "layout", "wrap", "tab_size",
-	"context_lines", "full_file_diff", "highlight_color", "editor_mode", "editor_focus", "review_format",
+	"context_lines", "full_file_diff", "highlight_color", "tour_note_percent", "editor_mode", "editor_focus", "review_format",
 	"auto_focus_mode", "mouse", "min_diff_width", "comment_expand", "comment_expand_delay",
 	"mark_reviewed_on_submit", "review_tracking", "idle_timeout",
 }

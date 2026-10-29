@@ -175,8 +175,8 @@ func TestEdgeRunsTheNavigateCommand(t *testing.T) {
 	}
 }
 
-// From the doc pane, ctrl+k goes up to the diff, and ctrl+l at its edge reaches
-// the edge command: the pane does not swallow them.
+// From a stop's note, above the diff, ctrl+j goes down to the diff, and ctrl+l
+// at its edge reaches the edge command: the pane does not swallow them.
 func TestDocPaneLetsPaneKeysThrough(t *testing.T) {
 	skipWithoutSh(t)
 	out := filepath.Join(t.TempDir(), "dirs")
@@ -189,9 +189,9 @@ func TestDocPaneLetsPaneKeysThrough(t *testing.T) {
 		t.Fatal("the stop's note is not open")
 	}
 	m.setFocus(focusDoc)
-	m = updateApp(t, m, tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl})
+	m = updateApp(t, m, tea.KeyPressMsg{Code: 'j', Mod: tea.ModCtrl})
 	if m.focus != focusMain {
-		t.Fatalf("ctrl+k from the doc pane left focus at %v, want the diff", m.focus)
+		t.Fatalf("ctrl+j from the note left focus at %v, want the diff", m.focus)
 	}
 	m.setFocus(focusDoc)
 	_, cmd := m.Update(tea.KeyPressMsg{Code: 'l', Mod: tea.ModCtrl})

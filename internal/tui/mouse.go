@@ -21,8 +21,8 @@ func (r paneRegion) translate(mx, my int) (int, int) {
 }
 
 // paneLayout holds the computed regions for all major content panes. doc is
-// the doc pane under the diff, empty while it is closed; its first row is the
-// pane's title.
+// the doc pane above or under the diff, empty while it is closed; its first
+// row is the pane's title.
 type paneLayout struct {
 	sidebar paneRegion
 	diff    paneRegion
@@ -45,9 +45,16 @@ const (
 // overlays never did.)
 func computePaneLayout(m *appModel) paneLayout {
 	l := computeMainPanes(m)
-	if m.docShown() {
-		// The doc pane is its own box directly under the diff's, so its content
-		// starts past the diff's bottom border and its own top one.
+	switch {
+	case m.docAbove():
+		// A tour note is its own box directly above the diff's: it takes the
+		// diff's place, and the diff starts past the note's bottom border and
+		// its own top one.
+		l.doc = paneRegion{l.diff.x, l.diff.y, l.diff.w, m.docPane.height}
+		l.diff.y += m.docPane.height + borderH
+	case m.docShown():
+		// An annotation's doc is its own box directly under the diff's, so its
+		// content starts past the diff's bottom border and its own top one.
 		l.doc = paneRegion{l.diff.x, l.diff.y + l.diff.h + borderH, l.diff.w, m.docPane.height}
 	}
 	return l

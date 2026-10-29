@@ -138,12 +138,6 @@ func wrapNote(src string, width int, styler *markdownStyler) []string {
 	return out
 }
 
-// noteHeight is how many rows the note wants, title included, at a width —
-// so a two-line note does not take half the screen.
-func (m docPaneModel) noteHeight(width int) int {
-	return len(wrapNote(m.noteSource, width, m.styler)) + 2 // + the title and its rule
-}
-
 // openRefs begins showing an annotation's refs starting at index 0. The caller
 // supplies the resolved content for the active ref via setContent.
 func (m *docPaneModel) openRefs(refs []types.DocRef) {

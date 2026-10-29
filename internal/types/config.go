@@ -77,6 +77,12 @@ type Config struct {
 	// (highlight_range), as a colour lipgloss understands ("#2d3b6b", "4").
 	// Empty uses the theme's.
 	HighlightColor string `json:"highlight_color"`
+	// TourNotePercent is the height of a tour stop's note pane, above the
+	// code, as a percentage of Monocle's window, box included. The pane is
+	// that height on every stop, whatever its note's length, so the code
+	// does not move from stop to stop; a longer note scrolls. 0 is 33; it is
+	// held between 10 and 90.
+	TourNotePercent int `json:"tour_note_percent"`
 	// RelatedEditorArgs are extra arguments appended to the editor command of
 	// the related-files pane (what ctrl+], ctrl+g in a tour and open-editor
 	// open) — `["-S", "/path/setup.vim"]`, say — so

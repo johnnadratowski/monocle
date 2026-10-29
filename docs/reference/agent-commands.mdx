@@ -514,7 +514,7 @@ The base ref is scoped to one review. After the reviewer submits (approve or req
 
 ## `monocle review set-walkthrough`
 
-Give the reviewer a **guided tour** of the review: an ordered list of stops they step through with `.` (next) and `,` (previous). Each stop puts the diff cursor on a range, shows your note about it in the pane under the diff, and can hand screenshots or recordings to the reviewer's [on-stop command](/configuration/config-file). The reviewer asks about a stop by its id ("1.2 — does `x` get hoisted here?"), and you answer with [`goto-stop`](#monocle-review-goto-stop).
+Give the reviewer a **guided tour** of the review: an ordered list of stops they step through with `.` (next) and `,` (previous). Each stop puts the diff cursor on a range, shows your note about it in the pane above the diff, and can hand screenshots or recordings to the reviewer's [on-stop command](/configuration/config-file). The reviewer asks about a stop by its id ("1.2 — does `x` get hoisted here?"), and you answer with [`goto-stop`](#monocle-review-goto-stop).
 
 ```bash
 monocle review set-walkthrough --file tour.json
@@ -676,7 +676,7 @@ In MCP tools mode, call the `open_editor` tool with `path`, `line` and, optional
 
 ## `monocle review doc`
 
-Hide or show the doc pane — the tour stop's note under the diff — in the reviewer's monocle, as its own `:doc` does: hidden, the diff takes the pane's rows.
+Hide or show the doc pane — the tour stop's note above the diff — in the reviewer's monocle, as its own `:doc` does: hidden, the diff takes the pane's rows.
 
 ```bash
 monocle review doc off

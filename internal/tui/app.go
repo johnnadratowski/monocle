@@ -289,6 +289,7 @@ type appModel struct {
 
 	mouseEnabled bool // whether mouse mode is active
 	minDiffWidth int  // minimum diff viewer content width in horizontal layout
+	notePercent  int  // tour_note_percent: a tour note's pane as a share of the window (notePercentOf)
 
 	showSessionPicker bool   // open session picker on startup
 	repoRoot          string // repo root for session listing
@@ -367,6 +368,7 @@ func NewApp(engine core.EngineAPI, opts ...AppOptions) appModel {
 
 	mouseEnabled := true
 	minDiffW := defaultMinDiffWidth
+	notePercent := 0
 	if engine != nil {
 		if cfg := engine.GetConfig(); cfg != nil {
 			if cfg.Keybindings != nil {
@@ -408,6 +410,7 @@ func NewApp(engine core.EngineAPI, opts ...AppOptions) appModel {
 			if cfg.MinDiffWidth > 0 {
 				minDiffW = cfg.MinDiffWidth
 			}
+			notePercent = cfg.TourNotePercent
 			if cfg.CommentExpand != nil && !*cfg.CommentExpand {
 				dv.commentExpandDelay = -1
 			} else if cfg.CommentExpandDelay > 0 {
@@ -464,6 +467,7 @@ func NewApp(engine core.EngineAPI, opts ...AppOptions) appModel {
 		mcpRegisterFn:     o.MCPRegisterFn,
 		mouseEnabled:      mouseEnabled,
 		minDiffWidth:      minDiffW,
+		notePercent:       notePercent,
 		showSessionPicker: o.ShowSessionPicker,
 		repoRoot:          o.RepoRoot,
 		nonGitMode:        o.NonGitMode,
@@ -3664,14 +3668,25 @@ func recalcPaneDimensions(m *appModel) {
 	}
 }
 
-// reserveDocPane carves the bottom of the diff column out for the annotation doc
-// pane when it's open. It shrinks the diff's real height (so its scroll math
-// matches what's rendered) and records the doc pane's inner height. The sidebar
-// keeps its full height — the doc pane sits under the diff only, not the sidebar.
-// noteMaxPercent caps a tour note's pane, as a share of Monocle's height. Two
-// thirds, so a note's end (a second reviewer's line, say) is not cut off and
-// missed; the PaneSize key shrinks it at once.
-const noteMaxPercent = 66
+// defaultNotePercent is a tour note's pane, box included, as a share of
+// Monocle's window: a third, the rest for the code (tour_note_percent sets
+// another).
+const defaultNotePercent = 33
+
+// notePercentOf is the note pane's share for a tour_note_percent: the default
+// for 0, and held between 10 and 90 so neither the note nor the code is
+// squeezed out.
+func notePercentOf(setting int) int {
+	if setting == 0 {
+		return defaultNotePercent
+	}
+	return min(max(setting, 10), 90)
+}
+
+// docAbove is whether the doc pane sits above the diff rather than under it:
+// a tour stop's note does, since it is read before the code it is about. An
+// annotation's doc stays under the code it explains.
+func (m appModel) docAbove() bool { return m.docShown() && m.docPane.note }
 
 // docSize is the doc pane's size against the diff, cycled by the PaneSize key:
 // the focused pane biggest first, then smallest, then back to the usual split.
@@ -3737,23 +3752,23 @@ func (m *appModel) setDocHidden(hidden bool) {
 	m.diffView.ensureVisible()
 }
 
+// reserveDocPane carves the doc pane out of the diff column when it's open:
+// a tour note above the diff, an annotation's doc under it. It shrinks the
+// diff's real height (so its scroll math matches what's rendered) and records
+// the doc pane's inner height. The sidebar keeps its full height — the doc
+// pane shares the diff's column only.
 func reserveDocPane(m *appModel) {
 	if !m.docShown() {
 		return
 	}
 	const borderH = 2
 	docInner := m.diffView.height / 2
-	// A note is sized to itself, up to the usual half: a two-line note taking
-	// half the screen away from the code it is about is the wrong trade.
 	m.docPane.width = m.diffView.width
 	if m.docPane.note {
-		// A tour note gets up to noteMaxPercent of the window, box included —
-		// more than the usual half — and a longer one scrolls inside it, under
-		// its pinned labels.
-		docInner = m.height*noteMaxPercent/100 - borderH
-		if want := m.docPane.noteHeight(m.diffView.width); want < docInner {
-			docInner = want
-		}
+		// A tour note's pane is the same height on every stop — a share of
+		// the window, box included — so the code under it does not move from
+		// stop to stop. A note longer than the pane scrolls in it.
+		docInner = m.height*notePercentOf(m.notePercent)/100 - borderH
 		m.docPane.reflow()
 	}
 	switch m.docSize {
@@ -4949,8 +4964,9 @@ func (m appModel) View() tea.View {
 
 	// The doc pane's height was already reserved out of the diff column in
 	// recalcPaneDimensions (so the diff's scroll math matches what's rendered).
-	// Here we render it as a box stacked directly under the diff at the diff
-	// column's width, so the sidebar keeps its full height beside both.
+	// Here we render it as a box stacked directly against the diff at the diff
+	// column's width — above it for a tour note, under it for an annotation's
+	// doc (docAbove) — so the sidebar keeps its full height beside both.
 	docPaneBox := func(outerW int) string {
 		docStyle := m.theme.MainPane
 		if m.focus == focusDoc {
@@ -4959,26 +4975,27 @@ func (m appModel) View() tea.View {
 		m.docPane.width = outerW - bw
 		return docStyle.Width(outerW).Height(m.docPane.height + bh).Render(m.docPane.View())
 	}
+	withDoc := func(mainView string, outerW int) string {
+		switch {
+		case !m.docShown():
+			return mainView
+		case m.docAbove():
+			return lipgloss.JoinVertical(lipgloss.Left, docPaneBox(outerW), mainView)
+		default:
+			return lipgloss.JoinVertical(lipgloss.Left, mainView, docPaneBox(outerW))
+		}
+	}
 
 	if m.sidebarHidden {
-		mainView := diffBox(m.diffView.width+bw, m.diffView.height+bh)
-		if m.docShown() {
-			mainView = lipgloss.JoinVertical(lipgloss.Left, mainView, docPaneBox(m.diffView.width+bw))
-		}
-		body = mainView
+		body = withDoc(diffBox(m.diffView.width+bw, m.diffView.height+bh), m.diffView.width+bw)
 	} else if m.layout == layoutStacked {
 		sidebarView := sidebarStyle.
 			Width(m.sidebar.width + bw).
 			Height(m.sidebar.height + bh).
 			Render(m.sidebar.View())
 
-		mainView := diffBox(m.diffView.width+bw, m.diffView.height+bh)
-
-		parts := []string{sidebarView, mainView}
-		if m.docShown() {
-			parts = append(parts, docPaneBox(m.diffView.width+bw))
-		}
-		body = lipgloss.JoinVertical(lipgloss.Left, parts...)
+		mainView := withDoc(diffBox(m.diffView.width+bw, m.diffView.height+bh), m.diffView.width+bw)
+		body = lipgloss.JoinVertical(lipgloss.Left, sidebarView, mainView)
 	} else {
 		sidebarView := sidebarStyle.
 			Width(m.sidebar.width + bw).
@@ -4994,12 +5011,8 @@ func (m appModel) View() tea.View {
 		}
 		m.diffView.width = diffContentW
 
-		mainView := diffBox(diffOuterW, m.diffView.height+bh)
-
-		// Doc pane stacks under the diff only; the sidebar stays full-height beside.
-		if m.docShown() {
-			mainView = lipgloss.JoinVertical(lipgloss.Left, mainView, docPaneBox(diffOuterW))
-		}
+		// The doc pane stacks with the diff only; the sidebar stays full-height beside.
+		mainView := withDoc(diffBox(diffOuterW, m.diffView.height+bh), diffOuterW)
 
 		body = lipgloss.JoinHorizontal(lipgloss.Top, sidebarView, mainView)
 	}
