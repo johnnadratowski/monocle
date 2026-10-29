@@ -42,6 +42,18 @@ func TestParseWalkthroughJSON(t *testing.T) {
 		}
 	})
 
+	// stage sends its "Not covered" stop last in every tour: it must load.
+	t.Run("an uncovered stop with its hunks", func(t *testing.T) {
+		got, err := parseWalkthroughJSON([]byte(`{"stops":[{"id":"uncovered","title":"Not covered","kind":"uncovered",
+			"note":"80% of the PR's changed lines are covered by a stop; these are not.","hunks":[{"file":"a.ts","start":6,"end":9}]}]}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if s := got.Stops[0]; s.Kind != "uncovered" || len(s.Hunks) != 1 || s.Hunks[0].File != "a.ts" || s.Hunks[0].End != 9 {
+			t.Errorf("got %+v", s)
+		}
+	})
+
 	t.Run("a bare list of stops", func(t *testing.T) {
 		got, err := parseWalkthroughJSON([]byte(` [{"id":"a"},{"id":"b"}] `))
 		if err != nil || len(got.Stops) != 2 {

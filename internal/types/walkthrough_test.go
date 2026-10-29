@@ -111,6 +111,24 @@ func TestNormalizeWalkthrough(t *testing.T) {
 		}
 	})
 
+	// An uncovered stop's hunks are where the reviewer lands, one after another:
+	// a hunk with no file has nowhere to land and is dropped, a range run
+	// backwards is turned round, and the kind is read however it was cased.
+	t.Run("an uncovered stop's hunks are tidied", func(t *testing.T) {
+		got, err := NormalizeWalkthrough(Walkthrough{Stops: []WalkthroughStop{{
+			ID: "uncovered", Kind: " Uncovered ",
+			Hunks: []StopHunk{{File: " a.ts ", Start: 6, End: 9}, {File: " ", Start: 1, End: 2}, {File: "b.ts", Start: 30, End: 4}, {File: "c.ts", Start: -2}},
+		}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		s := got.Stops[0]
+		want := []StopHunk{{File: "a.ts", Start: 6, End: 9}, {File: "b.ts", Start: 30, End: 30}, {File: "c.ts", Start: 1, End: 1}}
+		if s.Kind != StopKindUncovered || !s.Uncovered() || !reflect.DeepEqual(s.Hunks, want) {
+			t.Errorf("kind %q hunks %+v, want %q and %+v", s.Kind, s.Hunks, StopKindUncovered, want)
+		}
+	})
+
 	t.Run("no stops is not an error", func(t *testing.T) {
 		got, err := NormalizeWalkthrough(Walkthrough{})
 		if err != nil || !got.Empty() {
@@ -149,13 +167,16 @@ func TestWalkthroughJSONRoundTrip(t *testing.T) {
 		Calls:   []StopCall{{Stop: "2.2", Symbol: "createOrder", Line: 48}},
 		Layout:  "review",
 		Order:   []string{"view", "doc", "code", "regions"},
+	}, {
+		ID: "uncovered", Kind: StopKindUncovered, Hunks: []StopHunk{{File: "a.ts", Start: 6, End: 9}},
 	}}}
 	data, err := json.Marshal(in)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, key := range []string{`"id":"1.2"`, `"line_start":3`, `"line_end":9`, `"related":`, `"views":`, `"layout":"review"`, `"doc":"b.go"`,
-		`"calls":[{"stop":"2.2","symbol":"createOrder","line":48}]`, `"order":["view","doc","code","regions"]`} {
+		`"calls":[{"stop":"2.2","symbol":"createOrder","line":48}]`, `"order":["view","doc","code","regions"]`,
+		`"kind":"uncovered"`, `"hunks":[{"file":"a.ts","start":6,"end":9}]`} {
 		if !strings.Contains(string(data), key) {
 			t.Errorf("encoded tour %s is missing %s", data, key)
 		}

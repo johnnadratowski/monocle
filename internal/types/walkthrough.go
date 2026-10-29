@@ -47,6 +47,27 @@ type WalkthroughStop struct {
 	// it names them (["view", "doc", "code", "regions"], say), passed through
 	// like Layout. Monocle itself never interprets it.
 	Order []string `json:"order,omitempty"`
+	// Kind is what sort of stop this is: "" for one about a place in the
+	// code, StopKindUncovered for the changes no other stop covers.
+	Kind string `json:"kind,omitempty"`
+	// Hunks are an uncovered stop's changes, new-file line ranges in diff
+	// order. The reviewer steps through them as through stops, and the file
+	// list shows only their files.
+	Hunks []StopHunk `json:"hunks,omitempty"`
+}
+
+// StopKindUncovered is the stop a driver adds at a tour's end holding the
+// PR's changed lines that no stop covers.
+const StopKindUncovered = "uncovered"
+
+// Uncovered reports whether the stop is the changes no other stop covers.
+func (s WalkthroughStop) Uncovered() bool { return s.Kind == StopKindUncovered }
+
+// StopHunk is one run of changed lines: new-file lines Start to End of File.
+type StopHunk struct {
+	File  string `json:"file"`
+	Start int    `json:"start"`
+	End   int    `json:"end"`
 }
 
 // StopView is something to show alongside a stop that is not code: a
@@ -122,8 +143,8 @@ func (w *Walkthrough) Empty() bool { return w == nil || len(w.Stops) == 0 }
 // stop. It refuses rather than repairs a duplicate id, because the id is what
 // the reviewer types and the agent answers to — two stops called "1.2" would
 // make both ambiguous. An entry with nothing to act on — a related file with
-// no path, a view with no target, a call to a stop the tour does not have —
-// is dropped.
+// no path, a view with no target, a call to a stop the tour does not have, a
+// hunk with no file — is dropped.
 func NormalizeWalkthrough(w Walkthrough) (Walkthrough, error) {
 	out := Walkthrough{Title: strings.TrimSpace(w.Title), Stops: make([]WalkthroughStop, 0, len(w.Stops))}
 	seen := make(map[string]bool, len(w.Stops))
@@ -147,6 +168,18 @@ func NormalizeWalkthrough(w Walkthrough) (Walkthrough, error) {
 			s.LineEnd = s.LineStart
 		}
 		s.Layout = strings.TrimSpace(s.Layout)
+		s.Kind = strings.ToLower(strings.TrimSpace(s.Kind))
+		var hunks []StopHunk
+		for _, h := range s.Hunks {
+			// A hunk is somewhere to land: one with no file has nowhere.
+			if h.File = strings.TrimSpace(h.File); h.File == "" {
+				continue
+			}
+			h.Start = max(h.Start, 1)
+			h.End = max(h.End, h.Start)
+			hunks = append(hunks, h)
+		}
+		s.Hunks = hunks
 		var order []string
 		for _, o := range s.Order {
 			if o = strings.TrimSpace(o); o != "" {
