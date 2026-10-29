@@ -11,7 +11,6 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/josephschmitt/monocle/internal/types"
@@ -97,49 +96,8 @@ func TestAFailedViewRunSaysWhichView(t *testing.T) {
 	}
 }
 
-func TestStopLinkGroups(t *testing.T) {
-	got := stopLinkGroups(types.WalkthroughStop{
-		Related: []types.DocRef{{Doc: "a.go", StartLine: 4}, {Doc: "b.go"}},
-		Views: []types.StopView{
-			{Kind: "image", Target: "shots/x.png"},
-			{Kind: "url", Target: "https://x.test", Label: "Spec"},
-		},
-	}, nil, &tourStatus{views: []viewState{viewOpen}})
-	want := []linkGroup{
-		{head: "Calls:", hint: "click, or :call N"},
-		{head: "Related:", hint: "click, or :related N", links: []noteLink{
-			{label: "[1] a.go:4", act: tourRelatedMsg{arg: "1"}, middle: true},
-			{label: "[2] b.go", act: tourRelatedMsg{arg: "2"}, middle: true},
-		}},
-		{head: "Views:", hint: "click, or :view N", links: []noteLink{
-			{label: "[1] image x.png", act: tourViewMsg{arg: "1"}, state: viewOpen},
-			{label: "[2] url Spec", act: tourViewMsg{arg: "2"}},
-		}, trail: &noteTrail{text: "layout default"}},
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("got  %+v\nwant %+v", got, want)
-	}
-	if rows, _ := layoutGroups(stopLinkGroups(types.WalkthroughStop{}, nil, nil), 80); rows != nil {
-		t.Errorf("a stop with nothing to link has rows %q", rows)
-	}
-	// The layout always shows, flush right on the last group: "layout saved ·
-	// reset" with reset a label, or "layout default". On a stop with no view or
-	// related file it is a row of its own. An unknown status shows none.
-	savedTrail := &noteTrail{text: "layout saved", link: &noteLink{label: "reset", act: tourLayoutMsg{arg: "reset"}}}
-	saved := stopLinkGroups(types.WalkthroughStop{}, nil, &tourStatus{layoutSaved: true})
-	if len(saved) != 4 || !reflect.DeepEqual(saved[3], linkGroup{trail: savedTrail}) {
-		t.Errorf("with a saved layout: %+v", saved)
-	}
-	if got := stopLinkGroups(types.WalkthroughStop{}, nil, &tourStatus{}); len(got) != 4 || got[3].trail.text != "layout default" {
-		t.Errorf("with the default layout: %+v", got)
-	}
-	if got := stopLinkGroups(types.WalkthroughStop{}, nil, nil); len(got) != 3 {
-		t.Errorf("with no status: %+v", got)
-	}
-}
-
-// callsTour is an order tour whose route stop calls into three others: the
-// next stop, a later one, and one sent without a symbol.
+// anchoredCallsTour is callsTour with every stop on a line of the review.
+// callsTour is a tour whose first stop calls three others.
 func callsTour() *types.Walkthrough {
 	return &types.Walkthrough{Stops: []types.WalkthroughStop{
 		{ID: "2.1", Title: "The order route", Calls: []types.StopCall{
@@ -153,64 +111,6 @@ func callsTour() *types.Walkthrough {
 	}}
 }
 
-// A stop's calls are the first row under its note, above Related. The call
-// leading to the next stop reads "→" and has its own
-// colour; a call sent without a symbol shows the stop's title.
-func TestStopLinkGroupsCalls(t *testing.T) {
-	tour := callsTour()
-	stop := tour.Stops[0]
-	stop.Related = []types.DocRef{{Doc: "a.go", StartLine: 4}}
-	got := stopLinkGroups(stop, tour, nil)
-	wantCalls := linkGroup{head: "Calls:", hint: "click, or :call N", links: []noteLink{
-		{label: "[1] 4.1 reserveStock", act: tourCallMsg{arg: "1"}},
-		{label: "[2] → 2.2 createOrder", act: tourCallMsg{arg: "2"}, accent: nextCallColor},
-		{label: "[3] 3 The stock update", act: tourCallMsg{arg: "3"}},
-	}}
-	if len(got) != 3 || !reflect.DeepEqual(got[0], wantCalls) || got[1].head != "Related:" || got[2].head != "Views:" {
-		t.Fatalf("groups %+v, want Calls %+v then Related then the views", got, wantCalls)
-	}
-
-	// From the last stop nothing is next, so no call is marked.
-	last := tour.Stops[3]
-	last.Calls = []types.StopCall{{Stop: "2.2", Symbol: "createOrder"}}
-	if l := stopLinkGroups(last, tour, nil)[0].links[0]; l.accent != "" || strings.Contains(l.label, "→") {
-		t.Errorf("a call from the last stop is marked as the next: %+v", l)
-	}
-
-	// The layout trail stays where it was: on the views row, else the related
-	// row, else a row of its own — never on the calls row.
-	status := &tourStatus{}
-	onlyCalls := stopLinkGroups(tour.Stops[0], tour, status)
-	if len(onlyCalls) != 4 || onlyCalls[0].trail != nil || onlyCalls[3].trail == nil {
-		t.Errorf("a stop with only calls: trail on %+v, want a row of its own", onlyCalls)
-	}
-	withRelated := stopLinkGroups(stop, tour, status)
-	if len(withRelated) != 3 || withRelated[0].trail != nil || withRelated[1].trail == nil {
-		t.Errorf("a stop with calls and related files: trail on %+v, want the related row", withRelated)
-	}
-	stop.Views = []types.StopView{{Kind: "url", Target: "https://x.test"}}
-	withViews := stopLinkGroups(stop, tour, status)
-	if withViews[0].trail != nil || withViews[1].trail != nil || withViews[2].trail == nil {
-		t.Errorf("a stop with calls, related files and a view: trail on %+v, want the views row", withViews)
-	}
-}
-
-// The call to the next stop is drawn in its own colour; the rest in the usual
-// label accent.
-func TestTheNextStopsCallIsStyledApart(t *testing.T) {
-	tour := callsTour()
-	rows, _ := layoutGroups(stopLinkGroups(tour.Stops[0], tour, nil), 140)
-	label := lipgloss.NewStyle().Foreground(lipgloss.Color(annotationColor)).Bold(true).Underline(true)
-	next := label.Foreground(lipgloss.Color(nextCallColor))
-	if len(rows) != 1 || ansi.Strip(rows[0]) != " Calls: [1] 4.1 reserveStock · [2] → 2.2 createOrder · [3] 3 The stock update  click, or :call N" {
-		t.Fatalf("rows %q", rows)
-	}
-	if !strings.Contains(rows[0], next.Render("[2] → 2.2 createOrder")) || !strings.Contains(rows[0], label.Render("[1] 4.1 reserveStock")) {
-		t.Errorf("the next stop's call is not styled apart from the others: %q", rows[0])
-	}
-}
-
-// anchoredCallsTour is callsTour with every stop on a line of the review.
 func anchoredCallsTour() *types.Walkthrough {
 	tour := callsTour()
 	for i, at := range []struct {
@@ -219,49 +119,7 @@ func anchoredCallsTour() *types.Walkthrough {
 	}{{"a.go", 5}, {"b.go", 30}, {"b.go", 50}, {"a.go", 20}} {
 		tour.Stops[i].File, tour.Stops[i].LineStart = at.file, at.line
 	}
-	tour.Stops[0].Related = []types.DocRef{{Doc: "b.go", StartLine: 30}}
 	return tour
-}
-
-// Clicking a call's label is `:call N`, and both enter the stop it leads to.
-// The Calls row sits above the Related row.
-func TestClickingACallEntersItsStop(t *testing.T) {
-	for _, l := range layouts {
-		t.Run(l.name, func(t *testing.T) {
-			m, e := tourAppWith(t, anchoredCallsTour(), inertViewers(&types.Config{}))
-			m = updateApp(t, m, tea.WindowSizeMsg{Width: l.width, Height: 44})
-			m.sidebarHidden = l.sidebarHidden
-			recalcPaneDimensions(&m)
-
-			// In a short pane the Related row can be scrolled below the cap on
-			// label rows, so the order is read from the rows themselves.
-			calls, related := -1, -1
-			for i, r := range m.docPane.pinned {
-				switch plain := ansi.Strip(r); {
-				case strings.Contains(plain, "Calls:"):
-					calls = i
-				case strings.Contains(plain, "Related:"):
-					related = i
-				}
-			}
-			if calls < 0 || related <= calls {
-				t.Errorf("label rows %q: Calls at %d, Related at %d, want Calls above", m.docPane.pinned, calls, related)
-			}
-			cx, cy := onScreen(t, m, "[2] → 2.2 createOrder")
-			want := m.executeCommand("call 2")()
-			_, cmd := m.Update(leftClick(cx+3, cy))
-			if cmd == nil || !reflect.DeepEqual(cmd(), want) {
-				t.Fatalf("a click on the call did not send what :call 2 sends (%#v)", want)
-			}
-			m = updateApp(t, m, leftClick(cx+3, cy))
-			if stop, _ := m.currentStop(); stop.ID != "2.2" || m.diffView.path != "b.go" || cursorLine(m) != 30 {
-				t.Errorf("the click left the tour on %s at %s:%d, want 2.2 at b.go:30", stop.ID, m.diffView.path, cursorLine(m))
-			}
-			if got := e.reports(); got[len(got)-1] != "2.2" {
-				t.Errorf("reported %v, want the move to 2.2", got)
-			}
-		})
-	}
 }
 
 func TestCallCommand(t *testing.T) {
@@ -281,91 +139,6 @@ func TestCallCommand(t *testing.T) {
 	// A call followed is a detour: back returns from it.
 	if m = updateApp(t, m, backspaceKey); m.tour.index != 0 {
 		t.Errorf("back after following a call left index %d, want the stop that called", m.tour.index)
-	}
-}
-
-// TestLayoutKeepsEveryLabelWhole checks, at every width, that each label lands
-// on one row exactly where its hit says — so a click there finds it, and sends
-// what the label sends — and that no row is wider than the pane.
-func TestLayoutKeepsEveryLabelWhole(t *testing.T) {
-	views := []noteLink{
-		{label: "[1] video Before / after", act: tourViewMsg{arg: "1"}},
-		{label: "[2] url Spec", act: tourViewMsg{arg: "2"}},
-		{label: "[3] image A much longer label for the table structure", act: tourViewMsg{arg: "3"}},
-	}
-	t.Run("unmarked", func(t *testing.T) {
-		checkLinkLayout(t, linkGroup{head: "Views:", links: views, hint: "click, or :view N"})
-	})
-	marked := append([]noteLink(nil), views...)
-	marked[0].state, marked[1].state, marked[2].state = viewNotOpened, viewOpen, viewHidden
-	t.Run("marked", func(t *testing.T) { checkLinkLayout(t, linkGroup{head: "Views:", links: marked}) })
-	related := []noteLink{
-		{label: "[1] web-client/src/components/cart-items/cart-items.logic.js:66", act: tourRelatedMsg{arg: "1"}, middle: true},
-		{label: "[2] server/a.go:4", act: tourRelatedMsg{arg: "2"}, middle: true},
-	}
-	t.Run("paths", func(t *testing.T) { checkLinkLayout(t, linkGroup{head: "Related:", links: related}) })
-	t.Run("lead", func(t *testing.T) {
-		checkLinkLayout(t, linkGroup{head: "Layout:", lead: "saved", links: []noteLink{{label: "reset", act: tourViewMsg{arg: "x"}}}})
-	})
-}
-
-func checkLinkLayout(t *testing.T, g linkGroup) {
-	t.Helper()
-	for width := 12; width <= 140; width++ {
-		rows, hits := layoutGroups([]linkGroup{g}, width)
-		if len(hits) != len(g.links) {
-			t.Fatalf("width %d: %d hits for %d links", width, len(hits), len(g.links))
-		}
-		for _, r := range rows {
-			if w := lipgloss.Width(r); w > width-1 && width > 12 {
-				t.Errorf("width %d: row %q is %d wide", width, ansi.Strip(r), w)
-			}
-		}
-		for i, h := range hits {
-			l := g.links[i]
-			if !reflect.DeepEqual(h.act, l.act) {
-				t.Errorf("width %d: hit %d sends %#v, want %#v", width, i, h.act, l.act)
-			}
-			got := ansi.Strip(ansi.Cut(rows[h.line], h.start, h.end))
-			if got != l.label && (!strings.Contains(got, "…") || lipgloss.Width(got) != h.end-h.start) {
-				t.Errorf("width %d: label %d reads %q at its hit, want %q or a cut of it", width, i+1, got, l.label)
-			}
-			// A path cut to fit keeps its file name and line, room allowing.
-			if base := filepath.Base(l.label); l.middle && got != l.label && h.end-h.start > lipgloss.Width(base)+6 && !strings.HasSuffix(got, base) {
-				t.Errorf("width %d: path label %d was cut to %q, losing %q", width, i+1, got, base)
-			}
-			// Its marker follows it, on the same row and unclickable — unless
-			// the pane is too narrow for both, when the label is cut first.
-			if marker := ansi.Strip(l.state.marker()); marker != "" {
-				after := ansi.Strip(ansi.Cut(rows[h.line], h.end, h.end+1+len(marker)))
-				if after != " "+marker && (got == l.label || width >= 40) {
-					t.Errorf("width %d: label %d is followed by %q, want its marker %q", width, i+1, after, marker)
-				}
-			}
-		}
-	}
-}
-
-func TestLayoutGroupsStyleAndOrder(t *testing.T) {
-	groups := []linkGroup{
-		{head: "Related:", links: []noteLink{{label: "[1] a.go:4"}}, hint: "click, or :related N"},
-		{head: "Views:", links: []noteLink{{label: "[1] video Demo"}}, hint: "click, or :view N"},
-		{head: "Layout:", lead: "saved", links: []noteLink{{label: "reset"}}},
-	}
-	rows, _ := layoutGroups(groups, 80)
-	var plain []string
-	for _, r := range rows {
-		plain = append(plain, ansi.Strip(r))
-	}
-	want := []string{" Related: [1] a.go:4  click, or :related N", " Views: [1] video Demo  click, or :view N", " Layout: saved · reset"}
-	if !reflect.DeepEqual(plain, want) {
-		t.Errorf("rows read %q\nwant      %q", plain, want)
-	}
-	label := lipgloss.NewStyle().Foreground(lipgloss.Color(annotationColor)).Bold(true).Underline(true)
-	for i, l := range []string{"[1] a.go:4", "[1] video Demo", "reset"} {
-		if !strings.Contains(rows[i], label.Render(l)) {
-			t.Errorf("row %d: %q is not bold, underlined, in the accent", i, l)
-		}
 	}
 }
 
@@ -424,118 +197,6 @@ func TestDocPaneRegionIsWhereItRenders(t *testing.T) {
 	}
 }
 
-func TestClickingAViewLabelIsViewN(t *testing.T) {
-	for _, l := range layouts {
-		t.Run(l.name, func(t *testing.T) {
-			m := viewsAppIn(t, &types.Config{}, l.width, l.sidebarHidden)
-			focus, cursor := m.focus, m.diffView.cursor
-			for i, label := range []string{"[1] video Demo", "[2] url Spec"} {
-				x, y := onScreen(t, m, label)
-				want := m.executeCommand(fmt.Sprintf("view %d", i+1))()
-				for _, dx := range []int{0, lipgloss.Width(label) - 1} {
-					next, cmd := m.Update(leftClick(x+dx, y))
-					if cmd == nil {
-						t.Fatalf("a click on %q (+%d) did nothing", label, dx)
-					}
-					if got := cmd(); !reflect.DeepEqual(got, want) {
-						t.Errorf("a click on %q (+%d) sent %#v, want %#v — what :view %d sends", label, dx, got, want, i+1)
-					}
-					if app := next.(appModel); app.focus != focus || app.diffView.cursor != cursor {
-						t.Errorf("a click on %q moved focus or the diff cursor", label)
-					}
-				}
-			}
-			// Off the labels a click in the pane does nothing: past the end
-			// of one, the separator before the next, the hint, the note, the title.
-			x1, y1 := onScreen(t, m, "[1] video Demo")
-			x2, _ := onScreen(t, m, "[2] url Spec")
-			hx, hy := onScreen(t, m, "click, or :view N")
-			nx, ny := onScreen(t, m, "The write.")
-			tx, ty := onScreen(t, m, "1.2 · Where it lands")
-			for _, p := range [][2]int{{x1 + lipgloss.Width("[1] video Demo"), y1}, {x2 - 2, y1}, {x2 - 1, y1}, {hx, hy}, {nx, ny}, {tx, ty}} {
-				if _, cmd := m.Update(leftClick(p[0], p[1])); cmd != nil {
-					t.Errorf("a click at %v, off the labels, did something: %#v", p, cmd())
-				}
-			}
-		})
-	}
-}
-
-func TestClickingAViewLabelAsksTheOnStopCommandForIt(t *testing.T) {
-	skipWithoutSh(t)
-	out := filepath.Join(t.TempDir(), "runs")
-	m := viewsAppIn(t, &types.Config{WalkthroughOnStop: recordRuns(out)}, 140, false)
-	x, y := onScreen(t, m, "[2] url Spec")
-	m = updateApp(t, m, leftClick(x, y))
-	if got, want := waitForRuns(t, out, 1), []string{"1.2|2|view2"}; !reflect.DeepEqual(got, want) {
-		t.Errorf("on-stop runs %q, want %q", got, want)
-	}
-}
-
-func TestAClickFindsALabelInAScrolledNote(t *testing.T) {
-	tour := viewsTour()
-	tour.Stops[1].Note = strings.Repeat("A long note.\n\n", 30)
-	m, _ := tourAppWith(t, tour, inertViewers(&types.Config{}))
-	m = pressKey(t, m, ".")
-	for i := 0; i < 100; i++ {
-		m.docPane.scrollDown()
-	}
-	x, y := onScreen(t, m, "[2] url Spec")
-	_, cmd := m.Update(leftClick(x, y))
-	if cmd == nil {
-		t.Fatal("a click on a label scrolled into view did nothing")
-	}
-	if got := cmd(); !reflect.DeepEqual(got, tourViewMsg{arg: "2"}) {
-		t.Errorf("sent %#v, want view 2", got)
-	}
-}
-
-func TestMouseOffMeansNoClick(t *testing.T) {
-	off := false
-	m := viewsAppIn(t, &types.Config{Mouse: &off}, 140, false)
-	x, y := onScreen(t, m, "[2] url Spec")
-	if _, cmd := m.Update(leftClick(x, y)); cmd != nil {
-		t.Errorf("with mouse off a click did something: %#v", cmd())
-	}
-}
-
-func TestParseViewStatus(t *testing.T) {
-	for _, tc := range []struct {
-		out  string
-		n    int
-		want *tourStatus
-	}{
-		{`{"views": {"view": "open", "view2": "hidden", "view3": "closed"}, "layout": "saved"}`, 3,
-			&tourStatus{views: []viewState{viewOpen, viewHidden, viewNotOpened}, layoutSaved: true}},
-		{"{\"views\": {\"view2\": \"open\"}, \"layout\": \"default\"}\n", 2,
-			&tourStatus{views: []viewState{viewNotOpened, viewOpen}}},
-		{`{"views": {"view": "shut", "view9": "open"}}`, 1, &tourStatus{views: []viewState{viewNotOpened}}},
-		{`{"views": {}, "layout": "weird"}`, 2, &tourStatus{views: []viewState{viewNotOpened, viewNotOpened}}},
-		{`{"views": {}, "layout": "saved"}`, 0, &tourStatus{views: []viewState{}, layoutSaved: true}},
-	} {
-		got, err := parseViewStatus([]byte(tc.out), tc.n)
-		if err != nil || !reflect.DeepEqual(got, tc.want) {
-			t.Errorf("parseViewStatus(%q) = %+v, %v; want %+v", tc.out, got, err, tc.want)
-		}
-	}
-	// Anything without a "views" object of strings says nothing — the flat
-	// shape of an earlier draft included, so it cannot be misread as all closed.
-	for _, out := range []string{"", "open", "null", `["open"]`, `{}`, `{"view": "open"}`, `{"layout": "saved"}`,
-		`{"views": {"view": 1}}`, `{"views": ["open"]}`, `{"views": {}, "layout": 1}`, `{"views": {}`} {
-		if got, err := parseViewStatus([]byte(out), 1); err == nil {
-			t.Errorf("parseViewStatus(%q) = %v, want an error", out, got)
-		}
-	}
-}
-
-// statusApp is viewsAppIn with a view-status command (and, if given, an
-// on-stop command) on stop 1.2, before anything has been asked about it.
-func statusApp(t *testing.T, status, onStop string) appModel {
-	t.Helper()
-	skipWithoutSh(t)
-	return viewsAppIn(t, &types.Config{WalkthroughViewStatus: status, WalkthroughOnStop: onStop}, 140, false)
-}
-
 // settle runs what resting on the current stop runs, to completion.
 func settle(t *testing.T, m appModel) appModel {
 	t.Helper()
@@ -545,156 +206,6 @@ func settle(t *testing.T, m appModel) appModel {
 
 // screenText is the rendered screen without styling.
 func screenText(m appModel) string { return ansi.Strip(m.View().Content) }
-
-func TestViewMarkersComeFromTheStatusCommand(t *testing.T) {
-	m := settle(t, statusApp(t, `printf '{"views": {"view": "open", "view2": "hidden"}, "layout": "default"}'`, ""))
-	screen := screenText(m)
-	for _, want := range []string{"[1] video Demo (open)", "[2] url Spec (hidden)"} {
-		if !strings.Contains(screen, want) {
-			t.Errorf("screen lacks %q:\n%s", want, screen)
-		}
-	}
-	// The labels are still where a click finds them.
-	x, y := onScreen(t, m, "[2] url Spec")
-	if _, cmd := m.Update(leftClick(x, y)); cmd == nil || !reflect.DeepEqual(cmd(), tourViewMsg{arg: "2"}) {
-		t.Error("a marked label is not clickable")
-	}
-}
-
-func TestNoUsableStatusMeansNoMarker(t *testing.T) {
-	for name, status := range map[string]string{
-		"no command":      "",
-		"a failure":       `printf '{"views": {"view": "open"}, "layout": "saved"}'; exit 1`,
-		"not JSON":        `echo open`,
-		"the flat shape":  `echo '{"view": "open"}'`,
-		"a hung command":  `sleep 5`,
-		"over 500ms":      `sleep 1; echo '{"views": {"view": "open"}, "layout": "saved"}'`,
-		"stderr is noise": `echo '{"views": {"view": "open"}}' >&2`,
-	} {
-		t.Run(name, func(t *testing.T) {
-			m := settle(t, statusApp(t, status, ""))
-			if screen := screenText(m); strings.Contains(screen, "(open)") || strings.Contains(screen, "(not opened)") || strings.Contains(screen, "layout ") {
-				t.Errorf("a marker or the layout label with %s:\n%s", name, screen)
-			}
-		})
-	}
-}
-
-func TestAFailedAskClearsTheMarkers(t *testing.T) {
-	state := filepath.Join(t.TempDir(), "state")
-	if err := os.WriteFile(state, []byte(`{"views": {"view": "open"}, "layout": "saved"}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	m := settle(t, statusApp(t, "cat "+state, ""))
-	if !strings.Contains(screenText(m), "(open)") || !strings.Contains(screenText(m), "layout saved") {
-		t.Fatalf("no marker and layout label to begin with:\n%s", screenText(m))
-	}
-	_ = os.Remove(state)
-	m = settle(t, m)
-	if strings.Contains(screenText(m), "(open)") || strings.Contains(screenText(m), "layout ") {
-		t.Errorf("a marker or the layout label outlived the status command failing:\n%s", screenText(m))
-	}
-}
-
-// With an on-stop command, the ask waits for it: it is about to open this
-// stop's views, and asking first would mark the last stop's windows.
-func TestTheStatusAskFollowsTheOnStopCommand(t *testing.T) {
-	dir := t.TempDir()
-	state, out := filepath.Join(dir, "state"), filepath.Join(dir, "runs")
-	onStop := recordRuns(out) + `; printf '{"views": {"view": "open"}}' > ` + state
-	m := statusApp(t, "cat "+state, onStop)
-	next, cmd := m.settleOnStop(tourSettledMsg{seq: m.tour.settle})
-	if next.tour.statusSeq != m.tour.statusSeq {
-		t.Error("asked for the view status before the on-stop command ran")
-	}
-	m = driveWithin(t, next, cmd, 0, 5*time.Second)
-	if got := waitForRuns(t, out, 1); !reflect.DeepEqual(got, []string{"1.2|-|-"}) {
-		t.Fatalf("on-stop runs %q", got)
-	}
-	if screen := screenText(m); !strings.Contains(screen, "[1] video Demo (open)") || !strings.Contains(screen, "[2] url Spec (not opened)") {
-		t.Errorf("markers after the on-stop command:\n%s", screen)
-	}
-}
-
-func TestClickingAViewReasksItsStatus(t *testing.T) {
-	dir := t.TempDir()
-	state := filepath.Join(dir, "state")
-	// The on-stop command opens the view it is asked for; the status command
-	// reports it open.
-	onStop := `[ -n "$MONOCLE_VIEW_NAME" ] && printf '{"views": {"%s": "open"}}' "$MONOCLE_VIEW_NAME" > ` + state
-	m := settle(t, statusApp(t, "cat "+state+` 2>/dev/null || echo '{"views": {}}'`, onStop))
-	if !strings.Contains(screenText(m), "[2] url Spec (not opened)") {
-		t.Fatalf("before the click:\n%s", screenText(m))
-	}
-	x, y := onScreen(t, m, "[2] url Spec")
-	next, cmd := m.Update(leftClick(x, y))
-	m = driveWithin(t, next.(appModel), cmd, 0, 5*time.Second)
-	if screen := screenText(m); !strings.Contains(screen, "[1] video Demo (not opened)") || !strings.Contains(screen, "[2] url Spec (open)") {
-		t.Errorf("after clicking view 2:\n%s", screen)
-	}
-}
-
-// A restore runs no on-stop command, so the status is asked at once — on a
-// stop with no views too, since the answer also says whether the layout is
-// saved.
-func TestStatusIsAskedOnRestore(t *testing.T) {
-	skipWithoutSh(t)
-	m, _ := tourAppWith(t, viewsTour(), inertViewers(&types.Config{WalkthroughViewStatus: `echo '{"views": {}}'`}))
-	if stop, _ := m.currentStop(); len(stop.Views) != 0 || m.tour.statusSeq != 1 {
-		t.Errorf("restoring stop %s (%d views) asked %d times, want once", stop.ID, len(stop.Views), m.tour.statusSeq)
-	}
-}
-
-// The status command gets the on-stop command's environment: the stop, the
-// repo, and the stop as JSON.
-func TestTheStatusCommandsEnvironment(t *testing.T) {
-	status := `[ "$MONOCLE_STOP_ID" = 1.2 ] && [ "${MONOCLE_REPO_ROOT+set}" = set ] &&
-		case "$MONOCLE_STOP_JSON" in *'"id":"1.2"'*) echo '{"views": {"view": "open"}}';; esac`
-	m := settle(t, statusApp(t, status, ""))
-	if !strings.Contains(screenText(m), "[1] video Demo (open)") {
-		t.Errorf("the status command did not get its environment:\n%s", screenText(m))
-	}
-}
-
-func TestAStaleStatusAnswerIsDropped(t *testing.T) {
-	m := statusApp(t, `echo '{"views": {}}'`, "")
-	m.tour.statusSeq = 2
-	for name, msg := range map[string]viewStatusMsg{
-		"an older ask":  {seq: 1, stop: "1.2", status: &tourStatus{views: []viewState{viewOpen, viewOpen}}},
-		"another stop":  {seq: 2, stop: "1.1", status: &tourStatus{views: []viewState{viewOpen, viewOpen}}},
-		"the right one": {seq: 2, stop: "1.2", status: &tourStatus{views: []viewState{viewHidden, viewHidden}}},
-	} {
-		got := screenText(m.handleViewStatus(msg))
-		if marked := strings.Contains(got, "(open)") || strings.Contains(got, "(hidden)"); marked != (name == "the right one") {
-			t.Errorf("%s: marked=%v\n%s", name, marked, got)
-		}
-	}
-}
-
-func TestClickingARelatedLabelIsRelatedN(t *testing.T) {
-	for _, l := range layouts {
-		t.Run(l.name, func(t *testing.T) {
-			m := viewsAppIn(t, &types.Config{}, l.width, l.sidebarHidden)
-			focus, cursor := m.focus, m.diffView.cursor
-			for i, label := range []string{"[1] a.go:5", "[2] internal/deep/path/b.go:30"} {
-				x, y := onScreen(t, m, label)
-				want := m.executeCommand(fmt.Sprintf("related %d", i+1))()
-				for _, dx := range []int{0, lipgloss.Width(label) - 1} {
-					next, cmd := m.Update(leftClick(x+dx, y))
-					if cmd == nil {
-						t.Fatalf("a click on %q (+%d) did nothing", label, dx)
-					}
-					if got := cmd(); !reflect.DeepEqual(got, want) {
-						t.Errorf("a click on %q (+%d) sent %#v, want %#v — what :related %d sends", label, dx, got, want, i+1)
-					}
-					if app := next.(appModel); app.focus != focus || app.diffView.cursor != cursor {
-						t.Errorf("a click on %q moved focus or the diff cursor", label)
-					}
-				}
-			}
-		})
-	}
-}
 
 // captureRelated stands in for the tmux side of the related-files pane — the
 // test pretends to be inside tmux, with a server that does not exist — and
@@ -713,138 +224,8 @@ func captureRelated(t *testing.T) *[]relatedPanePlan {
 	return &plans
 }
 
-func TestRelatedNBringsUpEveryFileWithNActive(t *testing.T) {
-	m := viewsAppIn(t, &types.Config{Editor: "nvim"}, 140, false)
-	plans := captureRelated(t) // after: tourApp clears TMUX for itself
-
-	// Arriving at the stop opens its related files on the first, as before,
-	// and leaves a zoomed window as it is.
-	m = settle(t, m)
-	// Asking for file 2 opens them all again with file 2's window active, and
-	// unzooms the window so the pane can be seen.
-	m = typeCommand(t, m, "related 2")
-	if len(*plans) != 2 {
-		t.Fatalf("%d plans, want the stop's and :related 2's", len(*plans))
-	}
-	files := []string{"a.go", "internal/deep/path/b.go"}
-	for i, want := range []struct {
-		last   string
-		reveal bool
-		focus  bool
-	}{{"1wincmd w", false, false}, {"2wincmd w", true, true}} {
-		p := (*plans)[i]
-		c := p.argv[len(p.argv)-1]
-		if !reflect.DeepEqual(p.argv[3:5], files) || !strings.HasSuffix(c, "|"+want.last) || p.reveal != want.reveal {
-			t.Errorf("plan %d: argv %q reveal %v; want both files, ending %q, reveal %v", i, p.argv, p.reveal, want.last, want.reveal)
-		}
-		// Arriving leaves the keyboard with Monocle; asking for a file moves it
-		// there, so the reviewer sees which split it landed in.
-		if p.owner != "%99" || p.focus != want.focus {
-			t.Errorf("plan %d: owner %q focus %v, want beside %%99, focus %v", i, p.owner, p.focus, want.focus)
-		}
-	}
-	_ = m
-}
-
-func TestRelatedCommandRefusesWhatItCannotOpen(t *testing.T) {
-	m := viewsAppIn(t, &types.Config{}, 140, false) // on 1.2, outside tmux
-	for arg, want := range map[string]string{
-		"3": "1.2 has related files 1-2",
-		"0": "1.2 has related files 1-2",
-		"x": "1.2 has related files 1-2",
-		"2": "related files: " + errRelatedNeedsTmux.Error(),
-	} {
-		if got := typeCommand(t, m, "related "+arg).statusBar.searchInfo; got != want {
-			t.Errorf(":related %s said %q, want %q", arg, got, want)
-		}
-	}
-	if got := typeCommand(t, pressKey(t, m, ","), "related").statusBar.searchInfo; got != "1.1 has no related files" {
-		t.Errorf(":related on a stop with none said %q", got)
-	}
-	if got := typeCommand(t, pressKey(t, m, "W"), "related").statusBar.searchInfo; got != "no tour stop to open a related file from" {
-		t.Errorf(":related with the tour off said %q", got)
-	}
-}
-
-// layoutApp is statusApp on stop 1.2 with a view status read from a file, a
-// layout-reset command that records its runs and puts the layout back, and
-// the status asked once: the layout is saved.
-func layoutApp(t *testing.T, reset string) (appModel, string) {
-	t.Helper()
-	dir := t.TempDir()
-	state := filepath.Join(dir, "state")
-	if err := os.WriteFile(state, []byte(`{"views": {}, "layout": "saved"}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	m := statusApp(t, "cat "+state, "")
-	cfg := m.engine.GetConfig()
-	cfg.WalkthroughLayoutReset = strings.ReplaceAll(reset, "STATE", state)
-	return settle(t, m), dir
-}
-
 const recordingReset = `printf '%s|%s|%s\n' "$MONOCLE_STOP_ID" "${MONOCLE_REPO_ROOT+set}" "${MONOCLE_STOP_JSON:+json}" >> "$(dirname STATE)/resets"; ` +
 	`printf '{"views": {}, "layout": "default"}' > STATE`
-
-func TestASavedLayoutOffersAReset(t *testing.T) {
-	m, _ := layoutApp(t, recordingReset)
-	if row := rowWith(screenText(m), "layout saved · reset"); !strings.HasSuffix(strings.TrimRight(strings.TrimSuffix(strings.TrimRight(row, " "), "│"), " "), "layout saved · reset") {
-		t.Fatalf("no reset label flush right:\n%s", screenText(m))
-	}
-	x, y := onScreen(t, m, "· reset")
-	_, cmd := m.Update(leftClick(x+2, y))
-	if cmd == nil {
-		t.Fatal("a click on reset did nothing")
-	}
-	if got, want := cmd(), m.executeCommand("layout reset")(); !reflect.DeepEqual(got, want) {
-		t.Errorf("a click on reset sent %#v, want %#v — what :layout reset sends", got, want)
-	}
-	// "layout saved" itself is not a label.
-	lx, ly := onScreen(t, m, "layout saved")
-	if _, cmd := m.Update(leftClick(lx+8, ly)); cmd != nil {
-		t.Errorf("a click on \"saved\" did something: %#v", cmd())
-	}
-}
-
-func TestLayoutResetRunsTheCommandThenAsksAgain(t *testing.T) {
-	m, dir := layoutApp(t, recordingReset)
-	asked := m.tour.statusSeq
-	next, cmd := m.Update(tourLayoutMsg{arg: "reset"})
-	m = driveWithin(t, next.(appModel), cmd, 0, 5*time.Second)
-	runs, _ := os.ReadFile(filepath.Join(dir, "resets"))
-	if string(runs) != "1.2|set|json\n" {
-		t.Errorf("reset runs %q, want one with the status command's environment", runs)
-	}
-	if m.tour.statusSeq != asked+1 || m.statusBar.searchInfo != "layout reset" {
-		t.Errorf("after the reset: asked %d more times, status %q", m.tour.statusSeq-asked, m.statusBar.searchInfo)
-	}
-	if strings.Contains(screenText(m), "Layout:") {
-		t.Errorf("the label outlived the layout going back to the default:\n%s", screenText(m))
-	}
-}
-
-func TestLayoutCommand(t *testing.T) {
-	m, _ := layoutApp(t, `echo "no such scene" >&2; exit 4`)
-	for arg, want := range map[string]string{
-		"":        "layout: saved — :layout reset puts it back",
-		"frobble": "usage: :layout [reset]",
-	} {
-		if got := typeCommand(t, m, strings.TrimSpace("layout "+arg)).statusBar.searchInfo; got != want {
-			t.Errorf(":layout %s said %q, want %q", arg, got, want)
-		}
-	}
-	next, cmd := m.Update(tourLayoutMsg{arg: "reset"})
-	failed := driveWithin(t, next.(appModel), cmd, 0, 5*time.Second)
-	if want := "layout reset failed: exit status 4: no such scene"; failed.statusBar.searchInfo != want {
-		t.Errorf("a failed reset said %q, want %q", failed.statusBar.searchInfo, want)
-	}
-	if failed.tour.statusSeq != m.tour.statusSeq+1 {
-		t.Error("a failed reset did not ask the view status again")
-	}
-	m.engine.GetConfig().WalkthroughLayoutReset = ""
-	if got := typeCommand(t, m, "layout reset").statusBar.searchInfo; got != "no walkthrough_layout_reset command configured" {
-		t.Errorf("without a reset command :layout reset said %q", got)
-	}
-}
 
 // longNoteApp is viewsAppIn's stop 1.2 with a note far longer than the pane.
 func longNoteApp(t *testing.T) appModel {
@@ -867,7 +248,10 @@ func wheel(x, y int, down bool) tea.MouseWheelMsg {
 	return tea.MouseWheelMsg{X: x, Y: y, Button: b}
 }
 
-func TestLabelsStayInReachOfALongNote(t *testing.T) {
+// A note longer than its pane starts at its top; the wheel over it scrolls the
+// note, not the diff, down to its last line and back up; the title says how
+// much is out of sight. The note is all the pane holds: no labels under it.
+func TestTheWheelScrollsALongNote(t *testing.T) {
 	m := longNoteApp(t)
 	screen := screenText(m)
 	if !strings.Contains(screen, "Note line 1.") || strings.Contains(screen, "Note line 60.") {
@@ -876,16 +260,11 @@ func TestLabelsStayInReachOfALongNote(t *testing.T) {
 	if title := rowWith(screen, "1.2 · Where it lands"); !strings.Contains(title, "↓ ") {
 		t.Errorf("the title does not say how much is below: %q", title)
 	}
-	vx, vy := onScreen(t, m, "[2] url Spec")
-	rx, ry := onScreen(t, m, "[1] a.go:5")
-	// The labels are the pane's last rows: the box's bottom border is next.
-	lines := strings.Split(screen, "\n")
-	if ry != vy-1 || !strings.Contains(lines[vy+1], "└") {
-		t.Errorf("labels at rows %d and %d; the row under them is %q, want the pane's bottom border", ry, vy, lines[vy+1])
+	for _, label := range []string{"Calls:", "Related:", "View:", "Views:", "[1] a.go:5", "url Spec", "layout"} {
+		if strings.Contains(screen, label) {
+			t.Errorf("the note's pane still lists %q:\n%s", label, screen)
+		}
 	}
-
-	// The wheel over the note scrolls the note, not the diff, and the labels
-	// stay where they are, still clickable.
 	nx, ny := onScreen(t, m, "Note line 2.")
 	diffOffset := m.diffView.offset
 	for i := 0; i < 30; i++ {
@@ -898,20 +277,13 @@ func TestLabelsStayInReachOfALongNote(t *testing.T) {
 	if m.diffView.offset != diffOffset {
 		t.Error("the wheel over the note scrolled the diff")
 	}
-	if x, y := onScreen(t, m, "[2] url Spec"); x != vx || y != vy {
-		t.Errorf("the labels moved with the note: (%d,%d) → (%d,%d)", vx, vy, x, y)
-	}
 	if title := rowWith(screen, "1.2 · Where it lands"); !strings.Contains(title, "↑ ") || strings.Contains(title, "↓") {
 		t.Errorf("at the end the title should say only what is above: %q", title)
 	}
-	for label, want := range map[[2]int]tea.Msg{{vx, vy}: tourViewMsg{arg: "2"}, {rx, ry}: tourRelatedMsg{arg: "1"}} {
-		if _, cmd := m.Update(leftClick(label[0], label[1])); cmd == nil || !reflect.DeepEqual(cmd(), want) {
-			t.Errorf("after scrolling, a click at %v did not send %#v", label, want)
-		}
-	}
-	// The last note line sits just above the labels' blank row, not under them.
-	if _, ly := onScreen(t, m, "Note line 60."); ly != ry-2 {
-		t.Errorf("the note's last line is on row %d, want %d (above the blank row over the labels)", ly, ry-2)
+	// The note's last line is the pane's last row: its box's bottom border is next.
+	lines := strings.Split(screen, "\n")
+	if _, ly := onScreen(t, m, "Note line 60."); !strings.Contains(lines[ly+1], "└") {
+		t.Errorf("the row under the note's last line is %q, want the pane's bottom border", lines[ly+1])
 	}
 	for i := 0; i < 30; i++ {
 		m = updateApp(t, m, wheel(nx, ny, false))
@@ -990,8 +362,7 @@ func TestALongNoteShowsAScrollbar(t *testing.T) {
 	}
 }
 
-// A tour note's title has a rule under it, and a click on a label still lands on
-// the label (the rule moves the text down a row).
+// A tour note's title has a rule under it.
 func TestANoteHasARuleUnderItsTitle(t *testing.T) {
 	m := longNoteApp(t)
 	lines := strings.Split(screenText(m), "\n")
@@ -1019,54 +390,6 @@ func TestTheScrollHintSitsAtTheRightOfTheTitle(t *testing.T) {
 	}
 }
 
-// A stop with one view labels it "View:", not "Views:".
-func TestOneViewIsLabelledSingular(t *testing.T) {
-	tour := viewsTour()
-	for i := range tour.Stops {
-		if len(tour.Stops[i].Views) > 1 {
-			tour.Stops[i].Views = tour.Stops[i].Views[:1]
-		}
-	}
-	m, _ := tourAppWith(t, tour, inertViewers(&types.Config{}))
-	m = pressKey(t, m, ".")
-	screen := screenText(m)
-	if strings.Contains(screen, "Views:") || !strings.Contains(screen, "View:") {
-		t.Errorf("a one-view stop should read \"View:\":\n%s", screen)
-	}
-}
-
-// Many related files take at most a third of the notes pane; the rest scroll in
-// place with the wheel over them, and a click after scrolling still lands on the
-// label under it.
-func TestManyRelatedFilesScrollInPlace(t *testing.T) {
-	tour := viewsTour()
-	var refs []types.DocRef
-	for i := 1; i <= 24; i++ {
-		refs = append(refs, types.DocRef{Doc: fmt.Sprintf("pkg/file%02d.go", i), StartLine: i})
-	}
-	tour.Stops[1].Related = refs
-	m, _ := tourAppWith(t, tour, inertViewers(&types.Config{}))
-	m = pressKey(t, m, ".")
-	d := m.docPane
-	if len(d.pinned) <= d.pinCap() || d.pinnedShown() != d.pinCap() {
-		t.Fatalf("pinned %d rows, cap %d, shown %d: the labels should be capped", len(d.pinned), d.pinCap(), d.pinnedShown())
-	}
-	if strings.Contains(screenText(m), "file24.go") {
-		t.Fatal("the last related file should be out of sight before scrolling")
-	}
-	x, y := onScreen(t, m, "[1] pkg/file01.go")
-	for i := 0; i < 30; i++ {
-		m = updateApp(t, m, wheel(x, y, true))
-	}
-	if !strings.Contains(screenText(m), "file24.go") {
-		t.Fatalf("the wheel over the labels did not scroll them:\n%s", screenText(m))
-	}
-	lx, ly := onScreen(t, m, "file24.go")
-	if _, cmd := m.Update(leftClick(lx, ly)); cmd == nil || !reflect.DeepEqual(cmd(), tourRelatedMsg{arg: "24"}) {
-		t.Error("a click on a scrolled label did not open that file")
-	}
-}
-
 // = cycles the doc pane against the diff: from the diff, the diff biggest (the
 // doc smallest), then the doc biggest, then the usual split; from the doc pane,
 // the doc biggest first.
@@ -1085,15 +408,5 @@ func TestPaneSizeCycles(t *testing.T) {
 	m = pressKey(t, m, "=")
 	if m.docPane.height <= usual {
 		t.Errorf("from the doc pane the first press should make it biggest: %d (usual %d)", m.docPane.height, usual)
-	}
-}
-
-// A rule separates the note from its labels.
-func TestARuleSitsAboveTheLabels(t *testing.T) {
-	m := longNoteApp(t)
-	lines := strings.Split(screenText(m), "\n")
-	_, ry := onScreen(t, m, "[1] a.go:5")
-	if ry < 1 || !strings.Contains(lines[ry-1], "────") {
-		t.Errorf("no rule above the labels; the row above reads %q", lines[ry-1])
 	}
 }

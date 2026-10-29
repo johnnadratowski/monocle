@@ -47,7 +47,7 @@ func applyConfigFile(cfg *types.Config, data []byte, project bool) error {
 // of types.Config to one list or the other, so a new one is placed on purpose.
 var GlobalOnlyKeys = []string{
 	"editor", "markdown_viewer", "media_viewer",
-	"walkthrough_on_stop", "walkthrough_view_status", "walkthrough_layout_reset",
+	"walkthrough_on_stop",
 	"walkthrough_navigate", "walkthrough_ask", "walkthrough_resolve",
 	"cursor_command", "comments_command",
 	"related_editor_args", "related_editor_add", "related_editor_preview", "related_open",

@@ -1306,14 +1306,8 @@ func (m appModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case onStopDoneMsg:
 		return m.handleOnStopDone(msg)
 
-	case viewStatusMsg:
-		return m.handleViewStatus(msg), nil
-
 	case tourViewMsg:
 		return m.openStopView(msg.arg)
-
-	case tourRelatedMsg:
-		return m.openStopRelated(msg.arg)
 
 	case tourCallMsg:
 		return m.followStopCall(msg.arg)
@@ -1330,9 +1324,6 @@ func (m appModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case relatedOpenMsg:
 		return m.handleRelatedOpen(msg), nil
 
-	case tourLayoutMsg:
-		return m.handleLayout(msg)
-
 	case docPaneMsg:
 		return m.handleDocPane(msg.arg), nil
 
@@ -1341,9 +1332,6 @@ func (m appModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case linkMsg:
 		return m.handleLink(msg.arg), nil
-
-	case layoutResetDoneMsg:
-		return m.handleLayoutResetDone(msg)
 
 	// Sidebar selection → load diff (focus stays where it is)
 	case sidebarSelectMsg:
@@ -2119,9 +2107,9 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case Matches(key, km.FocusSwap), key == "shift+tab", Matches(key, km.OpenDocRef),
 			Matches(key, km.TourNext), Matches(key, km.TourPrev), Matches(key, km.ToggleTour),
-			Matches(key, km.CloseRelated), Matches(key, km.PaneSize), Matches(key, km.DocPane), Matches(key, km.OpenLink),
+			Matches(key, km.PaneSize), Matches(key, km.DocPane), Matches(key, km.OpenLink),
 			Matches(key, km.PaneLeft), Matches(key, km.PaneDown), Matches(key, km.PaneUp), Matches(key, km.PaneRight),
-			Matches(key, km.ToggleSidebar), Matches(key, km.Help), Matches(key, km.CommandMode), Matches(key, km.SendLines), Matches(key, km.OpenRefs), Matches(key, km.OpenRefsPreview), Matches(key, km.LayoutReset),
+			Matches(key, km.ToggleSidebar), Matches(key, km.Help), Matches(key, km.CommandMode), Matches(key, km.SendLines), Matches(key, km.OpenRefs), Matches(key, km.OpenRefsPreview),
 			m.tour.on && (Matches(key, km.TourBack) || Matches(key, km.TourForward)):
 			// fall through to the shared cases — the tour keys included, since
 			// the doc pane is where the tour's note is being read. ctrl+h/j/k/l
@@ -2256,16 +2244,6 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	case Matches(key, km.ToggleTour):
 		return m.toggleTour()
-
-	case Matches(key, km.LayoutReset):
-		return m.handleLayout(tourLayoutMsg{arg: "reset"})
-
-	case Matches(key, km.CloseRelated):
-		if !inTmux() {
-			m.statusBar.searchInfo = "no related-files pane: monocle is not running in tmux"
-			return m, nil
-		}
-		return m, closeRelatedCmd(m.tour.pane, os.Getenv("TMUX_PANE"))
 
 	case Matches(key, km.Help):
 		m.help.active = true
@@ -3221,7 +3199,7 @@ var commandNames = []string{
 	"pause", "unpause", "history",
 	"mark-all-reviewed", "mark-all-unreviewed",
 	"base-artifact-version", "base-ref", "ref", "theme",
-	"relaunch", "stop", "view", "related", "call", "back", "forward", "layout", "doc", "comments", "link",
+	"relaunch", "stop", "view", "call", "back", "forward", "doc", "comments", "link",
 }
 
 // matchingCommands returns the command names that start with prefix, in order.
@@ -3320,11 +3298,6 @@ func (m appModel) executeCommand(cmd string) tea.Cmd {
 		arg := strings.TrimSpace(strings.TrimPrefix(trimmed, "view"))
 		return func() tea.Msg { return tourViewMsg{arg: arg} }
 	}
-	// `:related 2` — bring up one of the current stop's related files.
-	if trimmed == "related" || strings.HasPrefix(trimmed, "related ") {
-		arg := strings.TrimSpace(strings.TrimPrefix(trimmed, "related"))
-		return func() tea.Msg { return tourRelatedMsg{arg: arg} }
-	}
 	// `:call 1` — enter the stop one of the current stop's calls leads to.
 	if trimmed == "call" || strings.HasPrefix(trimmed, "call ") {
 		arg := strings.TrimSpace(strings.TrimPrefix(trimmed, "call"))
@@ -3355,11 +3328,6 @@ func (m appModel) executeCommand(cmd string) tea.Cmd {
 	if trimmed == "link" || strings.HasPrefix(trimmed, "link ") {
 		arg := strings.TrimSpace(strings.TrimPrefix(trimmed, "link"))
 		return func() tea.Msg { return linkMsg{arg: arg} }
-	}
-	// `:layout reset` — put the tour's windows back in their default layout.
-	if trimmed == "layout" || strings.HasPrefix(trimmed, "layout ") {
-		arg := strings.TrimSpace(strings.TrimPrefix(trimmed, "layout"))
-		return func() tea.Msg { return tourLayoutMsg{arg: arg} }
 	}
 	switch trimmed {
 	case "submit":

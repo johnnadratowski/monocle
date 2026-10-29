@@ -28,14 +28,17 @@ type WalkthroughStop struct {
 	LineStart int    `json:"line_start,omitempty"` // new-file line; 0 = the file as a whole
 	LineEnd   int    `json:"line_end,omitempty"`
 	Note      string `json:"note,omitempty"` // markdown, shown in the doc pane
-	// Related are repo files to open, at their lines, in the editor split —
-	// typically where a change starts when the stop shows where it lands.
+	// Related are repo files the stop is about besides its own. Monocle no
+	// longer shows or opens them — the windows around it show what a stop is
+	// about — but a tour that carries them still loads, and the on-stop
+	// command still receives them.
 	Related []DocRef   `json:"related,omitempty"`
 	Views   []StopView `json:"views,omitempty"`
 	// Calls are the other stops this stop's code calls into: 2.1 is the
-	// route, and it calls createOrder, which is what 2.2 is about. Each is a
-	// label under the note that enters the stop it names, so the reviewer can
-	// follow the code from caller to callee.
+	// route, and it calls createOrder, which is what 2.2 is about. Each
+	// symbol is underlined in the stop's code, and o on it (or :call N) enters
+	// the stop it names, so the reviewer can follow the code from caller to
+	// callee.
 	Calls []StopCall `json:"calls,omitempty"`
 	// Layout is an opaque scene name, passed through to the on-stop command.
 	// Monocle itself never interprets it.
@@ -57,8 +60,8 @@ type StopView struct {
 }
 
 // StopCall is one function a stop's code calls that another stop is about.
-// Line places the call in this stop's file, so the call site itself can later
-// be marked in the diff; the label under the note does not need it.
+// Line places the call in this stop's file, so the underline marks the call
+// site itself rather than every use of the symbol in the stop's lines.
 type StopCall struct {
 	Stop   string `json:"stop"`           // the id of the stop the call leads to
 	Symbol string `json:"symbol"`         // the function called; empty shows the stop's title

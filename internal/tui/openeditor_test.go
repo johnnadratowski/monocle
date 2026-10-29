@@ -84,7 +84,7 @@ func TestOpenEditorUsesTheRelatedEditor(t *testing.T) {
 }
 
 // With no editor running beside Monocle one is started, as ctrl+g does in a
-// tour: with the stop's related files and the file asked for.
+// tour, with the file asked for.
 func TestOpenEditorStartsTheRelatedEditor(t *testing.T) {
 	m, added, plans, _ := openEditorApp(t, false)
 	m = openEditor(t, m, openEditorMsg{path: "lib/util.go", line: 12})
@@ -95,7 +95,7 @@ func TestOpenEditorStartsTheRelatedEditor(t *testing.T) {
 		t.Fatalf("%d plans, want the editor started", len(*plans))
 	}
 	root := m.repoRoot
-	want := []relatedFile{{filepath.Join(root, "a.go"), 5}, {filepath.Join(root, "lib/util.go"), 12}}
+	want := []relatedFile{{filepath.Join(root, "lib/util.go"), 12}}
 	if got := (*plans)[0].files; !reflect.DeepEqual(got, want) || !(*plans)[0].selectPane {
 		t.Errorf("started with %+v (focus %v), want %+v with the keyboard", got, (*plans)[0].selectPane, want)
 	}

@@ -13,15 +13,14 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-
-	"github.com/josephschmitt/monocle/internal/types"
 )
 
-// A tour stop's related files — typically where a change starts, when the stop
-// shows where it lands — open beside Monocle in ONE tmux pane running the
-// editor, each at its line. The next stop with related files reuses that pane
-// (respawn-pane) rather than splitting another, so a tour of twenty stops does
-// not leave twenty panes behind; X closes it.
+// What the reviewer opens from the code — what lines reference (ctrl+], p), a
+// file the agent asks for (open-editor) — opens beside Monocle in ONE tmux
+// pane running the editor, each file at its line. The next file opened reuses
+// that pane (respawn-pane, or related_editor_add) rather than splitting
+// another. (A tour stop once carried "related files" that opened here too;
+// the windows around Monocle show what a stop is about now.)
 //
 // The pane is found again after a Monocle restart through a pane option naming
 // the Monocle pane that owns it, so a relaunch does not strand the old split and
@@ -38,15 +37,6 @@ var relatedPaneMu sync.Mutex
 type relatedFile struct {
 	path string
 	line int
-}
-
-// relatedFilesFor lists a stop's related files for the editor.
-func relatedFilesFor(stop types.WalkthroughStop) []relatedFile {
-	out := make([]relatedFile, 0, len(stop.Related))
-	for _, r := range stop.Related {
-		out = append(out, relatedFile{path: r.Doc, line: r.StartLine})
-	}
-	return out
 }
 
 // absRelated anchors relative paths to the review's checkout, so the editor
@@ -340,17 +330,6 @@ func closeRelatedCmd(tracked, owner string) tea.Cmd {
 	}
 }
 
-// openRelated opens the current stop's related files. A stop with none leaves
-// the pane as it is: stepping through a stop that has nothing to add should not
-// take away what the last one opened.
-func (m appModel) openRelated(stop types.WalkthroughStop) tea.Cmd {
-	files := relatedFilesFor(stop)
-	if len(files) == 0 || m.relatedOpenCommand() != "" {
-		return nil // (with related_open, a stop's files are only its labels)
-	}
-	return m.showRelatedFiles(files, 1, false, false)
-}
-
 // errRelatedNeedsTmux is what showing related files says outside tmux.
 var errRelatedNeedsTmux = errors.New("related files open in a tmux pane; monocle is not running in tmux")
 
@@ -406,40 +385,6 @@ func (m appModel) relatedEditorArgs() []string {
 		return cfg.RelatedEditorArgs
 	}
 	return nil
-}
-
-// tourRelatedMsg asks to bring up one of the current stop's related files —
-// `:related 2`, or a click on its label.
-type tourRelatedMsg struct{ arg string }
-
-// openStopRelated brings up the related-files pane with all of the current
-// stop's related files, as arriving at the stop does, but with file n
-// (1-based; empty means the first) the active one — and unzooms Monocle's
-// window if it is zoomed, since asking for a file means wanting to see it.
-// Keyboard focus follows the same rule as on arriving: a respawn never moves
-// it, a new split takes it only with editor_focus.
-func (m appModel) openStopRelated(arg string) (appModel, tea.Cmd) {
-	stop, ok := m.currentStop()
-	if !ok || !m.tour.on {
-		m.statusBar.searchInfo = "no tour stop to open a related file from"
-		return m, nil
-	}
-	files := relatedFilesFor(stop)
-	if len(files) == 0 {
-		m.statusBar.searchInfo = stop.ID + " has no related files"
-		return m, nil
-	}
-	n, ok := stopItemNumber(arg, len(files))
-	if !ok {
-		m.statusBar.searchInfo = fmt.Sprintf("%s has related files 1-%d", stop.ID, len(files))
-		return m, nil
-	}
-	if m.relatedOpenCommand() != "" {
-		return m.openElsewhere(files[n-1 : n])
-	}
-	// The keyboard goes with it. Opening a file is a request to look at it, and
-	// with focus left behind nothing shows which split the file landed in.
-	return m, m.addOrShowRelated(files[n-1:n], files, n, true, true)
 }
 
 // A file the reviewer closed in the related pane's editor should stay closed

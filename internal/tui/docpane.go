@@ -45,38 +45,23 @@ type docPaneModel struct {
 	noteSource string
 	noteWidth  int
 	styler     *markdownStyler
-
-	// groups follow the note as rows of clickable labels (a tour stop's
-	// related files, views, layout). They are laid out into pinned, which
-	// stays at the bottom of the pane while only the note above it scrolls —
-	// a long note must not push the labels out of reach — and linkHits say
-	// where each label is among the pinned rows, so a click can be mapped
-	// back.
-	groups   []linkGroup
-	pinned   []string
-	linkHits []linkHit
-	// pinOffset scrolls the label rows when there are more than pinCap: a stop
-	// with many related files must not take the note's room.
-	pinOffset int
 }
 
-// openNote shows a block of markdown under a heading, followed by rows of
-// labels. key identifies what is showing (like annotationID does for refs), so
-// the caller can tell whether the pane already holds it.
-func (m *docPaneModel) openNote(key, title, body string, groups []linkGroup, styler *markdownStyler) {
+// openNote shows a block of markdown under a heading. key identifies what is
+// showing (like annotationID does for refs), so the caller can tell whether
+// the pane already holds it.
+func (m *docPaneModel) openNote(key, title, body string, styler *markdownStyler) {
 	m.active = true
 	m.note = true
 	m.annotationID = key
 	m.title = title
 	m.noteSource = body
-	m.groups = groups
 	m.styler = styler
 	m.refs = nil
 	m.activeRef = 0
 	m.hlStartLine, m.hlStartCol, m.hlEndLine, m.hlEndCol = 0, 0, 0, 0
 	m.rangeShifted = false
 	m.offset = 0
-	m.pinOffset = 0
 	m.noteWidth = -1 // force a wrap at the next width we learn
 	m.reflow()
 }
@@ -89,44 +74,12 @@ func (m *docPaneModel) reflow() {
 	}
 	m.noteWidth = m.width
 	m.lines = wrapNote(m.noteSource, m.width, m.styler)
-	m.pinned, m.linkHits = layoutGroups(m.groups, m.width)
 	m.clamp()
-	m.clampPins()
 }
 
-// pinCap is the most rows the labels take: a third of the pane, at least two.
-// More scroll in place (the wheel over them, with their own scrollbar).
-func (m docPaneModel) pinCap() int {
-	return max(2, m.viewportHeight()/3)
-}
-
-// pinnedShown is how many pinned rows show: all of them, up to pinCap and the
-// pane's height.
-func (m docPaneModel) pinnedShown() int {
-	return min(len(m.pinned), m.viewportHeight(), m.pinCap())
-}
-
-func (m *docPaneModel) clampPins() {
-	m.pinOffset = min(max(m.pinOffset, 0), max(len(m.pinned)-m.pinnedShown(), 0))
-}
-
-func (m *docPaneModel) scrollPinsDown() { m.pinOffset++; m.clampPins() }
-func (m *docPaneModel) scrollPinsUp()   { m.pinOffset--; m.clampPins() }
-
-// overPins reports whether a pane row (the title is row 0) is one of the label rows.
-func (m docPaneModel) overPins(y int) bool {
-	return m.note && y >= m.headRows()+m.pinnedTop() && y < m.headRows()+m.viewportHeight()
-}
-
-// noteRows is how many rows the note itself gets: what the pinned rows leave,
-// less a blank row between the two when there is room for one.
-func (m docPaneModel) noteRows() int {
-	rows := m.viewportHeight() - m.pinnedShown()
-	if m.pinnedShown() > 0 && rows > 1 {
-		rows-- // the blank row above the labels
-	}
-	return max(rows, 0)
-}
+// noteRows is how many rows the note itself gets: all of the pane's under
+// its header.
+func (m docPaneModel) noteRows() int { return m.viewportHeight() }
 
 // noteScrollHint says how much of the note is out of sight, for the title:
 // "↓ 12 lines", "↑ 3 · ↓ 9 lines", or "" when it all fits.
@@ -188,17 +141,7 @@ func wrapNote(src string, width int, styler *markdownStyler) []string {
 // noteHeight is how many rows the note wants, title included, at a width —
 // so a two-line note does not take half the screen.
 func (m docPaneModel) noteHeight(width int) int {
-	rows, _ := layoutGroups(m.groups, width)
-	if len(rows) > 0 {
-		rows = append(rows, "") // the blank row before them
-	}
-	return len(wrapNote(m.noteSource, width, m.styler)) + len(rows) + 2 // + the title and its rule
-}
-
-// pinnedTop is the viewport row (0-based, under the title) the pinned rows
-// start on.
-func (m docPaneModel) pinnedTop() int {
-	return m.viewportHeight() - m.pinnedShown()
+	return len(wrapNote(m.noteSource, width, m.styler)) + 2 // + the title and its rule
 }
 
 // openRefs begins showing an annotation's refs starting at index 0. The caller
@@ -280,9 +223,6 @@ func (m *docPaneModel) close() {
 	m.lines = nil
 	m.note = false
 	m.noteSource = ""
-	m.groups = nil
-	m.pinned = nil
-	m.linkHits = nil
 	m.annotationID = ""
 }
 
@@ -383,32 +323,15 @@ func (m docPaneModel) View() string {
 
 	vp := m.viewportHeight()
 	if m.note {
-		// The note scrolls; the label rows stay pinned to the bottom. A note taller
-		// than its rows gets a scrollbar in its last column.
-		top, rows := m.pinnedTop(), m.noteRows()
+		// The note scrolls. A note taller than its rows gets a scrollbar in its
+		// last column.
+		rows := m.noteRows()
 		thumb := noteThumb(rows, len(m.lines), m.offset)
-		pinThumb := noteThumb(m.pinnedShown(), len(m.pinned), m.pinOffset)
 		trackStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 		thumbStyle := lipgloss.NewStyle().Foreground(accent)
 		for i := 0; i < vp; i++ {
 			b.WriteString("\n")
 			switch {
-			case i == top-1 && rows == top-1 && m.pinnedShown() > 0:
-				// The row between the note and its labels is a rule, like the one
-				// under the title.
-				b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(strings.Repeat("─", max(m.width, 0))))
-			case i >= top && pinThumb != nil:
-				row := truncateToWidth(m.pinned[m.pinOffset+i-top], m.width-2)
-				if pad := m.width - 1 - lipgloss.Width(row); pad > 0 {
-					row += strings.Repeat(" ", pad)
-				}
-				bar := trackStyle.Render("│")
-				if pinThumb[i-top] {
-					bar = thumbStyle.Render("█")
-				}
-				b.WriteString(row + bar)
-			case i >= top:
-				b.WriteString(truncateToWidth(m.pinned[m.pinOffset+i-top], m.width))
 			case i < rows && thumb != nil:
 				line := ""
 				if m.offset+i < len(m.lines) {

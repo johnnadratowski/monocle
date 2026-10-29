@@ -86,8 +86,7 @@ func TestOpenReferencesAddsToTheLiveEditor(t *testing.T) {
 }
 
 // With no live pane there is no editor to add to: the pane is spawned with the
-// stop's related files and the files found — not with what it last held,
-// which may have been closed.
+// files found — not with what it last held, which may have been closed.
 func TestOpenReferencesSpawnsWhenNoPaneIsAlive(t *testing.T) {
 	m, added, plans, _ := addApp(t, `[{"path": "q.sql", "line": 12}]`, false)
 	root := m.repoRoot
@@ -99,44 +98,9 @@ func TestOpenReferencesSpawnsWhenNoPaneIsAlive(t *testing.T) {
 	if len(*plans) != 1 {
 		t.Fatalf("%d plans, want the pane spawned", len(*plans))
 	}
-	want := []relatedFile{{filepath.Join(root, "a.go"), 5}, {filepath.Join(root, "q.sql"), 12}}
+	want := []relatedFile{{filepath.Join(root, "q.sql"), 12}}
 	if got := (*plans)[0].files; !reflect.DeepEqual(got, want) {
-		t.Errorf("spawned with %+v, want the stop's a.go and q.sql: %+v", got, want)
-	}
-}
-
-// :related N, and a click on a related file's label, add just that file.
-func TestRelatedNAddsOneFile(t *testing.T) {
-	tour := viewsTour() // 1.2 has a.go:5 and internal/deep/path/b.go:30
-	m, _ := tourAppWith(t, tour, inertViewers(&types.Config{Editor: "nvim"}))
-	skipWithoutSh(t)
-	added := filepath.Join(t.TempDir(), "added")
-	m.engine.GetConfig().RelatedEditorAdd = `printf '%s|%s\n' {file} {line} >> ` + added
-	m = pressKey(t, m, ".")
-	plans := captureRelated(t)
-	log := fakeTmux(t)
-	orig := findPane
-	findPane = func(string, string) string { return "%7" }
-	t.Cleanup(func() { findPane = orig })
-
-	next, cmd := m.Update(tourRelatedMsg{arg: "2"}) // :related 2, or a click on its label
-	m = driveWithin(t, next.(appModel), cmd, 0, 5*time.Second)
-	if got := readLines(t, added); !reflect.DeepEqual(got, []string{"internal/deep/path/b.go|30"}) {
-		t.Errorf("related_editor_add ran for %q, want only file 2", got)
-	}
-	// The keyboard goes with it, so the reviewer sees which split it landed in.
-	if data, _ := os.ReadFile(log); !strings.Contains(string(data), "select-pane -t %7") {
-		t.Errorf(":related 2 left the keyboard in Monocle:\n%s", data)
-	}
-	if len(*plans) != 0 {
-		t.Error(":related 2 respawned the pane")
-	}
-
-	// A stop change still respawns with that stop's related files.
-	m = pressKey(t, pressKey(t, m, ","), ".")
-	m = settle(t, m)
-	if len(*plans) != 1 {
-		t.Errorf("%d plans after arriving at 1.2 again, want the stop's respawn", len(*plans))
+		t.Errorf("spawned with %+v, want q.sql: %+v", got, want)
 	}
 }
 

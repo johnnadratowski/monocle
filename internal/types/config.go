@@ -32,21 +32,6 @@ type Config struct {
 	// too, adding MONOCLE_VIEW_INDEX and MONOCLE_VIEW_NAME for the one view
 	// asked for. Empty runs nothing.
 	WalkthroughOnStop string `json:"walkthrough_on_stop"`
-	// WalkthroughViewStatus is a shell command that says how the windows
-	// around the current tour stop stand, so each view's label can be marked
-	// open, hidden or not opened. Run via sh -c in the repo root with the
-	// WalkthroughOnStop environment, 500ms timeout, when a stop is
-	// shown and after a view is opened. It prints one line of JSON:
-	// {"views": {"view": "open"|"hidden"|"closed", "view2": …},
-	// "layout": "saved"|"default"}. Empty, or a failure, shows no marker.
-	WalkthroughViewStatus string `json:"walkthrough_view_status"`
-	// WalkthroughLayoutReset is a shell command that puts the windows around a
-	// tour back in their default layout. When the view status says
-	// "layout": "saved", the tour note shows "Layout: saved · reset", and a
-	// click on reset (or `:layout reset`) runs it via sh -c in the repo root
-	// with the same environment as WalkthroughViewStatus, then asks the view status
-	// again. Empty runs nothing.
-	WalkthroughLayoutReset string `json:"walkthrough_layout_reset"`
 	// WalkthroughNavigate is a shell command that takes over when ctrl+h/j/k/l
 	// reaches the edge of Monocle's panes, in place of tmux select-pane. It runs
 	// via sh -c with MONOCLE_NAV_DIR (left, down, up or right) and TMUX_PANE in
@@ -93,7 +78,8 @@ type Config struct {
 	// Empty uses the theme's.
 	HighlightColor string `json:"highlight_color"`
 	// RelatedEditorArgs are extra arguments appended to the editor command of
-	// a tour stop's related-files pane — `["-S", "/path/setup.vim"]`, say — so
+	// the related-files pane (what ctrl+], ctrl+g in a tour and open-editor
+	// open) — `["-S", "/path/setup.vim"]`, say — so
 	// whatever runs the tour can set the editor up. {owner} in them becomes
 	// Monocle's own tmux pane id. With vim and nvim they are
 	// left out, with a status-bar note, when they would take +cmd, -c and -S
@@ -102,7 +88,7 @@ type Config struct {
 	// RelatedEditorAdd is a shell command that adds one file to the editor
 	// already running in the related-files pane, so files the reviewer closed
 	// there stay closed. With it set and the pane alive, a file opened from
-	// Monocle (ctrl+], `:related N`, a click on a related file) is added by
+	// Monocle (ctrl+], ctrl+g in a tour, open-editor) is added by
 	// running it once per file, instead of respawning the pane. {file} is the
 	// file's absolute path, {line} its line (0 for none), {owner} Monocle's
 	// tmux pane id; each is substituted shell-quoted. Empty respawns.
@@ -114,13 +100,11 @@ type Config struct {
 	// finds. Placeholders as related_editor_add's. Empty, or no live pane:
 	// the key opens the files as ctrl+] does.
 	RelatedEditorPreview string `json:"related_editor_preview"`
-	// RelatedOpen is a shell command that opens one related file somewhere
-	// other than the related-files pane — a popout window, say. With it set no
-	// pane is split beside Monocle: arriving at a stop opens nothing (its
-	// related files are the labels under the note), `:related N` or a click
-	// on a label runs it for that file, what walkthrough_resolve finds (ctrl+]
-	// and p) runs it for the first file found, and ctrl+g in a tour and
-	// open-editor run it for theirs. Placeholders as related_editor_add's.
+	// RelatedOpen is a shell command that opens one file somewhere other than
+	// the related-files pane — a popout window, say. With it set no pane is
+	// split beside Monocle: what walkthrough_resolve finds (ctrl+] and p) runs
+	// it for the first file found, and ctrl+g in a tour and open-editor run it
+	// for theirs. Placeholders as related_editor_add's.
 	// Empty keeps the related-files pane.
 	RelatedOpen string `json:"related_open"`
 	// EditorMode controls how Ctrl+g / Ctrl+o open a file: "terminal" (take over

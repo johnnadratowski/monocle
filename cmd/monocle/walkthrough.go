@@ -16,7 +16,7 @@ import (
 )
 
 // ReviewSetWalkthroughCmd sends a guided tour from a JSON file. A tour is a list
-// of stops each carrying related files and views — too nested for flags, and
+// of stops each carrying views and calls — too nested for flags, and
 // long enough that an agent writes it to a file anyway.
 type ReviewSetWalkthroughCmd struct {
 	WorkDirFlag

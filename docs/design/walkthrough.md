@@ -45,26 +45,32 @@ pane sizes) are deliberately not repeated here — read them from the code, wher
   otherwise finish after the jump and put the note under the wrong file.
 - **The file list hides when a tour starts, not when one is re-sent.** An agent correcting a note
   mid-review must not undo the reviewer's choice to show the list again.
-- **Labels are pinned; the note scrolls.** Related files, views and layout sit at the bottom of the
-  note pane so they stay reachable under a long note, and the header says how much is out of sight.
+- **The note pane holds the note and nothing else.** It once listed the stop's calls, related files,
+  views and layout as clickable labels under the note. With the windows around Monocle showing a
+  stop's views (John, 2026-10-28: "now that we have this full windowing system, we don't need to
+  list views and related files and such in the monocle doc anymore"), the labels went: a stop's
+  views are the on-stop command's to show, its calls are underlined in its code, and its related
+  files are no longer opened. `related` stays in the tour format, so older tours load.
 
 ## The related-files pane
 
+What ctrl+], ctrl+g in a tour and open-editor open goes to one editor pane beside Monocle. (A stop's
+own related files once opened here on arrival; they no longer do.)
+
 - **One `-c`, steps joined with `|`.** vim and nvim run at most ten `-c` commands, so a
-  command per window would break at five related files. Each step uses `exe 'normal! …'` because a
+  command per window would break at five files. Each step uses `exe 'normal! …'` because a
   bare line-number range before `|` is not a reliable jump.
-- **Only vim-like editors get splits.** Any other editor opens the first related file the way
-  `ctrl+g` opens any file.
-- **Arriving at a stop does not take the keyboard.** The tour is driven from Monocle, and a split
-  that grabbed focus on the first stop with related files would swallow the next `.`. Opening a file
-  explicitly — its label or `:related N` — does take it, because that is a request to look at it.
+- **Only vim-like editors get splits.** Any other editor opens the first file the way `ctrl+g`
+  opens any file.
+- **Opening a file takes the keyboard,** because it is a request to look at it.
 - **Each Monocle finds only its own pane,** tagged with a tmux pane option, so after a restart the
   old split is reused rather than a second one opened. Monocle's own pane is never respawned or
   killed, whatever the tracked id says.
-- **Side effects are debounced.** Holding `.` to skip ahead opens one pane for the stop you land on,
-  not one per stop passed. The diff and the note update at once; only the out-of-Monocle effects wait.
-- **Outside tmux there is no fallback.** Taking the screen over on every step would be worse than
-  saying related files need tmux.
+- **Side effects are debounced.** Holding `.` to skip ahead runs the on-stop command for the stop you
+  land on, not once per stop passed. The diff and the note update at once; only the out-of-Monocle
+  effects wait.
+- **Outside tmux there is no fallback.** Taking the screen over would be worse than saying the pane
+  needs tmux.
 
 ## Hooks
 
@@ -75,14 +81,12 @@ pane sizes) are deliberately not repeated here — read them from the code, wher
 - **A timeout kills the whole process group,** so a viewer the command spawned cannot outlive it
   holding the pipes.
 - **Monocle never opens a stop's views on its own.** Opening a browser on every `.` would be hostile
-  without a configured command. `:view N` (or a click on a view's label) opens one view — through
+  without a configured command. `:view N` opens one view — through
   the on-stop command when one is set, since it opened the windows and is the only thing that can
   raise one already showing; otherwise through the configured viewer.
-- **A label click is the same message as its command.** Each label carries exactly what `:view N`,
-  `:related N` or `:layout reset` would send, so click and command cannot diverge.
-- **The view-status command fails closed.** Output without a `views` object is a failure, so an older
-  flat shape cannot be misread as "everything closed". Any failure clears the markers rather than
-  leaving stale ones.
+- **No view status, no layout reset.** Monocle once asked a command which views were showing, to mark
+  their labels, and offered to reset a saved layout. Both went with the labels: the windows and
+  their layout belong to whatever the on-stop command drives.
 
 ## Stop-tagged comments
 

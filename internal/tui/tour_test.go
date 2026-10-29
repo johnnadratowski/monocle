@@ -212,9 +212,15 @@ func TestEnteringAStopShowsIt(t *testing.T) {
 		t.Fatal("the stop's note should be open in the doc pane")
 	}
 	doc := stripANSISeq(m.docPane.View())
-	for _, want := range []string{"1.2 · Where it lands", "The write.", "a.go:5", "video Demo"} {
+	for _, want := range []string{"1.2 · Where it lands", "The write."} {
 		if !strings.Contains(doc, want) {
 			t.Errorf("doc pane %q is missing %q", doc, want)
+		}
+	}
+	// The note is all it holds: no related files, no views.
+	for _, gone := range []string{"a.go:5", "video Demo"} {
+		if strings.Contains(doc, gone) {
+			t.Errorf("doc pane %q still lists %q", doc, gone)
 		}
 	}
 	if got := stripANSISeq(m.statusBar.View()); !strings.Contains(got, "tour 1.2 · 2 of 3") {
@@ -439,7 +445,7 @@ func TestStopNoteBody(t *testing.T) {
 func TestNotePaneWrapsAndSizesToItsNote(t *testing.T) {
 	th := DefaultTheme()
 	d := docPaneModel{width: 24, height: 10, theme: &th}
-	d.openNote("tour:1", "1 · T", "one two three four five six seven eight nine ten", nil, nil)
+	d.openNote("tour:1", "1 · T", "one two three four five six seven eight nine ten", nil)
 	d.reflow()
 	if len(d.lines) < 2 {
 		t.Fatalf("lines %q, want the note wrapped to the pane", d.lines)

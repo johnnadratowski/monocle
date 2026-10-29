@@ -69,13 +69,11 @@ type KeyMap struct {
 
 	// Guided review tour: step between the agent's stops, and switch the tour
 	// off without losing it.
-	TourNext     []string
-	TourPrev     []string
-	TourBack     []string // back through the stops entered, as a browser goes back
-	TourForward  []string
-	ToggleTour   []string
-	CloseRelated []string // close the tmux pane holding a stop's related files
-	LayoutReset  []string // :layout reset: the stop's related files back, then walkthrough_layout_reset
+	TourNext    []string
+	TourPrev    []string
+	TourBack    []string // back through the stops entered, as a browser goes back
+	TourForward []string
+	ToggleTour  []string
 
 	// Code-structure navigation in the diff (vim %, [{ and [[)
 	BlockMatch []string // block start <-> end
@@ -204,13 +202,9 @@ func DefaultKeyMap() KeyMap {
 		// tell apart from everything else, for a key remapper to send: from
 		// another window, or for shift+backspace, which a terminal cannot tell
 		// from backspace.
-		TourBack:     []string{"backspace", "f18"},
-		TourForward:  []string{"f19"},
-		ToggleTour:   []string{"W"}, // "walkthrough"
-		CloseRelated: []string{"X"},
-		// A key a terminal tells apart from all others, for a key remapper
-		// to send from a "reset" key of its own.
-		LayoutReset: []string{"f17"},
+		TourBack:    []string{"backspace", "f18"},
+		TourForward: []string{"f19"},
+		ToggleTour:  []string{"W"}, // "walkthrough"
 
 		BlockMatch: []string{"%"},
 		BlockUp:    []string{"("},
@@ -321,8 +315,6 @@ var keyActions = map[string]func(*KeyMap) *[]string{
 	"tour_back":               func(km *KeyMap) *[]string { return &km.TourBack },
 	"tour_forward":            func(km *KeyMap) *[]string { return &km.TourForward },
 	"toggle_tour":             func(km *KeyMap) *[]string { return &km.ToggleTour },
-	"close_related":           func(km *KeyMap) *[]string { return &km.CloseRelated },
-	"layout_reset":            func(km *KeyMap) *[]string { return &km.LayoutReset },
 	"block_match":             func(km *KeyMap) *[]string { return &km.BlockMatch },
 	"block_up":                func(km *KeyMap) *[]string { return &km.BlockUp },
 	"block_top":               func(km *KeyMap) *[]string { return &km.BlockTop },

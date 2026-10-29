@@ -62,8 +62,7 @@ func TestTheEnginesCheckoutIsTheTUIsRoot(t *testing.T) {
 	t.Setenv("TMUX", "")
 	t.Setenv("TMUX_PANE", "")
 	files := []types.ChangedFile{{Path: "a.go", Status: types.FileModified}}
-	tour := &types.Walkthrough{Stops: []types.WalkthroughStop{{ID: "1", File: "a.go", LineStart: 1,
-		Related: []types.DocRef{{Kind: types.DocRefFile, Doc: "db/new.sql", StartLine: 1}}}}}
+	tour := &types.Walkthrough{Stops: []types.WalkthroughStop{{ID: "1", File: "a.go", LineStart: 1}}}
 	e := &tourEngine{
 		stubEngine: stubEngine{cfg: &types.Config{Editor: "nvim"}, changedFiles: files,
 			session: &types.ReviewSession{ID: "s", RepoRoot: wtDir, ChangedFiles: files, Walkthrough: tour, WalkthroughStop: "1"}},
@@ -74,12 +73,13 @@ func TestTheEnginesCheckoutIsTheTUIsRoot(t *testing.T) {
 	m = updateApp(t, m, initialLoadMsg{files: files})
 	plans := captureRelated(t)
 	m = settle(t, m)
+	m = updateApp(t, m, openEditorMsg{path: "db/new.sql", line: 1})
 
 	if m.repoRoot != wtDir || m.diffView.repoRoot != wtDir {
 		t.Fatalf("root %q (diff view %q), want the worktree %q", m.repoRoot, m.diffView.repoRoot, wtDir)
 	}
 	if len(*plans) != 1 {
-		t.Fatalf("%d related-pane plans, want the stop's", len(*plans))
+		t.Fatalf("%d related-pane plans, want one for db/new.sql", len(*plans))
 	}
 	p := (*plans)[0]
 	want := filepath.Join(wtDir, "db", "new.sql")

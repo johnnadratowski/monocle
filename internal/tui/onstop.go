@@ -236,8 +236,7 @@ func lastLine(s string) string {
 
 // handleOnStopDone surfaces a failed on-stop command. Success is silent: the
 // command's effect is on screen, or it is not, and either way the reviewer
-// can see it. Either way the command may have opened or raised views, so the
-// stop's view markers are asked for again.
+// can see it.
 func (m appModel) handleOnStopDone(msg onStopDoneMsg) (appModel, tea.Cmd) {
 	switch {
 	case msg.err == nil:
@@ -246,13 +245,10 @@ func (m appModel) handleOnStopDone(msg onStopDoneMsg) (appModel, tea.Cmd) {
 	default:
 		m.statusBar.searchInfo = fmt.Sprintf("on-stop %s failed: %v", msg.id, msg.err)
 	}
-	if stop, ok := m.currentStop(); !ok || stop.ID != msg.id {
-		return m, nil
-	}
-	return m, m.refreshViewStatus()
+	return m, nil
 }
 
-// stopItemNumber reads the n of `:view n` / `:related n`: 1-based, at most
+// stopItemNumber reads the n of `:view n` / `:call n`: 1-based, at most
 // count, and the first when arg is empty.
 func stopItemNumber(arg string, count int) (int, bool) {
 	arg = strings.TrimSpace(arg)
@@ -300,5 +296,5 @@ func (m appModel) openStopView(arg string) (appModel, tea.Cmd) {
 		// which is a browser by default and so handles every one of them.
 		open = openInMediaViewer(v.Target, m.mediaViewerCommand())
 	}
-	return m, tea.Batch(open, m.refreshViewStatus())
+	return m, open
 }

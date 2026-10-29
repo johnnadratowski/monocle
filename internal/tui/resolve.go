@@ -145,9 +145,6 @@ func (m appModel) handleResolveDone(msg resolveDoneMsg) (appModel, tea.Cmd) {
 		return m.addResolved(msg.files)
 	}
 	have := m.tour.paneFiles
-	if stop, ok := m.currentStop(); len(have) == 0 && ok && m.tour.on {
-		have = absRelated(m.repoRoot, relatedFilesFor(stop))
-	}
 	files, added, left := mergeRelated(have, msg.files, maxRelatedFiles)
 	active := 1
 	for i, f := range files {
@@ -183,11 +180,7 @@ func (m appModel) addResolved(found []relatedFile) (appModel, tea.Cmd) {
 	if m.relatedOpenCommand() != "" {
 		return m.openElsewhere(found)
 	}
-	var base []relatedFile
-	if stop, ok := m.currentStop(); ok && m.tour.on {
-		base = absRelated(m.repoRoot, relatedFilesFor(stop))
-	}
-	spawn, _, _ := mergeRelated(base, found, maxRelatedFiles)
+	spawn, _, _ := mergeRelated(nil, found, maxRelatedFiles)
 	active := 1
 	for i, f := range spawn {
 		if f.path == found[0].path {
@@ -264,17 +257,13 @@ func (m appModel) handleRelatedPreview(msg relatedPreviewMsg) (appModel, tea.Cmd
 	return m, nil
 }
 
-// openAtCursor is o: on a symbol the stop's related file or call is about
-// (underlined), it opens that — the file in the related pane, with the
-// keyboard, or the stop the call leads to. Anywhere else, or with lines picked
-// (v, +), it opens what the lines reference, as ctrl+] does.
+// openAtCursor is o: on a symbol a stop's call is about (underlined), it
+// enters the stop the call leads to. Anywhere else, or with lines picked (v,
+// +), it opens what the lines reference, as ctrl+] does.
 func (m appModel) openAtCursor() (appModel, tea.Cmd) {
 	if m.tour.on && !m.diffView.visualMode && len(m.diffView.tags) == 0 {
 		if mk, ok := m.diffView.cursorMark(); ok {
-			if mk.call {
-				return m.followStopCall(fmt.Sprint(mk.n))
-			}
-			return m.openStopRelated(fmt.Sprint(mk.n))
+			return m.followStopCall(fmt.Sprint(mk.n))
 		}
 	}
 	return m.openReferences(false)

@@ -36,16 +36,11 @@ type tourState struct {
 	// opening windows, running the on-stop command — happen once the reviewer
 	// stops moving rather than for every stop they skipped past on the way.
 	settle int
-	// pane is the tmux pane holding the related files, "" when none is known,
-	// and paneFiles the files it was last given, so more can be added to them.
+	// pane is the tmux pane holding the files ctrl+] and open-editor opened,
+	// "" when none is known, and paneFiles the files it was last given, so
+	// more can be added to them.
 	pane      string
 	paneFiles []relatedFile
-	// status is what the view-status command last said about stop statusFor
-	// (nil: nothing usable). statusSeq numbers the asks, so only the answer
-	// to the latest lands.
-	status    *tourStatus
-	statusFor string
-	statusSeq int
 	// history is the stops entered, for back and forward (stopHistory).
 	history stopHistory
 	// seen are the stops the reviewer has been on, seeded from the review
@@ -221,8 +216,7 @@ type stopEntry struct {
 	// one that moved them (goto_stop, a tour arriving) or nothing moved (a
 	// restart restoring the stop the engine already has).
 	report bool
-	// effects opens the stop's related files (and runs the on-stop command)
-	// once the reviewer settles on it. Off only for a restart restoring the
+	// effects runs the on-stop command once the reviewer settles on it. Off only for a restart restoring the
 	// stop: resuming is not arriving.
 	effects bool
 }
@@ -263,11 +257,6 @@ func (m appModel) enterStop(i int, how stopEntry) (appModel, tea.Cmd) {
 	if cmd := m.jumpToStop(stop); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
-	if !how.effects {
-		// Nothing is about to open this stop's views, so what is showing now
-		// is the answer. With effects, the ask waits for them (settleOnStop).
-		cmds = append(cmds, m.refreshViewStatus())
-	}
 	if how.report && m.engine != nil {
 		engine, id := m.engine, stop.ID
 		cmds = append(cmds, func() tea.Msg {
@@ -291,20 +280,14 @@ func (m appModel) settleOnStop(msg tourSettledMsg) (appModel, tea.Cmd) {
 	if !ok || !m.tour.on || msg.seq != m.tour.settle {
 		return m, nil
 	}
-	// The on-stop command is about to open this stop's views; asking which are
-	// showing before it has would mark the last stop's windows. So with one,
-	// the ask follows it (handleOnStopDone); without one, it is now.
-	var status tea.Cmd
-	if m.onStopCommand() == "" {
-		status = m.refreshViewStatus()
-	}
-	return m, tea.Batch(m.stopEffects(stop), status)
+	return m, m.stopEffects(stop)
 }
 
 // stopEffects is everything arriving at a stop does outside Monocle's own
-// window. Each runs asynchronously and reports back; none blocks the TUI.
+// window: the on-stop command, which shows the stop's views. It runs
+// asynchronously and reports back; it never blocks the TUI.
 func (m appModel) stopEffects(stop types.WalkthroughStop) tea.Cmd {
-	return tea.Batch(m.openRelated(stop), m.runOnStop(stop))
+	return m.runOnStop(stop)
 }
 
 // stepTour moves one stop forward (+1) or back (-1). The ends clamp rather than
@@ -429,13 +412,13 @@ func (m *appModel) leaveTour() {
 	}
 }
 
-// openStopNote puts the stop's heading and note in the doc pane, followed by
-// what else the stop carries — its related files and views, as labels a click
-// opens — so the reviewer can see there is more without having to know to look.
+// openStopNote puts the stop's heading and note in the doc pane. The note is
+// all it holds: a stop's views show in the windows around Monocle, and its
+// calls are underlined in its code.
 func (m *appModel) openStopNote(stop types.WalkthroughStop) {
 	m.docHidden = false
 	m.docPane.theme = &m.theme
-	m.docPane.openNote(tourNoteKeyPrefix+stop.ID, stop.Heading(), stopNoteBody(stop), stopLinkGroups(stop, m.tour.tour, m.stopStatus(stop)), m.diffView.mdStyler)
+	m.docPane.openNote(tourNoteKeyPrefix+stop.ID, stop.Heading(), stopNoteBody(stop), m.diffView.mdStyler)
 	m.docPane.titleMark = stopVisitMark(m.tour.fresh && m.tour.freshFor == stop.ID)
 	m.docPane.titleLoc = stopLocation(stop, m.repoRoot)
 	recalcPaneDimensions(m)
@@ -474,91 +457,12 @@ func stopVisitMark(fresh bool) string {
 	return lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(stopVisitedMark)
 }
 
-// stopNoteBody is the doc pane's text for a stop: the note. What else the stop
-// carries follows as labels (stopLinkGroups).
+// stopNoteBody is the doc pane's text for a stop: the note.
 func stopNoteBody(stop types.WalkthroughStop) string {
 	if note := strings.TrimSpace(stop.Note); note != "" {
 		return note
 	}
 	return "_(no note)_"
-}
-
-// nextCallColor marks the call that leads to the next stop, the one a reader
-// following the code is most likely to want.
-const nextCallColor = "3" // yellow
-
-// stopLinkGroups are the labels under a stop's note, numbered the way their
-// commands count them: the stops its code calls ("[1] → 2.2 save", `:call 1`),
-// its related files ("[1] a.go:40", `:related 1`) and its views ("[2] url
-// Spec", `:view 2`), each view with what the view-status command said about
-// it, if anything — and, when it said the windows are in a saved layout,
-// "Layout: saved · reset" (`:layout reset`). Calls come first, above the
-// related files: they lead on through the tour. tour is the stop's tour: it
-// says which stop is next and names a call sent without a symbol.
-func stopLinkGroups(stop types.WalkthroughStop, tour *types.Walkthrough, status *tourStatus) []linkGroup {
-	calls := linkGroup{head: "Calls:", hint: "click, or :call N"}
-	next := ""
-	if i := tour.StopIndex(stop.ID); i >= 0 && i+1 < len(tour.Stops) {
-		next = tour.Stops[i+1].ID
-	}
-	for i, c := range stop.Calls {
-		name := c.Symbol
-		if name == "" {
-			if j := tour.StopIndex(c.Stop); j >= 0 {
-				name = tour.Stops[j].Title
-			}
-		}
-		link := noteLink{act: tourCallMsg{arg: fmt.Sprint(i + 1)}}
-		if c.Stop == next {
-			link.label, link.accent = fmt.Sprintf("[%d] → %s", i+1, c.Stop), nextCallColor
-		} else {
-			link.label = fmt.Sprintf("[%d] %s", i+1, c.Stop)
-		}
-		if name != "" {
-			link.label += " " + name
-		}
-		calls.links = append(calls.links, link)
-	}
-	related := linkGroup{head: "Related:", hint: "click, or :related N"}
-	for i, r := range stop.Related {
-		label := fmt.Sprintf("[%d] %s", i+1, r.Doc)
-		if r.StartLine > 0 {
-			label += fmt.Sprintf(":%d", r.StartLine)
-		}
-		related.links = append(related.links, noteLink{label: label, act: tourRelatedMsg{arg: fmt.Sprint(i + 1)}, middle: true})
-	}
-	views := linkGroup{head: "Views:", hint: "click, or :view N"}
-	if len(stop.Views) == 1 {
-		views.head = "View:" // the common case: one view per stop
-	}
-	for i, v := range stop.Views {
-		label := v.Label
-		if label == "" {
-			label = filepath.Base(v.Target)
-		}
-		link := noteLink{label: fmt.Sprintf("[%d] %s %s", i+1, v.Kind, label), act: tourViewMsg{arg: fmt.Sprint(i + 1)}}
-		if status != nil && i < len(status.views) {
-			link.state = status.views[i]
-		}
-		views.links = append(views.links, link)
-	}
-	if status != nil {
-		// The layout, always, flush right beside the view: a row that came and
-		// went with "saved" would be easy to miss.
-		trail := &noteTrail{text: "layout default"}
-		if status.layoutSaved {
-			trail = &noteTrail{text: "layout saved", link: &noteLink{label: "reset", act: tourLayoutMsg{arg: "reset"}}}
-		}
-		switch {
-		case len(views.links) > 0:
-			views.trail = trail
-		case len(related.links) > 0:
-			related.trail = trail
-		default:
-			return []linkGroup{calls, related, views, {trail: trail}}
-		}
-	}
-	return []linkGroup{calls, related, views}
 }
 
 // tourCallMsg asks to enter the stop one of the current stop's calls leads to
@@ -767,18 +671,13 @@ func (m appModel) nearStopMarks() []nearStop {
 	return marks
 }
 
-// stopMarksFor lists the symbols a stop's related files and calls are about,
-// numbered as :related N and :call N number them.
+// stopMarksFor lists the symbols a stop's calls are about, numbered as
+// :call N numbers them.
 func stopMarksFor(stop types.WalkthroughStop) []stopMark {
 	var marks []stopMark
-	for i, r := range stop.Related {
-		if r.Symbol != "" {
-			marks = append(marks, stopMark{symbol: r.Symbol, n: i + 1})
-		}
-	}
 	for i, c := range stop.Calls {
 		if c.Symbol != "" {
-			marks = append(marks, stopMark{symbol: c.Symbol, call: true, n: i + 1, line: c.Line})
+			marks = append(marks, stopMark{symbol: c.Symbol, n: i + 1, line: c.Line})
 		}
 	}
 	return marks

@@ -10,7 +10,7 @@ A review lands in whatever order its files sort. Your agent knows the order it s
 When the agent sends a tour, monocle enters **tour mode** on its first stop and **hides the file list**: the tour moves between files for you, so the list is the exception. `;` (`toggle_sidebar`) shows it again, and it stays as you leave it — a re-sent tour, `goto_stop` or `W` do not hide it again. A tour restored on launch hides it too. Each stop:
 
 1. Selects the stop's file and puts the diff cursor on its first line. Stop lines the compact diff hides between its hunks are revealed, with three lines either side; the rest of the file stays compact. The stop's lines stay marked in the gutter after you move off them, in magenta. The stops around it are marked too, so you can see where the tour goes from here: the previous stop in blue, the next in green, the one after it in bright green.
-2. Opens the doc pane under the diff with the header `1.2 · Title`, then, dim, where the stop is — `src/auth/login.ts:40–52`, or `:40` for one line — and the agent's note, followed by the stops its code calls, its related files and its views as labels — `[1] → 1.3 saveToken`, `[1] src/auth/idp.ts:12`, `[2] video Login flow`, underlined. Clicking a label does exactly what its command does: `:call 1`, `:related 1`, `:view 2`. The pane is as tall as its note, up to two thirds of monocle's window. The labels stay pinned to its bottom, so a note too long for it never pushes them out of reach: only the note above them scrolls — with the mouse wheel over it, or `j`/`k` once `Tab` has moved focus to the pane — and its header says how much is out of sight (`↓ 12 lines`). In a narrow pane the location gives way before the title does: directories drop from its left (`…/auth/login.ts:40–52`), never its file name and lines.
+2. Opens the doc pane under the diff with the header `1.2 · Title`, then, dim, where the stop is — `src/auth/login.ts:40–52`, or `:40` for one line — and the agent's note. The note is all the pane holds: the stop's views show in the windows around monocle (see [Screenshots, recordings and layouts](#screenshots-recordings-and-layouts)), and the stops its code calls are underlined in its code (see [Calls](#calls)). The pane is as tall as its note, up to two thirds of monocle's window. A note too long for it scrolls — with the mouse wheel over it, or `j`/`k` once `Tab` has moved focus to the pane — and its header says how much is out of sight (`↓ 12 lines`). In a narrow pane the location gives way before the title does: directories drop from its left (`…/auth/login.ts:40–52`), never its file name and lines.
 3. Shows `tour 1.2 · 3 of 7` (the stop id, then its position in the tour) in the status bar, and names the tour in the middle of the top bar, where the review's name was: `Tour for PR #308: Signup fixes` for a tour titled `PR #308 · Signup fixes` (a title starting `PR #<n>`, then `·`, `:`, a dash or a space), `Tour: <title>` for any other. `W` gives the top bar back to the review's name.
 4. Marks the note's title with whether you have been on this stop before: a bright **`new`** the first time, a dim **`✓`** after. It is decided as you arrive and stays for the whole visit, so it does not change while you read. Every way of reaching a stop counts — `.`/`,`, `:stop`, a call, back and forward, the agent's `goto_stop`. The visited stops are kept with the review, by tour title and stop id, so restarts keep them; a tour sent under another title starts afresh, and withdrawing the tour (`set-walkthrough --clear`) or ending the review forgets them.
 
@@ -21,14 +21,11 @@ When the agent sends a tour, monocle enters **tour mode** on its first stop and 
 | `backspace` | Back to the stop you came from — see [Calls](#calls). |
 | `f19` | Forward again. |
 | `W` | Tour mode on/off. Off hides the note, the marks and the status; your stop is kept, and `.`/`,` or `W` resume there. |
-| `X` | Close the related-files pane. |
 | `d` | Hide the stop's note, and show it again. With the cursor on an annotation, `d` opens the annotation's doc links instead, as outside a tour. |
 | `:stop <id>` | Jump to a stop by id, e.g. `:stop 1.2`. A chapter's number, `:stop 5`, goes to its first stop (an exact id wins); `:stop` alone goes to the tour's first stop. |
 | `:view [n]` | Open the stop's nth view (default the first): through your on-stop command when you have one (see [below](#screenshots-recordings-and-layouts)), else in your [`media_viewer`](/configuration/config-file) — or `markdown_viewer` for a markdown view. |
-| `:related [n]` | Bring up the stop's related files with the nth (default the first) active — see [Related files](#related-files). |
 | `:call [n]` | Go to the stop the stop's nth call (default the first) leads to — see [Calls](#calls). |
 | `:back` / `:forward` | The same as `backspace` / `f19`. |
-| `:layout [reset]` | Say whether the tour's windows are in a saved layout; `reset` puts back the default — see [Which views are showing](#which-views-are-showing). |
 | `:doc on`, `:doc off`, `:doc toggle`, `:doc` | Hide or show the stop's note (`-` toggles), the diff taking its rows. A new stop's note comes up shown. |
 
 The ends clamp: `.` on the last stop tells you it is the end rather than wrapping to the first. A stop with no file — one that exists to show a recording, say — shows its note and leaves the diff where it is. `ctrl+o` returns to wherever a stop jumped you from.
@@ -37,30 +34,26 @@ The tour belongs to the review. It survives a restart (you come back on the same
 
 ## Calls
 
-A stop's code often calls the function a later stop is about: 2.1 is the order route, and it calls `createOrder`, which is what 2.2 explains. The agent says so with the stop's `calls`, and each shows in a **Calls:** row, the first under the note: `[1] → 2.2 createOrder`, `[2] 4.1 reserveStock`. The call that leads to the **next** stop reads `→` and is coloured apart from the rest. Clicking one, or `:call N`, enters that stop as `:stop` would.
+A stop's code often calls the function a later stop is about: 2.1 is the order route, and it calls `createOrder`, which is what 2.2 explains. The agent says so with the stop's `calls`, each naming the `symbol` called and, optionally, the `line` of the call. monocle underlines each symbol in the stop's lines, faintly, in yellow — on its call's line only, when the call has one. `u` and `U` move the cursor between the underlined lines, and `o` on one enters the stop its call leads to, as `:stop` would; so does `:call N`, for the stop's Nth call.
 
 Following a call is a detour, so the tour keeps a **history** of the stops you enter — by `.`/`,`, `:stop`, a call, or the agent moving you — and walks it the way a browser walks pages. `backspace` (or `f18`) goes back to the stop you came from, `f19` goes forward again, and entering another stop after going back drops the stops forward would have reached. The status bar says where you went: `back to 2.1`, or `no earlier stop`. These keys work in tour mode only, and never while you are typing a comment, a search or a command. The history lasts as long as monocle runs.
 
-## Related files
+## The editor beside monocle
 
-A stop can name **related files** — typically where a change starts, when the stop shows where it lands. When you settle on such a stop, monocle opens them together in **one tmux pane** beside it, running your editor ([`editor`](/configuration/config-file), else `$VISUAL`/`$EDITOR`):
+What you open from the code — what lines reference (`ctrl+]`, below), the file on the cursor's line in a tour (`ctrl+g`), a file the agent asks for (`open_editor`) — opens in **one tmux pane** beside monocle, running your editor ([`editor`](/configuration/config-file), else `$VISUAL`/`$EDITOR`):
 
 - **vim / nvim** open every file **read-only** as a horizontal split (`nvim -R -o a b`), each window at its line. Read-only because the pane usually sits in the worktree under review, where one stray keypress would edit the change.
 - Other editors open the first file, at its line.
 
-A related file can name the `symbol` in the stop's lines that it is about — the function it defines, say: `{"kind": "file", "doc": "internal/store/accounts.go", "start_line": 120, "symbol": "LoadAccount"}`. A call names its own `symbol` already. Monocle underlines each symbol in the stop's lines, faintly: cyan for a related file, yellow for a call, as its label in the note. `u` and `U` move the cursor between the underlined lines, and `o` on one opens what it is about — the related file in the pane, with the keyboard, or the stop the call leads to. Opening a related file from its label or `:related N` also moves the keyboard into its split, so you see where it landed.
+The next file opened **reuses** that pane (`tmux respawn-pane`) instead of splitting another. Respawning brings back every file the pane was given, including ones you closed in the editor; with [`related_editor_add`](/configuration/config-file) set, a file opened while the pane is alive is added to the editor already there instead, so a file you closed stays closed. With [`related_open`](/configuration/config-file) set, no pane is split at all: each file goes to that command — a popout window, say.
 
-Respawning the pane brings back every file it was given, including ones you closed in the editor. With [`related_editor_add`](/configuration/config-file) set, a file opened from monocle while the pane is alive — with `ctrl+]`, `ctrl+g`, `:related N` or a click on a related file — is added to the editor already there instead, so a file you closed stays closed until you open it again or reset the layout: `:layout reset`, the `reset` label or `f17` respawns the pane with the stop's own related files before running `walkthrough_layout_reset`. A reset also puts you back where the stop starts: its file, the cursor on its first line, the keyboard in monocle's diff and in monocle's own tmux pane. `ctrl+o` jumps back to where you were. Arriving at a stop still respawns the pane with that stop's related files.
-
-In a tour, `ctrl+g` opens its file here too — the path named on the cursor's line, else the file under review, at the cursor's line — beside the stop's related files rather than in an editor of its own. `ctrl+shift+g` still takes over the screen.
+The pane is split beside monocle's own (stacked instead with `editor_mode: "tmux_horizontal"`) and takes the keyboard, so you see where the file landed. If monocle's tmux window is zoomed, it is unzoomed so the pane can be seen, and the `@monocle_zoomed` window option is cleared. `ctrl+shift+g` still takes over the screen. The pane needs monocle to be running inside tmux.
 
 Paths are opened in the review's own checkout — the one the engine serves — even when monocle was started somewhere else and pointed at that engine with `--socket`, such as from the main clone against a worktree's engine.
 
-The next stop with related files **reuses** that pane (`tmux respawn-pane`) instead of splitting another; a stop without any leaves it as it is. `X` closes it. The pane is split beside monocle's own (stacked instead with `editor_mode: "tmux_horizontal"`), and it does not take focus unless you set `editor_focus: true` — the tour is driven from monocle, and a split that took the keyboard would swallow your next `.`. Related files need monocle to be running inside tmux.
+A stop's `related` files are no longer shown or opened: the windows around monocle show what a stop is about. A tour that still carries them loads, and your on-stop command still receives them.
 
-To get one back — after `X`, say, or to look at the second file — click its label or type `:related N`. That brings the pane up with **all** of the stop's related files, as arriving does, with file N's window the active one (vim/nvim end on `Nwincmd w`; other editors open file N): it respawns the pane when it is open and splits it when it is not. If monocle's tmux window is zoomed — a "hide everything" key that zooms monocle's pane, say — it is unzoomed so the pane can be seen, and the `@monocle_zoomed` window option is cleared: a setup that hides a window's splits by zooming monocle's pane sets it while hidden, and monocle clears it when it unzooms. Keyboard focus follows the same rule as on arriving.
-
-Side effects wait until you rest on a stop for a moment, so holding `.` to skip ahead does not open a pane per stop.
+Side effects wait until you rest on a stop for a moment, so holding `.` to skip ahead does not run the on-stop command per stop.
 
 ## Screenshots, recordings and layouts
 
@@ -89,45 +82,13 @@ What the command does with it is up to you: open the recording in a browser, arr
 
 When these are set, show that one view — open it, or raise it if it is already open — and leave the rest of the screen as it is: the reviewer asked for a view, not for the stop again. Without an on-stop command, `:view N` opens the view in your `media_viewer` (or `markdown_viewer`).
 
-### Which views are showing
-
-The windows your on-stop command opens are out of monocle's sight, so it cannot tell on its own whether a view is showing. Configure [`walkthrough_view_status`](/configuration/config-file) and it will ask, then mark each view's label: `[1] video Login flow (open)`, `(hidden)` or `(not opened)`.
-
-```json
-{ "walkthrough_view_status": "tour-hook view-status" }
-```
-
-The command runs like the on-stop command — `sh -c` in the repo root, with `MONOCLE_STOP_ID`, `MONOCLE_REPO_ROOT` and `MONOCLE_STOP_JSON` — but has only 500 ms, since it is asked often and a slow answer must never be felt. It prints one line of JSON to stdout:
-
-```json
-{ "views": { "view": "open", "view2": "hidden" }, "layout": "default" }
-```
-
-`views` is keyed by view name — `view` for the first, then `view2`, `view3`…:
-
-| Value | Marker |
-|-------|--------|
-| `"open"` | `(open)` — on screen |
-| `"hidden"` | `(hidden)` — open, but out of sight |
-| `"closed"`, anything else, or no key for the view | `(not opened)` |
-
-`layout` is `"saved"` when the windows are in a layout you arranged, `"default"` otherwise. The note always shows it flush right on the view's row: **`layout default`**, or **`layout saved · reset`**. Clicking `reset` — or typing `:layout reset` — runs [`walkthrough_layout_reset`](/configuration/config-file) (`sh -c` in the repo root, with the same environment as the status command, 10-second timeout) and then asks the status again, so the label goes once the layout is back to the default:
-
-```json
-{ "walkthrough_layout_reset": "tour-hook layout-reset" }
-```
-
-Answer for the stop in the environment: a window still showing another stop's view is not this stop's view. Without the command, or when it fails, times out, or prints anything without a `views` object, nothing shows — no markers, no layout label — since monocle does not know, so it does not say.
-
-It is asked when a stop is shown (once the on-stop command has finished with it, when there is one, so the markers describe this stop's windows rather than the last stop's) and after `:view N` or a click. Only the latest answer for the stop you are on is used.
-
 ## Asking about a stop
 
 Stop ids are what you type and what the agent answers to. When you ask about one, the agent can call `goto_stop` to put that stop in front of you while it explains.
 
 To ask about particular lines, point at them and send them: select with `v` or a mouse drag, or tag lines one at a time with `+` (yellow in the gutter; they stay tagged across files and stops), then press `@`. monocle hands the tour, the stop and the file lines — the selection and the tags, else the cursor's line — to your [`walkthrough_ask`](/configuration/config-file) command, which puts them in the agent's prompt and moves you there to type the question. The status bar says what went: `sent 2.2 orders.ts:120-124 to the agent`.
 
-`ctrl+]` works out the same lines and asks your [`walkthrough_resolve`](/configuration/config-file) command what they reference — the SQL file a query is loaded from, say — then opens the answer in the related-files pane beside what it already holds (at most 8 files) and moves you there: `opened 2: find_by_email.sql, …`, or `nothing to open on these lines`. `p` (or `f16`) previews the first file instead, through [`related_editor_preview`](/configuration/config-file): a passing popup in the editor beside monocle that adds nothing to the pane.
+`ctrl+]` works out the same lines and asks your [`walkthrough_resolve`](/configuration/config-file) command what they reference — the SQL file a query is loaded from, say — then opens the answer in [the editor beside monocle](#the-editor-beside-monocle), beside what it already holds (at most 8 files) and moves you there: `opened 2: find_by_email.sql, …`, or `nothing to open on these lines`. `p` (or `f16`) previews the first file instead, through [`related_editor_preview`](/configuration/config-file): a passing popup in the editor beside monocle that adds nothing to the pane.
 
 A comment you write while the tour is on is tagged with the stop you were on: it shows `[1.2]` in its box, and the feedback the agent receives leads with it — `[1.2] Does x get hoisted here?` — so the agent reads it against what it said at that stop. If the agent re-sends the tour — to fix a note, say — you stay on the stop you were on as long as its id survives.
 

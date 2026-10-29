@@ -221,20 +221,15 @@ type diffViewModel struct {
 	hlColor        string
 }
 
-// stopMark is one symbol a stop's related file or call is about.
+// stopMark is one symbol a stop's call is about.
 type stopMark struct {
 	symbol string
-	call   bool // a call to another stop; else a related file
-	n      int  // 1-based: the related file's or the call's number
-	line   int  // a call's site; 0: anywhere in the stop's lines
+	n      int // 1-based: the call's number
+	line   int // the call's site; 0: anywhere in the stop's lines
 }
 
-// The underline colours: a call yellow, as the doc pane's call label; a
-// related file cyan.
-const (
-	callMarkColor    = nextCallColor
-	relatedMarkColor = "6"
-)
+// callMarkColor underlines a call: yellow.
+const callMarkColor = "3"
 
 // isIdentByte reports whether b can be part of an identifier, so a symbol is
 // marked only where it stands whole: readBalance, not readBalanceLive.
@@ -254,10 +249,7 @@ func (m diffViewModel) symbolRanges(line diffViewLine, content string) []markRan
 		if mk.symbol == "" || (mk.line > 0 && mk.line != n) {
 			continue
 		}
-		col := lipgloss.Color(relatedMarkColor)
-		if mk.call {
-			col = lipgloss.Color(callMarkColor)
-		}
+		col := lipgloss.Color(callMarkColor)
 		for from := 0; from < len(content); {
 			i := strings.Index(content[from:], mk.symbol)
 			if i < 0 {

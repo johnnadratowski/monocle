@@ -51,18 +51,14 @@ Structure is read from brackets where a language has them and from indentation o
 | Key | Action |
 |-----|--------|
 | `W` | Tour mode on/off (hides the note and marks, keeps your stop) |
-| `X` | Close the pane holding a stop's related files |
 | `,` | Previous stop |
 | `.` | Next stop of the agent's tour (resumes it when off) |
 | `backspace` / `f18` | Back to the stop you came from, as a browser goes back — through every stop entered, however you got there. Tour mode only |
 | `f19` | Forward again, until you enter another stop |
-| `f17` | Reset the layout, as `:layout reset` does: monocle goes back to the stop's first line, the stop's related files come back, fresh, then `walkthrough_layout_reset` runs. For a key remapper to send |
 | `:back` / `:forward` | The same as `backspace` / `f19` |
 | `:stop <id>` | Jump to a stop by id, e.g. `:stop 1.2`; `:stop 5` goes to chapter 5's first stop, `:stop` alone to the tour's first |
-| `:view [n]` | Open the stop's nth view (default the first): through `walkthrough_on_stop` when set, else in the media / markdown viewer. Clicking a view's label under the note does the same |
-| `:related [n]` | Bring up the related-files pane — every related file of the stop, as on arriving — with file n (default the first) the active window, unzooming monocle's tmux window if it is zoomed. Clicking a related file's label does the same |
-| `:call [n]` | Go to the stop the stop's nth call (default the first) leads to. Clicking a call's label under the note does the same |
-| `:layout [reset]` | Say whether the tour's windows are in a saved layout; `reset` respawns the related-files pane with the stop's own related files, then runs `walkthrough_layout_reset` to put back the default. Clicking `reset` in the note's `Layout: saved · reset` does the same |
+| `:view [n]` | Open the stop's nth view (default the first): through `walkthrough_on_stop` when set, else in the media / markdown viewer. |
+| `:call [n]` | Go to the stop the stop's nth call (default the first) leads to. |
 | `:doc on`, `:doc off`, `:doc toggle`, `:doc` | Hide or show the doc pane (the stop's note), the diff taking its rows; alone it toggles. `on` and `off` are idempotent, for a driver to send. A new stop's note comes up shown; the same stop again keeps it hidden |
 | `:comments on`, `:comments off`, `:comments toggle`, `:comments` | Show or hide source-code comment-only lines (a run of two or more becomes one "N comment lines hidden" row); alone it toggles. `on` and `off` are idempotent, for a walkthrough to send (`monocle review comments`); a dimmed view stays dimmed on `on`. The state holds across stops |
 | `:link`, `:link N` | Open the doc pane note's first (or Nth) link: http, https and `stage://` only; a link of any other scheme stays as written. The note shows its links underlined, as terminal hyperlinks |
@@ -235,8 +231,8 @@ When the agent sends groupings (`set_file_groups`), the sidebar switches to grou
 | `Q` | Ask a question at the cursor (a comment that wants an answer) |
 | `+` | Tag the line, or every line of the selection, to send to the agent; on lines all tagged, untag them. Tagged lines are marked yellow in the gutter and stay tagged across files and stops until sent |
 | `@` | Send the selection and the tagged lines — else the tags, else the cursor's line — to the agent through `walkthrough_ask`, then clear them |
-| `u` / `U` | In a tour, move to the next / previous underlined symbol in the stop: what one of its related files or calls is about |
-| `o` / `ctrl+]` | On an underlined symbol in a tour, open what it is about: its related file in the related-files pane, with the keyboard, or the stop its call leads to. Elsewhere, open what the lines `@` would send reference — the SQL file a query loads, the file a function lives in — in the related-files pane, through `walkthrough_resolve`, beside what it already holds (at most 8 files), and move focus there |
+| `u` / `U` | In a tour, move to the next / previous underlined symbol in the stop: what one of its calls is about |
+| `o` / `ctrl+]` | On an underlined symbol in a tour, enter the stop its call leads to. Elsewhere, open what the lines `@` would send reference — the SQL file a query loads, the file a function lives in — in the related-files pane, through `walkthrough_resolve`, beside what it already holds (at most 8 files), and move focus there |
 | `p` / `f16` | Preview the first of them instead, in a passing preview in the related-files pane's editor (`related_editor_preview`), which takes the keyboard; nothing is added to the pane |
 | `space` | Expand/collapse a comment under the cursor |
 | `E` | Expand/collapse **all** comments in the open file (any view) |

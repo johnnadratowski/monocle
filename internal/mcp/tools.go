@@ -134,7 +134,8 @@ func registerTools(s *sdkmcp.Server) {
 	}, handleOpenEditor)
 }
 
-// relatedParam is a repo file to open beside a tour stop, at a line.
+// relatedParam is a repo file a tour stop once opened beside the diff. Monocle
+// no longer shows or opens them; the field is still read, so older tours load.
 type relatedParam struct {
 	Doc       string `json:"doc"`
 	StartLine int    `json:"start_line,omitempty"`

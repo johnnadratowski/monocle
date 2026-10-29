@@ -207,17 +207,6 @@ func (m appModel) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 		return m, m.diffView.cursorMoved()
 	}
 
-	if layout.doc.contains(msg.X, msg.Y) {
-		// A tour note's labels are the pane's only clickable things. A click on
-		// one sends what its command sends (`:view 2`, `:related 2`), so both
-		// run the same code, and does nothing else: focus and the diff stay
-		// where they are.
-		relX, relY := layout.doc.translate(msg.X, msg.Y)
-		if act, ok := m.docPane.linkAt(relX, relY); ok {
-			return m, func() tea.Msg { return act }
-		}
-	}
-
 	return m, nil
 }
 
@@ -254,16 +243,7 @@ func (m appModel) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 
 	if layout.doc.contains(msg.X, msg.Y) {
 		// Over the doc pane the wheel scrolls it — a tour note too long for
-		// the pane, or a document — and not the diff above it. Over the label
-		// rows it scrolls them, when there are more than fit.
-		if _, relY := layout.doc.translate(msg.X, msg.Y); m.docPane.overPins(relY) {
-			if msg.Button == tea.MouseWheelDown {
-				m.docPane.scrollPinsDown()
-			} else if msg.Button == tea.MouseWheelUp {
-				m.docPane.scrollPinsUp()
-			}
-			return m, nil
-		}
+		// the pane, or a document — and not the diff beside it.
 		for i := 0; i < mouseScrollLines; i++ {
 			if msg.Button == tea.MouseWheelDown {
 				m.docPane.scrollDown()

@@ -189,23 +189,19 @@ func TestRelatedFocusDefaultsToMonocle(t *testing.T) {
 	}
 }
 
-// Outside tmux there is nowhere to open the files; the stop says so rather
-// than taking over the terminal on every step.
+// Outside tmux there is nowhere to open files; showing them says so rather
+// than taking over the terminal.
 func TestRelatedFilesOutsideTmux(t *testing.T) {
 	t.Setenv("TMUX", "")
 	t.Setenv("TMUX_PANE", "")
 	m := appModel{engine: &stubEngine{cfg: &types.Config{}}}
-	stop := types.WalkthroughStop{ID: "1", Related: []types.DocRef{{Doc: "a.go", StartLine: 2}}}
-	cmd := m.openRelated(stop)
+	cmd := m.showRelatedFiles([]relatedFile{{path: "a.go", line: 2}}, 1, true, true)
 	if cmd == nil {
-		t.Fatal("a stop with related files should report why it cannot open them")
+		t.Fatal("showing files should report why it cannot open them")
 	}
 	msg, ok := cmd().(relatedPaneMsg)
 	if !ok || msg.err == nil || !strings.Contains(msg.err.Error(), "tmux") {
 		t.Errorf("got %+v, want an error naming tmux", msg)
-	}
-	if m.openRelated(types.WalkthroughStop{ID: "2"}) != nil {
-		t.Error("a stop with no related files leaves the pane alone")
 	}
 }
 
@@ -222,8 +218,8 @@ func TestSettleRunsOnlyForTheLatestStop(t *testing.T) {
 	if _, cmd := m.settleOnStop(tourSettledMsg{seq: stale}); cmd != nil {
 		t.Error("a settle for a stop already left should do nothing")
 	}
-	// Outside tmux the latest stop (1.1, no related files) has nothing to open,
-	// so only 1.2 would produce a command; step back there to check it does.
+	// The current stop's settle runs the on-stop command.
+	m.engine.GetConfig().WalkthroughOnStop = "true"
 	m = pressKey(t, m, ".")
 	if _, cmd := m.settleOnStop(tourSettledMsg{seq: m.tour.settle}); cmd == nil {
 		t.Error("the current stop's settle should run its side effects")
@@ -298,7 +294,7 @@ func TestRelatedEditorArgs(t *testing.T) {
 func TestRelatedPaneCarriesTheConfiguredArgs(t *testing.T) {
 	m := viewsAppIn(t, &types.Config{Editor: "nvim", RelatedEditorArgs: []string{"-S", "/x/setup.vim"}}, 140, false)
 	plans := captureRelated(t)
-	m = settle(t, m)
+	m = updateApp(t, m, openEditorMsg{path: "a.go", line: 5})
 	if len(*plans) != 1 {
 		t.Fatalf("%d plans", len(*plans))
 	}
@@ -314,7 +310,7 @@ func TestRelatedPaneCarriesTheConfiguredArgs(t *testing.T) {
 func TestRelatedEditorArgsOwner(t *testing.T) {
 	m := viewsAppIn(t, &types.Config{Editor: "nvim", RelatedEditorArgs: []string{"--listen", "/tmp/nvim-{owner}.sock"}}, 140, false)
 	plans := captureRelated(t) // Monocle's pane is %99
-	m = settle(t, m)
+	m = updateApp(t, m, openEditorMsg{path: "a.go", line: 5})
 	if len(*plans) != 1 {
 		t.Fatalf("%d plans", len(*plans))
 	}

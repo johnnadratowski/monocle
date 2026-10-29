@@ -2,12 +2,8 @@ package tui
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"reflect"
-	"strings"
 	"testing"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -16,7 +12,8 @@ import (
 )
 
 // markLines is b.go for the symbol-mark tests: stop 1 covers 30-32, which use
-// readBalance (its related file) and planDraw (its call to stop 2).
+// readBalance and planDraw (its calls to stops 2 and 3) and deps (what its
+// related file is about, which is not marked).
 var markLines = map[int]string{
 	30: "x := deps.readBalance(id)",
 	31: "y := planDraw(x) + readBalanceLive()",
@@ -27,9 +24,10 @@ var markLines = map[int]string{
 func markTour() *types.Walkthrough {
 	return &types.Walkthrough{Title: "Tour", Stops: []types.WalkthroughStop{
 		{ID: "1", Title: "Draw", File: "b.go", LineStart: 30, LineEnd: 32,
-			Related: []types.DocRef{{Kind: types.DocRefFile, Doc: "a.go", StartLine: 5, Symbol: "readBalance"}},
-			Calls:   []types.StopCall{{Stop: "2", Symbol: "planDraw", Line: 31}}},
+			Related: []types.DocRef{{Kind: types.DocRefFile, Doc: "a.go", StartLine: 5, Symbol: "deps"}},
+			Calls:   []types.StopCall{{Stop: "2", Symbol: "planDraw", Line: 31}, {Stop: "3", Symbol: "readBalance"}}},
 		{ID: "2", Title: "Plan", File: "a.go", LineStart: 10, LineEnd: 12},
+		{ID: "3", Title: "Read", File: "a.go", LineStart: 20, LineEnd: 22},
 	}}
 }
 
@@ -56,8 +54,7 @@ func markApp(t *testing.T, cfg *types.Config) appModel {
 	return updateApp(t, m, initialLoadMsg{files: files})
 }
 
-// marksOn names the marks on the row showing new-file line n: "related
-// readBalance" or "call planDraw", in column order.
+// marksOn names the marks on the row showing new-file line n, in column order.
 func marksOn(t *testing.T, m appModel, n int) []string {
 	t.Helper()
 	for _, ln := range m.diffView.lines {
@@ -66,11 +63,7 @@ func marksOn(t *testing.T, m appModel, n int) []string {
 		}
 		var out []string
 		for _, r := range m.diffView.symbolRanges(ln, ln.content) {
-			kind := "related"
-			if r.mark.call {
-				kind = "call"
-			}
-			out = append(out, kind+" "+ln.content[r.start:r.end])
+			out = append(out, ln.content[r.start:r.end])
 		}
 		return out
 	}
@@ -78,14 +71,16 @@ func marksOn(t *testing.T, m appModel, n int) []string {
 	return nil
 }
 
-// In a stop's lines, the symbols its related files and calls are about are
-// underlined — the whole identifier only, and nowhere past the stop.
+// In a stop's lines, the symbols its calls are about are underlined — the
+// whole identifier only, a call with a line on that line only, and nowhere
+// past the stop. What a related file is about is not: Monocle no longer shows
+// related files.
 func TestStopSymbolsAreUnderlined(t *testing.T) {
 	m := markApp(t, &types.Config{})
 	for n, want := range map[int][]string{
-		30: {"related readBalance"},
-		31: {"call planDraw"}, // readBalanceLive is another identifier
-		32: {"related readBalance"},
+		30: {"readBalance"}, // not deps
+		31: {"planDraw"},    // readBalanceLive is another identifier
+		32: {"readBalance"},
 		33: nil,
 	} {
 		if got := marksOn(t, m, n); !reflect.DeepEqual(got, want) {
@@ -125,27 +120,14 @@ func TestUJumpsBetweenUnderlinedLines(t *testing.T) {
 	}
 }
 
-// o on an underlined symbol opens what it is about: its related file in the
-// editor beside Monocle, with the keyboard, or the stop its call leads to.
-func TestOOnAnUnderlinedSymbolOpensIt(t *testing.T) {
-	skipWithoutSh(t)
-	added := filepath.Join(t.TempDir(), "added")
-	m := markApp(t, &types.Config{Editor: "nvim", RelatedEditorAdd: `printf '%s|%s\n' {file} {line} >> ` + added})
-	captureRelated(t)
-	log := fakeTmux(t)
-	orig := findPane
-	findPane = func(string, string) string { return "%7" }
-	t.Cleanup(func() { findPane = orig })
-
-	next, cmd := m.Update(tea.KeyPressMsg{Code: 'o', Text: "o"}) // on 30: readBalance
-	m = driveWithin(t, next.(appModel), cmd, 0, 5*time.Second)
-	if got := readLines(t, added); !reflect.DeepEqual(got, []string{"a.go|5"}) {
-		t.Errorf("o on readBalance ran %q, want its related file", got)
+// o on an underlined symbol enters the stop its call leads to.
+func TestOOnAnUnderlinedSymbolEntersItsStop(t *testing.T) {
+	m := markApp(t, &types.Config{})
+	m = pressKey(t, m, "o") // on 30: readBalance
+	if stop, _ := m.currentStop(); stop.ID != "3" {
+		t.Errorf("o on readBalance left the tour on %s, want the stop it calls, 3", stop.ID)
 	}
-	if data, _ := os.ReadFile(log); !strings.Contains(string(data), "select-pane -t %7") {
-		t.Errorf("the editor did not get the keyboard:\n%s", data)
-	}
-
+	m = markApp(t, &types.Config{})
 	m = pressKey(t, m, "u") // 31: planDraw
 	m = pressKey(t, m, "o")
 	if stop, _ := m.currentStop(); stop.ID != "2" {

@@ -44,7 +44,7 @@ func noteBar(t *testing.T, width int, loc noteLocation) (raw, row, hint string) 
 	t.Helper()
 	th := DefaultTheme()
 	d := docPaneModel{width: width, height: 6, theme: &th}
-	d.openNote("tour:1.2", "1.2 · Where it lands", strings.Repeat("A line of the note.\n\n", 4), nil, nil)
+	d.openNote("tour:1.2", "1.2 · Where it lands", strings.Repeat("A line of the note.\n\n", 4), nil)
 	d.titleMark = stopVisitMark(false)
 	d.titleLoc = loc
 	d.reflow()
