@@ -280,10 +280,11 @@ func TestTheWheelScrollsALongNote(t *testing.T) {
 	if title := rowWith(screen, "1.2 · Where it lands"); !strings.Contains(title, "↑ ") || strings.Contains(title, "↓") {
 		t.Errorf("at the end the title should say only what is above: %q", title)
 	}
-	// The note's last line is the pane's last row: its box's bottom border is next.
+	// The note's last line sits over the pane's last row, the marker saying
+	// it is the end; the box's bottom border is next.
 	lines := strings.Split(screen, "\n")
-	if _, ly := onScreen(t, m, "Note line 60."); !strings.Contains(lines[ly+1], "└") {
-		t.Errorf("the row under the note's last line is %q, want the pane's bottom border", lines[ly+1])
+	if _, ly := onScreen(t, m, "Note line 60."); !strings.Contains(lines[ly+1], "end of note") || !strings.Contains(lines[ly+2], "└") {
+		t.Errorf("under the note's last line: %q, then %q; want the end marker, then the pane's bottom border", lines[ly+1], lines[ly+2])
 	}
 	for i := 0; i < 30; i++ {
 		m = updateApp(t, m, wheel(nx, ny, false))
@@ -344,21 +345,6 @@ func TestALongNoteShowsAScrollbar(t *testing.T) {
 	if last := rowWith(screenText(m), "Note line 60."); !strings.Contains(last, "█") {
 		t.Errorf("at the end the thumb should sit on the last note row: %q", last)
 	}
-}
-
-// A tour note's title has a rule under it.
-func TestANoteHasARuleUnderItsTitle(t *testing.T) {
-	m := longNoteApp(t)
-	lines := strings.Split(screenText(m), "\n")
-	for i, l := range lines {
-		if strings.Contains(l, "1.2 · Where it lands") {
-			if i+1 >= len(lines) || !strings.Contains(lines[i+1], "────") {
-				t.Fatalf("no rule under the note's title; next row %q", lines[i+1])
-			}
-			return
-		}
-	}
-	t.Fatal("note title not on screen")
 }
 
 // The note's scroll hint is right-justified in the title bar, apart from the title.

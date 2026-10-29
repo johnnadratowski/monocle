@@ -77,23 +77,55 @@ func (m *docPaneModel) reflow() {
 	m.clamp()
 }
 
-// noteRows is how many rows the note itself gets: all of the pane's under
-// its header.
-func (m docPaneModel) noteRows() int { return m.viewportHeight() }
+// noteRows is how many rows of text the note gets: all of the pane's under
+// its header, less the last for the more-lines marker when the note does not
+// fit (noteMarked).
+func (m docPaneModel) noteRows() int {
+	rows := m.viewportHeight()
+	if m.noteMarked() {
+		rows--
+	}
+	return rows
+}
+
+// noteMarked is whether the note is longer than the pane, so its last row is
+// the more-lines marker. It is decided by the note's length, not by where it
+// is scrolled, so the text does not move as the reviewer scrolls to the end.
+func (m docPaneModel) noteMarked() bool {
+	vp := m.viewportHeight()
+	return m.note && vp > 1 && len(m.lines) > vp
+}
 
 // noteScrollHint says how much of the note is out of sight, for the title:
-// "↓ 12 lines", "↑ 3 · ↓ 9 lines", or "" when it all fits.
+// "↓ 12 more lines", "↑ 3 · ↓ 9 more lines", "↑ 3 lines above", or "" when
+// it all fits.
 func (m docPaneModel) noteScrollHint() string {
 	above, below := m.offset, len(m.lines)-m.offset-m.noteRows()
 	switch {
 	case above > 0 && below > 0:
-		return fmt.Sprintf("↑ %d · ↓ %d lines", above, below)
+		return fmt.Sprintf("↑ %d · ↓ %d more line%s", above, below, plural(below))
 	case below > 0:
-		return fmt.Sprintf("↓ %d lines", below)
+		return fmt.Sprintf("↓ %d more line%s", below, plural(below))
 	case above > 0:
-		return fmt.Sprintf("↑ %d lines", above)
+		return fmt.Sprintf("↑ %d line%s above", above, plural(above))
 	}
 	return ""
+}
+
+// noteMarkerText is the more-lines marker under a note of total lines, rows
+// of them showing from offset: on the left how many are below ("↓ 12 more
+// lines", or "end of note" once there are none), on the right which are
+// showing ("lines 1–8 of 20"). The marker is where the reading stops, so it
+// is where a note cut short has to say so; the band's hint is easy to read
+// past as part of the title.
+func noteMarkerText(total, rows, offset int) (left, right string) {
+	last := min(offset+rows, total)
+	if below := total - last; below > 0 {
+		left = fmt.Sprintf("↓ %d more line%s", below, plural(below))
+	} else {
+		left = "end of note"
+	}
+	return left, fmt.Sprintf("lines %d–%d of %d", offset+1, last, total)
 }
 
 // noteThumb marks which of the note's rows carry the scrollbar's thumb: sized by how
@@ -220,17 +252,11 @@ func (m *docPaneModel) close() {
 	m.annotationID = ""
 }
 
-// headRows is the title bar, plus, for a tour note, the rule under it, which
-// keeps the title apart from the text.
-func (m docPaneModel) headRows() int {
-	if m.note {
-		return 2
-	}
-	return 1
-}
+// headRows is the title bar: one row. (A tour note's is a solid band, which
+// keeps it apart from the text without a rule.)
+func (m docPaneModel) headRows() int { return 1 }
 
-// viewportHeight is the number of doc lines that fit under the title bar (and a
-// note's rule).
+// viewportHeight is the number of doc lines that fit under the title bar.
 func (m docPaneModel) viewportHeight() int {
 	h := m.height - m.headRows()
 	if h < 1 {
@@ -247,6 +273,13 @@ func (m docPaneModel) View() string {
 	}
 	accent := lipgloss.Color(annotationColor)
 	titleStyle := lipgloss.NewStyle().Foreground(accent).Bold(true).Width(m.width)
+	// A tour note's title bar is a solid band of the accent, edge to edge,
+	// dark text on it: the stop's id and title stand out from the note and
+	// from the code under it.
+	band := lipgloss.NewStyle().Background(accent).Foreground(lipgloss.Color("0"))
+	if m.note {
+		titleStyle = band.Bold(true).Width(m.width)
+	}
 	// The width is only final at render time (the horizontal layout measures
 	// the rendered sidebar), so re-wrap a note here if it moved. m is a copy.
 	m.reflow()
@@ -269,14 +302,15 @@ func (m docPaneModel) View() string {
 	var b strings.Builder
 	switch {
 	case m.note && (m.titleMark != "" || m.titleLoc.path != ""):
-		// The mark keeps its own colour, and the stop's location is dim, so both
-		// are drawn outside the title's style. The title is kept whole while the
-		// location can shorten instead.
+		// The mark is styled by its maker (stopVisitMark), and the stop's
+		// location is not bold, so both are drawn outside the title's style,
+		// on the band. The title is kept whole while the location can shorten
+		// instead.
 		mark := ""
 		if m.titleMark != "" {
-			mark = " " + m.titleMark
+			mark = band.Render(" ") + m.titleMark
 		}
-		plain := lipgloss.NewStyle().Foreground(accent).Bold(true)
+		plain := band.Bold(true)
 		markW, hintW := lipgloss.Width(mark), lipgloss.Width(hint)
 		reserve := markW + 1
 		if hint != "" {
@@ -293,7 +327,7 @@ func (m docPaneModel) View() string {
 		}
 		left := plain.Render(" "+truncateToWidth(title, room)) + mark
 		if loc != "" {
-			left += sep + lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(loc)
+			left += band.Render(sep + loc)
 		}
 		right := ""
 		if hint != "" {
@@ -308,9 +342,6 @@ func (m docPaneModel) View() string {
 		gap := max(m.width-lipgloss.Width(left)-lipgloss.Width(hint)-1, 1)
 		b.WriteString(titleStyle.Render(left + strings.Repeat(" ", gap) + hint + " "))
 	}
-	if m.note {
-		b.WriteString("\n" + lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(strings.Repeat("─", max(m.width, 0))))
-	}
 
 	lineNumStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
 	hlStyle := lipgloss.NewStyle().Background(accent).Foreground(lipgloss.Color("0"))
@@ -318,7 +349,7 @@ func (m docPaneModel) View() string {
 	vp := m.viewportHeight()
 	if m.note {
 		// The note scrolls. A note taller than its rows gets a scrollbar in its
-		// last column.
+		// last column, and its last row is the more-lines marker.
 		rows := m.noteRows()
 		thumb := noteThumb(rows, len(m.lines), m.offset)
 		trackStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
@@ -326,6 +357,12 @@ func (m docPaneModel) View() string {
 		for i := 0; i < vp; i++ {
 			b.WriteString("\n")
 			switch {
+			case i == rows && m.noteMarked():
+				left, right := noteMarkerText(len(m.lines), rows, m.offset)
+				left = lipgloss.NewStyle().Foreground(accent).Bold(true).Render(" " + left)
+				right = trackStyle.Render(right + " ")
+				gap := max(m.width-lipgloss.Width(left)-lipgloss.Width(right), 1)
+				b.WriteString(truncateToWidth(left+strings.Repeat(" ", gap)+right, m.width))
 			case i < rows && thumb != nil:
 				line := ""
 				if m.offset+i < len(m.lines) {

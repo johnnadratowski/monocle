@@ -442,19 +442,21 @@ func stopLocation(stop types.WalkthroughStop, root string) noteLocation {
 	return loc
 }
 
-// The marks after a stop's title: a bright "new" on a stop the reviewer has not
-// been on before, a dim check on one they have.
+// The marks after a stop's title, on its accent band: a bold "new" on a stop
+// the reviewer has not been on before, a plain check on one they have.
 const (
 	stopNewMark     = "new"
 	stopVisitedMark = "✓"
 )
 
-// stopVisitMark is the styled mark for a stop new on arrival, or visited.
+// stopVisitMark is the styled mark for a stop new on arrival, or visited,
+// drawn on the note's band (docPaneModel.View).
 func stopVisitMark(fresh bool) string {
+	band := lipgloss.NewStyle().Background(lipgloss.Color(annotationColor)).Foreground(lipgloss.Color("0"))
 	if fresh {
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Bold(true).Render(stopNewMark)
+		return band.Bold(true).Underline(true).Render(stopNewMark)
 	}
-	return lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(stopVisitedMark)
+	return band.Render(stopVisitedMark)
 }
 
 // stopNoteBody is the doc pane's text for a stop: the note.
