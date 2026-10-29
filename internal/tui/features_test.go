@@ -8,14 +8,14 @@ import (
 )
 
 // What the TUI reports it understands: each feature is a command-line command
-// it has, and :doc is one.
+// it has, and :doc is one, or a kind of stop it shows.
 func TestFeaturesAreRealCommands(t *testing.T) {
 	if !slices.Contains(Features, "doc") {
 		t.Errorf("Features = %v, want doc in it", Features)
 	}
 	for _, f := range Features {
-		if !slices.Contains(commandNames, f) {
-			t.Errorf("feature %q is not a command the TUI has", f)
+		if !slices.Contains(commandNames, f) && !slices.Contains(stopKinds, f) {
+			t.Errorf("feature %q is not a command or stop kind the TUI has", f)
 		}
 	}
 }

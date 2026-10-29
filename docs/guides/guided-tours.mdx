@@ -92,6 +92,10 @@ To ask about particular lines, point at them and send them: select with `v` or a
 
 A comment you write while the tour is on is tagged with the stop you were on: it shows `[1.2]` in its box, and the feedback the agent receives leads with it — `[1.2] Does x get hoisted here?` — so the agent reads it against what it said at that stop. If the agent re-sends the tour — to fix a note, say — you stay on the stop you were on as long as its id survives.
 
+## Not covered
+
+A driver can end the tour with a **Not covered** stop: the PR's changed lines that no stop covers, as `hunks`. Its note says how much of the change the tour covers. On it the file list comes up holding only the uncovered files, as wide as their paths need; `.` and `,` step through the uncovered changes one at a time, each marked in the gutter as a stop's lines are, and `>` and `<` jump a file at a time. The note's header names the change on screen and the status bar counts them (`tour uncovered · 9 of 9 · hunk 2 of 7`). Past the last change `.` goes on through the tour, and `,` before the first goes back to the stop before; stepping back into the stop lands on its last change. Leaving it puts the file list back as it was.
+
 ## Sending a tour
 
 Agents send tours with the `set_walkthrough` MCP tool or `monocle review set-walkthrough --file tour.json`. See [Agent commands](/reference/agent-commands#monocle-review-set-walkthrough) for the format.

@@ -74,6 +74,10 @@ type KeyMap struct {
 	TourBack    []string // back through the stops entered, as a browser goes back
 	TourForward []string
 	ToggleTour  []string
+	// On the uncovered stop, a file of its changes at a time: . and , step
+	// through them a change at a time.
+	TourPrevFile []string
+	TourNextFile []string
 
 	// Code-structure navigation in the diff (vim %, [{ and [[)
 	BlockMatch []string // block start <-> end
@@ -205,6 +209,10 @@ func DefaultKeyMap() KeyMap {
 		TourBack:    []string{"backspace", "f18"},
 		TourForward: []string{"f19"},
 		ToggleTour:  []string{"W"}, // "walkthrough"
+		// Stage passes < and > through on the uncovered stop, where they are
+		// its files; elsewhere they are Stage's own.
+		TourPrevFile: []string{"<"},
+		TourNextFile: []string{">"},
 
 		BlockMatch: []string{"%"},
 		BlockUp:    []string{"("},
@@ -315,6 +323,8 @@ var keyActions = map[string]func(*KeyMap) *[]string{
 	"tour_back":               func(km *KeyMap) *[]string { return &km.TourBack },
 	"tour_forward":            func(km *KeyMap) *[]string { return &km.TourForward },
 	"toggle_tour":             func(km *KeyMap) *[]string { return &km.ToggleTour },
+	"tour_prev_file":          func(km *KeyMap) *[]string { return &km.TourPrevFile },
+	"tour_next_file":          func(km *KeyMap) *[]string { return &km.TourNextFile },
 	"block_match":             func(km *KeyMap) *[]string { return &km.BlockMatch },
 	"block_up":                func(km *KeyMap) *[]string { return &km.BlockUp },
 	"block_top":               func(km *KeyMap) *[]string { return &km.BlockTop },

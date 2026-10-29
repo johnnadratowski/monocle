@@ -51,6 +51,9 @@ type sidebarModel struct {
 
 	// Filter state: "" = show all, "unreviewed" = hide reviewed, "reviewed" = hide unreviewed
 	reviewFilter string
+	// onlyPaths, when set, are the only changed files the list holds — the
+	// uncovered stop's — and it holds no artifacts or added files.
+	onlyPaths map[string]bool
 
 	// reviewTracking: when false, hide all review indicators/counts/filters
 	reviewTracking bool
@@ -1525,10 +1528,19 @@ func (m *sidebarModel) clampOffset() {
 	}
 }
 
-// applyReviewedFilter builds new slices based on reviewFilter state.
+// applyReviewedFilter builds new slices based on onlyPaths and reviewFilter state.
 // "" = no filter, "unreviewed" = hide reviewed, "reviewed" = hide unreviewed.
 // Call after setting files/contentItems/additionalFiles.
 func (m *sidebarModel) applyReviewedFilter() {
+	if m.onlyPaths != nil {
+		var files []types.ChangedFile
+		for _, f := range m.files {
+			if m.onlyPaths[f.Path] {
+				files = append(files, f)
+			}
+		}
+		m.files, m.contentItems, m.additionalFiles = files, nil, nil
+	}
 	if m.reviewFilter == "" {
 		m.rebuildGroups() // keep grouped order in sync when files change
 		return

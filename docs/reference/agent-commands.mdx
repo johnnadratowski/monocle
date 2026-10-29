@@ -558,6 +558,8 @@ A tour file is a JSON object (or a bare array of stops):
 | `calls` | No | The other stops this stop's code calls into, each `{"stop": id, "symbol": name, "line": n}` — a route stop calling the function the next stop is about, say. Each `symbol` is underlined in the stop's lines (on `line` only, when it is set), and `o` on it — or `:call N` — enters that stop. `symbol` is the function called (without one nothing is underlined, and `:call N` still reaches the stop); `line` is the call site's **new-file** line in this stop's file. A call to an id the tour does not have is dropped. |
 | `layout` | No | A scene name passed through to the on-stop command. monocle never interprets it. |
 | `order` | No | The order the on-stop command shows the stop's windows in, as it names them (`["view", "doc", "code", "regions"]`, say). Passed through like `layout`; monocle never interprets it. |
+| `kind` | No | `uncovered` for the stop holding the changes no other stop covers, which a driver adds at the tour's end; omit it for any other stop. A TUI from before it reports no `uncovered` in [`caps`](#monocle-review-caps), and a monocle from before it refuses the field. |
+| `hunks` | No | An `uncovered` stop's changes, each `{"file", "start", "end"}`: **new-file** line ranges, in diff order. `.` and `,` step through them and `<` and `>` through their files, and the file list shows only their files; past either end `.` and `,` go on through the tour. Leave `file` out of the stop itself; with no hunks the stop is its note alone. |
 
 Notes:
 
@@ -743,6 +745,7 @@ The answer comes from the TUIs themselves, as each reported on connecting, not f
 | Feature | Commands |
 |---------|----------|
 | `doc` | `:doc on`, `:doc off`, `:doc toggle` |
+| `uncovered` | A tour stop with `"kind": "uncovered"` and its `hunks` (see [stop fields](#stop-fields)) |
 
 ### Flags
 

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"maps"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -52,6 +53,11 @@ type tourState struct {
 	seenTitle string
 	fresh     bool
 	freshFor  string
+	// hunk is the uncovered stop's change on screen, an index into its
+	// Hunks, and filesShown that the stop showed the file list the tour had
+	// hidden, so leaving it hides the list again.
+	hunk       int
+	filesShown bool
 }
 
 // A tour is read in order, but following a call to the stop about the function
@@ -150,7 +156,11 @@ func (m appModel) tourLabel() string {
 	if !ok || !m.tour.on {
 		return ""
 	}
-	return fmt.Sprintf("tour %s · %d of %d", stop.ID, m.tour.index+1, len(m.tour.tour.Stops))
+	label := fmt.Sprintf("tour %s · %d of %d", stop.ID, m.tour.index+1, len(m.tour.tour.Stops))
+	if hunks := m.stopHunks(); len(hunks) > 0 {
+		label += fmt.Sprintf(" · hunk %d of %d", m.tour.hunk+1, len(hunks))
+	}
+	return label
 }
 
 // prTourTitle is a tour title that starts with its PR's number, as an agent
@@ -205,9 +215,11 @@ func (m *appModel) syncTour(session *types.ReviewSession) {
 	if m.tour.index < 0 {
 		m.tour.index = 0
 	}
+	m.tour.hunk = min(m.tour.hunk, max(len(m.stopHunks())-1, 0))
 	if m.tour.on {
 		m.statusBar.tourLabel = m.tourLabel()
 	}
+	m.syncUncoveredFiles()
 }
 
 // stopEntry says what entering a stop should do besides showing it.
@@ -219,6 +231,9 @@ type stopEntry struct {
 	// effects runs the on-stop command once the reviewer settles on it. Off only for a restart restoring the
 	// stop: resuming is not arriving.
 	effects bool
+	// fromEnd lands on an uncovered stop's last change rather than its
+	// first: stepping back into it.
+	fromEnd bool
 }
 
 // enterStop makes stop i current and shows it.
@@ -227,6 +242,15 @@ func (m appModel) enterStop(i int, how stopEntry) (appModel, tea.Cmd) {
 		return m, nil
 	}
 	stop := m.tour.tour.Stops[i]
+	// Another stop starts at its first change (its last, stepping back into
+	// it); the same one again — a re-sent tour, :stop to where he is — keeps
+	// the change he is on.
+	if i != m.tour.index || !m.tour.on {
+		m.tour.hunk = 0
+		if how.fromEnd {
+			m.tour.hunk = max(len(stop.Hunks)-1, 0)
+		}
+	}
 	m.tour.index = i
 	m.tour.on = true
 	// A walk back or forward has already moved the history to this stop, so
@@ -253,8 +277,9 @@ func (m appModel) enterStop(i int, how stopEntry) (appModel, tea.Cmd) {
 	if keepHidden {
 		m.setDocHidden(true)
 	}
+	m.syncUncoveredFiles()
 	var cmds []tea.Cmd
-	if cmd := m.jumpToStop(stop); cmd != nil {
+	if cmd := m.jumpToStop(m.landing(stop)); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
 	if how.report && m.engine != nil {
@@ -302,6 +327,9 @@ func (m appModel) stepTour(dir int) (appModel, tea.Cmd) {
 	if !m.tour.on {
 		return m.enterStop(m.tour.index, stopEntry{report: true, effects: true})
 	}
+	if hunks := m.stopHunks(); m.tour.hunk+dir >= 0 && m.tour.hunk+dir < len(hunks) {
+		return m.enterHunk(m.tour.hunk + dir)
+	}
 	next := m.tour.index + dir
 	if next < 0 || next >= len(m.tour.tour.Stops) {
 		if dir > 0 {
@@ -311,7 +339,7 @@ func (m appModel) stepTour(dir int) (appModel, tea.Cmd) {
 		}
 		return m, nil
 	}
-	return m.enterStop(next, stopEntry{report: true, effects: true})
+	return m.enterStop(next, stopEntry{report: true, effects: true, fromEnd: dir < 0})
 }
 
 // gotoStop enters a stop by id, from `:stop` or the agent.
@@ -410,6 +438,7 @@ func (m *appModel) leaveTour() {
 	if m.docPane.active && strings.HasPrefix(m.docPane.annotationID, tourNoteKeyPrefix) {
 		m.closeDocPane()
 	}
+	m.syncUncoveredFiles()
 }
 
 // openStopNote puts the stop's heading and note in the doc pane. The note is
@@ -420,7 +449,7 @@ func (m *appModel) openStopNote(stop types.WalkthroughStop) {
 	m.docPane.theme = &m.theme
 	m.docPane.openNote(tourNoteKeyPrefix+stop.ID, stop.Heading(), stopNoteBody(stop), m.diffView.mdStyler)
 	m.docPane.titleMark = stopVisitMark(m.tour.fresh && m.tour.freshFor == stop.ID)
-	m.docPane.titleLoc = stopLocation(stop, m.repoRoot)
+	m.docPane.titleLoc = stopLocation(m.landing(stop), m.repoRoot)
 	recalcPaneDimensions(m)
 	m.diffView.ensureVisible()
 }
@@ -683,9 +712,15 @@ func stopMarksFor(stop types.WalkthroughStop) []stopMark {
 	return marks
 }
 
-// reviewHasFile reports whether a repo-relative path is one of the changed files.
+// reviewHasFile reports whether a repo-relative path is one of the changed
+// files: one the file list holds, or, while the uncovered stop narrows the
+// list, any the review has.
 func (m appModel) reviewHasFile(path string) bool {
-	for _, f := range m.sidebar.files {
+	files := m.sidebar.files
+	if m.sidebar.onlyPaths != nil && m.engine != nil {
+		files = m.engine.GetChangedFiles()
+	}
+	for _, f := range files {
 		if f.Path == path {
 			return true
 		}
@@ -746,3 +781,129 @@ func (m appModel) handleTourEvent(msg tourEventMsg) (appModel, tea.Cmd) {
 	}
 	return m, nil
 }
+
+// The uncovered stop is the PR's changes no other stop covers, which stage
+// adds at a tour's end. It is a stop of many places rather than one: . and ,
+// step through its changes (its hunks) and < and > through their files, the
+// file list holding only those files; past either end, . and , go on through
+// the tour.
+
+// stopHunks are the changes of the stop the reviewer is on, when it is the
+// uncovered stop and the tour is on.
+func (m appModel) stopHunks() []types.StopHunk {
+	stop, ok := m.currentStop()
+	if !ok || !m.tour.on || !stop.Uncovered() {
+		return nil
+	}
+	return stop.Hunks
+}
+
+// landing is the place in the code a stop shows: its own, or for the
+// uncovered stop the change on screen.
+func (m appModel) landing(stop types.WalkthroughStop) types.WalkthroughStop {
+	if !stop.Uncovered() || len(stop.Hunks) == 0 {
+		return stop
+	}
+	h := stop.Hunks[min(max(m.tour.hunk, 0), len(stop.Hunks)-1)]
+	stop.File, stop.LineStart, stop.LineEnd = h.File, h.Start, h.End
+	return stop
+}
+
+// enterHunk shows the uncovered stop's change h: its lines marked, the cursor
+// on them, the note's header and the status bar saying where it is. The stop
+// is not re-entered, so the on-stop command does not run again.
+func (m appModel) enterHunk(h int) (appModel, tea.Cmd) {
+	stop, _ := m.currentStop()
+	m.tour.hunk = h
+	m.statusBar.tourLabel = m.tourLabel()
+	m.statusBar.searchInfo = ""
+	at := m.landing(stop)
+	m.docPane.titleLoc = stopLocation(at, m.repoRoot)
+	return m, m.jumpToStop(at)
+}
+
+// stepHunkFile moves to the first change of the next file (dir +1) or the one
+// before (-1) on the uncovered stop. At either end it stays and says so;
+// on any other stop it moves nothing.
+func (m appModel) stepHunkFile(dir int) (appModel, tea.Cmd) {
+	hunks := m.stopHunks()
+	if len(hunks) == 0 {
+		if m.tour.on {
+			m.statusBar.searchInfo = "< and > step through the files on the Not covered stop"
+		}
+		return m, nil
+	}
+	file := hunks[m.tour.hunk].File
+	i := m.tour.hunk
+	for i >= 0 && i < len(hunks) && hunks[i].File == file {
+		i += dir
+	}
+	if i < 0 || i >= len(hunks) {
+		if dir > 0 {
+			m.statusBar.searchInfo = "last file not covered"
+		} else {
+			m.statusBar.searchInfo = "first file not covered"
+		}
+		return m, nil
+	}
+	for i > 0 && hunks[i-1].File == hunks[i].File {
+		i--
+	}
+	return m.enterHunk(i)
+}
+
+// syncUncoveredFiles makes the file list fit the stop: on the uncovered stop
+// it comes up holding only that stop's files, as wide as their paths need;
+// off it, it holds the whole review again, hidden if the stop showed it.
+func (m *appModel) syncUncoveredFiles() {
+	var only map[string]bool
+	longest := 0
+	for _, h := range m.stopHunks() {
+		if only == nil {
+			only = map[string]bool{}
+		}
+		only[h.File] = true
+		longest = max(longest, len(h.File))
+	}
+	if maps.Equal(only, m.sidebar.onlyPaths) && (only == nil) == (m.sidebar.onlyPaths == nil) {
+		return
+	}
+	m.sidebar.onlyPaths, m.sidebarFit = only, longest
+	if m.engine != nil {
+		m.sidebar.files = m.engine.GetChangedFiles()
+		m.sidebar.contentItems = m.engine.GetContentItems()
+		m.sidebar.additionalFiles = m.engine.GetAdditionalFiles()
+	}
+	m.sidebar.applyReviewedFilter()
+	m.sidebar.rebuildTree()
+	m.sidebar.clampOffset()
+	switch {
+	case only != nil && m.sidebarHidden:
+		m.sidebarHidden, m.tour.filesShown = false, true
+	case only == nil && m.tour.filesShown:
+		m.tour.filesShown = false
+		m.hideFileListForTour()
+	}
+	recalcPaneDimensions(m)
+}
+
+// sidebarRowChrome is a file row's columns besides its path: status, recent
+// mark, icon and the review mark.
+const sidebarRowChrome = 11
+
+// maxUncoveredListWidth is the widest the uncovered stop's file list gets: a
+// path longer than that is cut, so the code keeps its room.
+const maxUncoveredListWidth = 72
+
+// uncoveredListWidth is the uncovered stop's file list's width side by side:
+// enough for its longest path, within the list's usual floor of 30 and
+// maxUncoveredListWidth, and no more than room, what the diff can spare.
+func uncoveredListWidth(longest, room int) int {
+	w := min(longest+sidebarRowChrome, maxUncoveredListWidth, room)
+	return max(w, 30)
+}
+
+// stopKinds are the kinds of stop this TUI shows as more than a place in the
+// code. Each is in Features, so a driver asks the running TUI before sending
+// one.
+var stopKinds = []string{types.StopKindUncovered}

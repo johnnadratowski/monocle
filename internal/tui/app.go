@@ -291,6 +291,10 @@ type appModel struct {
 	minDiffWidth int  // minimum diff viewer content width in horizontal layout
 	notePercent  int  // tour_note_percent: a tour note's pane as a share of the window (notePercentOf)
 
+	// sidebarFit, when set, is the longest path the file list holds on the
+	// uncovered stop: side by side, the list is as wide as that needs.
+	sidebarFit int
+
 	showSessionPicker bool   // open session picker on startup
 	repoRoot          string // repo root for session listing
 
@@ -2111,6 +2115,7 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case Matches(key, km.FocusSwap), key == "shift+tab", Matches(key, km.OpenDocRef),
 			Matches(key, km.TourNext), Matches(key, km.TourPrev), Matches(key, km.ToggleTour),
+			Matches(key, km.TourNextFile), Matches(key, km.TourPrevFile),
 			Matches(key, km.PaneSize), Matches(key, km.DocPane), Matches(key, km.OpenLink),
 			Matches(key, km.PaneLeft), Matches(key, km.PaneDown), Matches(key, km.PaneUp), Matches(key, km.PaneRight),
 			Matches(key, km.ToggleSidebar), Matches(key, km.Help), Matches(key, km.CommandMode), Matches(key, km.SendLines), Matches(key, km.OpenRefs), Matches(key, km.OpenRefsPreview),
@@ -2246,6 +2251,12 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case Matches(key, km.TourPrev):
 		return m.stepTour(-1)
 
+	case Matches(key, km.TourNextFile):
+		return m.stepHunkFile(+1)
+
+	case Matches(key, km.TourPrevFile):
+		return m.stepHunkFile(-1)
+
 	case Matches(key, km.ToggleTour):
 		return m.toggleTour()
 
@@ -2285,6 +2296,7 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.sidebarHidden = !m.sidebarHidden
 		m.sidebarAutoHidden = false           // user explicitly toggled
 		m.sidebarUserShown = !m.sidebarHidden // track if user forced it visible
+		m.tour.filesShown = false             // the list is theirs now, not the uncovered stop's
 		if m.sidebarHidden {
 			m.focus = focusMain
 			m.sidebar.focused = false
@@ -3191,11 +3203,12 @@ func (m appModel) persistSidebarStyle() {
 
 // executeCommand runs a named command entered in command mode.
 // Features are the `:` commands a driver (a walkthrough's stage) may type into
-// this TUI, reported to the engine when it connects (get_frontends) so the
-// driver asks the running TUI rather than the binary on disk: a TUI from
-// before a command would take its keys as typing. Add a command here when a
-// driver is meant to send it.
-var Features = []string{"doc", "comments"}
+// this TUI, and the kinds of stop it may send it (stopKinds), reported to the
+// engine when it connects (get_frontends) so the driver asks the running TUI
+// rather than the binary on disk: a TUI from before a command would take its
+// keys as typing, and one from before a stop kind refuses the tour. Add a
+// command here when a driver is meant to send it.
+var Features = []string{"doc", "comments", types.StopKindUncovered}
 
 // commandNames is the canonical list of `:` commands, used for tab completion.
 var commandNames = []string{
@@ -3645,6 +3658,9 @@ func recalcPaneDimensions(m *appModel) {
 		}
 		if sidebarContentW > 50 {
 			sidebarContentW = 50
+		}
+		if m.sidebarFit > 0 {
+			sidebarContentW = uncoveredListWidth(m.sidebarFit, maxSidebarForDiff)
 		}
 
 		sidebarOuter := sidebarContentW + borderW
