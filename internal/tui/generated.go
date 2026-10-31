@@ -3,7 +3,6 @@ package tui
 import (
 	"fmt"
 	"strings"
-	"unicode"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -22,7 +21,7 @@ import (
 //
 // Everything on the card but its labels is the change's own text (a header, a
 // lockfile, a path, a tour note), so the card strips escape sequences and
-// control bytes from it before drawing (cardText).
+// control bytes, and bidi controls, from it before drawing (termText).
 
 // generatedBadge marks a generated file in the file list.
 const generatedBadge = "⚙"
@@ -143,23 +142,6 @@ func generatedWhy(reason string, own bool) string {
 	return reason
 }
 
-// cardText is s as the card may draw it. A header, a lockfile, a path and a
-// tour note are the change's words, and can carry escape sequences and control
-// bytes that would drive the reviewer's terminal (clear it, set its clipboard,
-// redraw what he reads). ANSI sequences go whole; every other control
-// character (C0, DEL, C1) goes, a tab as a space; invalid UTF-8 becomes U+FFFD.
-func cardText(s string) string {
-	return strings.Map(func(r rune) rune {
-		switch {
-		case r == '\t':
-			return ' '
-		case unicode.Is(unicode.Cc, r):
-			return -1
-		}
-		return r
-	}, ansi.Strip(strings.ToValidUTF8(s, "\uFFFD")))
-}
-
 // renderGeneratedCard is the folded diff: what the file is, then the key that
 // shows the diff.
 func (c generatedCard) render(width, height int) string {
@@ -184,8 +166,8 @@ func (c generatedCard) render(width, height int) string {
 		}
 	}
 
-	note, by, from := cardText(c.note), cardText(c.by), cardText(c.from)
-	add(" " + bold.Render(generatedBadge+" Generated file") + "  " + cardText(c.path))
+	note, by, from := termText(c.note), termText(c.by), termText(c.from)
+	add(" " + bold.Render(generatedBadge+" Generated file") + "  " + termText(c.path))
 	add(" " + faint.Render("Generated: "+generatedWhy(c.reason, c.own)+"."))
 	add("")
 	if note != "" {
@@ -229,7 +211,7 @@ func (c generatedCard) render(width, height int) string {
 				break
 			}
 			var row string
-			name, was, is := cardText(ch.Name), cardText(ch.From), cardText(ch.To)
+			name, was, is := termText(ch.Name), termText(ch.From), termText(ch.To)
 			switch {
 			case ch.From == "":
 				row = "+ " + name + " " + is
@@ -247,7 +229,7 @@ func (c generatedCard) render(width, height int) string {
 			if i == types.GeneratedHeaderLines || (i == 0 && ln == "") {
 				break
 			}
-			ln = ansi.Truncate(cardText(ln), textW, "…")
+			ln = ansi.Truncate(termText(ln), textW, "…")
 			if i == 0 {
 				add("  " + label.Render("First lines") + faint.Render(ln))
 			} else {

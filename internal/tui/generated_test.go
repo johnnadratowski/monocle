@@ -297,8 +297,8 @@ func TestTheCardDrawsNoControlBytes(t *testing.T) {
 			t.Errorf("the card lost the printable text %q:\n%s", want, plain)
 		}
 	}
-	if got := cardText("a\tb\x7fc\xffd"); got != "a bc\uFFFDd" {
-		t.Errorf("cardText = %q, want a tab as a space, DEL gone, invalid UTF-8 as U+FFFD", got)
+	if got := termText("a\tb\x7fc\xffd"); got != "a bc\uFFFDd" {
+		t.Errorf("termText = %q, want a tab as a space, DEL gone, invalid UTF-8 as U+FFFD", got)
 	}
 }
 

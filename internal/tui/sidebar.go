@@ -1605,7 +1605,9 @@ func (m sidebarModel) reviewFilterLabel() string {
 // truncatePath shortens a file path or artifact title for the sidebar, keeping
 // both ends. It also measures in runes rather than bytes: the byte-sliced
 // version it replaces could cut a multi-byte character in half and emit a
-// replacement glyph.
+// replacement glyph. A path is the change's own text, so it is drawn through
+// termText first: a file named with an escape sequence or a bidi control must
+// not drive the terminal or reorder the list.
 func truncatePath(path string, maxLen int) string {
-	return truncateMiddle(path, maxLen)
+	return truncateMiddle(termText(path), maxLen)
 }
