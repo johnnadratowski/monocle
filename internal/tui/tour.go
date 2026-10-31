@@ -766,12 +766,8 @@ func (m appModel) handleTourEvent(msg tourEventMsg) (appModel, tea.Cmd) {
 	}
 	starting := !m.hasTour()
 	m.syncTour(m.engine.GetSession())
-	// The engine judged the files again with the tour's notes on generated
-	// files, so the list and the card on screen are read again.
-	m.sidebar.files = m.engine.GetChangedFiles()
-	m.sidebar.applyReviewedFilter()
-	m.sidebar.rebuildTree()
-	m.sidebar.clampOffset()
+	// The tour's notes are the cards' text (never which files are generated):
+	// the card on screen is drawn again with them.
 	m.syncGeneratedCard()
 	if starting && msg.status == core.WalkthroughEventSet && m.hasTour() {
 		m.hideFileListForTour()

@@ -580,7 +580,7 @@ func (m sidebarModel) renderFileItem(f types.ChangedFile, selected bool) string 
 		if nameW < 1 {
 			nameW = 1
 		}
-		name := fmt.Sprintf("%-*s", nameW, truncatePath(f.Path, nameW))
+		name := fileRowName(f, f.Path, nameW, false)
 		padded := prefix + name + right
 		return m.selectionStyle().Render(padded)
 	}
@@ -592,23 +592,31 @@ func (m sidebarModel) renderFileItem(f types.ChangedFile, selected bool) string 
 	if nameW < 1 {
 		nameW = 1
 	}
-	name := fmt.Sprintf("%-*s", nameW, truncatePath(f.Path, nameW))
-	if f.IsGenerated() {
-		name = lipgloss.NewStyle().Faint(true).Render(name)
+	return prefix + fileRowName(f, f.Path, nameW, true) + right
+}
+
+// fileRowName is a file row's name padded to nameW: a generated file's badged
+// and, styled, faint. The badge sits by the name, so the mark column still
+// says whether the file awaits review: a generated file does, until marked.
+func fileRowName(f types.ChangedFile, name string, nameW int, styled bool) string {
+	if !f.IsGenerated() {
+		return fmt.Sprintf("%-*s", nameW, truncatePath(name, nameW))
 	}
-	return prefix + name + right
+	w := max(nameW-2, 1)
+	out := generatedBadge + " " + fmt.Sprintf("%-*s", w, truncatePath(name, w))
+	if styled {
+		out = lipgloss.NewStyle().Faint(true).Render(out)
+	}
+	return out
 }
 
 // fileMark is a file row's right-hand mark, plain (the selected row draws its
-// own colours) and styled: ✓ reviewed, ○ awaiting review, and the generated
-// badge for a generated file not marked, which awaits nothing. Both "" when
-// the row has no mark.
+// own colours) and styled: ✓ reviewed, ○ awaiting review. Both "" when the
+// list does not track review.
 func (m sidebarModel) fileMark(f types.ChangedFile) (plain, styled string) {
 	switch {
 	case m.reviewTracking && f.Reviewed:
 		return "✓", lipgloss.NewStyle().Foreground(lipgloss.Color("#2ea043")).Render("✓")
-	case f.IsGenerated():
-		return generatedBadge, lipgloss.NewStyle().Faint(true).Render(generatedBadge)
 	case m.reviewTracking:
 		return "○", "○"
 	}
@@ -622,10 +630,6 @@ func markColumn(mark string) string {
 	}
 	return " " + mark + " "
 }
-
-// awaitsReview reports whether the file is still the reviewer's to sign off:
-// not marked, and not generated (a generated file never counts as unreviewed).
-func awaitsReview(f types.ChangedFile) bool { return !f.Reviewed && !f.IsGenerated() }
 
 // renderDirItem renders a directory node in tree mode.
 func (m sidebarModel) renderDirItem(item visibleItem, selected bool) string {
@@ -709,7 +713,7 @@ func (m sidebarModel) renderTreeFileItem(item visibleItem, selected bool) string
 		if nameW < 1 {
 			nameW = 1
 		}
-		name := fmt.Sprintf("%-*s", nameW, truncatePath(item.node.Name, nameW))
+		name := fileRowName(*f, item.node.Name, nameW, false)
 		padded := prefix + name + right
 		return m.selectionStyle().Render(padded)
 	}
@@ -722,11 +726,7 @@ func (m sidebarModel) renderTreeFileItem(item visibleItem, selected bool) string
 	if nameW < 1 {
 		nameW = 1
 	}
-	name := fmt.Sprintf("%-*s", nameW, truncatePath(item.node.Name, nameW))
-	if f.IsGenerated() {
-		name = lipgloss.NewStyle().Faint(true).Render(name)
-	}
-	return prefix + name + right
+	return prefix + fileRowName(*f, item.node.Name, nameW, true) + right
 }
 
 func (m sidebarModel) renderContentItem(item types.ContentItem, selected bool) string {
@@ -1077,13 +1077,13 @@ func (m *sidebarModel) nextUnreviewed() tea.Cmd {
 				if item.isDir {
 					continue
 				}
-				if awaitsReview(*item.node.File) {
+				if !item.node.File.Reviewed {
 					m.cursor = next
 					m.ensureVisible()
 					return m.selectCurrent()
 				}
 			} else {
-				if awaitsReview(m.displayFiles()[fileIdx]) {
+				if !m.displayFiles()[fileIdx].Reviewed {
 					m.cursor = next
 					m.ensureVisible()
 					return m.selectCurrent()
@@ -1551,9 +1551,8 @@ func (m *sidebarModel) applyReviewedFilter() {
 
 	var files []types.ChangedFile
 	for _, f := range m.files {
-		// A generated file awaits nothing, so "unreviewed" leaves it out until
-		// someone marks it.
-		if (keepReviewed && f.Reviewed) || (!keepReviewed && awaitsReview(f)) {
+		// A generated file too: it awaits the reviewer until marked.
+		if f.Reviewed == keepReviewed {
 			files = append(files, f)
 		}
 	}

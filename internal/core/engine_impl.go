@@ -176,7 +176,7 @@ func (e *Engine) StartSession(opts SessionOptions) (*types.ReviewSession, error)
 
 	e.mu.Lock()
 	e.current = session
-	session.ChangedFiles = applyGenerated(session.RepoRoot, session.ChangedFiles, session.Walkthrough)
+	session.ChangedFiles = applyGenerated(session.RepoRoot, session.BaseRef, session.ChangedFiles)
 	// Persist the engine's current auto-advance/selected-ref state onto the new
 	// session row so it survives a later resume.
 	e.current.AutoAdvanceRef = e.autoAdvanceRef
@@ -208,7 +208,7 @@ func (e *Engine) ResumeSession(sessionID string) (*types.ReviewSession, error) {
 	// and the grouping only layers in on the next refresh tick.
 	e.applyFileMetadata(session.ID, files)
 	applyImportOrder(session.RepoRoot, files)
-	e.current.ChangedFiles = applyGenerated(session.RepoRoot, files, session.Walkthrough)
+	e.current.ChangedFiles = applyGenerated(session.RepoRoot, session.BaseRef, files)
 	// Restore the persisted base-ref state. Without this, auto-advance defaults
 	// back to true and the next refresh advances BaseRef to HEAD — emptying the
 	// diff (and the file list) when the reviewed work has since been committed.
@@ -307,7 +307,7 @@ func (e *Engine) RefreshChangedFiles() ([]types.ChangedFile, error) {
 		}
 		e.applyFileMetadata(session.ID, files)
 		applyImportOrder(session.RepoRoot, files)
-		files = applyGenerated(session.RepoRoot, files, e.current.Walkthrough)
+		files = applyGenerated(session.RepoRoot, e.current.BaseRef, files)
 		e.current.ChangedFiles = files
 	}
 	e.mu.Unlock()
@@ -2636,9 +2636,11 @@ func (e *Engine) reviewCountsLocked() reviewCounts {
 		addedFiles: len(s.AdditionalFiles),
 	}
 	for _, f := range s.ChangedFiles {
-		// A generated file is not work awaiting the human: its card says what
-		// it is, and leaving it unmarked must not read as an open review.
-		if !f.Reviewed && !f.IsGenerated() {
+		// A generated file counts too: it folds to a card, but the review is
+		// the human's, and the change under review must not be able to take a
+		// file out of it (John, 2026-10-31: "I'm not going to fully review a
+		// generated file, but I need to know what it does").
+		if !f.Reviewed {
 			c.filesUnreviewed++
 		}
 	}

@@ -1,9 +1,11 @@
 package tui
 
 import (
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
+	"unicode"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -179,40 +181,124 @@ func TestGroupingPutsGeneratedFilesLastInTheirGroup(t *testing.T) {
 	}
 }
 
-func TestAGeneratedFileNeverCountsAsUnreviewed(t *testing.T) {
+// A generated file counts as unreviewed until it is marked (John,
+// 2026-10-31: "I'm not going to fully review a generated file, but I need to
+// know what it does"): the card makes marking it quick; the change under
+// review must not be able to take a file out of review.
+func TestAGeneratedFileCountsAsUnreviewedUntilMarked(t *testing.T) {
 	m, _ := generatedApp(t)
 	m.sidebar.reviewTracking = true
 	m.sidebar.reviewFilter = "unreviewed"
 	m.sidebar.files = m.engine.GetChangedFiles()
 	m.sidebar.applyReviewedFilter()
-	if got := listedFiles(m); !slices.Equal(got, []string{"a.go"}) {
-		t.Errorf("the unreviewed filter lists %q, want only a.go", got)
+	if got := listedFiles(m); !slices.Equal(got, []string{"a.go", schemaPath, "pnpm-lock.yaml"}) {
+		t.Errorf("the unreviewed filter lists %q, want the generated files too", got)
 	}
-	// Next unreviewed passes over them.
+	// Next unreviewed stops at them.
 	m.sidebar.reviewFilter = ""
-	m.sidebar.files = append(m.engine.GetChangedFiles(), types.ChangedFile{Path: "z.go"})
 	m.sidebar.applyReviewedFilter()
 	m.sidebar.selectPath("a.go")
 	m.sidebar.nextUnreviewed()
-	if f := m.sidebar.selectedFile(); f == nil || f.Path != "z.go" {
-		t.Errorf("next unreviewed from a.go is %v, want z.go past the generated files", f)
+	if f := m.sidebar.selectedFile(); f == nil || f.Path != schemaPath {
+		t.Errorf("next unreviewed from a.go is %v, want %s", f, schemaPath)
 	}
-	// The status bar's progress counts them as done.
-	m.sidebar.files = m.engine.GetChangedFiles()
-	if m.reviewedCountForStatus() != 2 {
-		t.Errorf("reviewed count %d, want the two generated files", m.reviewedCountForStatus())
+	// The status bar's progress counts one once it is marked, not before.
+	if n := m.reviewedCountForStatus(); n != 0 {
+		t.Errorf("reviewed count %d with nothing marked, want 0", n)
+	}
+	m.sidebar.files[1].Reviewed = true
+	if n := m.reviewedCountForStatus(); n != 1 {
+		t.Errorf("reviewed count %d with the client marked, want 1", n)
+	}
+	// Its row says it awaits review, beside its badge.
+	row := ansi.Strip(m.sidebar.renderFileItem(m.engine.GetChangedFiles()[2], false))
+	if !strings.Contains(row, generatedBadge) || !strings.Contains(row, "○") {
+		t.Errorf("the lockfile's row %q, want its badge and the unreviewed mark", row)
+	}
+	m = openFile(t, m, "pnpm-lock.yaml")
+	if view := plainView(m); !strings.Contains(view, "not reviewed yet") {
+		t.Errorf("the card does not say the file is not reviewed yet:\n%s", view)
 	}
 }
 
-// The engine re-judges the files when a tour arrives (its notes can make a
-// file generated), so the list is read again with it.
-func TestATourArrivingReadsTheFilesAgain(t *testing.T) {
+// A tour's note never makes a file generated: a.go, noted, still opens to its
+// diff. The note is only the card's text for a file the rule calls generated.
+func TestATourNoteNeverMakesAFileGenerated(t *testing.T) {
 	m, e := generatedApp(t)
-	e.changedFiles = append([]types.ChangedFile(nil), e.changedFiles...)
-	e.changedFiles[0].Generated = types.GeneratedTour
+	e.session.Walkthrough.Generated["a.go"] = "Made by a script, it says."
 	m = updateApp(t, m, tourEventMsg{status: core.WalkthroughEventSet, id: "1"})
-	if f := m.sidebar.files[0]; f.Path != "a.go" || f.Generated != types.GeneratedTour {
-		t.Errorf("the list holds %+v after the tour arrived, want a.go now generated", f)
+	m = openFile(t, m, "a.go")
+	if view := plainView(m); !strings.Contains(view, "line 1 of a.go") || strings.Contains(view, "Made by a script") {
+		t.Errorf("a noted hand-written file did not open to its diff:\n%s", view)
+	}
+	m.setFocus(focusMain)
+	m = pressKey(t, m, "Z")
+	if !strings.Contains(m.statusBar.searchInfo, "not generated") {
+		t.Errorf("Z on it: status %q, want it to say the file is not generated", m.statusBar.searchInfo)
+	}
+}
+
+// A file the change adds, classified only by its own name or header, still
+// folds, but its card says the change classified itself, that it is new, and
+// its first lines; one key shows the diff.
+func TestANewFileClassifiedByItsOwnNameSaysSo(t *testing.T) {
+	m, e := generatedApp(t)
+	f := types.ChangedFile{Path: "api/new.gen.ts", Status: types.FileAdded, Additions: 3, Generated: types.GeneratedName,
+		GeneratedOwn: true, GeneratedNew: true, GeneratedHead: "export function steal() {\n  fetch(evil)\n}"}
+	e.changedFiles = append(e.changedFiles, f)
+	e.diffs[f.Path] = fileDiff(f.Path, 3)
+	m = updateApp(t, m, initialLoadMsg{files: e.changedFiles})
+	m = openFile(t, m, f.Path)
+	view := plainView(m)
+	for _, want := range []string{"classified by this PR's own name", "this change adds the file", "First lines",
+		"export function steal() {", "fetch(evil)", "+3 -0"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("the card does not say %q:\n%s", want, view)
+		}
+	}
+	m.setFocus(focusMain)
+	m = pressKey(t, m, "Z")
+	if view := plainView(m); !strings.Contains(view, "line 1 of "+f.Path) {
+		t.Errorf("Z did not show its diff:\n%s", view)
+	}
+	// A header too, worded so.
+	if why := generatedWhy(types.GeneratedHeader, true); !strings.Contains(why, "this PR's own header") {
+		t.Errorf("generatedWhy(header, own) = %q", why)
+	}
+}
+
+// The card draws the change's own text (a path, a tour note, a header's
+// generator and source, a lockfile's packages, a new file's first lines): an
+// escape sequence or a control byte in any of them must not reach the
+// terminal. Each field carries a CSI (clear screen), an OSC 52 (set the
+// clipboard) ended by a BEL, a raw BEL, a C1 CSI and a DEL.
+func TestTheCardDrawsNoControlBytes(t *testing.T) {
+	const evil = "\x1b[2J\x1b]52;c;ZXZpbA==\x07\x07\u009b\x7f"
+	c := generatedCard{
+		path: "api/x" + evil + ".gen.ts", reason: types.GeneratedHeader, own: true, new: true,
+		head: "// line" + evil + "one\n// line" + evil + "two",
+		note: "note" + evil + "text", by: "gen" + evil + "tool", from: "spec" + evil + ".yaml",
+		changes: []types.PackageChange{{Name: "pkg" + evil + "a", From: "1" + evil + ".0", To: "2" + evil + ".0"}, {Name: "new" + evil + "pkg", To: "3" + evil + ".0"}},
+		adds:    1, dels: 0, unfold: "Z", review: "r",
+	}
+	out := c.render(200, 60)
+	// The card's own styling is SGR (bold, faint, colour); nothing else may
+	// be there: no other escape, no control byte but the line breaks.
+	rest := regexp.MustCompile(`\x1b\[[0-9;]*m`).ReplaceAllString(out, "")
+	for i, r := range rest {
+		if r != '\n' && unicode.Is(unicode.Cc, r) {
+			t.Fatalf("control character %U at byte %d of the card:\n%q", r, i, rest)
+		}
+	}
+	plain := ansi.Strip(out)
+	for _, want := range []string{"api/x", ".gen.ts", "notetext", "gentool", "spec", ".yaml", "pkg", "1.0 → 2", "newpkg",
+		"// lineone", "// linetwo"} {
+		if !strings.Contains(plain, want) {
+			t.Errorf("the card lost the printable text %q:\n%s", want, plain)
+		}
+	}
+	if got := cardText("a\tb\x7fc\xffd"); got != "a bc\uFFFDd" {
+		t.Errorf("cardText = %q, want a tab as a space, DEL gone, invalid UTF-8 as U+FFFD", got)
 	}
 }
 

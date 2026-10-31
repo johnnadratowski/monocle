@@ -98,7 +98,9 @@ A driver can end the tour with a **Not covered** stop: the PR's changed lines th
 
 ## Generated files
 
-A lockfile, a typed client or a swagger spec can be most of a change's lines and none of its decisions. monocle marks such a file generated — by `.gitattributes`' `linguist-generated`, a lockfile's name, a `.gen.` or `.generated.` name, a swagger file, or a marker in its first 5 lines — and the file list badges it `⚙`, after the files someone wrote. Its diff opens folded to a card saying what it is: the tour's line for it (a tour's `generated` notes), the generator its header names, a lockfile's packages added, removed and bumped, and its line counts. `Z` shows the diff, and folds it back; a stop at lines of the file shows those lines. A generated file never counts as unreviewed: `r` still marks it.
+A lockfile, a typed client or a swagger spec can be most of a change's lines and none of its decisions. monocle marks such a file generated — by `.gitattributes`' `linguist-generated`, a lockfile's name, a `.gen.` or `.generated.` name, a swagger file, or a marker in its first 5 lines — and the file list badges it `⚙`, after the files someone wrote. Its diff opens folded to a card saying what it is: the tour's line for it (a tour's `generated` notes), the generator its header names, a lockfile's packages added, removed and bumped, a new file's first lines, and its line counts. `Z` shows the diff, and folds it back; a stop at lines of the file shows those lines. A generated file still counts as unreviewed until you mark it with `r`: the card is there to make that quick.
+
+What marks a file generated never comes from the change under review, or the change could fold its own files away: `.gitattributes` is read at the base, and a header marker counts on a file the base has only when the base's version has it too. A file the change adds counts by its own name or header, and its card says the change classified it ("classified by this PR's own name"). A tour's note never makes a file generated. The card strips escape sequences and control bytes from everything it shows.
 
 ## Sending a tour
 

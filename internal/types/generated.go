@@ -11,12 +11,16 @@ import (
 // A generated file — a lockfile, a typed client, a swagger spec — can be most
 // of a change's lines and none of its decisions. The reviewer is not going to
 // read it line by line, but needs to know what it is. So Monocle tells a
-// generated file from a hand-written one, folds its diff to a card saying what
-// it is, and never counts it as unreviewed.
+// generated file from a hand-written one and folds its diff to a card saying
+// what it is. It still counts as unreviewed until the reviewer marks it: the
+// card makes that quick, and a file folded away must never drop out of the
+// review (John, 2026-10-31).
 //
 // The rule is shared with stage (the walkthrough skill's
-// design/generated-files.md, whose cases table generated_test.go copies): the
-// first test that applies decides, and each answer has a reason.
+// design/generated-files.md, whose cases tables generated_test.go copies): the
+// first test that applies decides, and each answer has a reason. What it reads
+// must not come from the change under review, or whoever writes the change
+// could fold a file away (JudgeGenerated).
 
 // The reasons a file is generated. A ChangedFile's Generated holds one, or ""
 // for a hand-written file.
@@ -26,7 +30,6 @@ const (
 	GeneratedName     = "name"               // a .gen. or .generated. part in its name
 	GeneratedCodegen  = "codegen output"     // a swagger spec
 	GeneratedHeader   = "header"             // a marker in its first lines
-	GeneratedTour     = "tour"               // the tour's note says what made it
 )
 
 // GeneratedHeaderLines is how many of a file's first lines the header test
@@ -46,7 +49,7 @@ var (
 	generatedHeader = regexp.MustCompile(`@generated|DO NOT EDIT|(?i:auto-?generated)`)
 )
 
-// GeneratedReason says why the file at repo path p is generated, or "" when it
+// GeneratedReason is the rule itself: why the file at repo path p is generated, or "" when it
 // is hand-written. head is the file's first lines (only GeneratedHeaderLines
 // are read; "" for a deleted file); attr is `git check-attr linguist-generated`'s
 // value for it ("set", "true", "false", "unset", "unspecified"; "" not known).
@@ -66,12 +69,61 @@ func GeneratedReason(p, head, attr string) string {
 	case slices.Contains(codegenOutputs, base):
 		return GeneratedCodegen
 	}
-	for _, ln := range headLines(head) {
-		if generatedHeader.MatchString(ln) {
-			return GeneratedHeader
-		}
+	if HeaderMarked(head) {
+		return GeneratedHeader
 	}
 	return ""
+}
+
+// GeneratedInput is what JudgeGenerated reads of a changed file, each from
+// where the change under review cannot write it.
+type GeneratedInput struct {
+	Path string
+	// New: the path is not at the base, so the change adds it (a rename's new
+	// path too). Deleted: it is gone from the working tree.
+	New, Deleted bool
+	// Head is the file's first lines now ("" when deleted); BaseHead, at the
+	// base ("" when new).
+	Head, BaseHead string
+	// Attr is linguist-generated as the BASE's .gitattributes say: a line the
+	// change adds to .gitattributes is the change speaking for itself.
+	Attr string
+}
+
+// JudgeGenerated says why a changed file is generated, or "" when it is
+// hand-written, so that the change under review cannot take a file out of
+// review by its own say-so:
+//   - the attribute is the base's (GeneratedInput.Attr);
+//   - a file at the base counts by a header only when the base's version has
+//     the marker too (a deleted file, by the base's version alone);
+//   - a new file counts by its own header or name, the only signals it has.
+//     own is then true: the card says the change classified itself.
+//
+// Whatever it says, a generated file still counts as unreviewed until marked.
+func JudgeGenerated(in GeneratedInput) (reason string, own bool) {
+	if in.New {
+		reason = GeneratedReason(in.Path, in.Head, in.Attr)
+		return reason, reason != "" && reason != GeneratedByAttr
+	}
+	// The path is the base's, so the attribute and the path rules stand.
+	if reason = GeneratedReason(in.Path, "", in.Attr); reason != "" || in.Attr == "false" || in.Attr == "unset" {
+		return reason, false
+	}
+	if !HeaderMarked(in.BaseHead) || (!in.Deleted && !HeaderMarked(in.Head)) {
+		return "", false
+	}
+	return GeneratedHeader, false
+}
+
+// HeaderMarked reports whether a generated marker is in the first
+// GeneratedHeaderLines lines.
+func HeaderMarked(head string) bool {
+	for _, ln := range headLines(head) {
+		if generatedHeader.MatchString(ln) {
+			return true
+		}
+	}
+	return false
 }
 
 func headLines(head string) []string {
@@ -79,9 +131,14 @@ func headLines(head string) []string {
 	return lines[:min(len(lines), GeneratedHeaderLines)]
 }
 
+// What Monocle reads out of a header or a lockfile reaches the terminal, and a
+// change's file can carry escape sequences and control bytes. So every capture
+// is printable text ([^\s\p{Cc}], or a class without \p{Cc}) and runs to a
+// delimiter: a control byte inside makes no capture, rather than a cut one.
+// The card strips control bytes again before it draws anything.
 var (
-	generatedBy = regexp.MustCompile(`(?i)generated by:?\s+([\w@./-]+?)[.,;:]?(?:\s+from\s+(\S+?)[.,;:]?)?(?:\s|$)`)
-	sourceLine  = regexp.MustCompile(`(?i)^[\s/#*;-]*source:\s*(\S+)`)
+	generatedBy = regexp.MustCompile(`(?i)generated by:?\s+([\w@./-]+?)[.,;:]?(?:\s+from\s+([^\s\p{Cc}]+?)[.,;:]?)?(?:\s|$)`)
+	sourceLine  = regexp.MustCompile(`(?i)^[\s/#*;-]*source:\s*([^\s\p{Cc}]+)(?:\s|$)`)
 )
 
 // GeneratorOf reads what made a file, and from what, out of its header: "Code
@@ -102,30 +159,16 @@ func GeneratorOf(head string) (generator, source string) {
 	return generator, source
 }
 
-// IsGenerated reports whether the file is generated, by the rule or the tour.
+// IsGenerated reports whether the rule calls the file generated. A tour's note
+// never does: it is only the card's text for a file the rule already calls
+// generated.
 func (f ChangedFile) IsGenerated() bool { return f.Generated != "" }
 
-// MarkGenerated applies the tour's notes to files the rule has already judged:
-// a file the tour notes is generated whatever the rule said (the author knows
-// more than the rule), and a file only an earlier tour noted is hand-written
-// again. It returns the files hand-written first, then generated, each in the
-// order they came: a generated file sorts after the files someone wrote.
-func MarkGenerated(files []ChangedFile, w *Walkthrough) []ChangedFile {
+// SortGenerated returns the files hand-written first, then generated, each in
+// the order they came: a generated file sorts after the files someone wrote.
+func SortGenerated(files []ChangedFile) []ChangedFile {
 	if files == nil {
 		return nil
-	}
-	var notes map[string]string
-	if w != nil {
-		notes = w.Generated
-	}
-	for i := range files {
-		_, noted := notes[files[i].Path]
-		switch {
-		case files[i].Generated == GeneratedTour && !noted:
-			files[i].Generated = ""
-		case files[i].Generated == "" && noted:
-			files[i].Generated = GeneratedTour
-		}
 	}
 	sort.SliceStable(files, func(i, j int) bool { return !files[i].IsGenerated() && files[j].IsGenerated() })
 	return files
@@ -148,14 +191,14 @@ type lockFormat struct {
 }
 
 var (
-	pnpmKey    = regexp.MustCompile(`^  ['"]?/?([^\s'"][^'"]*?)['"]?:\s*$`)
-	goSumLine  = regexp.MustCompile(`^(\S+) (v[^\s/]+)(?:/go\.mod)? \S+$`)
-	npmKey     = regexp.MustCompile(`^\s*"(?:[^"]*node_modules/)((?:@[^/"]+/)?[^/"]+)": \{\s*$`)
-	npmVersion = regexp.MustCompile(`^\s*"version": "([^"]+)"`)
-	yarnKey    = regexp.MustCompile(`^"?((?:@[^@"/\s]+/)?[^@"\s]+)@[^:]*:\s*$`)
-	yarnVer    = regexp.MustCompile(`^\s+version:? "?([^"\s]+)"?\s*$`)
-	cargoKey   = regexp.MustCompile(`^name = "([^"]+)"`)
-	cargoVer   = regexp.MustCompile(`^version = "([^"]+)"`)
+	pnpmKey    = regexp.MustCompile(`^  ['"]?/?([^\s'"\p{Cc}][^'"\p{Cc}]*?)['"]?:\s*$`)
+	goSumLine  = regexp.MustCompile(`^([^\s\p{Cc}]+) (v[^\s/\p{Cc}]+)(?:/go\.mod)? [^\s\p{Cc}]+$`)
+	npmKey     = regexp.MustCompile(`^\s*"(?:[^"]*node_modules/)((?:@[^/"\p{Cc}]+/)?[^/"\p{Cc}]+)": \{\s*$`)
+	npmVersion = regexp.MustCompile(`^\s*"version": "([^"\p{Cc}]+)"`)
+	yarnKey    = regexp.MustCompile(`^"?((?:@[^@"/\s\p{Cc}]+/)?[^@"\s\p{Cc}]+)@[^:]*:\s*$`)
+	yarnVer    = regexp.MustCompile(`^\s+version:? "?([^"\s\p{Cc}]+)"?\s*$`)
+	cargoKey   = regexp.MustCompile(`^name = "([^"\p{Cc}]+)"`)
+	cargoVer   = regexp.MustCompile(`^version = "([^"\p{Cc}]+)"`)
 )
 
 // pnpmPackage reads a pnpm packages/snapshots key: "  '@types/node@20.2.0':",

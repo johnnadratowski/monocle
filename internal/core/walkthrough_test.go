@@ -272,6 +272,7 @@ func TestWalkthroughWarnings(t *testing.T) {
 	got := walkthroughWarnings(w,
 		func(p string) bool { return p == "in.go" },
 		func(p string) bool { return p != "gone.go" },
+		func(string) bool { return false },
 	)
 	if len(got) != 2 || !strings.Contains(got[0], "stop a: related file gone.go") || !strings.Contains(got[1], "stop b: out.go") {
 		t.Errorf("warnings = %q", got)

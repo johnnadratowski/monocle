@@ -17,8 +17,8 @@ type Walkthrough struct {
 	// Generated is the tour's one line for each generated file the change
 	// holds, by repo path: what it is, what made it, how to make it again and
 	// what catches a stale copy. A generated file's diff opens folded to a
-	// card that shows this first; a file noted here is generated whatever
-	// GeneratedReason says.
+	// card that shows this first. A note never makes a file generated: on a
+	// file the rule does not call generated it shows nowhere (a warning).
 	Generated map[string]string `json:"generated,omitempty"`
 }
 

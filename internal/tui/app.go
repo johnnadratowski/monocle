@@ -5406,11 +5406,11 @@ func (m appModel) currentFileStatus() string {
 }
 
 // reviewedCountForStatus is the status bar's review progress: the files
-// marked reviewed, and the generated ones, which never count as unreviewed.
+// marked reviewed. A generated file counts once it is marked, like any other.
 func (m appModel) reviewedCountForStatus() int {
 	n := 0
 	for _, f := range m.sidebar.files {
-		if !awaitsReview(f) {
+		if f.Reviewed {
 			n++
 		}
 	}

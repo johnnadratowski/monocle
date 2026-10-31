@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"unicode"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -10,13 +11,18 @@ import (
 	"github.com/josephschmitt/monocle/internal/types"
 )
 
-// A generated file (types.GeneratedReason, or a tour's note) is not read line
-// by line, but the reviewer needs to know what it is. Its diff opens folded to
-// a card saying so, from the best source there is to the worst: the tour's
-// note, the generator its header names, a lockfile's package changes, its
-// line counts. One key (unfold_generated) shows the real diff, and folds it
-// back. A jump to lines of the file — a stop, goto_line — shows those lines.
-// It never counts as unreviewed.
+// A generated file (types.JudgeGenerated) is not read line by line, but the
+// reviewer needs to know what it is. Its diff opens folded to a card saying
+// so, from the best source there is to the worst: the tour's note, the
+// generator its header names, a lockfile's package changes, a new file's first
+// lines, its line counts. One key (unfold_generated) shows the real diff, and
+// folds it back. A jump to lines of the file — a stop, goto_line — shows those
+// lines. It counts as unreviewed until the reviewer marks it (r): the card is
+// there to make that quick, not to take the file out of review.
+//
+// Everything on the card but its labels is the change's own text (a header, a
+// lockfile, a path, a tour note), so the card strips escape sequences and
+// control bytes from it before drawing (cardText).
 
 // generatedBadge marks a generated file in the file list.
 const generatedBadge = "⚙"
@@ -25,6 +31,9 @@ const generatedBadge = "⚙"
 type generatedCard struct {
 	path     string
 	reason   string // a types.Generated* reason
+	own      bool   // classified only by a signal the change introduced
+	new      bool   // the change adds the file
+	head     string // a new file's first lines
 	note     string // the tour's line for the file
 	by, from string // what made it and from what, as its header says
 	changes  []types.PackageChange
@@ -66,7 +75,8 @@ func (m *appModel) syncGeneratedCard() {
 		return
 	}
 	card := &generatedCard{
-		path: f.Path, reason: f.Generated, by: f.GeneratedBy, from: f.GeneratedFrom,
+		path: f.Path, reason: f.Generated, own: f.GeneratedOwn, new: f.GeneratedNew, head: f.GeneratedHead,
+		by: f.GeneratedBy, from: f.GeneratedFrom,
 		adds: f.Additions, dels: f.Deletions, comments: len(dv.comments),
 		changes: types.LockfileChanges(&types.DiffResult{Path: f.Path, Hunks: dv.hunks}),
 		unfold:  Label(m.keys.UnfoldGenerated), review: Label(m.keys.Reviewed),
@@ -108,8 +118,16 @@ func (m *appModel) toggleGeneratedFold() {
 	m.statusBar.searchInfo = ""
 }
 
-// generatedWhy is the card's reason, as the reviewer reads it.
-func generatedWhy(reason string) string {
+// generatedWhy is the card's reason, as the reviewer reads it. own: the only
+// signal is one the change itself introduced, and the card says so.
+func generatedWhy(reason string, own bool) string {
+	if own {
+		what := "name"
+		if reason == types.GeneratedHeader {
+			what = "header"
+		}
+		return "classified by this PR's own " + what + "; nothing at the base says so"
+	}
 	switch reason {
 	case types.GeneratedByAttr:
 		return ".gitattributes marks it linguist-generated"
@@ -120,11 +138,26 @@ func generatedWhy(reason string) string {
 	case types.GeneratedCodegen:
 		return "a codegen output"
 	case types.GeneratedHeader:
-		return "its header says so"
-	case types.GeneratedTour:
-		return "the tour says so"
+		return "its header says so, as at the base"
 	}
 	return reason
+}
+
+// cardText is s as the card may draw it. A header, a lockfile, a path and a
+// tour note are the change's words, and can carry escape sequences and control
+// bytes that would drive the reviewer's terminal (clear it, set its clipboard,
+// redraw what he reads). ANSI sequences go whole; every other control
+// character (C0, DEL, C1) goes, a tab as a space; invalid UTF-8 becomes U+FFFD.
+func cardText(s string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r == '\t':
+			return ' '
+		case unicode.Is(unicode.Cc, r):
+			return -1
+		}
+		return r
+	}, ansi.Strip(strings.ToValidUTF8(s, "\uFFFD")))
 }
 
 // renderGeneratedCard is the folded diff: what the file is, then the key that
@@ -151,19 +184,20 @@ func (c generatedCard) render(width, height int) string {
 		}
 	}
 
-	add(" " + bold.Render(generatedBadge+" Generated file") + "  " + c.path)
-	add(" " + faint.Render("Generated: "+generatedWhy(c.reason)+"."))
+	note, by, from := cardText(c.note), cardText(c.by), cardText(c.from)
+	add(" " + bold.Render(generatedBadge+" Generated file") + "  " + cardText(c.path))
+	add(" " + faint.Render("Generated: "+generatedWhy(c.reason, c.own)+"."))
 	add("")
-	if c.note != "" {
-		field("What it is", c.note)
+	if note != "" {
+		field("What it is", note)
 	}
-	if c.by != "" || c.from != "" {
-		made := c.by
+	if by != "" || from != "" {
+		made := by
 		switch {
 		case made == "":
-			made = "made from " + c.from
-		case c.from != "":
-			made += ", from " + c.from
+			made = "made from " + from
+		case from != "":
+			made += ", from " + from
 		}
 		field("Made by", made)
 	}
@@ -195,15 +229,30 @@ func (c generatedCard) render(width, height int) string {
 				break
 			}
 			var row string
+			name, was, is := cardText(ch.Name), cardText(ch.From), cardText(ch.To)
 			switch {
 			case ch.From == "":
-				row = "+ " + ch.Name + " " + ch.To
+				row = "+ " + name + " " + is
 			case ch.To == "":
-				row = "- " + ch.Name + " " + ch.From
+				row = "- " + name + " " + was
 			default:
-				row = "↑ " + ch.Name + " " + ch.From + " → " + ch.To
+				row = "↑ " + name + " " + was + " → " + is
 			}
 			add("  " + strings.Repeat(" ", 12) + ansi.Truncate(row, textW, ""))
+		}
+	}
+	if c.new {
+		field("New", "this change adds the file")
+		for i, ln := range strings.Split(c.head, "\n") {
+			if i == types.GeneratedHeaderLines || (i == 0 && ln == "") {
+				break
+			}
+			ln = ansi.Truncate(cardText(ln), textW, "…")
+			if i == 0 {
+				add("  " + label.Render("First lines") + faint.Render(ln))
+			} else {
+				add("  " + strings.Repeat(" ", 12) + faint.Render(ln))
+			}
 		}
 	}
 	field("Lines", fmt.Sprintf("+%d -%d", c.adds, c.dels))
@@ -211,7 +260,7 @@ func (c generatedCard) render(width, height int) string {
 		field("Comments", fmt.Sprintf("%d on this file, in its diff", c.comments))
 	}
 	add("")
-	status := "it never counts as unreviewed"
+	status := "not reviewed yet"
 	if c.reviewed {
 		status = "marked reviewed"
 	}

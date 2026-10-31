@@ -141,10 +141,17 @@ type ChangedFile struct {
 	// explicit SortIndex.
 	ImportOrder int
 
-	// Generated is why the file is generated (one of the Generated* reasons),
-	// or "" when someone wrote it. A generated file's diff opens folded to a
-	// card, and it never counts as unreviewed.
+	// Generated is why the file is generated (one of the Generated* reasons,
+	// JudgeGenerated), or "" when someone wrote it. A generated file's diff
+	// opens folded to a card; it still counts as unreviewed until marked.
 	Generated string
+	// GeneratedOwn: the only signal is one the change itself introduced (a new
+	// file's own header or name). It still folds, and its card says so.
+	GeneratedOwn bool
+	// GeneratedNew: the change adds the file (its path is not at the base);
+	// GeneratedHead is then its first lines, which its card shows.
+	GeneratedNew  bool
+	GeneratedHead string
 	// GeneratedBy and GeneratedFrom are what made the file and from what, as
 	// its header says (GeneratorOf); "" when it does not say.
 	GeneratedBy   string
