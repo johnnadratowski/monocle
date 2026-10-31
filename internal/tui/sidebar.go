@@ -557,14 +557,7 @@ func (m sidebarModel) renderFileItem(f types.ChangedFile, selected bool) string 
 	}
 	styledStatus := lipgloss.NewStyle().Foreground(lipgloss.Color(statusColor)).Bold(true).Render(statusChar)
 
-	// Review status
-	reviewChar := ""
-	if m.reviewTracking {
-		reviewChar = "○"
-		if f.Reviewed {
-			reviewChar = lipgloss.NewStyle().Foreground(lipgloss.Color("#2ea043")).Render("✓")
-		}
-	}
+	plainMark, styledMark := m.fileMark(f)
 
 	// Recent indicator
 	recentChar := " "
@@ -581,14 +574,7 @@ func (m sidebarModel) renderFileItem(f types.ChangedFile, selected bool) string 
 	const iconSlack = 2
 
 	if selected {
-		right := " "
-		if m.reviewTracking {
-			plainReview := "○"
-			if f.Reviewed {
-				plainReview = "✓"
-			}
-			right = " " + plainReview + " "
-		}
+		right := markColumn(plainMark)
 		prefix := fmt.Sprintf(" %s %s%s ", statusChar, recentChar, glyph)
 		nameW := m.width - lipgloss.Width(prefix) - lipgloss.Width(right) - iconSlack
 		if nameW < 1 {
@@ -600,18 +586,46 @@ func (m sidebarModel) renderFileItem(f types.ChangedFile, selected bool) string 
 	}
 
 	leftPad := " "
-	right := " "
-	if m.reviewTracking {
-		right = " " + reviewChar + " "
-	}
+	right := markColumn(styledMark)
 	prefix := fmt.Sprintf("%s%s %s%s ", leftPad, styledStatus, recentChar, icon)
 	nameW := m.width - lipgloss.Width(prefix) - lipgloss.Width(right) - iconSlack
 	if nameW < 1 {
 		nameW = 1
 	}
 	name := fmt.Sprintf("%-*s", nameW, truncatePath(f.Path, nameW))
+	if f.IsGenerated() {
+		name = lipgloss.NewStyle().Faint(true).Render(name)
+	}
 	return prefix + name + right
 }
+
+// fileMark is a file row's right-hand mark, plain (the selected row draws its
+// own colours) and styled: ✓ reviewed, ○ awaiting review, and the generated
+// badge for a generated file not marked, which awaits nothing. Both "" when
+// the row has no mark.
+func (m sidebarModel) fileMark(f types.ChangedFile) (plain, styled string) {
+	switch {
+	case m.reviewTracking && f.Reviewed:
+		return "✓", lipgloss.NewStyle().Foreground(lipgloss.Color("#2ea043")).Render("✓")
+	case f.IsGenerated():
+		return generatedBadge, lipgloss.NewStyle().Faint(true).Render(generatedBadge)
+	case m.reviewTracking:
+		return "○", "○"
+	}
+	return "", ""
+}
+
+// markColumn is the row's right edge around its mark.
+func markColumn(mark string) string {
+	if mark == "" {
+		return " "
+	}
+	return " " + mark + " "
+}
+
+// awaitsReview reports whether the file is still the reviewer's to sign off:
+// not marked, and not generated (a generated file never counts as unreviewed).
+func awaitsReview(f types.ChangedFile) bool { return !f.Reviewed && !f.IsGenerated() }
 
 // renderDirItem renders a directory node in tree mode.
 func (m sidebarModel) renderDirItem(item visibleItem, selected bool) string {
@@ -677,13 +691,7 @@ func (m sidebarModel) renderTreeFileItem(item visibleItem, selected bool) string
 		statusColor = "7"
 	}
 
-	reviewChar := ""
-	if m.reviewTracking {
-		reviewChar = "○"
-		if f.Reviewed {
-			reviewChar = lipgloss.NewStyle().Foreground(lipgloss.Color("#2ea043")).Render("✓")
-		}
-	}
+	plainMark, styledMark := m.fileMark(*f)
 
 	recentChar := " "
 	if m.recentPaths[f.Path] {
@@ -695,14 +703,7 @@ func (m sidebarModel) renderTreeFileItem(item visibleItem, selected bool) string
 	const iconSlack = 2
 
 	if selected {
-		right := " "
-		if m.reviewTracking {
-			plainReview := "○"
-			if f.Reviewed {
-				plainReview = "✓"
-			}
-			right = " " + plainReview + " "
-		}
+		right := markColumn(plainMark)
 		prefix := fmt.Sprintf(" %s%s %s%s ", indent, statusChar, recentChar, glyph)
 		nameW := m.width - lipgloss.Width(prefix) - lipgloss.Width(right) - iconSlack
 		if nameW < 1 {
@@ -715,16 +716,16 @@ func (m sidebarModel) renderTreeFileItem(item visibleItem, selected bool) string
 
 	leftPad := " "
 	styledStatus := lipgloss.NewStyle().Foreground(lipgloss.Color(statusColor)).Bold(true).Render(statusChar)
-	right := " "
-	if m.reviewTracking {
-		right = " " + reviewChar + " "
-	}
+	right := markColumn(styledMark)
 	prefix := fmt.Sprintf("%s%s%s %s%s ", leftPad, indent, styledStatus, recentChar, icon)
 	nameW := m.width - lipgloss.Width(prefix) - lipgloss.Width(right) - iconSlack
 	if nameW < 1 {
 		nameW = 1
 	}
 	name := fmt.Sprintf("%-*s", nameW, truncatePath(item.node.Name, nameW))
+	if f.IsGenerated() {
+		name = lipgloss.NewStyle().Faint(true).Render(name)
+	}
 	return prefix + name + right
 }
 
@@ -1076,13 +1077,13 @@ func (m *sidebarModel) nextUnreviewed() tea.Cmd {
 				if item.isDir {
 					continue
 				}
-				if !item.node.File.Reviewed {
+				if awaitsReview(*item.node.File) {
 					m.cursor = next
 					m.ensureVisible()
 					return m.selectCurrent()
 				}
 			} else {
-				if !m.displayFiles()[fileIdx].Reviewed {
+				if awaitsReview(m.displayFiles()[fileIdx]) {
 					m.cursor = next
 					m.ensureVisible()
 					return m.selectCurrent()
@@ -1550,7 +1551,9 @@ func (m *sidebarModel) applyReviewedFilter() {
 
 	var files []types.ChangedFile
 	for _, f := range m.files {
-		if f.Reviewed == keepReviewed {
+		// A generated file awaits nothing, so "unreviewed" leaves it out until
+		// someone marks it.
+		if (keepReviewed && f.Reviewed) || (!keepReviewed && awaitsReview(f)) {
 			files = append(files, f)
 		}
 	}

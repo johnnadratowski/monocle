@@ -566,6 +566,12 @@ func (m appModel) reviewPathOf(file string) (string, bool) {
 // command that finishes the load. The caller has checked the review holds
 // the file (reviewPathOf).
 func (m *appModel) openFileAt(file string, line, end int, top *int) tea.Cmd {
+	if line > 0 {
+		// Lines of a generated file someone chose to show are shown, not folded.
+		if f, ok := m.changedFileFor(file); ok && f.IsGenerated() {
+			m.unfoldGenerated(file)
+		}
+	}
 	if m.reviewHasFile(file) {
 		m.sidebar.selectPath(file)
 		reload := m.reveal(file, line, end) || m.tour.loading == file
@@ -760,6 +766,13 @@ func (m appModel) handleTourEvent(msg tourEventMsg) (appModel, tea.Cmd) {
 	}
 	starting := !m.hasTour()
 	m.syncTour(m.engine.GetSession())
+	// The engine judged the files again with the tour's notes on generated
+	// files, so the list and the card on screen are read again.
+	m.sidebar.files = m.engine.GetChangedFiles()
+	m.sidebar.applyReviewedFilter()
+	m.sidebar.rebuildTree()
+	m.sidebar.clampOffset()
+	m.syncGeneratedCard()
 	if starting && msg.status == core.WalkthroughEventSet && m.hasTour() {
 		m.hideFileListForTour()
 	}

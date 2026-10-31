@@ -127,6 +127,7 @@ type groupItem struct {
 	sortIndex       int
 	importRank      int // intra-changeset import order (0 if unknown); dependencies first
 	churn           int
+	generated       bool // a generated file sorts after the hand-written ones of its group
 }
 
 // groupHeaderLine is one rendered header row in the grouped sidebar. level 0 is a
@@ -153,7 +154,7 @@ type groupBucket[T any] struct {
 // category. Agent-labeled groups sort first (by group order), then category
 // groups in the fixed category order. Within a group, items sort by agent sort
 // index, then intra-changeset import order (dependencies first), then churn
-// descending, then path.
+// descending, then path — the generated files after all the others.
 func groupItemsBy[T any](items []T, proj func(T) groupItem) ([]T, map[int][]groupHeaderLine) {
 	// First partition by workstream (the optional top level), preserving
 	// first-appearance order. The empty workstream ("") collects files the agent
@@ -269,6 +270,9 @@ func bucketizeByGroup[T any](items []T, proj func(T) groupItem) []*groupBucket[T
 	for _, b := range ordered {
 		sort.SliceStable(b.items, func(i, j int) bool {
 			x, y := proj(b.items[i]), proj(b.items[j])
+			if x.generated != y.generated {
+				return y.generated // what someone wrote first, then what made itself
+			}
 			if x.sortIndex != y.sortIndex {
 				return x.sortIndex < y.sortIndex
 			}
@@ -297,6 +301,7 @@ func groupFiles(files []types.ChangedFile) ([]types.ChangedFile, map[int][]group
 			sortIndex:       f.SortIndex,
 			importRank:      f.ImportOrder,
 			churn:           f.Additions + f.Deletions,
+			generated:       f.IsGenerated(),
 		}
 	})
 }

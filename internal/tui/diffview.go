@@ -90,7 +90,10 @@ type diffViewLine struct {
 }
 
 type diffViewModel struct {
-	path          string
+	path string
+	// genCard, when set for the file on screen, is shown in place of its diff:
+	// a generated file, folded (generated.go).
+	genCard       *generatedCard
 	hunks         []types.DiffHunk
 	comments      []types.ReviewComment
 	annotations   []types.Annotation // agent-authored, for the current file
@@ -992,6 +995,9 @@ func (m diffViewModel) Update(msg tea.Msg) (diffViewModel, tea.Cmd) {
 }
 
 func (m diffViewModel) View() string {
+	if c := m.genCard; c != nil && c.path == m.path && !m.contentMode && m.additionalFilePath == "" {
+		return c.render(m.width, m.height)
+	}
 	if m.width == 0 || len(m.lines) == 0 {
 		if m.path == "" {
 			return renderSplash(m.width, m.height)

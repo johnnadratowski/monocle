@@ -197,6 +197,10 @@ type AppOptions struct {
 
 // appModel is the root model that composes all sub-models.
 type appModel struct {
+	// genUnfolded are the generated files the reviewer unfolded to their diff
+	// (unfold_generated, or a jump to their lines): the rest open as a card.
+	genUnfolded map[string]bool
+
 	engine core.EngineAPI
 
 	sidebar        sidebarModel
@@ -1115,6 +1119,7 @@ func (m appModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		var cmd tea.Cmd
 		m.diffView, cmd = m.diffView.Update(msg)
+		m.syncGeneratedCard()
 		if m.pendingChunkLanding != 0 && m.diffView.LandOnChunkEdge(m.pendingChunkLanding) {
 			m.pendingChunkLanding = 0
 		}
@@ -1268,6 +1273,7 @@ func (m appModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case loadFileContentMsg:
 		var cmd tea.Cmd
 		m.diffView, cmd = m.diffView.Update(msg)
+		m.syncGeneratedCard()
 		if m.pendingChunkLanding != 0 && m.diffView.LandOnChunkEdge(m.pendingChunkLanding) {
 			m.pendingChunkLanding = 0
 		}
@@ -2324,6 +2330,10 @@ func (m appModel) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.handleMarkReviewed()
 
+	case Matches(key, km.UnfoldGenerated):
+		m.toggleGeneratedFold()
+		return m, nil
+
 	case Matches(key, km.SearchBackward):
 		if m.focus == focusMain && m.diffSearchable() {
 			return m.openSearch(true), nil
@@ -3208,7 +3218,13 @@ func (m appModel) persistSidebarStyle() {
 // rather than the binary on disk: a TUI from before a command would take its
 // keys as typing, and one from before a stop kind refuses the tour. Add a
 // command here when a driver is meant to send it.
-var Features = []string{"doc", "comments", types.StopKindUncovered}
+var Features = append([]string{"doc", "comments", types.StopKindUncovered}, tourKeys...)
+
+// tourKeys are the keys of a tour beyond its stops that this TUI shows: a
+// tour's "generated" notes, each on its file's folded card. Each is in
+// Features, so stage leaves a key out of a tour for a TUI from before it,
+// which would refuse the tour.
+var tourKeys = []string{"generated"}
 
 // commandNames is the canonical list of `:` commands, used for tab completion.
 var commandNames = []string{
@@ -4963,6 +4979,16 @@ func (m appModel) View() tea.View {
 		extent: m.diffView.scrollExtent(),
 	}
 	paneBorderColor := mainStyle.GetBorderBottomForeground()
+	if c := m.diffView.genCard; c != nil {
+		// The card says whether the file is marked; a copy, so View changes nothing.
+		card := *c
+		for _, f := range m.sidebar.files {
+			if f.Path == card.path {
+				card.reviewed = f.Reviewed
+			}
+		}
+		m.diffView.genCard = &card
+	}
 	diffBox := func(outerW, outerH int) string {
 		return withPaneChrome(
 			mainStyle.Width(outerW).Height(outerH).Render(m.diffView.View()),
@@ -5045,14 +5071,8 @@ func (m appModel) View() tea.View {
 	m.statusBar.diffToVersion = m.diffView.diffToVersion
 	// Review progress + annotation count (cheap to recompute from the sidebar;
 	// annotationCount is cached and refreshed on load/file-change).
-	reviewed := 0
-	for _, f := range m.sidebar.files {
-		if f.Reviewed {
-			reviewed++
-		}
-	}
 	m.statusBar.fileCount = len(m.sidebar.files)
-	m.statusBar.reviewedCount = reviewed
+	m.statusBar.reviewedCount = m.reviewedCountForStatus()
 	m.statusBar.annotationCount = m.annotationCount
 	// When a changed file is shown, surface its annotation count as "x/n";
 	// otherwise (an artifact, or nothing selected) just show the total.
@@ -5383,4 +5403,16 @@ func (m appModel) currentFileStatus() string {
 		}
 	}
 	return ""
+}
+
+// reviewedCountForStatus is the status bar's review progress: the files
+// marked reviewed, and the generated ones, which never count as unreviewed.
+func (m appModel) reviewedCountForStatus() int {
+	n := 0
+	for _, f := range m.sidebar.files {
+		if !awaitsReview(f) {
+			n++
+		}
+	}
+	return n
 }

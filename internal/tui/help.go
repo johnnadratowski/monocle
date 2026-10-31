@@ -323,6 +323,7 @@ func (m helpModel) buildContent() string {
 			{"1/2", "Jump straight to a pane"},
 			{Label(km.Select), "Focus the diff pane / toggle a directory open"},
 			{Label(km.ToggleSidebar), "Show/hide the sidebar"},
+			{Label(km.UnfoldGenerated), "Show a generated file's diff, folded to a card saying what it is; again folds it back"},
 			{Label(km.PaneSize), "Doc pane size: focused biggest, smallest, back"},
 			{Label(km.DocPane), "Hide/show the doc pane, the diff taking its rows (also :doc off|on|toggle)"},
 			{Label(km.CycleLayout), "Cycle layout (auto/side-by-side/stacked)"},

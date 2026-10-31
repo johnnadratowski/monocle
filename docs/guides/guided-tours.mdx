@@ -96,6 +96,10 @@ A comment you write while the tour is on is tagged with the stop you were on: it
 
 A driver can end the tour with a **Not covered** stop: the PR's changed lines that no stop covers, as `hunks`. Its note says how much of the change the tour covers. On it the file list comes up holding only the uncovered files, as wide as their paths need; `.` and `,` step through the uncovered changes one at a time, each marked in the gutter as a stop's lines are, and `>` and `<` jump a file at a time. The note's header names the change on screen and the status bar counts them (`tour uncovered · 9 of 9 · hunk 2 of 7`). Past the last change `.` goes on through the tour, and `,` before the first goes back to the stop before; stepping back into the stop lands on its last change. Leaving it puts the file list back as it was.
 
+## Generated files
+
+A lockfile, a typed client or a swagger spec can be most of a change's lines and none of its decisions. monocle marks such a file generated — by `.gitattributes`' `linguist-generated`, a lockfile's name, a `.gen.` or `.generated.` name, a swagger file, or a marker in its first 5 lines — and the file list badges it `⚙`, after the files someone wrote. Its diff opens folded to a card saying what it is: the tour's line for it (a tour's `generated` notes), the generator its header names, a lockfile's packages added, removed and bumped, and its line counts. `Z` shows the diff, and folds it back; a stop at lines of the file shows those lines. A generated file never counts as unreviewed: `r` still marks it.
+
 ## Sending a tour
 
 Agents send tours with the `set_walkthrough` MCP tool or `monocle review set-walkthrough --file tour.json`. See [Agent commands](/reference/agent-commands#monocle-review-set-walkthrough) for the format.

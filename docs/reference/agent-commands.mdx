@@ -544,6 +544,18 @@ A tour file is a JSON object (or a bare array of stops):
 }
 ```
 
+### Generated files
+
+Besides `stops`, a tour may carry `generated`: one line for each generated file of the review, keyed by repo path.
+
+```json
+"generated": {
+  "ui/packages/api/src/schema.gen.ts": "Typed client generated from docs/swagger.json by openapi-typescript; regenerate with pnpm gen; CI drift guard G-16 fails a stale copy."
+}
+```
+
+Say what the file is, what it is made from, how to make it again and what catches a stale copy. monocle marks a file generated on its own when `.gitattributes` sets `linguist-generated` (`false` or `-linguist-generated` says it is not), when it is a lockfile, when its name has a `.gen.` or `.generated.` part, when it is a `swagger.json` or `swagger.yaml`, or when its first 5 lines say `@generated`, `DO NOT EDIT` or `auto-generated`. A file you note is generated whatever that rule says. A generated file's diff opens folded to a card — your line first, then the generator its header names, a lockfile's package changes and its line counts — and it never counts as unreviewed. A note for a file the review does not hold is a warning. A TUI from before it reports no `generated` in [`caps`](#monocle-review-caps), and a monocle from before it refuses the field.
+
 ### Stop fields
 
 | Field | Required | Description |
@@ -746,6 +758,7 @@ The answer comes from the TUIs themselves, as each reported on connecting, not f
 |---------|----------|
 | `doc` | `:doc on`, `:doc off`, `:doc toggle` |
 | `uncovered` | A tour stop with `"kind": "uncovered"` and its `hunks` (see [stop fields](#stop-fields)) |
+| `generated` | A tour's `generated` notes (see [generated files](#generated-files)) |
 
 ### Flags
 
