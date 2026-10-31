@@ -23,7 +23,7 @@ func sampleTour() *types.Walkthrough {
 			Views:   []types.StopView{{Kind: types.StopViewVideo, Target: "demo.webm", Label: "demo"}},
 			Layout:  "review"},
 		{ID: "1.2", Title: "Effect"},
-	}}
+	}, Generated: map[string]string{"api/schema.gen.ts": "Typed client from docs/swagger.json"}}
 }
 
 func TestWalkthroughStorage(t *testing.T) {
@@ -163,6 +163,37 @@ func TestMigrateAddsCommentStopID(t *testing.T) {
 	got, _ = d.GetComments("s")
 	if len(got) != 2 || got[1].StopID != "1.2" {
 		t.Errorf("stop id did not round-trip: %+v", got)
+	}
+}
+
+// Walkthroughs gained a generated column (the tour's notes on generated
+// files) without a version bump, so a binary from before it still opens the
+// database: a tour saved before it reads back with none, and a new one keeps
+// its notes.
+func TestMigrateAddsWalkthroughGenerated(t *testing.T) {
+	d := walkthroughDB(t)
+	old := &types.Walkthrough{Title: "Old", Stops: []types.WalkthroughStop{{ID: "1"}}}
+	if err := d.SaveWalkthrough("s1", old, "1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Exec("ALTER TABLE walkthroughs DROP COLUMN generated"); err != nil {
+		t.Fatalf("rewind: %v", err)
+	}
+	if err := setVersion(d.DB, 18); err != nil {
+		t.Fatal(err)
+	}
+	if err := Migrate(d.DB); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	got, cur, err := d.GetWalkthrough("s1")
+	if err != nil || got == nil || got.Title != "Old" || cur != "1" || got.Generated != nil {
+		t.Fatalf("tour after migration = %+v at %q (%v), want the old tour with no notes", got, cur, err)
+	}
+	if err := d.SaveWalkthrough("s1", sampleTour(), "1.1"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _, _ := d.GetWalkthrough("s1"); !reflect.DeepEqual(got.Generated, sampleTour().Generated) {
+		t.Errorf("generated notes after migration = %q, want %q", got.Generated, sampleTour().Generated)
 	}
 }
 

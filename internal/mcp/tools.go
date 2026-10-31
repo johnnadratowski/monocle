@@ -173,11 +173,13 @@ type walkthroughStopParam struct {
 type setWalkthroughParams struct {
 	Title string                 `json:"title,omitempty"`
 	Stops []walkthroughStopParam `json:"stops"`
+	// Generated is one line per generated file of the review, by repo path.
+	Generated map[string]string `json:"generated,omitempty"`
 }
 
 // walkthroughFromParams converts the tool's arguments into the domain type.
 func walkthroughFromParams(p setWalkthroughParams) types.Walkthrough {
-	w := types.Walkthrough{Title: p.Title, Stops: make([]types.WalkthroughStop, 0, len(p.Stops))}
+	w := types.Walkthrough{Title: p.Title, Stops: make([]types.WalkthroughStop, 0, len(p.Stops)), Generated: p.Generated}
 	for _, s := range p.Stops {
 		stop := types.WalkthroughStop{
 			ID: s.ID, Title: s.Title, File: s.File, LineStart: s.LineStart, LineEnd: s.LineEnd,

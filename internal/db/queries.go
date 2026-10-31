@@ -917,10 +917,16 @@ func (d *DB) SaveWalkthrough(sessionID string, w *types.Walkthrough, currentStop
 	if err != nil {
 		return fmt.Errorf("encode walkthrough stops: %w", err)
 	}
+	generated := []byte("{}")
+	if len(w.Generated) > 0 {
+		if generated, err = json.Marshal(w.Generated); err != nil {
+			return fmt.Errorf("encode walkthrough generated notes: %w", err)
+		}
+	}
 	_, err = d.Exec(
-		`INSERT OR REPLACE INTO walkthroughs (session_id, title, stops, current_stop, updated_at)
-		 VALUES (?, ?, ?, ?, ?)`,
-		sessionID, w.Title, string(stops), currentStop, time.Now(),
+		`INSERT OR REPLACE INTO walkthroughs (session_id, title, stops, current_stop, generated, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		sessionID, w.Title, string(stops), currentStop, string(generated), time.Now(),
 	)
 	if err != nil {
 		return fmt.Errorf("save walkthrough: %w", err)
@@ -933,9 +939,10 @@ func (d *DB) SaveWalkthrough(sessionID string, w *types.Walkthrough, currentStop
 func (d *DB) GetWalkthrough(sessionID string) (*types.Walkthrough, string, error) {
 	var w types.Walkthrough
 	var stops, current string
+	var generated sql.NullString // NULL in a row from before the column
 	err := d.QueryRow(
-		`SELECT title, stops, current_stop FROM walkthroughs WHERE session_id = ?`, sessionID,
-	).Scan(&w.Title, &stops, &current)
+		`SELECT title, stops, current_stop, generated FROM walkthroughs WHERE session_id = ?`, sessionID,
+	).Scan(&w.Title, &stops, &current, &generated)
 	if err == sql.ErrNoRows {
 		return nil, "", nil
 	}
@@ -944,6 +951,11 @@ func (d *DB) GetWalkthrough(sessionID string) (*types.Walkthrough, string, error
 	}
 	if err := json.Unmarshal([]byte(stops), &w.Stops); err != nil {
 		return nil, "", fmt.Errorf("decode walkthrough stops: %w", err)
+	}
+	if generated.Valid && generated.String != "" && generated.String != "{}" {
+		if err := json.Unmarshal([]byte(generated.String), &w.Generated); err != nil {
+			return nil, "", fmt.Errorf("decode walkthrough generated notes: %w", err)
+		}
 	}
 	return &w, current, nil
 }

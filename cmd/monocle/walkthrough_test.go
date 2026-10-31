@@ -54,6 +54,18 @@ func TestParseWalkthroughJSON(t *testing.T) {
 		}
 	})
 
+	// stage passes the tour's notes on generated files once Monocle says it
+	// has "generated": they must load, not be refused as unknown.
+	t.Run("the tour's notes on generated files", func(t *testing.T) {
+		got, err := parseWalkthroughJSON([]byte(`{"stops":[{"id":"1"}],"generated":{"pnpm-lock.yaml":"The lockfile; pnpm install."}}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Generated["pnpm-lock.yaml"] != "The lockfile; pnpm install." {
+			t.Errorf("generated = %q", got.Generated)
+		}
+	})
+
 	t.Run("a bare list of stops", func(t *testing.T) {
 		got, err := parseWalkthroughJSON([]byte(` [{"id":"a"},{"id":"b"}] `))
 		if err != nil || len(got.Stops) != 2 {

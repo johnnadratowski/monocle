@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/josephschmitt/monocle/internal/protocol"
@@ -49,6 +50,7 @@ func (e *Engine) handleSetWalkthrough(msg *protocol.SetWalkthroughMsg) *protocol
 			session.Walkthrough = nil
 			session.WalkthroughStop = ""
 			session.WalkthroughVisited = nil
+			session.ChangedFiles = types.MarkGenerated(session.ChangedFiles, nil)
 		}
 		e.mu.Unlock()
 		if err != nil {
@@ -70,6 +72,8 @@ func (e *Engine) handleSetWalkthrough(msg *protocol.SetWalkthroughMsg) *protocol
 	}
 	session.Walkthrough = &w
 	session.WalkthroughStop = current
+	// The tour's notes make files generated (or, dropped, hand-written again).
+	session.ChangedFiles = types.MarkGenerated(session.ChangedFiles, &w)
 	// A re-sent tour keeps the stops visited that it still has; another tour,
 	// by its title, starts afresh. Arriving does not count the first stop: the
 	// TUI reports it once the reviewer is shown it.
@@ -320,6 +324,7 @@ func (e *Engine) dropWalkthroughLocked(sessionID string) error {
 		e.current.Walkthrough = nil
 		e.current.WalkthroughStop = ""
 		e.current.WalkthroughVisited = nil
+		e.current.ChangedFiles = types.MarkGenerated(e.current.ChangedFiles, nil)
 	}
 	return nil
 }
@@ -389,6 +394,16 @@ func walkthroughWarnings(w types.Walkthrough, inReview, exists func(string) bool
 			if !exists(r.Doc) {
 				out = append(out, fmt.Sprintf("stop %s: related file %s does not exist", s.ID, r.Doc))
 			}
+		}
+	}
+	paths := make([]string, 0, len(w.Generated))
+	for p := range w.Generated {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+	for _, p := range paths {
+		if !inReview(p) {
+			out = append(out, fmt.Sprintf("generated: %s is not in the review, so its note shows nowhere (fix the path)", p))
 		}
 	}
 	return out

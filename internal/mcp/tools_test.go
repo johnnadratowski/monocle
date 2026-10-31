@@ -180,6 +180,18 @@ func TestSetWalkthroughParamsReadAStopsOrder(t *testing.T) {
 	}
 }
 
+// An agent's set_walkthrough arrives as JSON: its notes on generated files
+// reach the tour.
+func TestSetWalkthroughParamsReadGeneratedNotes(t *testing.T) {
+	var p setWalkthroughParams
+	if err := json.Unmarshal([]byte(`{"stops":[{"id":"1"}],"generated":{"pnpm-lock.yaml":"the lockfile"}}`), &p); err != nil {
+		t.Fatal(err)
+	}
+	if got := walkthroughFromParams(p).Generated; !reflect.DeepEqual(got, map[string]string{"pnpm-lock.yaml": "the lockfile"}) {
+		t.Errorf("generated %q", got)
+	}
+}
+
 // Both tour tools must be described: an empty description is an MCP tool an
 // agent has no reason to call.
 func TestTourToolsAreDescribed(t *testing.T) {

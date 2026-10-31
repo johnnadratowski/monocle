@@ -94,6 +94,7 @@ CREATE TABLE IF NOT EXISTS walkthroughs (
 	title TEXT NOT NULL DEFAULT '',
 	stops TEXT NOT NULL DEFAULT '[]',
 	current_stop TEXT NOT NULL DEFAULT '',
+	generated TEXT NOT NULL DEFAULT '{}',
 	updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -301,6 +302,9 @@ var addedColumns = map[string]map[string]string{
 	},
 	"comments": {
 		"stop_id": "TEXT NOT NULL DEFAULT ''",
+	},
+	"walkthroughs": {
+		"generated": "TEXT NOT NULL DEFAULT '{}'",
 	},
 }
 
