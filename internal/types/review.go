@@ -140,6 +140,15 @@ type ChangedFile struct {
 	// 0 when unknown. Used as the within-group sort when the agent gives no
 	// explicit SortIndex.
 	ImportOrder int
+
+	// Generated is why the file is generated (one of the Generated* reasons),
+	// or "" when someone wrote it. A generated file's diff opens folded to a
+	// card, and it never counts as unreviewed.
+	Generated string
+	// GeneratedBy and GeneratedFrom are what made the file and from what, as
+	// its header says (GeneratorOf); "" when it does not say.
+	GeneratedBy   string
+	GeneratedFrom string
 }
 
 type AdditionalFile struct {

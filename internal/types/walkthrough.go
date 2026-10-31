@@ -14,6 +14,12 @@ import (
 type Walkthrough struct {
 	Title string            `json:"title,omitempty"`
 	Stops []WalkthroughStop `json:"stops"`
+	// Generated is the tour's one line for each generated file the change
+	// holds, by repo path: what it is, what made it, how to make it again and
+	// what catches a stale copy. A generated file's diff opens folded to a
+	// card that shows this first; a file noted here is generated whatever
+	// GeneratedReason says.
+	Generated map[string]string `json:"generated,omitempty"`
 }
 
 // WalkthroughStop is one place the tour stops.
@@ -147,6 +153,18 @@ func (w *Walkthrough) Empty() bool { return w == nil || len(w.Stops) == 0 }
 // hunk with no file — is dropped.
 func NormalizeWalkthrough(w Walkthrough) (Walkthrough, error) {
 	out := Walkthrough{Title: strings.TrimSpace(w.Title), Stops: make([]WalkthroughStop, 0, len(w.Stops))}
+	// A generated file's note: a path with nothing said about it, or nothing
+	// said about no path, is no note.
+	for p, note := range w.Generated {
+		p, note = strings.TrimPrefix(strings.TrimSpace(p), "./"), strings.TrimSpace(note)
+		if p == "" || note == "" {
+			continue
+		}
+		if out.Generated == nil {
+			out.Generated = map[string]string{}
+		}
+		out.Generated[p] = note
+	}
 	seen := make(map[string]bool, len(w.Stops))
 	for i, s := range w.Stops {
 		s.ID = strings.TrimSpace(s.ID)
